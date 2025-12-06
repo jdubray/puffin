@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file:">
+  <title>Puffin</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/themes.css">
+  <link rel="stylesheet" href="styles/debugger.css">
+</head>
+<body>
+  <!-- Splash Screen -->
+  <div id="splash-screen" class="splash-screen">
+    <img src="img/header.jpg" alt="Puffin for Claude Code">
+  </div>
+
+  <div id="app">
+    <!-- Header -->
+    <header id="header">
+      <div class="header-left">
+        <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar">
+          <span class="icon">☰</span>
+        </button>
+        <h1 class="app-title">Puffin</h1>
+      </div>
+      <nav id="main-nav">
+        <button class="nav-btn" data-view="config">Config</button>
+        <button class="nav-btn active" data-view="prompt">Prompt</button>
+        <button class="nav-btn" data-view="designer">Designer</button>
+        <button class="nav-btn" data-view="architecture">Architecture</button>
+        <button class="nav-btn" data-view="cli-output">CLI Output</button>
+      </nav>
+      <div class="header-right">
+        <span id="project-name" class="project-indicator"></span>
+        <span id="save-indicator" class="save-indicator hidden">●</span>
+        <button id="debugger-toggle" class="icon-btn" title="SAM Debugger (Ctrl+Shift+D)">
+          <span class="icon">🔍</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main-content">
+      <!-- Sidebar -->
+      <aside id="sidebar">
+        <div class="sidebar-section">
+          <h3>Branches</h3>
+          <ul id="branch-list" class="branch-list">
+            <!-- Branches rendered dynamically -->
+          </ul>
+          <button id="add-branch-btn" class="add-btn">+ Add Branch</button>
+        </div>
+        <div class="sidebar-section">
+          <h3>History</h3>
+          <div id="history-tree" class="history-tree">
+            <!-- History tree rendered dynamically -->
+          </div>
+        </div>
+      </aside>
+
+      <!-- View Container -->
+      <div id="view-container">
+        <!-- Config View (replaces Project Form View) -->
+        <section id="config-view" class="view">
+          <div class="view-content">
+            <h2>Project Configuration</h2>
+            <form id="config-form" class="project-form">
+              <div class="form-group">
+                <label for="project-name-input">Project Name</label>
+                <input type="text" id="project-name-input" placeholder="My Awesome Project" required>
+              </div>
+
+              <div class="form-group">
+                <label for="project-description">Description</label>
+                <textarea id="project-description" rows="4" placeholder="Describe your project..."></textarea>
+              </div>
+
+              <div class="form-group">
+                <label>Assumptions</label>
+                <div id="assumptions-list" class="list-editor">
+                  <!-- Assumptions rendered dynamically -->
+                </div>
+                <button type="button" id="add-assumption-btn" class="add-btn small">+ Add Assumption</button>
+              </div>
+
+              <div class="form-group">
+                <label for="technical-architecture">Technical Architecture</label>
+                <textarea id="technical-architecture" rows="4" placeholder="Describe the technical architecture..."></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="data-model">Data Model</label>
+                <textarea id="data-model" rows="4" placeholder="Define your data model..."></textarea>
+              </div>
+
+              <fieldset class="options-fieldset">
+                <legend>Claude Guidance Options</legend>
+
+                <div class="options-grid">
+                  <div class="form-group">
+                    <label for="programming-style">Programming Style</label>
+                    <select id="programming-style">
+                      <option value="HYBRID">Hybrid Approach</option>
+                      <option value="OOP">Object-Oriented (OOP)</option>
+                      <option value="FP">Functional (FP)</option>
+                      <option value="TEMPORAL">Temporal Logic (TLA+/SAM)</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="testing-approach">Testing Approach</label>
+                    <select id="testing-approach">
+                      <option value="TDD">Test-Driven (TDD)</option>
+                      <option value="BDD">Behavior-Driven (BDD)</option>
+                      <option value="INTEGRATION">Integration First</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="documentation-level">Documentation Level</label>
+                    <select id="documentation-level">
+                      <option value="MINIMAL">Minimal</option>
+                      <option value="STANDARD" selected>Standard</option>
+                      <option value="COMPREHENSIVE">Comprehensive</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="error-handling">Error Handling</label>
+                    <select id="error-handling">
+                      <option value="EXCEPTIONS">Exceptions</option>
+                      <option value="RESULT">Result Types</option>
+                      <option value="EITHER">Either Monad</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="naming-convention">Naming Convention</label>
+                    <select id="naming-convention">
+                      <option value="CAMEL">camelCase</option>
+                      <option value="SNAKE">snake_case</option>
+                      <option value="PASCAL">PascalCase</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="comment-style">Comment Style</label>
+                    <select id="comment-style">
+                      <option value="JSDoc">JSDoc</option>
+                      <option value="Inline">Inline</option>
+                      <option value="Minimal">Minimal</option>
+                    </select>
+                  </div>
+                </div>
+              </fieldset>
+
+              <div class="form-actions">
+                <button type="submit" class="btn primary">Save Configuration</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- Prompt View -->
+        <section id="prompt-view" class="view active">
+          <div class="view-content prompt-layout">
+            <!-- Branch Tabs -->
+            <div class="branch-tabs">
+              <button class="branch-tab active" data-branch="specifications">Specifications</button>
+              <button class="branch-tab" data-branch="architecture">Architecture</button>
+              <button class="branch-tab" data-branch="ui">UI</button>
+              <button class="branch-tab" data-branch="backend">Backend</button>
+              <button class="branch-tab" data-branch="deployment">Deployment</button>
+              <button class="branch-tab" data-branch="tmp">Tmp</button>
+            </div>
+            <div class="response-area">
+              <div id="response-content" class="response-content">
+                <p class="placeholder">Select a thread and start a conversation with Claude...</p>
+              </div>
+            </div>
+            <div class="prompt-area">
+              <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
+              <div class="prompt-actions">
+                <button id="submit-prompt-btn" class="btn primary">
+                  <span class="btn-text">Send</span>
+                  <span class="btn-loading hidden">...</span>
+                </button>
+                <button id="cancel-prompt-btn" class="btn secondary hidden">Cancel</button>
+                <button id="include-gui-btn" class="btn secondary" title="Include GUI Design">
+                  Include GUI
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Designer View -->
+        <section id="designer-view" class="view">
+          <div class="view-content designer-layout">
+            <div class="designer-toolbar">
+              <div class="element-palette">
+                <button class="palette-item" data-type="container" title="Container">
+                  <span class="icon">□</span>
+                </button>
+                <button class="palette-item" data-type="text" title="Text">
+                  <span class="icon">T</span>
+                </button>
+                <button class="palette-item" data-type="input" title="Input">
+                  <span class="icon">⎕</span>
+                </button>
+                <button class="palette-item" data-type="button" title="Button">
+                  <span class="icon">▢</span>
+                </button>
+                <button class="palette-item" data-type="image" title="Image">
+                  <span class="icon">🖼</span>
+                </button>
+                <button class="palette-item" data-type="list" title="List">
+                  <span class="icon">≡</span>
+                </button>
+              </div>
+              <div class="toolbar-actions">
+                <button id="clear-canvas-btn" class="btn small">Clear</button>
+                <button id="export-gui-btn" class="btn small primary">Export</button>
+              </div>
+            </div>
+            <div class="designer-main">
+              <div id="designer-canvas" class="designer-canvas">
+                <!-- Canvas elements rendered dynamically -->
+              </div>
+              <div id="property-panel" class="property-panel">
+                <h3>Properties</h3>
+                <div id="property-content">
+                  <p class="placeholder">Select an element to edit properties</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Architecture View -->
+        <section id="architecture-view" class="view">
+          <div class="view-content architecture-layout">
+            <div class="architecture-editor">
+              <textarea id="architecture-content" placeholder="Document your architecture here...
+
+## Overview
+Describe the overall system architecture...
+
+## Components
+List and describe the main components...
+
+## Data Flow
+Explain how data flows through the system...
+
+## APIs
+Document your API endpoints..."></textarea>
+            </div>
+            <div class="architecture-actions">
+              <span id="architecture-info" class="info-text"></span>
+              <button id="review-architecture-btn" class="btn primary">Review with Claude</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- CLI Output View -->
+        <section id="cli-output-view" class="view">
+          <div class="view-content cli-output-layout">
+            <div class="cli-output-header">
+              <div class="cli-output-tabs">
+                <button class="cli-tab active" data-tab="stream">Live Stream</button>
+                <button class="cli-tab" data-tab="messages">Messages</button>
+                <button class="cli-tab" data-tab="raw">Raw JSON</button>
+              </div>
+              <div class="cli-output-controls">
+                <label class="cli-checkbox">
+                  <input type="checkbox" id="cli-autoscroll" checked>
+                  Auto-scroll
+                </label>
+                <label class="cli-checkbox">
+                  <input type="checkbox" id="cli-show-system">
+                  Show System
+                </label>
+                <button id="cli-clear-btn" class="btn small">Clear</button>
+                <button id="cli-export-btn" class="btn small">Export</button>
+              </div>
+            </div>
+            <div class="cli-output-body">
+              <div id="cli-stream-content" class="cli-content active">
+                <div class="cli-stream-output">
+                  <p class="cli-placeholder">3CLI output will appear here when you submit a prompt...</p>
+                </div>
+              </div>
+              <div id="cli-messages-content" class="cli-content">
+                <div class="cli-messages-list">
+                  <!-- Messages rendered dynamically -->
+                </div>
+              </div>
+              <div id="cli-raw-content" class="cli-content">
+                <pre class="cli-raw-output"></pre>
+              </div>
+            </div>
+            <div class="cli-output-footer">
+              <span id="cli-status" class="cli-status">Idle</span>
+              <span id="cli-session-info" class="cli-session-info"></span>
+              <span id="cli-cost-info" class="cli-cost-info"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="modal-container hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modal-title">Modal Title</h3>
+          <button class="modal-close">×</button>
+        </div>
+        <div id="modal-content" class="modal-content">
+          <!-- Modal content rendered dynamically -->
+        </div>
+        <div id="modal-actions" class="modal-actions">
+          <!-- Modal actions rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <!-- Application Scripts -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>

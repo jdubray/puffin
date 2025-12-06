@@ -1,0 +1,459 @@
+/**
+ * CLI Output Component
+ *
+ * Displays raw 3CLI interactions including:
+ * - Live streaming output
+ * - Parsed message history
+ * - Raw JSON for debugging
+ */
+
+export class CliOutputComponent {
+  constructor(intents) {
+    this.intents = intents
+    this.messages = []
+    this.rawMessages = []
+    this.streamBuffer = ''
+    this.activeTab = 'stream'
+    this.autoScroll = true
+    this.showSystem = false
+    this.currentSession = null
+    this.totalCost = 0
+    this.totalTurns = 0
+  }
+
+  /**
+   * Initialize the component
+   */
+  init() {
+    this.bindEvents()
+  }
+
+  /**
+   * Bind event handlers
+   */
+  bindEvents() {
+    // Tab switching
+    document.querySelectorAll('.cli-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        this.switchTab(e.target.dataset.tab)
+      })
+    })
+
+    // Auto-scroll toggle
+    document.getElementById('cli-autoscroll')?.addEventListener('change', (e) => {
+      this.autoScroll = e.target.checked
+    })
+
+    // Show system messages toggle
+    document.getElementById('cli-show-system')?.addEventListener('change', (e) => {
+      this.showSystem = e.target.checked
+      this.renderMessages()
+    })
+
+    // Clear button
+    document.getElementById('cli-clear-btn')?.addEventListener('click', () => {
+      this.clear()
+    })
+
+    // Export button
+    document.getElementById('cli-export-btn')?.addEventListener('click', () => {
+      this.exportOutput()
+    })
+  }
+
+  /**
+   * Switch between tabs
+   */
+  switchTab(tabName) {
+    this.activeTab = tabName
+
+    // Update tab buttons
+    document.querySelectorAll('.cli-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.tab === tabName)
+    })
+
+    // Update tab content
+    document.querySelectorAll('.cli-content').forEach(content => {
+      content.classList.toggle('active', content.id === `cli-${tabName}-content`)
+    })
+  }
+
+  /**
+   * Handle incoming raw message from 3CLI
+   * Called for each JSON line from the CLI stream
+   */
+  handleRawMessage(jsonLine) {
+    // Store raw message
+    this.rawMessages.push({
+      timestamp: Date.now(),
+      raw: jsonLine
+    })
+
+    // Try to parse JSON
+    try {
+      const parsed = JSON.parse(jsonLine)
+      this.handleParsedMessage(parsed)
+    } catch (e) {
+      // Not valid JSON, treat as plain text
+      this.appendToStream(jsonLine, 'text')
+    }
+
+    // Update raw view
+    this.updateRawView()
+  }
+
+  /**
+   * Handle parsed JSON message
+   */
+  handleParsedMessage(msg) {
+    const message = {
+      timestamp: Date.now(),
+      type: msg.type,
+      data: msg
+    }
+
+    this.messages.push(message)
+
+    switch (msg.type) {
+      case 'assistant':
+        this.handleAssistantMessage(msg)
+        break
+
+      case 'user':
+        this.handleUserMessage(msg)
+        break
+
+      case 'system':
+        this.handleSystemMessage(msg)
+        break
+
+      case 'result':
+        this.handleResultMessage(msg)
+        break
+
+      default:
+        this.appendToStream(`[${msg.type}] ${JSON.stringify(msg)}`, 'unknown')
+    }
+
+    this.renderMessages()
+    this.updateStatus()
+  }
+
+  /**
+   * Handle assistant message (Claude's response)
+   */
+  handleAssistantMessage(msg) {
+    if (msg.message?.content) {
+      for (const block of msg.message.content) {
+        if (block.type === 'text') {
+          this.appendToStream(block.text, 'assistant-text')
+        } else if (block.type === 'tool_use') {
+          this.appendToStream(`\n🔧 Tool: ${block.name}`, 'tool-use')
+          if (block.input) {
+            const inputStr = JSON.stringify(block.input, null, 2)
+            this.appendToStream(`Input: ${inputStr}`, 'tool-input')
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle user message (tool results)
+   */
+  handleUserMessage(msg) {
+    if (msg.message?.content) {
+      for (const block of msg.message.content) {
+        if (block.type === 'tool_result') {
+          const status = block.is_error ? '❌' : '✅'
+          this.appendToStream(`\n${status} Tool Result (${block.tool_use_id}):`, 'tool-result-header')
+
+          if (typeof block.content === 'string') {
+            // Truncate long results for display
+            const content = block.content.length > 500
+              ? block.content.substring(0, 500) + '...[truncated]'
+              : block.content
+            this.appendToStream(content, block.is_error ? 'tool-error' : 'tool-result')
+          } else if (Array.isArray(block.content)) {
+            for (const item of block.content) {
+              if (item.type === 'text') {
+                const content = item.text.length > 500
+                  ? item.text.substring(0, 500) + '...[truncated]'
+                  : item.text
+                this.appendToStream(content, block.is_error ? 'tool-error' : 'tool-result')
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle system message
+   */
+  handleSystemMessage(msg) {
+    if (this.showSystem) {
+      this.appendToStream(`[SYSTEM] ${msg.message || JSON.stringify(msg)}`, 'system')
+    }
+  }
+
+  /**
+   * Handle result message (final summary)
+   */
+  handleResultMessage(msg) {
+    this.currentSession = msg.session_id
+    this.totalCost += msg.cost_usd || 0
+    this.totalTurns += msg.num_turns || 0
+
+    this.appendToStream('\n' + '─'.repeat(50), 'divider')
+    this.appendToStream(`✓ Completed`, 'result-header')
+    this.appendToStream(`  Session: ${msg.session_id}`, 'result-info')
+    this.appendToStream(`  Turns: ${msg.num_turns}`, 'result-info')
+    this.appendToStream(`  Cost: $${(msg.cost_usd || 0).toFixed(4)}`, 'result-info')
+    this.appendToStream(`  Duration: ${msg.duration_ms}ms`, 'result-info')
+    this.appendToStream('─'.repeat(50) + '\n', 'divider')
+
+    this.updateSessionInfo()
+    this.updateCostInfo()
+  }
+
+  /**
+   * Append text to the stream view
+   */
+  appendToStream(text, className = '') {
+    this.streamBuffer += `<div class="stream-line ${className}">${this.escapeHtml(text)}</div>`
+    this.updateStreamView()
+  }
+
+  /**
+   * Update the stream view
+   */
+  updateStreamView() {
+    const container = document.querySelector('.cli-stream-output')
+    if (!container) return
+
+    container.innerHTML = this.streamBuffer || '<p class="cli-placeholder">3CLI output will appear here when you submit a prompt...</p>'
+
+    if (this.autoScroll) {
+      container.scrollTop = container.scrollHeight
+    }
+  }
+
+  /**
+   * Update the messages view
+   */
+  renderMessages() {
+    const container = document.querySelector('.cli-messages-list')
+    if (!container) return
+
+    const filteredMessages = this.showSystem
+      ? this.messages
+      : this.messages.filter(m => m.type !== 'system')
+
+    if (filteredMessages.length === 0) {
+      container.innerHTML = '<p class="cli-placeholder">No messages yet...</p>'
+      return
+    }
+
+    container.innerHTML = filteredMessages.map((msg, index) => `
+      <div class="cli-message cli-message-${msg.type}">
+        <div class="cli-message-header">
+          <span class="cli-message-type">${this.getMessageIcon(msg.type)} ${msg.type}</span>
+          <span class="cli-message-time">${this.formatTime(msg.timestamp)}</span>
+          <button class="cli-message-expand" data-index="${index}">▼</button>
+        </div>
+        <div class="cli-message-preview">${this.getMessagePreview(msg)}</div>
+        <pre class="cli-message-detail hidden">${this.escapeHtml(JSON.stringify(msg.data, null, 2))}</pre>
+      </div>
+    `).join('')
+
+    // Add expand/collapse handlers
+    container.querySelectorAll('.cli-message-expand').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const detail = e.target.closest('.cli-message').querySelector('.cli-message-detail')
+        detail.classList.toggle('hidden')
+        e.target.textContent = detail.classList.contains('hidden') ? '▼' : '▲'
+      })
+    })
+
+    if (this.autoScroll) {
+      container.scrollTop = container.scrollHeight
+    }
+  }
+
+  /**
+   * Update raw JSON view
+   */
+  updateRawView() {
+    const pre = document.querySelector('.cli-raw-output')
+    if (!pre) return
+
+    pre.textContent = this.rawMessages
+      .map(m => `[${this.formatTime(m.timestamp)}] ${m.raw}`)
+      .join('\n')
+
+    if (this.autoScroll) {
+      pre.parentElement.scrollTop = pre.parentElement.scrollHeight
+    }
+  }
+
+  /**
+   * Update status indicator
+   */
+  updateStatus(status) {
+    const statusEl = document.getElementById('cli-status')
+    if (statusEl && status) {
+      statusEl.textContent = status
+      statusEl.className = `cli-status cli-status-${status.toLowerCase().replace(/\s/g, '-')}`
+    }
+  }
+
+  /**
+   * Set processing status
+   */
+  setProcessing(isProcessing) {
+    this.updateStatus(isProcessing ? 'Processing...' : 'Idle')
+
+    const statusEl = document.getElementById('cli-status')
+    if (statusEl) {
+      statusEl.classList.toggle('processing', isProcessing)
+    }
+  }
+
+  /**
+   * Update session info
+   */
+  updateSessionInfo() {
+    const sessionEl = document.getElementById('cli-session-info')
+    if (sessionEl && this.currentSession) {
+      sessionEl.textContent = `Session: ${this.currentSession.substring(0, 8)}...`
+      sessionEl.title = this.currentSession
+    }
+  }
+
+  /**
+   * Update cost info
+   */
+  updateCostInfo() {
+    const costEl = document.getElementById('cli-cost-info')
+    if (costEl) {
+      costEl.textContent = `Total: $${this.totalCost.toFixed(4)} | ${this.totalTurns} turns`
+    }
+  }
+
+  /**
+   * Clear all output
+   */
+  clear() {
+    this.messages = []
+    this.rawMessages = []
+    this.streamBuffer = ''
+
+    this.updateStreamView()
+    this.renderMessages()
+    this.updateRawView()
+
+    document.getElementById('cli-session-info').textContent = ''
+  }
+
+  /**
+   * Export output to file
+   */
+  exportOutput() {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      session: this.currentSession,
+      totalCost: this.totalCost,
+      totalTurns: this.totalTurns,
+      messages: this.messages,
+      rawMessages: this.rawMessages
+    }
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `puffin-cli-output-${Date.now()}.json`
+    a.click()
+
+    URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Get icon for message type
+   */
+  getMessageIcon(type) {
+    const icons = {
+      assistant: '🤖',
+      user: '👤',
+      system: '⚙️',
+      result: '✓'
+    }
+    return icons[type] || '📝'
+  }
+
+  /**
+   * Get preview text for message
+   */
+  getMessagePreview(msg) {
+    const data = msg.data
+
+    if (msg.type === 'assistant' && data.message?.content) {
+      for (const block of data.message.content) {
+        if (block.type === 'text') {
+          const text = block.text.substring(0, 100)
+          return this.escapeHtml(text) + (block.text.length > 100 ? '...' : '')
+        }
+        if (block.type === 'tool_use') {
+          return `🔧 ${block.name}`
+        }
+      }
+    }
+
+    if (msg.type === 'user' && data.message?.content) {
+      for (const block of data.message.content) {
+        if (block.type === 'tool_result') {
+          const status = block.is_error ? '❌' : '✅'
+          return `${status} Tool result`
+        }
+      }
+    }
+
+    if (msg.type === 'result') {
+      return `Session: ${data.session_id?.substring(0, 8)}... | Cost: $${(data.cost_usd || 0).toFixed(4)}`
+    }
+
+    return JSON.stringify(data).substring(0, 80) + '...'
+  }
+
+  /**
+   * Format timestamp
+   */
+  formatTime(timestamp) {
+    const date = new Date(timestamp)
+    return date.toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }) + '.' + String(date.getMilliseconds()).padStart(3, '0')
+  }
+
+  /**
+   * Escape HTML
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div')
+    div.textContent = text
+    return div.innerHTML
+  }
+
+  /**
+   * Cleanup
+   */
+  destroy() {
+    // Nothing to cleanup currently
+  }
+}

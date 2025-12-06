@@ -1,0 +1,54 @@
+{
+  "name": "puffin",
+  "version": "0.1.0",
+  "description": "A GUI for Claude Code to help you 'clode' new projects",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "test": "node --test tests/",
+    "package": "electron-builder"
+  },
+  "keywords": [
+    "claude",
+    "ai",
+    "development",
+    "electron",
+    "sam-pattern"
+  ],
+  "author": "jdubray",
+  "license": "MIT",
+  "dependencies": {
+    "sam-pattern": "^1.5.10",
+    "sam-fsm": "^0.9.24",
+    "marked": "^14.0.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.puffin.app",
+    "productName": "Puffin",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "src/renderer/img/logo.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "src/renderer/img/logo.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "src/renderer/img/logo.png"
+    }
+  }
+}

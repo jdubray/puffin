@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+
+# Electron
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.puffin/
+
+# Environment
+.env
+.env.local
+
+# Project data (user-specific)
+projects/*.json
+
+# Keep projects folder structure
+!projects/.gitkeep

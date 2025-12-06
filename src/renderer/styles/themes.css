@@ -1,0 +1,163 @@
+/**
+ * Puffin - Theme Definitions
+ * CSS Custom Properties for theming
+ */
+
+/* Dark Theme (Default) */
+:root {
+  /* Background colors */
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --bg-input: #0d1b2a;
+  --bg-canvas: #0d1117;
+
+  /* Text colors */
+  --text-primary: #e6e6e6;
+  --text-secondary: #a0a0a0;
+  --text-muted: #666666;
+
+  /* Accent colors */
+  --accent-primary: #6c63ff;
+  --accent-hover: #5a52e0;
+  --accent-shadow: rgba(108, 99, 255, 0.25);
+
+  /* Border colors */
+  --border-color: #2d3748;
+  --grid-color: rgba(255, 255, 255, 0.05);
+
+  /* Status colors */
+  --success-color: #48bb78;
+  --error-color: #f56565;
+  --warning-color: #ecc94b;
+  --info-color: #4299e1;
+
+  /* Radius */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Light Theme */
+[data-theme="light"] {
+  /* Background colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f8fa;
+  --bg-tertiary: #edf2f7;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-active: rgba(0, 0, 0, 0.1);
+  --bg-input: #ffffff;
+  --bg-canvas: #f0f0f0;
+
+  /* Text colors */
+  --text-primary: #1a202c;
+  --text-secondary: #4a5568;
+  --text-muted: #a0aec0;
+
+  /* Accent colors */
+  --accent-primary: #5a52e0;
+  --accent-hover: #4a42c0;
+  --accent-shadow: rgba(90, 82, 224, 0.2);
+
+  /* Border colors */
+  --border-color: #e2e8f0;
+  --grid-color: rgba(0, 0, 0, 0.05);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* Puffin Theme - A warmer variation */
+[data-theme="puffin"] {
+  /* Background colors */
+  --bg-primary: #1c1917;
+  --bg-secondary: #292524;
+  --bg-tertiary: #3f3a36;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --bg-input: #171412;
+  --bg-canvas: #0f0e0d;
+
+  /* Text colors */
+  --text-primary: #faf5f0;
+  --text-secondary: #a8a29e;
+  --text-muted: #6b6560;
+
+  /* Accent colors - Puffin orange/coral */
+  --accent-primary: #fb923c;
+  --accent-hover: #f97316;
+  --accent-shadow: rgba(251, 146, 60, 0.25);
+
+  /* Border colors */
+  --border-color: #44403c;
+  --grid-color: rgba(255, 255, 255, 0.03);
+
+  /* Status colors */
+  --success-color: #4ade80;
+  --error-color: #ef4444;
+  --warning-color: #fbbf24;
+  --info-color: #38bdf8;
+}
+
+/* High Contrast Theme */
+[data-theme="high-contrast"] {
+  /* Background colors */
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #1a1a1a;
+  --bg-hover: rgba(255, 255, 255, 0.1);
+  --bg-active: rgba(255, 255, 255, 0.15);
+  --bg-input: #000000;
+  --bg-canvas: #050505;
+
+  /* Text colors */
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --text-muted: #888888;
+
+  /* Accent colors */
+  --accent-primary: #00ff88;
+  --accent-hover: #00cc6a;
+  --accent-shadow: rgba(0, 255, 136, 0.3);
+
+  /* Border colors */
+  --border-color: #444444;
+  --grid-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Animation preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f7f8fa;
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --border-color: #cccccc;
+  }
+
+  #sidebar,
+  #header,
+  .btn,
+  .modal-container {
+    display: none !important;
+  }
+}

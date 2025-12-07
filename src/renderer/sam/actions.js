@@ -377,6 +377,105 @@ export const loadUserStories = (stories) => ({
 })
 
 /**
+ * User Story Derivation Actions
+ * For the derive -> iterate -> implement workflow
+ */
+
+// Start deriving user stories from a prompt
+export const deriveUserStories = (data) => ({
+  type: 'DERIVE_USER_STORIES',
+  payload: {
+    branchId: data.branchId,
+    content: data.content,
+    timestamp: Date.now()
+  }
+})
+
+// Receive derived stories from Claude
+export const receiveDerivedStories = (stories, originalPrompt) => ({
+  type: 'RECEIVE_DERIVED_STORIES',
+  payload: {
+    stories: stories.map(s => ({
+      id: generateId(),
+      title: s.title,
+      description: s.description || '',
+      acceptanceCriteria: s.acceptanceCriteria || [],
+      status: 'pending',
+      notes: ''
+    })),
+    originalPrompt,
+    timestamp: Date.now()
+  }
+})
+
+// Mark a pending story as ready for implementation
+export const markStoryReady = (storyId) => ({
+  type: 'MARK_STORY_READY',
+  payload: {
+    storyId
+  }
+})
+
+// Unmark a story (set back to pending)
+export const unmarkStoryReady = (storyId) => ({
+  type: 'UNMARK_STORY_READY',
+  payload: {
+    storyId
+  }
+})
+
+// Update a pending story's fields
+export const updateDerivedStory = (storyId, updates) => ({
+  type: 'UPDATE_DERIVED_STORY',
+  payload: {
+    storyId,
+    updates
+  }
+})
+
+// Delete a pending story from the review list
+export const deleteDerivedStory = (storyId) => ({
+  type: 'DELETE_DERIVED_STORY',
+  payload: {
+    storyId
+  }
+})
+
+// Request Claude to modify stories based on feedback
+export const requestStoryChanges = (feedback) => ({
+  type: 'REQUEST_STORY_CHANGES',
+  payload: {
+    feedback,
+    timestamp: Date.now()
+  }
+})
+
+// Accept and implement ready stories
+export const implementStories = (storyIds, withPlanning = false) => ({
+  type: 'IMPLEMENT_STORIES',
+  payload: {
+    storyIds,
+    withPlanning,
+    timestamp: Date.now()
+  }
+})
+
+// Cancel story review (discard pending stories)
+export const cancelStoryReview = () => ({
+  type: 'CANCEL_STORY_REVIEW',
+  payload: {}
+})
+
+// Story derivation error
+export const storyDerivationError = (error) => ({
+  type: 'STORY_DERIVATION_ERROR',
+  payload: {
+    error: error.message || error,
+    timestamp: Date.now()
+  }
+})
+
+/**
  * UI Navigation Actions
  */
 

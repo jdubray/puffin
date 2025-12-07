@@ -121,7 +121,16 @@ export const initialModel = {
   activeGuidelinesTab: 'guidelines', // 'guidelines', 'stylesheets', 'tokens', 'patterns'
   activeGuidelinesSection: 'layout', // 'layout', 'typography', 'colors', 'components', 'interactions'
   selectedStylesheet: null,
-  selectedComponentPattern: null
+  selectedComponentPattern: null,
+
+  // User Story Derivation state
+  storyDerivation: {
+    status: 'idle', // 'idle' | 'deriving' | 'reviewing' | 'requesting-changes' | 'implementing'
+    pendingStories: [], // Stories being reviewed before implementation
+    originalPrompt: null, // The prompt that triggered derivation
+    branchId: null, // Branch context for the stories
+    error: null
+  }
 }
 
 /**
@@ -555,6 +564,181 @@ export const loadUserStoriesAcceptor = model => proposal => {
 }
 
 /**
+ * User Story Derivation Acceptors
+ */
+
+export const deriveUserStoriesAcceptor = model => proposal => {
+  if (proposal?.type === 'DERIVE_USER_STORIES') {
+    model.storyDerivation = {
+      status: 'deriving',
+      pendingStories: [],
+      originalPrompt: proposal.payload.content,
+      branchId: proposal.payload.branchId,
+      error: null
+    }
+    // Clear the prompt input
+    model.currentPrompt = { content: '', branchId: null }
+  }
+}
+
+export const receiveDerivedStoriesAcceptor = model => proposal => {
+  if (proposal?.type === 'RECEIVE_DERIVED_STORIES') {
+    model.storyDerivation.status = 'reviewing'
+    model.storyDerivation.pendingStories = proposal.payload.stories
+    model.storyDerivation.originalPrompt = proposal.payload.originalPrompt
+    // Show the review modal
+    model.modal = {
+      type: 'user-story-review',
+      data: {}
+    }
+  }
+}
+
+export const markStoryReadyAcceptor = model => proposal => {
+  if (proposal?.type === 'MARK_STORY_READY') {
+    const story = model.storyDerivation.pendingStories.find(
+      s => s.id === proposal.payload.storyId
+    )
+    if (story) {
+      story.status = 'ready'
+    }
+  }
+}
+
+export const unmarkStoryReadyAcceptor = model => proposal => {
+  if (proposal?.type === 'UNMARK_STORY_READY') {
+    const story = model.storyDerivation.pendingStories.find(
+      s => s.id === proposal.payload.storyId
+    )
+    if (story) {
+      story.status = 'pending'
+    }
+  }
+}
+
+export const updateDerivedStoryAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_DERIVED_STORY') {
+    const story = model.storyDerivation.pendingStories.find(
+      s => s.id === proposal.payload.storyId
+    )
+    if (story) {
+      Object.assign(story, proposal.payload.updates)
+    }
+  }
+}
+
+export const deleteDerivedStoryAcceptor = model => proposal => {
+  if (proposal?.type === 'DELETE_DERIVED_STORY') {
+    model.storyDerivation.pendingStories = model.storyDerivation.pendingStories.filter(
+      s => s.id !== proposal.payload.storyId
+    )
+  }
+}
+
+export const requestStoryChangesAcceptor = model => proposal => {
+  if (proposal?.type === 'REQUEST_STORY_CHANGES') {
+    model.storyDerivation.status = 'requesting-changes'
+    // The feedback will be sent via IPC, and we'll receive new stories
+  }
+}
+
+export const implementStoriesAcceptor = model => proposal => {
+  if (proposal?.type === 'IMPLEMENT_STORIES') {
+    const { storyIds, withPlanning } = proposal.payload
+
+    // Get ready stories
+    const readyStories = model.storyDerivation.pendingStories.filter(
+      s => storyIds.includes(s.id)
+    )
+
+    // Add them to the user stories with branchId
+    const branchId = model.storyDerivation.branchId
+    readyStories.forEach(story => {
+      model.userStories.push({
+        id: story.id,
+        branchId: branchId,
+        title: story.title,
+        description: story.description,
+        acceptanceCriteria: story.acceptanceCriteria,
+        status: 'pending',
+        sourcePromptId: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      })
+    })
+
+    // Set implementation status
+    model.storyDerivation.status = 'implementing'
+
+    // Close modal
+    model.modal = null
+
+    // Clear pending stories
+    model.storyDerivation.pendingStories = []
+
+    // Create a prompt entry to track the implementation
+    const storyTitles = readyStories.map(s => s.title).join(', ')
+    const promptContent = withPlanning
+      ? `[Planning] Implementing user stories: ${storyTitles}`
+      : `[Implementing] User stories: ${storyTitles}`
+
+    // Generate prompt ID
+    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+
+    // Add prompt to the branch
+    if (!model.history.branches[branchId]) {
+      model.history.branches[branchId] = {
+        id: branchId,
+        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
+        prompts: []
+      }
+    }
+
+    model.history.branches[branchId].prompts.push({
+      id: promptId,
+      content: promptContent,
+      parentId: null,
+      timestamp: Date.now(),
+      response: null
+    })
+
+    // Set as active prompt and switch to prompt view
+    model.history.activeBranch = branchId
+    model.history.activePromptId = promptId
+    model.pendingPromptId = promptId
+    model.currentView = 'prompt'
+
+    // Enable streaming response display
+    model.hasStreamingResponse = true
+    model.streamingResponse = ''
+  }
+}
+
+export const cancelStoryReviewAcceptor = model => proposal => {
+  if (proposal?.type === 'CANCEL_STORY_REVIEW') {
+    model.storyDerivation = {
+      status: 'idle',
+      pendingStories: [],
+      originalPrompt: null,
+      branchId: null,
+      error: null
+    }
+    model.modal = null
+  }
+}
+
+export const storyDerivationErrorAcceptor = model => proposal => {
+  if (proposal?.type === 'STORY_DERIVATION_ERROR') {
+    model.storyDerivation.status = 'idle'
+    model.storyDerivation.error = proposal.payload.error
+    model.appError = {
+      message: `Story derivation failed: ${proposal.payload.error}`,
+      timestamp: proposal.payload.timestamp
+    }
+  }
+}
+
+/**
  * UI Navigation Acceptors
  */
 
@@ -637,6 +821,18 @@ export const acceptors = [
   updateUserStoryAcceptor,
   deleteUserStoryAcceptor,
   loadUserStoriesAcceptor,
+
+  // Story Derivation
+  deriveUserStoriesAcceptor,
+  receiveDerivedStoriesAcceptor,
+  markStoryReadyAcceptor,
+  unmarkStoryReadyAcceptor,
+  updateDerivedStoryAcceptor,
+  deleteDerivedStoryAcceptor,
+  requestStoryChangesAcceptor,
+  implementStoriesAcceptor,
+  cancelStoryReviewAcceptor,
+  storyDerivationErrorAcceptor,
 
   // UI Navigation
   switchViewAcceptor,

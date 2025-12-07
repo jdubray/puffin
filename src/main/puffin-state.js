@@ -171,6 +171,7 @@ class PuffinState {
   async addUserStory(story) {
     const newStory = {
       id: story.id || this.generateId(),
+      branchId: story.branchId || null, // Branch context for the story
       title: story.title,
       description: story.description || '',
       acceptanceCriteria: story.acceptanceCriteria || [],

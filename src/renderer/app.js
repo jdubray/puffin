@@ -23,6 +23,7 @@ import { ArchitectureComponent } from './components/architecture/architecture.js
 import { DebuggerComponent } from './components/debugger/debugger.js'
 import { CliOutputComponent } from './components/cli-output/cli-output.js'
 import { UserStoriesComponent } from './components/user-stories/user-stories.js'
+import { UserStoryReviewModalComponent } from './components/user-story-review-modal/user-story-review-modal.js'
 
 /**
  * Main application class
@@ -125,6 +126,10 @@ class PuffinApp {
       'deleteGuiDefinition', 'showSaveGuiDefinitionDialog',
       'updateArchitecture', 'reviewArchitecture',
       'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories',
+      // Story derivation actions
+      'deriveUserStories', 'receiveDerivedStories', 'markStoryReady', 'unmarkStoryReady',
+      'updateDerivedStory', 'deleteDerivedStory', 'requestStoryChanges',
+      'implementStories', 'cancelStoryReview', 'storyDerivationError',
       'switchView', 'toggleSidebar', 'showModal', 'hideModal'
     ]
 
@@ -186,6 +191,18 @@ class PuffinApp {
           ['UPDATE_USER_STORY', actions.updateUserStory],
           ['DELETE_USER_STORY', actions.deleteUserStory],
           ['LOAD_USER_STORIES', actions.loadUserStories],
+
+          // Story derivation actions (no FSM needed)
+          ['DERIVE_USER_STORIES', actions.deriveUserStories],
+          ['RECEIVE_DERIVED_STORIES', actions.receiveDerivedStories],
+          ['MARK_STORY_READY', actions.markStoryReady],
+          ['UNMARK_STORY_READY', actions.unmarkStoryReady],
+          ['UPDATE_DERIVED_STORY', actions.updateDerivedStory],
+          ['DELETE_DERIVED_STORY', actions.deleteDerivedStory],
+          ['REQUEST_STORY_CHANGES', actions.requestStoryChanges],
+          ['IMPLEMENT_STORIES', actions.implementStories],
+          ['CANCEL_STORY_REVIEW', actions.cancelStoryReview],
+          ['STORY_DERIVATION_ERROR', actions.storyDerivationError],
 
           // UI Navigation actions (no FSM needed)
           ['SWITCH_VIEW', actions.switchView],
@@ -260,7 +277,8 @@ class PuffinApp {
       'UPDATE_ARCHITECTURE',
       'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
       'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
-      'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY'
+      'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
+      'IMPLEMENT_STORIES' // Persist user stories when implementing
     ]
 
     if (!persistActions.includes(actionType)) return
@@ -284,6 +302,24 @@ class PuffinApp {
 
       if (actionType === 'UPDATE_ARCHITECTURE') {
         await window.puffin.state.updateArchitecture(this.state.architecture.content)
+      }
+
+      // Persist user stories and history when implementing from derivation
+      if (actionType === 'IMPLEMENT_STORIES') {
+        // Persist history (we added a prompt entry)
+        await window.puffin.state.updateHistory(this.state.history.raw)
+
+        // The stories have been added to this.state.userStories via the acceptor
+        // We need to persist each newly added story
+        for (const story of this.state.userStories) {
+          // Try to add - if it exists, this will be handled gracefully
+          try {
+            await window.puffin.state.addUserStory(story)
+          } catch (e) {
+            // Story might already exist, update instead
+            await window.puffin.state.updateUserStory(story.id, story)
+          }
+        }
       }
 
       console.log('State persisted for action:', actionType)
@@ -328,7 +364,8 @@ class PuffinApp {
       architecture: new ArchitectureComponent(this.intents),
       debugger: new DebuggerComponent(this.intents),
       cliOutput: new CliOutputComponent(this.intents),
-      userStories: new UserStoriesComponent(this.intents)
+      userStories: new UserStoriesComponent(this.intents),
+      userStoryReviewModal: new UserStoryReviewModalComponent(this.intents)
     }
 
     // Initialize each component
@@ -417,6 +454,21 @@ class PuffinApp {
       this.components.cliOutput.setProcessing(false)
     })
     this.claudeListeners.push(unsubError)
+
+    // Story derivation - stories derived
+    const unsubStoriesDerived = window.puffin.claude.onStoriesDerived((data) => {
+      console.log('Stories derived:', data)
+      this.intents.receiveDerivedStories(data.stories, data.originalPrompt)
+    })
+    this.claudeListeners.push(unsubStoriesDerived)
+
+    // Story derivation - error
+    const unsubStoryError = window.puffin.claude.onStoryDerivationError((error) => {
+      console.error('Story derivation error:', error)
+      this.intents.storyDerivationError(error)
+      this.showToast('Failed to derive stories: ' + error.error, 'error')
+    })
+    this.claudeListeners.push(unsubStoryError)
   }
 
   /**
@@ -504,6 +556,9 @@ class PuffinApp {
         break
       case 'gui-export':
         // Handled by gui-designer component
+        break
+      case 'user-story-review':
+        // Handled by UserStoryReviewModalComponent which subscribes to state changes
         break
       default:
         console.log('Unknown modal type:', modal.type)

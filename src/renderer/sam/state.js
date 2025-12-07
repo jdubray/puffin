@@ -41,6 +41,9 @@ export function computeState(model) {
     // User Stories state
     userStories: model.userStories || [],
 
+    // Story Derivation state
+    storyDerivation: computeStoryDerivationState(model),
+
     // UI state
     ui: computeUIState(model)
   }
@@ -238,6 +241,43 @@ function computeUIState(model) {
 
     // Navigation state
     canNavigate: !model.pendingPromptId
+  }
+}
+
+/**
+ * Story Derivation state computation
+ */
+function computeStoryDerivationState(model) {
+  const derivation = model.storyDerivation || {
+    status: 'idle',
+    pendingStories: [],
+    originalPrompt: null,
+    branchId: null,
+    error: null
+  }
+
+  const pendingStories = derivation.pendingStories || []
+  const readyCount = pendingStories.filter(s => s.status === 'ready').length
+  const pendingCount = pendingStories.filter(s => s.status === 'pending').length
+
+  return {
+    status: derivation.status,
+    isDeriving: derivation.status === 'deriving',
+    isReviewing: derivation.status === 'reviewing',
+    isRequestingChanges: derivation.status === 'requesting-changes',
+    isImplementing: derivation.status === 'implementing',
+    isIdle: derivation.status === 'idle',
+
+    pendingStories: pendingStories,
+    storyCount: pendingStories.length,
+    readyCount: readyCount,
+    pendingCount: pendingCount,
+    hasReadyStories: readyCount > 0,
+    allStoriesReady: pendingStories.length > 0 && readyCount === pendingStories.length,
+
+    originalPrompt: derivation.originalPrompt,
+    branchId: derivation.branchId,
+    error: derivation.error
   }
 }
 

@@ -16,6 +16,8 @@ export class PromptEditorComponent {
     this.includeGuiMenu = null
     this.includeGui = false
     this.selectedGuiDefinition = null
+    this.deriveStoriesCheckbox = null
+    this.deriveUserStories = false
   }
 
   /**
@@ -29,6 +31,7 @@ export class PromptEditorComponent {
     this.includeGuiBtn = document.getElementById('include-gui-btn')
     this.includeGuiDropdown = document.getElementById('include-gui-dropdown')
     this.includeGuiMenu = document.getElementById('include-gui-menu')
+    this.deriveStoriesCheckbox = document.getElementById('derive-stories-checkbox')
 
     this.bindEvents()
     this.subscribeToState()
@@ -62,6 +65,11 @@ export class PromptEditorComponent {
     this.includeGuiBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       this.toggleDropdown()
+    })
+
+    // Derive user stories checkbox
+    this.deriveStoriesCheckbox.addEventListener('change', () => {
+      this.deriveUserStories = this.deriveStoriesCheckbox.checked
     })
 
     // Close dropdown when clicking outside
@@ -263,6 +271,18 @@ export class PromptEditorComponent {
     // Get current state from window
     const state = window.puffinApp?.state
     if (!state) return
+
+    // Check if we should derive user stories first
+    if (this.deriveUserStories) {
+      this.deriveStories(content, state)
+      return
+    }
+
+    // If branch is empty, behave the same as "Send as New Thread"
+    if (state.history.isEmpty) {
+      this.submitAsNewThread()
+      return
+    }
 
     // Get parentId only if the active prompt is in the current branch
     let parentId = null
@@ -623,6 +643,33 @@ export class PromptEditorComponent {
     elements.forEach(el => describeElement(el))
 
     return lines.join('\n')
+  }
+
+  /**
+   * Derive user stories from the prompt before implementation
+   */
+  async deriveStories(content, state) {
+    // Dispatch action to show derivation is in progress
+    this.intents.deriveUserStories({
+      branchId: state.history.activeBranch,
+      content: content
+    })
+
+    // Reset the checkbox
+    this.deriveUserStories = false
+    this.deriveStoriesCheckbox.checked = false
+
+    // Call the IPC to derive stories
+    if (window.puffin && window.puffin.claude.deriveStories) {
+      window.puffin.claude.deriveStories({
+        prompt: content,
+        branchId: state.history.activeBranch,
+        project: state.config ? {
+          name: state.config.name,
+          description: state.config.description
+        } : null
+      })
+    }
   }
 
   /**

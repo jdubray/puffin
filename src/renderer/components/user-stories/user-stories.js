@@ -12,8 +12,11 @@ export class UserStoriesComponent {
     this.filterBtns = null
     this.addBtn = null
     this.listContainer = null
+    this.branchSelect = null
     this.currentFilter = 'all'
+    this.currentBranch = 'all' // Filter by branch
     this.stories = []
+    this.branches = {}
   }
 
   /**
@@ -53,6 +56,7 @@ export class UserStoriesComponent {
     document.addEventListener('puffin-state-change', (e) => {
       const { state } = e.detail
       this.stories = state.userStories || []
+      this.branches = state.history?.raw?.branches || {}
       this.render()
     })
   }
@@ -69,27 +73,48 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Get filtered stories
+   * Set branch filter
+   */
+  setBranchFilter(branchId) {
+    this.currentBranch = branchId
+    this.render()
+  }
+
+  /**
+   * Get filtered stories (by status and branch)
    */
   getFilteredStories() {
-    if (this.currentFilter === 'all') {
-      return this.stories
+    let filtered = this.stories
+
+    // Filter by branch
+    if (this.currentBranch !== 'all') {
+      filtered = filtered.filter(s => s.branchId === this.currentBranch)
     }
-    return this.stories.filter(s => s.status === this.currentFilter)
+
+    // Filter by status
+    if (this.currentFilter !== 'all') {
+      filtered = filtered.filter(s => s.status === this.currentFilter)
+    }
+
+    return filtered
   }
 
   /**
    * Render the stories list
    */
   render() {
+    // Render branch filter dropdown
+    this.renderBranchFilter()
+
     const filtered = this.getFilteredStories()
 
     if (filtered.length === 0) {
+      const branchText = this.currentBranch !== 'all' ? ` in "${this.currentBranch}" branch` : ''
       this.listContainer.innerHTML = `
         <p class="placeholder">
           ${this.currentFilter === 'all'
-            ? 'No user stories yet. Add prompts to the Specifications branch to auto-extract stories, or click "+ Add Story".'
-            : `No ${this.currentFilter} stories.`}
+            ? `No user stories${branchText} yet. Use "Derive User Stories" checkbox when submitting a prompt, or click "+ Add Story".`
+            : `No ${this.currentFilter} stories${branchText}.`}
         </p>
       `
       return
@@ -99,6 +124,55 @@ export class UserStoriesComponent {
 
     // Bind card events
     this.bindCardEvents()
+  }
+
+  /**
+   * Render the branch filter dropdown
+   */
+  renderBranchFilter() {
+    // Find or create branch filter container
+    let branchFilterContainer = this.container.querySelector('.branch-filter-container')
+    if (!branchFilterContainer) {
+      const toolbar = this.container.querySelector('.user-stories-toolbar')
+      if (toolbar) {
+        branchFilterContainer = document.createElement('div')
+        branchFilterContainer.className = 'branch-filter-container'
+        toolbar.insertBefore(branchFilterContainer, toolbar.firstChild)
+      } else {
+        return
+      }
+    }
+
+    // Get unique branches from stories
+    const branchIds = [...new Set(this.stories.map(s => s.branchId).filter(Boolean))]
+
+    branchFilterContainer.innerHTML = `
+      <label class="branch-filter-label">Branch:</label>
+      <select class="branch-filter-select" id="story-branch-filter">
+        <option value="all" ${this.currentBranch === 'all' ? 'selected' : ''}>All Branches</option>
+        ${branchIds.map(branchId => `
+          <option value="${branchId}" ${this.currentBranch === branchId ? 'selected' : ''}>
+            ${this.formatBranchName(branchId)}
+          </option>
+        `).join('')}
+      </select>
+    `
+
+    // Bind change event
+    const select = branchFilterContainer.querySelector('#story-branch-filter')
+    select.addEventListener('change', (e) => {
+      this.setBranchFilter(e.target.value)
+    })
+  }
+
+  /**
+   * Format branch name for display
+   */
+  formatBranchName(branchId) {
+    const branch = this.branches[branchId]
+    if (branch?.name) return branch.name
+    // Capitalize first letter
+    return branchId.charAt(0).toUpperCase() + branchId.slice(1)
   }
 
   /**
@@ -129,6 +203,7 @@ export class UserStoriesComponent {
         ` : ''}
         <div class="story-footer">
           <span class="story-date">${this.formatDate(story.createdAt)}</span>
+          ${story.branchId ? `<span class="story-branch">${this.formatBranchName(story.branchId)}</span>` : ''}
           ${story.sourcePromptId ? '<span class="story-source">Auto-extracted</span>' : ''}
         </div>
       </div>

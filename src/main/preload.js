@@ -125,6 +125,30 @@ contextBridge.exposeInMainWorld('puffin', {
       const handler = (event, jsonLine) => callback(jsonLine)
       ipcRenderer.on('claude:raw', handler)
       return () => ipcRenderer.removeListener('claude:raw', handler)
+    },
+
+    // User Story Derivation Operations
+    // Derive user stories from a prompt
+    deriveStories: (data) => ipcRenderer.send('claude:deriveStories', data),
+
+    // Modify stories based on feedback
+    modifyStories: (data) => ipcRenderer.send('claude:modifyStories', data),
+
+    // Implement stories
+    implementStories: (data) => ipcRenderer.send('claude:implementStories', data),
+
+    // Subscribe to stories derived event
+    onStoriesDerived: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('claude:storiesDerived', handler)
+      return () => ipcRenderer.removeListener('claude:storiesDerived', handler)
+    },
+
+    // Subscribe to story derivation error event
+    onStoryDerivationError: (callback) => {
+      const handler = (event, error) => callback(error)
+      ipcRenderer.on('claude:storyDerivationError', handler)
+      return () => ipcRenderer.removeListener('claude:storyDerivationError', handler)
     }
   },
 

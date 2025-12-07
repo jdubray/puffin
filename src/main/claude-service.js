@@ -15,6 +15,58 @@
 const { spawn } = require('child_process')
 const path = require('path')
 
+/**
+ * Tool emoji mapping for different tool types
+ */
+const TOOL_EMOJIS = {
+  // File reading operations
+  Read: '📖',
+
+  // File editing operations
+  Edit: '✏️',
+
+  // File writing operations
+  Write: '📝',
+
+  // Search operations
+  Grep: '🔍',
+  Glob: '🔍',
+
+  // Command execution
+  Bash: '💻',
+
+  // Web operations
+  WebFetch: '🌐',
+  WebSearch: '🔎',
+
+  // Task/Agent operations
+  Task: '🤖',
+
+  // Notebook operations
+  NotebookEdit: '📓',
+
+  // Todo operations
+  TodoWrite: '📋',
+
+  // Other specialized tools
+  Skill: '🎯',
+  SlashCommand: '⚡',
+  EnterPlanMode: '📋',
+  ExitPlanMode: '✅',
+
+  // Default fallback
+  default: '⚙️'
+}
+
+/**
+ * Get emoji for a tool name
+ * @param {string} toolName - The name of the tool
+ * @returns {string} The corresponding emoji
+ */
+function getToolEmoji(toolName) {
+  return TOOL_EMOJIS[toolName] || TOOL_EMOJIS.default
+}
+
 class ClaudeService {
   constructor() {
     this.currentProcess = null
@@ -314,8 +366,8 @@ class ClaudeService {
             if (block.type === 'text') {
               onChunk(block.text)
             } else if (block.type === 'tool_use') {
-              // Show tool usage in a formatted way
-              onChunk(`\n🔧 Using tool: ${block.name}\n`)
+              // Show tool emoji only
+              onChunk(getToolEmoji(block.name))
             }
           }
         }
@@ -597,6 +649,222 @@ When asked to create documents, lists, or summaries, include the full content in
         resolve(null)
       })
     })
+  }
+
+  /**
+   * Derive user stories from a prompt
+   * @param {string} prompt - The original prompt
+   * @param {string} projectPath - Project directory path
+   * @param {Object} project - Project context
+   * @returns {Promise<{success: boolean, stories?: Array, error?: string}>}
+   */
+  async deriveStories(prompt, projectPath, project = null) {
+    const systemPrompt = `You are a requirements analyst. Your task is to derive user stories from the following request.
+
+Output ONLY a valid JSON array of user stories in this exact format:
+[
+  {
+    "title": "Brief title of the user story",
+    "description": "As a [type of user], I want [goal] so that [benefit]",
+    "acceptanceCriteria": ["Criterion 1", "Criterion 2", "..."]
+  }
+]
+
+Guidelines:
+- Each story should be focused on a single feature or capability
+- Write clear, actionable acceptance criteria
+- Keep stories at a granular enough level to be implemented individually
+- Output ONLY the JSON array, no other text or markdown`
+
+    const fullPrompt = `${systemPrompt}
+
+${project?.description ? `Project Context: ${project.description}\n` : ''}
+Request to analyze:
+${prompt}`
+
+    return new Promise((resolve, reject) => {
+      const cwd = projectPath || this.projectPath || process.cwd()
+      const args = [
+        '--print',
+        '--output-format', 'stream-json',
+        '--verbose',
+        '--max-turns', '3',
+        '--permission-mode', 'acceptEdits',
+        '-'
+      ]
+
+      const spawnOptions = this.getSpawnOptions(cwd)
+      spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
+      const proc = spawn('claude', args, spawnOptions)
+
+      let buffer = ''
+      let resultText = ''
+      let allMessages = []
+
+      proc.stdin.write(fullPrompt)
+      proc.stdin.end()
+
+      proc.stdout.on('data', (chunk) => {
+        buffer += chunk.toString()
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const json = JSON.parse(line)
+            allMessages.push(json)
+
+            if (json.type === 'assistant' && json.message?.content) {
+              for (const block of json.message.content) {
+                if (block.type === 'text') {
+                  resultText += block.text
+                }
+              }
+            }
+
+            if (json.type === 'result' && json.result) {
+              resultText = json.result
+            }
+          } catch (e) {
+            // Not JSON
+          }
+        }
+      })
+
+      proc.on('close', (code) => {
+        // Process remaining buffer
+        if (buffer.trim()) {
+          try {
+            const json = JSON.parse(buffer)
+            if (json.type === 'result' && json.result) {
+              resultText = json.result
+            }
+          } catch (e) {
+            // Not JSON
+          }
+        }
+
+        try {
+          // Extract JSON array from the response
+          const jsonMatch = resultText.match(/\[[\s\S]*\]/)
+          if (jsonMatch) {
+            const stories = JSON.parse(jsonMatch[0])
+            resolve({ success: true, stories })
+          } else {
+            resolve({ success: false, error: 'Could not parse stories from response' })
+          }
+        } catch (e) {
+          resolve({ success: false, error: `Failed to parse stories: ${e.message}` })
+        }
+      })
+
+      proc.on('error', (error) => {
+        resolve({ success: false, error: error.message })
+      })
+
+      // Timeout after 60 seconds
+      setTimeout(() => {
+        proc.kill()
+        resolve({ success: false, error: 'Story derivation timed out' })
+      }, 60000)
+    })
+  }
+
+  /**
+   * Modify stories based on user feedback
+   * @param {Array} currentStories - Current story list
+   * @param {string} feedback - User feedback
+   * @param {string} projectPath - Project directory path
+   * @param {Object} project - Project context
+   * @returns {Promise<{success: boolean, stories?: Array, error?: string}>}
+   */
+  async modifyStories(currentStories, feedback, projectPath, project = null) {
+    const storiesJson = JSON.stringify(currentStories, null, 2)
+
+    const systemPrompt = `You are a requirements analyst. You have previously derived user stories from a request.
+Now the user wants to modify these stories based on their feedback.
+
+Current stories:
+${storiesJson}
+
+Output ONLY a valid JSON array with the modified user stories in this exact format:
+[
+  {
+    "title": "Brief title of the user story",
+    "description": "As a [type of user], I want [goal] so that [benefit]",
+    "acceptanceCriteria": ["Criterion 1", "Criterion 2", "..."]
+  }
+]
+
+Apply the user's feedback to modify, add, remove, or clarify the stories as needed.
+Output ONLY the JSON array, no other text or markdown.`
+
+    const fullPrompt = `${systemPrompt}
+
+User's feedback:
+${feedback}`
+
+    return this.deriveStories(fullPrompt, projectPath, project)
+  }
+
+  /**
+   * Implement user stories
+   * @param {Array} stories - Stories to implement
+   * @param {string} projectPath - Project directory path
+   * @param {Object} project - Project context
+   * @param {boolean} withPlanning - Whether to plan first
+   * @param {Function} onChunk - Streaming callback
+   * @param {Function} onComplete - Completion callback
+   * @param {Function} onRaw - Raw JSON callback
+   */
+  async implementStories(stories, projectPath, project, withPlanning, onChunk, onComplete, onRaw) {
+    // Build implementation prompt from stories
+    let prompt = ''
+
+    if (withPlanning) {
+      prompt = `Please analyze and create an implementation plan for the following user stories:
+
+${stories.map((s, i) => `### Story ${i + 1}: ${s.title}
+${s.description}
+
+Acceptance Criteria:
+${s.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
+`).join('\n')}
+
+First, create a detailed implementation plan covering:
+1. Technical approach for each story
+2. Files to create or modify
+3. Key components and their relationships
+4. Implementation order and dependencies
+
+Then wait for my approval before implementing.`
+    } else {
+      prompt = `Please implement the following user stories:
+
+${stories.map((s, i) => `### Story ${i + 1}: ${s.title}
+${s.description}
+
+Acceptance Criteria:
+${s.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
+`).join('\n')}
+
+Implement each story ensuring all acceptance criteria are met.`
+    }
+
+    // Use the existing submit method
+    return this.submit(
+      {
+        prompt,
+        projectPath,
+        project,
+        branchId: 'backend', // Default to backend for implementation
+        maxTurns: 20
+      },
+      onChunk,
+      onComplete,
+      onRaw
+    )
   }
 }
 

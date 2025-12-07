@@ -7,6 +7,49 @@
  * - Raw JSON for debugging
  */
 
+/**
+ * Tool emoji mapping for different tool types
+ */
+const TOOL_EMOJIS = {
+  // File reading operations
+  Read: '📖',
+
+  // File editing operations
+  Edit: '✏️',
+
+  // File writing operations
+  Write: '📝',
+
+  // Search operations
+  Grep: '🔍',
+  Glob: '🔍',
+
+  // Command execution
+  Bash: '💻',
+
+  // Web operations
+  WebFetch: '🌐',
+  WebSearch: '🔎',
+
+  // Task/Agent operations
+  Task: '🤖',
+
+  // Notebook operations
+  NotebookEdit: '📓',
+
+  // Todo operations
+  TodoWrite: '📋',
+
+  // Other specialized tools
+  Skill: '🎯',
+  SlashCommand: '⚡',
+  EnterPlanMode: '📋',
+  ExitPlanMode: '✅',
+
+  // Default fallback
+  default: '⚙️'
+}
+
 export class CliOutputComponent {
   constructor(intents) {
     this.intents = intents
@@ -19,6 +62,16 @@ export class CliOutputComponent {
     this.currentSession = null
     this.totalCost = 0
     this.totalTurns = 0
+    this.activeTools = new Map() // Track active tools by ID
+  }
+
+  /**
+   * Get emoji for a tool name
+   * @param {string} toolName - The name of the tool
+   * @returns {string} The corresponding emoji
+   */
+  getToolEmoji(toolName) {
+    return TOOL_EMOJIS[toolName] || TOOL_EMOJIS.default
   }
 
   /**
@@ -148,7 +201,18 @@ export class CliOutputComponent {
         if (block.type === 'text') {
           this.appendToStream(block.text, 'assistant-text')
         } else if (block.type === 'tool_use') {
-          this.appendToStream(`\n🔧 Tool: ${block.name}`, 'tool-use')
+          // Track active tool
+          this.activeTools.set(block.id, {
+            name: block.name,
+            timestamp: Date.now()
+          })
+
+          // Create emoji element with tooltip and animation
+          const emoji = this.getToolEmoji(block.name)
+          const toolElement = `<span class="tool-emoji active" data-tool-id="${block.id}" data-tool-name="${this.escapeHtml(block.name)}" title="${this.escapeHtml(block.name)}">${emoji}</span>`
+
+          // Use raw append since we're inserting HTML
+          this.appendToStreamRaw(toolElement, 'tool-use')
           if (block.input) {
             const inputStr = JSON.stringify(block.input, null, 2)
             this.appendToStream(`Input: ${inputStr}`, 'tool-input')
@@ -165,6 +229,12 @@ export class CliOutputComponent {
     if (msg.message?.content) {
       for (const block of msg.message.content) {
         if (block.type === 'tool_result') {
+          // Remove active animation for completed tool
+          if (this.activeTools.has(block.tool_use_id)) {
+            this.removeActiveToolAnimation(block.tool_use_id)
+            this.activeTools.delete(block.tool_use_id)
+          }
+
           const status = block.is_error ? '❌' : '✅'
           this.appendToStream(`\n${status} Tool Result (${block.tool_use_id}):`, 'tool-result-header')
 
@@ -219,10 +289,18 @@ export class CliOutputComponent {
   }
 
   /**
-   * Append text to the stream view
+   * Append text to the stream view (HTML escaped)
    */
   appendToStream(text, className = '') {
     this.streamBuffer += `<div class="stream-line ${className}">${this.escapeHtml(text)}</div>`
+    this.updateStreamView()
+  }
+
+  /**
+   * Append raw HTML to the stream view (no escaping - use carefully)
+   */
+  appendToStreamRaw(html, className = '') {
+    this.streamBuffer += `<div class="stream-line ${className}">${html}</div>`
     this.updateStreamView()
   }
 
@@ -382,6 +460,24 @@ export class CliOutputComponent {
   }
 
   /**
+   * Remove active animation from completed tool
+   * @param {string} toolUseId - The ID of the completed tool
+   */
+  removeActiveToolAnimation(toolUseId) {
+    // Find all tool emoji elements in the current stream and remove active class
+    // This is a simple implementation - in a more complex app you'd track DOM elements
+    const container = document.querySelector('.cli-stream-output')
+    if (container) {
+      // Remove active class from all tool emojis since we don't track individual DOM elements
+      // This is acceptable since tools typically complete quickly
+      container.querySelectorAll('.tool-emoji.active').forEach(el => {
+        el.classList.remove('active')
+        el.classList.add('completed')
+      })
+    }
+  }
+
+  /**
    * Get icon for message type
    */
   getMessageIcon(type) {
@@ -407,7 +503,7 @@ export class CliOutputComponent {
           return this.escapeHtml(text) + (block.text.length > 100 ? '...' : '')
         }
         if (block.type === 'tool_use') {
-          return `🔧 ${block.name}`
+          return `${this.getToolEmoji(block.name)} ${block.name}`
         }
       }
     }

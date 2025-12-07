@@ -367,6 +367,85 @@ function setupClaudeHandlers(ipcMain) {
   ipcMain.on('claude:cancel', () => {
     claudeService.cancel()
   })
+
+  // Derive user stories from a prompt
+  ipcMain.on('claude:deriveStories', async (event, data) => {
+    try {
+      const result = await claudeService.deriveStories(
+        data.prompt,
+        projectPath,
+        data.project
+      )
+
+      if (result.success) {
+        event.sender.send('claude:storiesDerived', {
+          stories: result.stories,
+          originalPrompt: data.prompt
+        })
+      } else {
+        event.sender.send('claude:storyDerivationError', {
+          error: result.error
+        })
+      }
+    } catch (error) {
+      event.sender.send('claude:storyDerivationError', {
+        error: error.message
+      })
+    }
+  })
+
+  // Modify stories based on feedback
+  ipcMain.on('claude:modifyStories', async (event, data) => {
+    try {
+      const result = await claudeService.modifyStories(
+        data.stories,
+        data.feedback,
+        projectPath,
+        data.project
+      )
+
+      if (result.success) {
+        event.sender.send('claude:storiesDerived', {
+          stories: result.stories,
+          originalPrompt: data.originalPrompt
+        })
+      } else {
+        event.sender.send('claude:storyDerivationError', {
+          error: result.error
+        })
+      }
+    } catch (error) {
+      event.sender.send('claude:storyDerivationError', {
+        error: error.message
+      })
+    }
+  })
+
+  // Implement user stories
+  ipcMain.on('claude:implementStories', async (event, data) => {
+    try {
+      await claudeService.implementStories(
+        data.stories,
+        projectPath,
+        data.project,
+        data.withPlanning,
+        // On chunk received (streaming output)
+        (chunk) => {
+          event.sender.send('claude:response', chunk)
+        },
+        // On complete
+        (response) => {
+          event.sender.send('claude:complete', response)
+        },
+        // On raw JSON line
+        (jsonLine) => {
+          event.sender.send('claude:raw', jsonLine)
+        }
+      )
+    } catch (error) {
+      event.sender.send('claude:error', { message: error.message })
+    }
+  })
 }
 
 /**

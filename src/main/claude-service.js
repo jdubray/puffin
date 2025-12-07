@@ -57,6 +57,7 @@ class ClaudeService {
       this.currentProcess = spawn('claude', args, spawnOptions)
 
       let fullOutput = ''
+      let streamedContent = '' // Accumulate streamed assistant text
       let errorOutput = ''
       let resultData = null
       let buffer = ''
@@ -87,6 +88,16 @@ class ClaudeService {
 
           try {
             const json = JSON.parse(line)
+
+            // Accumulate assistant text content
+            if (json.type === 'assistant' && json.message?.content) {
+              for (const block of json.message.content) {
+                if (block.type === 'text') {
+                  streamedContent += block.text
+                }
+              }
+            }
+
             this.handleStreamMessage(json, onChunk)
 
             // Capture final result
@@ -135,8 +146,12 @@ class ClaudeService {
         }
 
         if (code === 0 || resultData) {
+          // Use result field if available, otherwise use streamed content, fallback to fullOutput
+          const responseContent = resultData?.result || streamedContent || fullOutput
+          console.log('Final response content length:', responseContent.length)
+
           const response = {
-            content: resultData?.result || fullOutput,
+            content: responseContent,
             sessionId: resultData?.session_id,
             cost: resultData?.total_cost_usd,
             turns: resultData?.num_turns,

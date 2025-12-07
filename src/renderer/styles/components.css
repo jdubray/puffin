@@ -271,7 +271,27 @@
   display: flex;
   gap: 0.5rem;
   margin-top: 0.75rem;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Button positioning for the new layout */
+.prompt-actions #new-thread-btn {
+  order: 1;
+}
+
+.prompt-actions #cancel-prompt-btn {
+  order: 2;
+}
+
+.prompt-actions #submit-prompt-btn {
+  order: 3;
+  margin-left: auto;
+  margin-right: 1rem;
+}
+
+.prompt-actions #include-gui-btn {
+  order: 4;
 }
 
 /* Streaming indicator */
@@ -538,6 +558,170 @@
   justify-content: flex-end;
   padding: 1rem 1.25rem;
   border-top: 1px solid var(--border-color);
+}
+
+/* GUI Definition List (in modal) */
+.gui-definition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.gui-definition-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gui-definition-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.gui-definition-item.current-design {
+  border-color: var(--accent-primary);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.definition-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.definition-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.definition-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.definition-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.definition-delete {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-xs);
+  transition: all 0.15s ease;
+}
+
+.definition-delete:hover {
+  background: var(--danger);
+  color: white;
+}
+
+.no-definitions {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 2rem;
+  font-style: italic;
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
+/* Dropdown */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 0.25rem;
+  min-width: 200px;
+  max-width: 280px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  display: none;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.dropdown.open .dropdown-menu {
+  display: block;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+.dropdown-item.selected {
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.dropdown-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dropdown-item.clear-selection {
+  color: var(--text-muted);
+}
+
+.dropdown-item .item-icon {
+  font-size: 1rem;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.dropdown-item .item-label {
+  flex: 1;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-item .item-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 0.25rem 0;
 }
 
 /* Toast */

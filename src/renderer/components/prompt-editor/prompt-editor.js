@@ -9,9 +9,13 @@ export class PromptEditorComponent {
     this.intents = intents
     this.textarea = null
     this.submitBtn = null
+    this.newThreadBtn = null
     this.cancelBtn = null
     this.includeGuiBtn = null
+    this.includeGuiDropdown = null
+    this.includeGuiMenu = null
     this.includeGui = false
+    this.selectedGuiDefinition = null
   }
 
   /**
@@ -20,8 +24,11 @@ export class PromptEditorComponent {
   init() {
     this.textarea = document.getElementById('prompt-input')
     this.submitBtn = document.getElementById('submit-prompt-btn')
+    this.newThreadBtn = document.getElementById('new-thread-btn')
     this.cancelBtn = document.getElementById('cancel-prompt-btn')
     this.includeGuiBtn = document.getElementById('include-gui-btn')
+    this.includeGuiDropdown = document.getElementById('include-gui-dropdown')
+    this.includeGuiMenu = document.getElementById('include-gui-menu')
 
     this.bindEvents()
     this.subscribeToState()
@@ -41,14 +48,27 @@ export class PromptEditorComponent {
       this.submit()
     })
 
+    // New thread button
+    this.newThreadBtn.addEventListener('click', () => {
+      this.submitAsNewThread()
+    })
+
     // Cancel button
     this.cancelBtn.addEventListener('click', () => {
       this.cancel()
     })
 
-    // Include GUI toggle
-    this.includeGuiBtn.addEventListener('click', () => {
-      this.toggleIncludeGui()
+    // Include GUI dropdown
+    this.includeGuiBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.toggleDropdown()
+    })
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!this.includeGuiDropdown.contains(e.target)) {
+        this.closeDropdown()
+      }
     })
 
     // Branch tab clicks
@@ -244,10 +264,22 @@ export class PromptEditorComponent {
     const state = window.puffinApp?.state
     if (!state) return
 
+    // Get parentId only if the active prompt is in the current branch
+    let parentId = null
+    if (state.history.activePromptId) {
+      // Check if activePromptId belongs to the current branch's prompt tree
+      const isInCurrentBranch = state.history.promptTree?.some(
+        p => p.id === state.history.activePromptId
+      )
+      if (isInCurrentBranch) {
+        parentId = state.history.activePromptId
+      }
+    }
+
     // Build submission data
     const data = {
       branchId: state.history.activeBranch,
-      parentId: state.history.activePromptId,
+      parentId: parentId,
       content: content
     }
 
@@ -265,8 +297,14 @@ export class PromptEditorComponent {
 
       // Get GUI description if included
       let guiDescription = null
-      if (this.includeGui && state.designer.hasElements) {
-        guiDescription = this.buildGuiDescription(state.designer.elements)
+      if (this.includeGui) {
+        if (this.selectedGuiDefinition) {
+          // Use the selected saved definition
+          guiDescription = this.buildGuiDescription(this.selectedGuiDefinition.elements)
+        } else if (state.designer.hasElements) {
+          // Fallback to current designer elements
+          guiDescription = this.buildGuiDescription(state.designer.elements)
+        }
       }
 
       window.puffin.claude.submit({
@@ -290,6 +328,59 @@ export class PromptEditorComponent {
   }
 
   /**
+   * Submit the prompt as a new thread (no parent, no session resume)
+   */
+  async submitAsNewThread() {
+    const content = this.textarea.value.trim()
+    if (!content) return
+
+    // Get current state from window
+    const state = window.puffinApp?.state
+    if (!state) return
+
+    // Build submission data with no parent (new thread)
+    const data = {
+      branchId: state.history.activeBranch,
+      parentId: null, // Always null for new thread
+      content: content
+    }
+
+    // Submit to SAM
+    this.intents.submitPrompt(data)
+
+    // Submit to Claude via IPC - no session resume for new thread
+    if (window.puffin) {
+      // Get GUI description if included
+      let guiDescription = null
+      if (this.includeGui) {
+        if (this.selectedGuiDefinition) {
+          guiDescription = this.buildGuiDescription(this.selectedGuiDefinition.elements)
+        } else if (state.designer.hasElements) {
+          guiDescription = this.buildGuiDescription(state.designer.elements)
+        }
+      }
+
+      window.puffin.claude.submit({
+        prompt: content,
+        branchId: state.history.activeBranch,
+        sessionId: null, // No session resume - fresh conversation
+        project: state.config ? {
+          name: state.config.name,
+          description: state.config.description,
+          assumptions: state.config.assumptions,
+          technicalArchitecture: state.config.technicalArchitecture,
+          dataModel: state.config.dataModel,
+          options: state.config.options,
+          architecture: state.architecture
+        } : null,
+        history: [], // No history for new thread
+        guiDescription: guiDescription,
+        model: 'claude-sonnet-4-20250514'
+      })
+    }
+  }
+
+  /**
    * Cancel the current request
    */
   cancel() {
@@ -300,11 +391,161 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Toggle include GUI in prompt
+   * Toggle the Include GUI dropdown
    */
-  toggleIncludeGui() {
-    this.includeGui = !this.includeGui
-    this.includeGuiBtn.classList.toggle('active', this.includeGui)
+  async toggleDropdown() {
+    const isOpen = this.includeGuiDropdown.classList.contains('open')
+    if (isOpen) {
+      this.closeDropdown()
+    } else {
+      await this.openDropdown()
+    }
+  }
+
+  /**
+   * Open the dropdown and populate with options
+   */
+  async openDropdown() {
+    // Fetch saved definitions
+    let definitions = []
+    try {
+      const result = await window.puffin.state.listGuiDefinitions()
+      if (result.success) {
+        definitions = result.definitions || []
+      }
+    } catch (error) {
+      console.error('Failed to load GUI definitions:', error)
+    }
+
+    // Check if current designer has elements
+    const state = window.puffinApp?.state
+    const hasCurrentDesign = state?.designer?.hasElements
+
+    // Build menu HTML
+    let menuHtml = ''
+
+    // Clear selection option (if something is selected)
+    if (this.includeGui) {
+      menuHtml += `<div class="dropdown-item clear-selection" data-action="clear">
+        <span class="item-icon">✕</span>
+        <span class="item-label">Clear Selection</span>
+      </div>
+      <div class="dropdown-divider"></div>`
+    }
+
+    // Current design option
+    if (hasCurrentDesign) {
+      const isSelected = this.includeGui && !this.selectedGuiDefinition?.filename
+      menuHtml += `<div class="dropdown-item ${isSelected ? 'selected' : ''}" data-action="current">
+        <span class="item-icon">📐</span>
+        <span class="item-label">Use Current Design</span>
+        <span class="item-meta">${state.designer.elementCount} elements</span>
+      </div>`
+    }
+
+    // Saved definitions
+    if (definitions.length > 0) {
+      if (hasCurrentDesign) {
+        menuHtml += '<div class="dropdown-divider"></div>'
+      }
+      definitions.forEach(def => {
+        const isSelected = this.selectedGuiDefinition?.filename === def.filename
+        menuHtml += `<div class="dropdown-item ${isSelected ? 'selected' : ''}" data-action="load" data-filename="${this.escapeHtml(def.filename)}">
+          <span class="item-icon">📋</span>
+          <span class="item-label">${this.escapeHtml(def.name)}</span>
+        </div>`
+      })
+    }
+
+    // Empty state
+    if (!hasCurrentDesign && definitions.length === 0) {
+      menuHtml = `<div class="dropdown-item disabled">
+        <span class="item-label">No designs available</span>
+      </div>`
+    }
+
+    this.includeGuiMenu.innerHTML = menuHtml
+    this.includeGuiDropdown.classList.add('open')
+
+    // Bind click events
+    this.includeGuiMenu.querySelectorAll('.dropdown-item:not(.disabled)').forEach(item => {
+      item.addEventListener('click', (e) => this.handleDropdownSelect(e, item))
+    })
+  }
+
+  /**
+   * Close the dropdown
+   */
+  closeDropdown() {
+    this.includeGuiDropdown.classList.remove('open')
+  }
+
+  /**
+   * Handle dropdown item selection
+   */
+  async handleDropdownSelect(e, item) {
+    e.stopPropagation()
+    const action = item.dataset.action
+
+    switch (action) {
+      case 'clear':
+        this.clearGuiSelection()
+        break
+      case 'current':
+        const state = window.puffinApp?.state
+        this.setSelectedGuiDefinition({
+          elements: state.designer.flatElements
+        })
+        break
+      case 'load':
+        const filename = item.dataset.filename
+        try {
+          const result = await window.puffin.state.loadGuiDefinition(filename)
+          if (result.success) {
+            this.setSelectedGuiDefinition({
+              ...result.definition,
+              filename: filename
+            })
+          }
+        } catch (error) {
+          console.error('Failed to load definition:', error)
+        }
+        break
+    }
+
+    this.closeDropdown()
+  }
+
+  /**
+   * Set the selected GUI definition for inclusion in prompts
+   */
+  setSelectedGuiDefinition(definition) {
+    this.selectedGuiDefinition = definition
+    this.includeGui = true
+    this.includeGuiBtn.classList.add('active')
+    this.updateButtonLabel()
+  }
+
+  /**
+   * Clear GUI selection
+   */
+  clearGuiSelection() {
+    this.includeGui = false
+    this.selectedGuiDefinition = null
+    this.includeGuiBtn.classList.remove('active')
+    this.updateButtonLabel()
+  }
+
+  /**
+   * Update button label to show selection
+   */
+  updateButtonLabel() {
+    if (this.includeGui && this.selectedGuiDefinition) {
+      const name = this.selectedGuiDefinition.name || 'Current Design'
+      this.includeGuiBtn.textContent = `GUI: ${name} ▾`
+    } else {
+      this.includeGuiBtn.textContent = 'Include GUI ▾'
+    }
   }
 
   /**

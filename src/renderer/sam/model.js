@@ -379,6 +379,38 @@ export const clearGuiCanvasAcceptor = model => proposal => {
 }
 
 /**
+ * GUI Definition Acceptors
+ */
+
+export const loadGuiDefinitionAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_GUI_DEFINITION') {
+    const { definition } = proposal.payload
+    model.guiElements = definition.elements || []
+    model.selectedGuiElement = null
+  }
+}
+
+export const showGuiDefinitionDialogAcceptor = model => proposal => {
+  if (proposal?.type === 'SHOW_GUI_DEFINITION_DIALOG') {
+    model.modal = {
+      type: 'gui-definition-selector',
+      data: {}
+    }
+  }
+}
+
+export const showSaveGuiDefinitionDialogAcceptor = model => proposal => {
+  if (proposal?.type === 'SHOW_SAVE_GUI_DEFINITION_DIALOG') {
+    model.modal = {
+      type: 'save-gui-definition',
+      data: {
+        elements: [...model.guiElements]
+      }
+    }
+  }
+}
+
+/**
  * Architecture Acceptors
  */
 
@@ -464,6 +496,10 @@ export const acceptors = [
   resizeGuiElementAcceptor,
   selectGuiElementAcceptor,
   clearGuiCanvasAcceptor,
+
+  // GUI Definitions
+  loadGuiDefinitionAcceptor,
+  showSaveGuiDefinitionDialogAcceptor,
 
   // Architecture
   updateArchitectureAcceptor,

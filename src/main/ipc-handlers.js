@@ -137,6 +137,52 @@ function setupStateHandlers(ipcMain) {
       return { success: false, error: error.message }
     }
   })
+
+  // GUI definition operations
+  ipcMain.handle('state:saveGuiDefinition', async (event, { name, description, elements }) => {
+    try {
+      const result = await puffinState.saveGuiDefinition(name, description, elements)
+      return { success: true, ...result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:listGuiDefinitions', async () => {
+    try {
+      const definitions = await puffinState.listGuiDefinitions()
+      return { success: true, definitions }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:loadGuiDefinition', async (event, filename) => {
+    try {
+      const definition = await puffinState.loadGuiDefinition(filename)
+      return { success: true, definition }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateGuiDefinition', async (event, { filename, updates }) => {
+    try {
+      const definition = await puffinState.updateGuiDefinition(filename, updates)
+      return { success: true, definition }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:deleteGuiDefinition', async (event, filename) => {
+    try {
+      await puffinState.deleteGuiDefinition(filename)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
 }
 
 /**

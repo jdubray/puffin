@@ -243,6 +243,63 @@ export const exportGuiDescription = () => ({
 })
 
 /**
+ * GUI Definition Actions
+ */
+
+// Save current GUI as a named definition
+export const saveGuiDefinition = (name, description) => ({
+  type: 'SAVE_GUI_DEFINITION',
+  payload: {
+    name,
+    description,
+    timestamp: Date.now()
+  }
+})
+
+// Load a GUI definition into the designer
+export const loadGuiDefinition = (filename, definition) => ({
+  type: 'LOAD_GUI_DEFINITION',
+  payload: {
+    filename,
+    definition,
+    timestamp: Date.now()
+  }
+})
+
+// List all available GUI definitions
+export const listGuiDefinitions = () => ({
+  type: 'LIST_GUI_DEFINITIONS',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Delete a GUI definition
+export const deleteGuiDefinition = (filename) => ({
+  type: 'DELETE_GUI_DEFINITION',
+  payload: {
+    filename,
+    timestamp: Date.now()
+  }
+})
+
+// Show GUI definition selection dialog
+export const showGuiDefinitionDialog = () => ({
+  type: 'SHOW_GUI_DEFINITION_DIALOG',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Show save GUI definition dialog
+export const showSaveGuiDefinitionDialog = () => ({
+  type: 'SHOW_SAVE_GUI_DEFINITION_DIALOG',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
  * Architecture Document Actions
  */
 

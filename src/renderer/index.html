@@ -183,14 +183,22 @@
             <div class="prompt-area">
               <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
               <div class="prompt-actions">
+                <button id="new-thread-btn" class="btn outline" title="Start a new conversation thread">
+                  Send as New Thread
+                </button>
+                <button id="cancel-prompt-btn" class="btn secondary hidden">Cancel</button>
                 <button id="submit-prompt-btn" class="btn primary">
                   <span class="btn-text">Send</span>
                   <span class="btn-loading hidden">...</span>
                 </button>
-                <button id="cancel-prompt-btn" class="btn secondary hidden">Cancel</button>
-                <button id="include-gui-btn" class="btn secondary" title="Include GUI Design">
-                  Include GUI
-                </button>
+                <div class="dropdown" id="include-gui-dropdown">
+                  <button id="include-gui-btn" class="btn secondary" title="Include GUI Design">
+                    Include GUI ▾
+                  </button>
+                  <div class="dropdown-menu" id="include-gui-menu">
+                    <!-- Populated dynamically -->
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -221,6 +229,8 @@
                 </button>
               </div>
               <div class="toolbar-actions">
+                <button id="save-gui-btn" class="btn small">Save</button>
+                <button id="load-gui-btn" class="btn small">Load</button>
                 <button id="clear-canvas-btn" class="btn small">Clear</button>
                 <button id="export-gui-btn" class="btn small primary">Export</button>
               </div>

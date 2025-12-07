@@ -38,10 +38,19 @@ contextBridge.exposeInMainWorld('puffin', {
     // Update architecture document
     updateArchitecture: (content) => ipcRenderer.invoke('state:updateArchitecture', content),
 
-    // GUI design operations
+    // GUI design operations (legacy)
     saveGuiDesign: (name, design) => ipcRenderer.invoke('state:saveGuiDesign', { name, design }),
     listGuiDesigns: () => ipcRenderer.invoke('state:listGuiDesigns'),
-    loadGuiDesign: (filename) => ipcRenderer.invoke('state:loadGuiDesign', filename)
+    loadGuiDesign: (filename) => ipcRenderer.invoke('state:loadGuiDesign', filename),
+
+    // GUI definition operations
+    saveGuiDefinition: (name, description, elements) =>
+      ipcRenderer.invoke('state:saveGuiDefinition', { name, description, elements }),
+    listGuiDefinitions: () => ipcRenderer.invoke('state:listGuiDefinitions'),
+    loadGuiDefinition: (filename) => ipcRenderer.invoke('state:loadGuiDefinition', filename),
+    updateGuiDefinition: (filename, updates) =>
+      ipcRenderer.invoke('state:updateGuiDefinition', { filename, updates }),
+    deleteGuiDefinition: (filename) => ipcRenderer.invoke('state:deleteGuiDefinition', filename)
   },
 
   /**

@@ -39,6 +39,16 @@ export class GuiDesignerComponent {
       })
     })
 
+    // Save GUI definition
+    document.getElementById('save-gui-btn').addEventListener('click', () => {
+      this.showSaveDialog()
+    })
+
+    // Load GUI definition
+    document.getElementById('load-gui-btn').addEventListener('click', () => {
+      this.showLoadDialog()
+    })
+
     // Clear canvas
     document.getElementById('clear-canvas-btn').addEventListener('click', () => {
       if (confirm('Clear all elements?')) {
@@ -440,6 +450,28 @@ export class GuiDesignerComponent {
     elements.forEach(el => describe(el))
 
     return lines.join('\n')
+  }
+
+  /**
+   * Show save definition dialog
+   */
+  showSaveDialog() {
+    const state = window.puffinApp?.state
+    if (!state?.designer.hasElements) {
+      alert('No elements to save')
+      return
+    }
+
+    this.intents.showModal('save-gui-definition', {
+      elements: state.designer.flatElements
+    })
+  }
+
+  /**
+   * Show load definition dialog
+   */
+  async showLoadDialog() {
+    this.intents.showModal('load-gui-definition', {})
   }
 
   /**

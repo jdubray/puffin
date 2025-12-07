@@ -53,12 +53,53 @@ export class ProjectFormComponent {
       })
     }
 
+    // Generate Claude.md button
+    const generateBtn = document.getElementById('generate-claude-md-btn')
+    if (generateBtn) {
+      generateBtn.addEventListener('click', () => {
+        this.handleGenerateClaudeMd()
+      })
+    }
+
+    // Color input synchronization (color picker <-> text input)
+    this.bindColorInputs()
+
     // Input changes trigger config update
     const inputs = this.form.querySelectorAll('input, textarea, select')
     inputs.forEach(input => {
       input.addEventListener('change', () => {
         this.handleInputChange()
       })
+    })
+  }
+
+  /**
+   * Bind color input synchronization
+   */
+  bindColorInputs() {
+    const colorPairs = [
+      ['ux-color-primary', 'ux-color-primary-text'],
+      ['ux-color-secondary', 'ux-color-secondary-text'],
+      ['ux-color-accent', 'ux-color-accent-text'],
+      ['ux-color-background', 'ux-color-background-text'],
+      ['ux-color-text', 'ux-color-text-text'],
+      ['ux-color-error', 'ux-color-error-text']
+    ]
+
+    colorPairs.forEach(([colorId, textId]) => {
+      const colorInput = document.getElementById(colorId)
+      const textInput = document.getElementById(textId)
+
+      if (colorInput && textInput) {
+        colorInput.addEventListener('input', () => {
+          textInput.value = colorInput.value
+        })
+        textInput.addEventListener('input', () => {
+          if (/^#[0-9A-Fa-f]{6}$/.test(textInput.value)) {
+            colorInput.value = textInput.value
+          }
+        })
+      }
     })
   }
 
@@ -117,9 +158,40 @@ export class ProjectFormComponent {
       if (commentStyle) commentStyle.value = options.codeStyle.comments || 'JSDoc'
     }
 
+    // UX Style
+    const uxStyle = config.uxStyle || {}
+    const uxAlignment = document.getElementById('ux-alignment')
+    const uxFontFamily = document.getElementById('ux-font-family')
+    const uxFontSize = document.getElementById('ux-font-size')
+    const uxBaselineCss = document.getElementById('ux-baseline-css')
+
+    if (uxAlignment) uxAlignment.value = uxStyle.alignment || 'left'
+    if (uxFontFamily) uxFontFamily.value = uxStyle.fontFamily || 'system-ui, -apple-system, sans-serif'
+    if (uxFontSize) uxFontSize.value = uxStyle.fontSize || '16px'
+    if (uxBaselineCss) uxBaselineCss.value = uxStyle.baselineCss || ''
+
+    // Color palette
+    const colorPalette = uxStyle.colorPalette || {}
+    this.setColorInput('ux-color-primary', colorPalette.primary || '#6c63ff')
+    this.setColorInput('ux-color-secondary', colorPalette.secondary || '#16213e')
+    this.setColorInput('ux-color-accent', colorPalette.accent || '#48bb78')
+    this.setColorInput('ux-color-background', colorPalette.background || '#ffffff')
+    this.setColorInput('ux-color-text', colorPalette.text || '#1a1a2e')
+    this.setColorInput('ux-color-error', colorPalette.error || '#f56565')
+
     // Assumptions
     this.assumptions = config.assumptions || []
     this.renderAssumptions()
+  }
+
+  /**
+   * Set color input value (both color picker and text input)
+   */
+  setColorInput(baseId, value) {
+    const colorInput = document.getElementById(baseId)
+    const textInput = document.getElementById(`${baseId}-text`)
+    if (colorInput) colorInput.value = value
+    if (textInput) textInput.value = value
   }
 
   /**
@@ -153,6 +225,20 @@ export class ProjectFormComponent {
           naming: document.getElementById('naming-convention').value,
           comments: document.getElementById('comment-style').value
         }
+      },
+      uxStyle: {
+        alignment: document.getElementById('ux-alignment').value,
+        fontFamily: document.getElementById('ux-font-family').value,
+        fontSize: document.getElementById('ux-font-size').value,
+        baselineCss: document.getElementById('ux-baseline-css').value.trim(),
+        colorPalette: {
+          primary: document.getElementById('ux-color-primary').value,
+          secondary: document.getElementById('ux-color-secondary').value,
+          accent: document.getElementById('ux-color-accent').value,
+          background: document.getElementById('ux-color-background').value,
+          text: document.getElementById('ux-color-text').value,
+          error: document.getElementById('ux-color-error').value
+        }
       }
     }
   }
@@ -163,6 +249,28 @@ export class ProjectFormComponent {
   handleInputChange() {
     const formData = this.getFormData()
     this.intents.updateConfig(formData)
+  }
+
+  /**
+   * Handle Generate Claude.md button click
+   */
+  async handleGenerateClaudeMd() {
+    try {
+      // Save current config first
+      const formData = this.getFormData()
+      this.intents.updateConfig(formData)
+
+      // Generate Claude.md via IPC
+      const result = await window.puffin.state.generateClaudeMd()
+
+      if (result.success) {
+        this.showSuccess(`Claude.md generated at ${result.path}`)
+      } else {
+        this.showError(result.error || 'Failed to generate Claude.md')
+      }
+    } catch (error) {
+      this.showError(`Error generating Claude.md: ${error.message}`)
+    }
   }
 
   /**

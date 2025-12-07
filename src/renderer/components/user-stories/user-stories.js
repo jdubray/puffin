@@ -1,0 +1,268 @@
+/**
+ * User Stories Component
+ *
+ * Manages user stories extracted from specification prompts.
+ * Stories can be manually added or auto-extracted from specifications branch.
+ */
+
+export class UserStoriesComponent {
+  constructor(intents) {
+    this.intents = intents
+    this.container = null
+    this.filterBtns = null
+    this.addBtn = null
+    this.listContainer = null
+    this.currentFilter = 'all'
+    this.stories = []
+  }
+
+  /**
+   * Initialize the component
+   */
+  init() {
+    this.container = document.getElementById('user-stories-view')
+    this.listContainer = document.getElementById('user-stories-list')
+    this.addBtn = document.getElementById('add-story-btn')
+    this.filterBtns = this.container.querySelectorAll('.filter-btn')
+
+    this.bindEvents()
+    this.subscribeToState()
+  }
+
+  /**
+   * Bind DOM events
+   */
+  bindEvents() {
+    // Filter buttons
+    this.filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.setFilter(btn.dataset.status)
+      })
+    })
+
+    // Add story button
+    this.addBtn.addEventListener('click', () => {
+      this.showAddStoryModal()
+    })
+  }
+
+  /**
+   * Subscribe to state changes
+   */
+  subscribeToState() {
+    document.addEventListener('puffin-state-change', (e) => {
+      const { state } = e.detail
+      this.stories = state.userStories || []
+      this.render()
+    })
+  }
+
+  /**
+   * Set the current filter
+   */
+  setFilter(status) {
+    this.currentFilter = status
+    this.filterBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.status === status)
+    })
+    this.render()
+  }
+
+  /**
+   * Get filtered stories
+   */
+  getFilteredStories() {
+    if (this.currentFilter === 'all') {
+      return this.stories
+    }
+    return this.stories.filter(s => s.status === this.currentFilter)
+  }
+
+  /**
+   * Render the stories list
+   */
+  render() {
+    const filtered = this.getFilteredStories()
+
+    if (filtered.length === 0) {
+      this.listContainer.innerHTML = `
+        <p class="placeholder">
+          ${this.currentFilter === 'all'
+            ? 'No user stories yet. Add prompts to the Specifications branch to auto-extract stories, or click "+ Add Story".'
+            : `No ${this.currentFilter} stories.`}
+        </p>
+      `
+      return
+    }
+
+    this.listContainer.innerHTML = filtered.map(story => this.renderStoryCard(story)).join('')
+
+    // Bind card events
+    this.bindCardEvents()
+  }
+
+  /**
+   * Render a single story card
+   */
+  renderStoryCard(story) {
+    const statusClass = story.status.replace('-', '')
+    const criteriaCount = story.acceptanceCriteria?.length || 0
+
+    return `
+      <div class="story-card ${statusClass}" data-story-id="${story.id}">
+        <div class="story-header">
+          <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
+          <div class="story-actions">
+            <button class="story-action-btn edit-btn" title="Edit story">✎</button>
+            <button class="story-action-btn delete-btn" title="Delete story">×</button>
+          </div>
+        </div>
+        <h4 class="story-title">${this.escapeHtml(story.title)}</h4>
+        ${story.description ? `<p class="story-description">${this.escapeHtml(story.description)}</p>` : ''}
+        ${criteriaCount > 0 ? `
+          <div class="story-criteria">
+            <span class="criteria-count">${criteriaCount} acceptance criteria</span>
+            <ul class="criteria-list collapsed">
+              ${story.acceptanceCriteria.map(c => `<li>${this.escapeHtml(c)}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+        <div class="story-footer">
+          <span class="story-date">${this.formatDate(story.createdAt)}</span>
+          ${story.sourcePromptId ? '<span class="story-source">Auto-extracted</span>' : ''}
+        </div>
+      </div>
+    `
+  }
+
+  /**
+   * Bind events for story cards
+   */
+  bindCardEvents() {
+    // Status change on click
+    this.listContainer.querySelectorAll('.story-status').forEach(statusEl => {
+      statusEl.addEventListener('click', (e) => {
+        const card = e.target.closest('.story-card')
+        const storyId = card.dataset.storyId
+        this.cycleStatus(storyId)
+      })
+    })
+
+    // Edit button
+    this.listContainer.querySelectorAll('.edit-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const card = e.target.closest('.story-card')
+        const storyId = card.dataset.storyId
+        this.showEditStoryModal(storyId)
+      })
+    })
+
+    // Delete button
+    this.listContainer.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const card = e.target.closest('.story-card')
+        const storyId = card.dataset.storyId
+        this.deleteStory(storyId)
+      })
+    })
+
+    // Expand/collapse criteria
+    this.listContainer.querySelectorAll('.story-criteria').forEach(criteria => {
+      criteria.addEventListener('click', () => {
+        const list = criteria.querySelector('.criteria-list')
+        list.classList.toggle('collapsed')
+      })
+    })
+  }
+
+  /**
+   * Cycle through status values
+   */
+  cycleStatus(storyId) {
+    const story = this.stories.find(s => s.id === storyId)
+    if (!story) return
+
+    const statusOrder = ['pending', 'in-progress', 'completed']
+    const currentIndex = statusOrder.indexOf(story.status)
+    const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length]
+
+    this.intents.updateUserStory(storyId, { status: nextStatus })
+  }
+
+  /**
+   * Show add story modal
+   */
+  showAddStoryModal() {
+    this.intents.showModal('add-user-story', {
+      onSubmit: (data) => {
+        this.intents.addUserStory({
+          title: data.title,
+          description: data.description,
+          acceptanceCriteria: data.acceptanceCriteria,
+          status: 'pending'
+        })
+      }
+    })
+  }
+
+  /**
+   * Show edit story modal
+   */
+  showEditStoryModal(storyId) {
+    const story = this.stories.find(s => s.id === storyId)
+    if (!story) return
+
+    this.intents.showModal('edit-user-story', {
+      story,
+      onSubmit: (data) => {
+        this.intents.updateUserStory(storyId, data)
+      }
+    })
+  }
+
+  /**
+   * Delete a story
+   */
+  deleteStory(storyId) {
+    if (confirm('Are you sure you want to delete this story?')) {
+      this.intents.deleteUserStory(storyId)
+    }
+  }
+
+  /**
+   * Format status for display
+   */
+  formatStatus(status) {
+    const statusMap = {
+      'pending': 'Pending',
+      'in-progress': 'In Progress',
+      'completed': 'Completed'
+    }
+    return statusMap[status] || status
+  }
+
+  /**
+   * Format date for display
+   */
+  formatDate(timestamp) {
+    if (!timestamp) return ''
+    const date = new Date(timestamp)
+    return date.toLocaleDateString()
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div')
+    div.textContent = text
+    return div.innerHTML
+  }
+
+  /**
+   * Cleanup
+   */
+  destroy() {
+    // No cleanup needed currently
+  }
+}

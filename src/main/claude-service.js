@@ -57,10 +57,12 @@ class ClaudeService {
       this.currentProcess = spawn('claude', args, spawnOptions)
 
       let fullOutput = ''
-      let streamedContent = '' // Accumulate streamed assistant text
+      let streamedContent = '' // Accumulate ALL streamed assistant text
+      let lastAssistantMessage = '' // Track the last complete assistant message
       let errorOutput = ''
       let resultData = null
       let buffer = ''
+      let allMessages = [] // Store all messages for debugging/fallback
 
       console.log('Claude CLI process started, PID:', this.currentProcess.pid)
 
@@ -88,13 +90,20 @@ class ClaudeService {
 
           try {
             const json = JSON.parse(line)
+            allMessages.push(json)
 
             // Accumulate assistant text content
             if (json.type === 'assistant' && json.message?.content) {
+              let messageText = ''
               for (const block of json.message.content) {
                 if (block.type === 'text') {
+                  messageText += block.text
                   streamedContent += block.text
                 }
+              }
+              // Keep track of the last assistant message with substantial text
+              if (messageText.length > 50) {
+                lastAssistantMessage = messageText
               }
             }
 
@@ -103,6 +112,7 @@ class ClaudeService {
             // Capture final result
             if (json.type === 'result') {
               resultData = json
+              console.log('[CLAUDE-DEBUG] Captured result, result field length:', json.result?.length || 0)
             }
           } catch (e) {
             // Not JSON, treat as plain text
@@ -133,22 +143,94 @@ class ClaudeService {
       this.currentProcess.on('close', (code) => {
         this.currentProcess = null
 
+        console.log('[CLAUDE-DEBUG] Process closed with code:', code)
+        console.log('[CLAUDE-DEBUG] buffer remaining:', buffer?.length || 0, 'chars')
+        console.log('[CLAUDE-DEBUG] streamedContent length:', streamedContent?.length || 0)
+        console.log('[CLAUDE-DEBUG] fullOutput length:', fullOutput?.length || 0)
+        console.log('[CLAUDE-DEBUG] resultData:', resultData ? 'exists' : 'null')
+        if (resultData) {
+          console.log('[CLAUDE-DEBUG] resultData.result length:', resultData.result?.length || 0)
+          console.log('[CLAUDE-DEBUG] resultData.result preview:', resultData.result?.substring(0, 200) || '(empty)')
+        }
+
         // Process any remaining buffer
         if (buffer.trim()) {
+          console.log('[CLAUDE-DEBUG] Processing remaining buffer:', buffer.substring(0, 200))
           try {
             const json = JSON.parse(buffer)
             if (json.type === 'result') {
               resultData = json
+              console.log('[CLAUDE-DEBUG] Found result in buffer, result length:', resultData.result?.length || 0)
             }
           } catch (e) {
             fullOutput += buffer
+            console.log('[CLAUDE-DEBUG] Buffer was not JSON, added to fullOutput')
           }
         }
 
         if (code === 0 || resultData) {
-          // Use result field if available, otherwise use streamed content, fallback to fullOutput
-          const responseContent = resultData?.result || streamedContent || fullOutput
-          console.log('Final response content length:', responseContent.length)
+          // Determine best response content:
+          // Due to a known bug in Claude Code CLI (issue #8126), the result field
+          // can be empty even when the conversation completed successfully.
+          // We need to extract content from multiple sources.
+          let responseContent = ''
+
+          console.log('[CLAUDE-DEBUG] Final response content selection:')
+          console.log('[CLAUDE-DEBUG]   resultData?.result:', resultData?.result ? `${resultData.result.length} chars` : 'null/empty')
+          console.log('[CLAUDE-DEBUG]   streamedContent:', streamedContent ? `${streamedContent.length} chars` : 'empty')
+          console.log('[CLAUDE-DEBUG]   lastAssistantMessage:', lastAssistantMessage ? `${lastAssistantMessage.length} chars` : 'empty')
+          console.log('[CLAUDE-DEBUG]   fullOutput:', fullOutput ? `${fullOutput.length} chars` : 'empty')
+          console.log('[CLAUDE-DEBUG]   Total messages captured:', allMessages.length)
+
+          // Try to extract the best content in order of preference:
+          // 1. resultData.result (if substantial)
+          // 2. Look for the final assistant message with actual content (not just "thinking" text)
+          // 3. streamedContent (accumulated text from all assistant messages)
+          // 4. fullOutput (non-JSON fallback)
+
+          if (resultData?.result && resultData.result.length > 100) {
+            responseContent = resultData.result
+            console.log('[CLAUDE-DEBUG]   -> Using resultData.result (substantial content)')
+          } else {
+            // Look for the last assistant message that contains substantial content
+            // This handles the case where Claude outputs a final response after tool use
+            const assistantMessages = allMessages.filter(m => m.type === 'assistant')
+            console.log('[CLAUDE-DEBUG]   Assistant messages count:', assistantMessages.length)
+
+            // Find the last assistant message with substantial text content
+            for (let i = assistantMessages.length - 1; i >= 0; i--) {
+              const msg = assistantMessages[i]
+              if (msg.message?.content) {
+                let textContent = ''
+                for (const block of msg.message.content) {
+                  if (block.type === 'text') {
+                    textContent += block.text
+                  }
+                }
+                // If this message has substantial content (not just short thinking text)
+                if (textContent.length > 200) {
+                  responseContent = textContent
+                  console.log('[CLAUDE-DEBUG]   -> Using last substantial assistant message:', textContent.length, 'chars')
+                  break
+                }
+              }
+            }
+
+            // If we still don't have content, use streamedContent
+            if (!responseContent && streamedContent && streamedContent.length > 0) {
+              responseContent = streamedContent
+              console.log('[CLAUDE-DEBUG]   -> Using streamedContent (accumulated)')
+            }
+
+            // Last resort: use result even if short, or fullOutput
+            if (!responseContent) {
+              responseContent = resultData?.result || fullOutput || ''
+              console.log('[CLAUDE-DEBUG]   -> Using fallback:', responseContent.length, 'chars')
+            }
+          }
+
+          console.log('[CLAUDE-DEBUG]   -> Final content:', responseContent ? `${responseContent.length} chars` : 'EMPTY!')
+          console.log('[CLAUDE-DEBUG]   -> Content preview:', responseContent?.substring(0, 200) || '(EMPTY)')
 
           const response = {
             content: responseContent,
@@ -158,10 +240,12 @@ class ClaudeService {
             duration: resultData?.duration_ms,
             exitCode: code
           }
+          console.log('[CLAUDE-DEBUG] Calling onComplete with response.content length:', response.content?.length || 0)
           onComplete(response)
           resolve(response)
         } else {
           const error = new Error(`Claude CLI exited with code ${code}: ${errorOutput}`)
+          console.error('[CLAUDE-DEBUG] Process failed:', error.message)
           reject(error)
         }
       })
@@ -321,7 +405,12 @@ Consider performance, security, and data integrity.`,
 
       deployment: `[DEPLOYMENT THREAD]
 Focus on: CI/CD, infrastructure, containerization, hosting, monitoring, and DevOps practices.
-Consider reliability, scalability, and operational concerns.`
+Consider reliability, scalability, and operational concerns.`,
+
+      tmp: `[TEMPORARY/SCRATCH THREAD]
+This is a scratch space for ad-hoc tasks and experiments.
+IMPORTANT: Always output your final results as text in your response, not just as file writes.
+When asked to create documents, lists, or summaries, include the full content in your response text.`
     }
 
     return branchContexts[branchId] || null

@@ -22,6 +22,7 @@ import { GuiDesignerComponent } from './components/gui-designer/gui-designer.js'
 import { ArchitectureComponent } from './components/architecture/architecture.js'
 import { DebuggerComponent } from './components/debugger/debugger.js'
 import { CliOutputComponent } from './components/cli-output/cli-output.js'
+import { UserStoriesComponent } from './components/user-stories/user-stories.js'
 
 /**
  * Main application class
@@ -123,6 +124,7 @@ class PuffinApp {
       'saveGuiDefinition', 'loadGuiDefinition', 'listGuiDefinitions',
       'deleteGuiDefinition', 'showSaveGuiDefinitionDialog',
       'updateArchitecture', 'reviewArchitecture',
+      'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories',
       'switchView', 'toggleSidebar', 'showModal', 'hideModal'
     ]
 
@@ -178,6 +180,12 @@ class PuffinApp {
           // Architecture actions (no FSM needed)
           ['UPDATE_ARCHITECTURE', actions.updateArchitecture],
           ['REVIEW_ARCHITECTURE', actions.reviewArchitecture],
+
+          // User Story actions (no FSM needed)
+          ['ADD_USER_STORY', actions.addUserStory],
+          ['UPDATE_USER_STORY', actions.updateUserStory],
+          ['DELETE_USER_STORY', actions.deleteUserStory],
+          ['LOAD_USER_STORIES', actions.loadUserStories],
 
           // UI Navigation actions (no FSM needed)
           ['SWITCH_VIEW', actions.switchView],
@@ -251,7 +259,8 @@ class PuffinApp {
       'SELECT_BRANCH', 'CREATE_BRANCH', 'DELETE_BRANCH',
       'UPDATE_ARCHITECTURE',
       'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
-      'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS'
+      'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
+      'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY'
     ]
 
     if (!persistActions.includes(actionType)) return
@@ -266,6 +275,11 @@ class PuffinApp {
 
       if (['SUBMIT_PROMPT', 'COMPLETE_RESPONSE', 'SELECT_BRANCH', 'CREATE_BRANCH', 'DELETE_BRANCH'].includes(actionType)) {
         await window.puffin.state.updateHistory(this.state.history.raw)
+
+        // Auto-extract user stories from specifications branch responses
+        if (actionType === 'COMPLETE_RESPONSE' && this.state.history.activeBranch === 'specifications') {
+          await this.extractUserStoriesFromResponse()
+        }
       }
 
       if (actionType === 'UPDATE_ARCHITECTURE') {
@@ -313,7 +327,8 @@ class PuffinApp {
       guiDesigner: new GuiDesignerComponent(this.intents),
       architecture: new ArchitectureComponent(this.intents),
       debugger: new DebuggerComponent(this.intents),
-      cliOutput: new CliOutputComponent(this.intents)
+      cliOutput: new CliOutputComponent(this.intents),
+      userStories: new UserStoriesComponent(this.intents)
     }
 
     // Initialize each component
@@ -386,6 +401,11 @@ class PuffinApp {
 
     // Response complete
     const unsubComplete = window.puffin.claude.onComplete((response) => {
+      console.log('[SAM-DEBUG] app.js onComplete received')
+      console.log('[SAM-DEBUG] response:', response)
+      console.log('[SAM-DEBUG] response.content length:', response?.content?.length || 0)
+      console.log('[SAM-DEBUG] response.content preview:', response?.content?.substring(0, 200) || '(empty)')
+      console.log('[SAM-DEBUG] response.content type:', typeof response?.content)
       this.intents.completeResponse(response)
       this.components.cliOutput.setProcessing(false)
     })
@@ -443,7 +463,7 @@ class PuffinApp {
    * Update view visibility
    */
   updateViews(state) {
-    const views = ['config', 'prompt', 'designer', 'architecture', 'cli-output']
+    const views = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output']
     views.forEach(viewName => {
       const view = document.getElementById(`${viewName}-view`)
       if (view) {
@@ -694,6 +714,113 @@ class PuffinApp {
     setTimeout(() => {
       toast.remove()
     }, 3000)
+  }
+
+  /**
+   * Extract user stories from the most recent specifications response
+   * Uses heuristic-based extraction looking for common user story patterns
+   */
+  async extractUserStoriesFromResponse() {
+    try {
+      const specBranch = this.state.history.raw.branches.specifications
+      if (!specBranch || !specBranch.prompts.length) return
+
+      // Get the most recent prompt with a response
+      const recentPrompt = [...specBranch.prompts].reverse().find(p => p.response)
+      if (!recentPrompt || !recentPrompt.response?.content) return
+
+      const content = recentPrompt.content + '\n' + recentPrompt.response.content
+      const extractedStories = this.parseUserStories(content)
+
+      if (extractedStories.length === 0) {
+        console.log('No user stories found in specifications response')
+        return
+      }
+
+      // Add each extracted story
+      for (const story of extractedStories) {
+        // Check if a similar story already exists (by title)
+        const exists = this.state.userStories?.some(
+          s => s.title.toLowerCase() === story.title.toLowerCase()
+        )
+
+        if (!exists) {
+          await window.puffin.state.addUserStory({
+            ...story,
+            sourcePromptId: recentPrompt.id
+          })
+          console.log('Auto-extracted user story:', story.title)
+        }
+      }
+
+      // Reload user stories to update state
+      const result = await window.puffin.state.getUserStories()
+      if (result.success) {
+        this.intents.loadUserStories(result.stories)
+      }
+
+      if (extractedStories.length > 0) {
+        this.showToast(`Extracted ${extractedStories.length} user ${extractedStories.length === 1 ? 'story' : 'stories'} from specifications`, 'success')
+      }
+    } catch (error) {
+      console.error('Failed to extract user stories:', error)
+    }
+  }
+
+  /**
+   * Parse user stories from text content
+   * Looks for common patterns like:
+   * - "As a [user], I want [action] so that [benefit]"
+   * - "User Story: [title]"
+   * - Numbered/bulleted lists of features
+   */
+  parseUserStories(content) {
+    const stories = []
+
+    // Pattern 1: "As a [user], I want [action] so that [benefit]"
+    const asAUserPattern = /as an? ([^,]+),?\s+i want\s+(.+?)\s+so that\s+(.+?)(?:\.|$)/gi
+    let match
+    while ((match = asAUserPattern.exec(content)) !== null) {
+      const [, user, action, benefit] = match
+      stories.push({
+        title: `${action.trim()}`.substring(0, 100),
+        description: `As a ${user.trim()}, I want ${action.trim()} so that ${benefit.trim()}.`,
+        acceptanceCriteria: [],
+        status: 'pending'
+      })
+    }
+
+    // Pattern 2: "User Story:" or "Story:" headers
+    const storyHeaderPattern = /(?:user\s+)?story[:\s]+([^\n]+)/gi
+    while ((match = storyHeaderPattern.exec(content)) !== null) {
+      const title = match[1].trim()
+      if (title.length > 5 && !stories.some(s => s.title === title)) {
+        stories.push({
+          title: title.substring(0, 100),
+          description: '',
+          acceptanceCriteria: [],
+          status: 'pending'
+        })
+      }
+    }
+
+    // Pattern 3: Feature descriptions with "should" or "must"
+    const featurePattern = /(?:the\s+)?(?:system|app|application|user)\s+(?:should|must|can|will)\s+(?:be able to\s+)?([^.]{15,100})/gi
+    while ((match = featurePattern.exec(content)) !== null) {
+      const feature = match[1].trim()
+      const title = feature.charAt(0).toUpperCase() + feature.slice(1)
+      if (!stories.some(s => s.title.toLowerCase() === title.toLowerCase())) {
+        stories.push({
+          title: title.substring(0, 100),
+          description: `The system should ${feature}.`,
+          acceptanceCriteria: [],
+          status: 'pending'
+        })
+      }
+    }
+
+    // Limit to avoid creating too many stories at once
+    return stories.slice(0, 10)
   }
 
   /**

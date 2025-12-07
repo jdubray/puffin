@@ -33,14 +33,29 @@ export class ResponseViewerComponent {
    * Render component based on state
    */
   render(promptState, historyState) {
+    console.log('[SAM-DEBUG] ResponseViewer.render called')
+    console.log('[SAM-DEBUG] promptState.hasStreamingResponse:', promptState.hasStreamingResponse)
+    console.log('[SAM-DEBUG] historyState.selectedPrompt:', historyState.selectedPrompt ? 'exists' : 'null')
+    if (historyState.selectedPrompt) {
+      console.log('[SAM-DEBUG] historyState.selectedPrompt.response:', historyState.selectedPrompt.response ? 'exists' : 'null')
+      if (historyState.selectedPrompt.response) {
+        console.log('[SAM-DEBUG] response.content length:', historyState.selectedPrompt.response.content?.length || 0)
+        console.log('[SAM-DEBUG] response.content preview:', historyState.selectedPrompt.response.content?.substring(0, 100) || '(empty)')
+      }
+    }
+
     // Priority: streaming response > selected prompt response > placeholder
     if (promptState.hasStreamingResponse) {
+      console.log('[SAM-DEBUG] -> Rendering streaming response')
       this.renderStreaming(promptState.streamingResponse)
     } else if (historyState.selectedPrompt?.response) {
+      console.log('[SAM-DEBUG] -> Rendering completed response')
       this.renderResponse(historyState.selectedPrompt)
     } else if (historyState.selectedPrompt) {
+      console.log('[SAM-DEBUG] -> Rendering prompt only (no response yet)')
       this.renderPromptOnly(historyState.selectedPrompt)
     } else {
+      console.log('[SAM-DEBUG] -> Rendering placeholder')
       this.renderPlaceholder()
     }
   }
@@ -63,7 +78,18 @@ export class ResponseViewerComponent {
    * Render complete response
    */
   renderResponse(prompt) {
+    console.log('[SAM-DEBUG] renderResponse called')
+    console.log('[SAM-DEBUG] prompt.id:', prompt.id)
+    console.log('[SAM-DEBUG] prompt.content length:', prompt.content?.length || 0)
+    console.log('[SAM-DEBUG] prompt.response:', prompt.response ? 'exists' : 'null')
+    console.log('[SAM-DEBUG] prompt.response.content:', prompt.response?.content || '(undefined/null)')
+    console.log('[SAM-DEBUG] prompt.response.content length:', prompt.response?.content?.length || 0)
+    console.log('[SAM-DEBUG] prompt.response.content type:', typeof prompt.response?.content)
+
     const html = this.parseMarkdown(prompt.response.content)
+    console.log('[SAM-DEBUG] parseMarkdown result length:', html?.length || 0)
+    console.log('[SAM-DEBUG] parseMarkdown result preview:', html?.substring(0, 100) || '(empty)')
+
     const response = prompt.response
 
     // Build metadata string
@@ -91,6 +117,7 @@ export class ResponseViewerComponent {
         </div>
       </div>
     `
+    console.log('[SAM-DEBUG] renderResponse finished rendering')
   }
 
   /**

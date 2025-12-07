@@ -38,6 +38,9 @@ export function computeState(model) {
     // Architecture state
     architecture: computeArchitectureState(model),
 
+    // User Stories state
+    userStories: model.userStories || [],
+
     // UI state
     ui: computeUIState(model)
   }
@@ -99,6 +102,8 @@ function computePromptState(model) {
 function computeHistoryState(model) {
   const { branches, activeBranch, activePromptId } = model.history
 
+  console.log('[SAM-DEBUG] computeHistoryState - activeBranch:', activeBranch, 'activePromptId:', activePromptId)
+
   // Build branch list with metadata
   const branchList = Object.entries(branches).map(([id, branch]) => ({
     id,
@@ -116,9 +121,17 @@ function computeHistoryState(model) {
   let selectedPrompt = null
   if (activePromptId && activeBranchData) {
     selectedPrompt = activeBranchData.prompts.find(p => p.id === activePromptId)
+    console.log('[SAM-DEBUG] computeHistoryState - found selectedPrompt:', selectedPrompt?.id)
+    if (selectedPrompt) {
+      console.log('[SAM-DEBUG] computeHistoryState - selectedPrompt.response:', selectedPrompt.response ? 'exists' : 'null')
+      console.log('[SAM-DEBUG] computeHistoryState - response.content length:', selectedPrompt.response?.content?.length || 0)
+      console.log('[SAM-DEBUG] computeHistoryState - response.content preview:', selectedPrompt.response?.content?.substring(0, 100) || '(empty)')
+    }
+  } else {
+    console.log('[SAM-DEBUG] computeHistoryState - no selectedPrompt (activePromptId:', activePromptId, ', activeBranchData:', !!activeBranchData, ')')
   }
 
-  return {
+  const result = {
     branches: branchList,
     // Keep full raw history for persistence
     raw: {
@@ -143,6 +156,13 @@ function computeHistoryState(model) {
     } : null,
     isEmpty: promptTree.length === 0
   }
+
+  console.log('[SAM-DEBUG] computeHistoryState - result.selectedPrompt:', result.selectedPrompt ? 'exists' : 'null')
+  if (result.selectedPrompt?.response) {
+    console.log('[SAM-DEBUG] computeHistoryState - result.selectedPrompt.response.content length:', result.selectedPrompt.response.content?.length || 0)
+  }
+
+  return result
 }
 
 /**
@@ -212,6 +232,7 @@ function computeUIState(model) {
     showConfig: model.currentView === 'config',
     showPromptEditor: model.currentView === 'prompt',
     showDesigner: model.currentView === 'designer',
+    showUserStories: model.currentView === 'user-stories',
     showArchitecture: model.currentView === 'architecture',
     showCliOutput: model.currentView === 'cli-output',
 

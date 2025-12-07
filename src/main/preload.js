@@ -50,7 +50,40 @@ contextBridge.exposeInMainWorld('puffin', {
     loadGuiDefinition: (filename) => ipcRenderer.invoke('state:loadGuiDefinition', filename),
     updateGuiDefinition: (filename, updates) =>
       ipcRenderer.invoke('state:updateGuiDefinition', { filename, updates }),
-    deleteGuiDefinition: (filename) => ipcRenderer.invoke('state:deleteGuiDefinition', filename)
+    deleteGuiDefinition: (filename) => ipcRenderer.invoke('state:deleteGuiDefinition', filename),
+
+    // User story operations
+    getUserStories: () => ipcRenderer.invoke('state:getUserStories'),
+    addUserStory: (story) => ipcRenderer.invoke('state:addUserStory', story),
+    updateUserStory: (storyId, updates) =>
+      ipcRenderer.invoke('state:updateUserStory', { storyId, updates }),
+    deleteUserStory: (storyId) => ipcRenderer.invoke('state:deleteUserStory', storyId),
+
+    // UI Guidelines operations
+    updateUiGuidelines: (updates) => ipcRenderer.invoke('state:updateUiGuidelines', updates),
+    updateGuidelineSection: (section, content) =>
+      ipcRenderer.invoke('state:updateGuidelineSection', { section, content }),
+
+    // Stylesheet operations
+    addStylesheet: (stylesheet) => ipcRenderer.invoke('state:addStylesheet', stylesheet),
+    updateStylesheet: (stylesheetId, updates) =>
+      ipcRenderer.invoke('state:updateStylesheet', { stylesheetId, updates }),
+    deleteStylesheet: (stylesheetId) => ipcRenderer.invoke('state:deleteStylesheet', stylesheetId),
+
+    // Design tokens operations
+    updateDesignTokens: (tokenUpdates) => ipcRenderer.invoke('state:updateDesignTokens', tokenUpdates),
+
+    // Component pattern operations
+    addComponentPattern: (pattern) => ipcRenderer.invoke('state:addComponentPattern', pattern),
+    updateComponentPattern: (patternId, updates) =>
+      ipcRenderer.invoke('state:updateComponentPattern', { patternId, updates }),
+    deleteComponentPattern: (patternId) => ipcRenderer.invoke('state:deleteComponentPattern', patternId),
+
+    // Export UI guidelines
+    exportUiGuidelines: (options) => ipcRenderer.invoke('state:exportUiGuidelines', options),
+
+    // Generate Claude.md file
+    generateClaudeMd: (options) => ipcRenderer.invoke('state:generateClaudeMd', options)
   },
 
   /**

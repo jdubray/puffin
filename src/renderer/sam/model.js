@@ -40,6 +40,20 @@ export const initialModel = {
         naming: 'CAMEL',
         comments: 'JSDoc'
       }
+    },
+    uxStyle: {
+      baselineCss: '',
+      alignment: 'left',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontSize: '16px',
+      colorPalette: {
+        primary: '#6c63ff',
+        secondary: '#16213e',
+        accent: '#48bb78',
+        background: '#ffffff',
+        text: '#1a1a2e',
+        error: '#f56565'
+      }
     }
   },
 
@@ -75,10 +89,39 @@ export const initialModel = {
     updatedAt: null
   },
 
+  // User stories state (from .puffin/user-stories.json)
+  userStories: [],
+
+  // UI Guidelines state (from .puffin/ui-guidelines.json)
+  uiGuidelines: {
+    guidelines: {
+      layout: '',
+      typography: '',
+      colors: '',
+      components: '',
+      interactions: ''
+    },
+    stylesheets: [],
+    designTokens: {
+      colors: {},
+      typography: { fontFamilies: [], fontSizes: [], fontWeights: [] },
+      spacing: [],
+      radii: [],
+      shadows: []
+    },
+    componentPatterns: []
+  },
+
   // UI state
-  currentView: 'prompt', // 'config', 'prompt', 'designer', 'architecture', 'cli-output'
+  currentView: 'prompt', // 'config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output'
   sidebarVisible: true,
-  modal: null
+  modal: null,
+
+  // UI Guidelines specific UI state
+  activeGuidelinesTab: 'guidelines', // 'guidelines', 'stylesheets', 'tokens', 'patterns'
+  activeGuidelinesSection: 'layout', // 'layout', 'typography', 'colors', 'components', 'interactions'
+  selectedStylesheet: null,
+  selectedComponentPattern: null
 }
 
 /**
@@ -108,6 +151,8 @@ export const loadStateAcceptor = model => proposal => {
     model.config = state.config
     model.history = state.history
     model.architecture = state.architecture
+    model.userStories = state.userStories || []
+    model.uiGuidelines = state.uiGuidelines || model.uiGuidelines
 
     // Switch to prompt view once loaded
     model.currentView = 'prompt'
@@ -221,11 +266,24 @@ export const receiveResponseChunkAcceptor = model => proposal => {
 }
 
 export const completeResponseAcceptor = model => proposal => {
-  if (proposal?.type === 'COMPLETE_RESPONSE' && model.pendingPromptId) {
+  if (proposal?.type === 'COMPLETE_RESPONSE') {
+    console.log('[SAM-DEBUG] completeResponseAcceptor triggered')
+    console.log('[SAM-DEBUG] pendingPromptId:', model.pendingPromptId)
+    console.log('[SAM-DEBUG] proposal.payload:', JSON.stringify(proposal.payload, null, 2))
+    console.log('[SAM-DEBUG] payload.content length:', proposal.payload?.content?.length || 0)
+    console.log('[SAM-DEBUG] payload.content preview:', proposal.payload?.content?.substring(0, 200) || '(empty)')
+
+    if (!model.pendingPromptId) {
+      console.warn('[SAM-DEBUG] WARNING: No pendingPromptId - response will be dropped!')
+      return
+    }
+
     // Find the prompt and update its response
-    for (const branch of Object.values(model.history.branches)) {
+    let promptFound = false
+    for (const [branchId, branch] of Object.entries(model.history.branches)) {
       const prompt = branch.prompts.find(p => p.id === model.pendingPromptId)
       if (prompt) {
+        console.log('[SAM-DEBUG] Found prompt in branch:', branchId, 'promptId:', prompt.id)
         prompt.response = {
           content: proposal.payload.content,
           sessionId: proposal.payload.sessionId,
@@ -234,12 +292,24 @@ export const completeResponseAcceptor = model => proposal => {
           duration: proposal.payload.duration,
           timestamp: proposal.payload.timestamp
         }
+        console.log('[SAM-DEBUG] Set prompt.response.content length:', prompt.response.content?.length || 0)
         model.history.activePromptId = prompt.id
+        promptFound = true
         break
       }
     }
+
+    if (!promptFound) {
+      console.error('[SAM-DEBUG] ERROR: Could not find prompt with id:', model.pendingPromptId)
+      console.error('[SAM-DEBUG] Available branches:', Object.keys(model.history.branches))
+      for (const [branchId, branch] of Object.entries(model.history.branches)) {
+        console.error('[SAM-DEBUG] Branch', branchId, 'prompts:', branch.prompts.map(p => p.id))
+      }
+    }
+
     model.pendingPromptId = null
     model.streamingResponse = ''
+    console.log('[SAM-DEBUG] completeResponseAcceptor finished. activePromptId:', model.history.activePromptId)
   }
 }
 
@@ -263,8 +333,23 @@ export const cancelPromptAcceptor = model => proposal => {
 
 export const selectBranchAcceptor = model => proposal => {
   if (proposal?.type === 'SELECT_BRANCH') {
-    if (model.history.branches[proposal.payload.branchId]) {
-      model.history.activeBranch = proposal.payload.branchId
+    const newBranchId = proposal.payload.branchId
+    if (model.history.branches[newBranchId]) {
+      model.history.activeBranch = newBranchId
+
+      // Reset activePromptId when switching branches
+      // Set to the most recent prompt in the new branch, or null if empty
+      const newBranch = model.history.branches[newBranchId]
+      if (newBranch.prompts && newBranch.prompts.length > 0) {
+        // Select the most recent prompt in the new branch
+        const lastPrompt = newBranch.prompts[newBranch.prompts.length - 1]
+        model.history.activePromptId = lastPrompt.id
+        console.log('[SAM-DEBUG] selectBranchAcceptor: switched to branch', newBranchId, 'selected prompt:', lastPrompt.id)
+      } else {
+        // No prompts in this branch, clear the selection
+        model.history.activePromptId = null
+        console.log('[SAM-DEBUG] selectBranchAcceptor: switched to branch', newBranchId, 'no prompts, cleared activePromptId')
+      }
     }
   }
 }
@@ -428,12 +513,54 @@ export const reviewArchitectureAcceptor = model => proposal => {
 }
 
 /**
+ * User Story Acceptors
+ */
+
+export const addUserStoryAcceptor = model => proposal => {
+  if (proposal?.type === 'ADD_USER_STORY') {
+    model.userStories.push({
+      id: proposal.payload.id,
+      title: proposal.payload.title,
+      description: proposal.payload.description,
+      acceptanceCriteria: proposal.payload.acceptanceCriteria,
+      status: proposal.payload.status,
+      sourcePromptId: proposal.payload.sourcePromptId,
+      createdAt: proposal.payload.createdAt
+    })
+  }
+}
+
+export const updateUserStoryAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_USER_STORY') {
+    const index = model.userStories.findIndex(s => s.id === proposal.payload.id)
+    if (index !== -1) {
+      model.userStories[index] = {
+        ...model.userStories[index],
+        ...proposal.payload
+      }
+    }
+  }
+}
+
+export const deleteUserStoryAcceptor = model => proposal => {
+  if (proposal?.type === 'DELETE_USER_STORY') {
+    model.userStories = model.userStories.filter(s => s.id !== proposal.payload.id)
+  }
+}
+
+export const loadUserStoriesAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_USER_STORIES') {
+    model.userStories = proposal.payload.stories || []
+  }
+}
+
+/**
  * UI Navigation Acceptors
  */
 
 export const switchViewAcceptor = model => proposal => {
   if (proposal?.type === 'SWITCH_VIEW') {
-    const validViews = ['config', 'prompt', 'designer', 'architecture', 'cli-output']
+    const validViews = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output']
     if (validViews.includes(proposal.payload.view)) {
       model.currentView = proposal.payload.view
     }
@@ -504,6 +631,12 @@ export const acceptors = [
   // Architecture
   updateArchitectureAcceptor,
   reviewArchitectureAcceptor,
+
+  // User Stories
+  addUserStoryAcceptor,
+  updateUserStoryAcceptor,
+  deleteUserStoryAcceptor,
+  loadUserStoriesAcceptor,
 
   // UI Navigation
   switchViewAcceptor,

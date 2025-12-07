@@ -183,6 +183,144 @@ function setupStateHandlers(ipcMain) {
       return { success: false, error: error.message }
     }
   })
+
+  // User story operations
+  ipcMain.handle('state:getUserStories', async () => {
+    try {
+      const stories = puffinState.getUserStories()
+      return { success: true, stories }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:addUserStory', async (event, story) => {
+    try {
+      const newStory = await puffinState.addUserStory(story)
+      return { success: true, story: newStory }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateUserStory', async (event, { storyId, updates }) => {
+    try {
+      const story = await puffinState.updateUserStory(storyId, updates)
+      return { success: true, story }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:deleteUserStory', async (event, storyId) => {
+    try {
+      const deleted = await puffinState.deleteUserStory(storyId)
+      return { success: true, deleted }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // UI Guidelines operations
+  ipcMain.handle('state:updateUiGuidelines', async (event, updates) => {
+    try {
+      const guidelines = await puffinState.updateUiGuidelines(updates)
+      return { success: true, guidelines }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateGuidelineSection', async (event, { section, content }) => {
+    try {
+      const guidelines = await puffinState.updateGuidelineSection(section, content)
+      return { success: true, guidelines }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:addStylesheet', async (event, stylesheet) => {
+    try {
+      const newStylesheet = await puffinState.addStylesheet(stylesheet)
+      return { success: true, stylesheet: newStylesheet }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateStylesheet', async (event, { stylesheetId, updates }) => {
+    try {
+      const stylesheet = await puffinState.updateStylesheet(stylesheetId, updates)
+      return { success: true, stylesheet }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:deleteStylesheet', async (event, stylesheetId) => {
+    try {
+      const deleted = await puffinState.deleteStylesheet(stylesheetId)
+      return { success: true, deleted }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateDesignTokens', async (event, tokenUpdates) => {
+    try {
+      const tokens = await puffinState.updateDesignTokens(tokenUpdates)
+      return { success: true, tokens }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:addComponentPattern', async (event, pattern) => {
+    try {
+      const newPattern = await puffinState.addComponentPattern(pattern)
+      return { success: true, pattern: newPattern }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateComponentPattern', async (event, { patternId, updates }) => {
+    try {
+      const pattern = await puffinState.updateComponentPattern(patternId, updates)
+      return { success: true, pattern }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:deleteComponentPattern', async (event, patternId) => {
+    try {
+      const deleted = await puffinState.deleteComponentPattern(patternId)
+      return { success: true, deleted }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:exportUiGuidelines', async (event, options) => {
+    try {
+      const exported = await puffinState.exportUiGuidelines(options)
+      return { success: true, content: exported }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Generate Claude.md file
+  ipcMain.handle('state:generateClaudeMd', async (event, options) => {
+    try {
+      const result = await puffinState.writeClaudeMd(options)
+      return { success: true, path: result.path, content: result.content }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
 }
 
 /**

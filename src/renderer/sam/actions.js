@@ -109,9 +109,14 @@ export const receiveResponseChunk = (chunk) => ({
 })
 
 // Complete response from Claude
-export const completeResponse = (response) => ({
-  type: 'COMPLETE_RESPONSE',
-  payload: {
+export const completeResponse = (response) => {
+  console.log('[SAM-DEBUG] actions.completeResponse called')
+  console.log('[SAM-DEBUG] response arg:', response)
+  console.log('[SAM-DEBUG] response.content length:', response?.content?.length || 0)
+  console.log('[SAM-DEBUG] response.content preview:', response?.content?.substring(0, 200) || '(empty)')
+  console.log('[SAM-DEBUG] response.content type:', typeof response?.content)
+
+  const payload = {
     content: response.content,
     sessionId: response.sessionId,
     cost: response.cost,
@@ -119,7 +124,14 @@ export const completeResponse = (response) => ({
     duration: response.duration,
     timestamp: Date.now()
   }
-})
+
+  console.log('[SAM-DEBUG] payload.content length:', payload.content?.length || 0)
+
+  return {
+    type: 'COMPLETE_RESPONSE',
+    payload
+  }
+}
 
 // Response failed
 export const responseError = (error) => ({
@@ -321,6 +333,50 @@ export const reviewArchitecture = () => ({
 })
 
 /**
+ * User Story Actions
+ */
+
+// Add a user story
+export const addUserStory = (story) => ({
+  type: 'ADD_USER_STORY',
+  payload: {
+    id: generateId(),
+    title: story.title,
+    description: story.description || '',
+    acceptanceCriteria: story.acceptanceCriteria || [],
+    status: story.status || 'pending',
+    sourcePromptId: story.sourcePromptId || null,
+    createdAt: Date.now()
+  }
+})
+
+// Update a user story
+export const updateUserStory = (storyId, updates) => ({
+  type: 'UPDATE_USER_STORY',
+  payload: {
+    id: storyId,
+    ...updates,
+    updatedAt: Date.now()
+  }
+})
+
+// Delete a user story
+export const deleteUserStory = (storyId) => ({
+  type: 'DELETE_USER_STORY',
+  payload: {
+    id: storyId
+  }
+})
+
+// Load user stories from storage
+export const loadUserStories = (stories) => ({
+  type: 'LOAD_USER_STORIES',
+  payload: {
+    stories
+  }
+})
+
+/**
  * UI Navigation Actions
  */
 
@@ -328,7 +384,7 @@ export const reviewArchitecture = () => ({
 export const switchView = (view) => ({
   type: 'SWITCH_VIEW',
   payload: {
-    view // 'config', 'prompt', 'designer', 'architecture', 'cli-output'
+    view // 'config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output'
   }
 })
 

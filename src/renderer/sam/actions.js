@@ -109,23 +109,16 @@ export const receiveResponseChunk = (chunk) => ({
 })
 
 // Complete response from Claude
-export const completeResponse = (response) => {
-  console.log('[SAM-DEBUG] actions.completeResponse called')
-  console.log('[SAM-DEBUG] response arg:', response)
-  console.log('[SAM-DEBUG] response.content length:', response?.content?.length || 0)
-  console.log('[SAM-DEBUG] response.content preview:', response?.content?.substring(0, 200) || '(empty)')
-  console.log('[SAM-DEBUG] response.content type:', typeof response?.content)
-
+export const completeResponse = (response, filesModified = []) => {
   const payload = {
     content: response.content,
     sessionId: response.sessionId,
     cost: response.cost,
     turns: response.turns,
     duration: response.duration,
+    filesModified: filesModified,
     timestamp: Date.now()
   }
-
-  console.log('[SAM-DEBUG] payload.content length:', payload.content?.length || 0)
 
   return {
     type: 'COMPLETE_RESPONSE',
@@ -145,6 +138,21 @@ export const responseError = (error) => ({
 // Cancel current prompt
 export const cancelPrompt = () => ({
   type: 'CANCEL_PROMPT',
+  payload: {}
+})
+
+// Rerun a prompt (re-submit with same content)
+export const rerunPrompt = (promptId) => ({
+  type: 'RERUN_PROMPT',
+  payload: {
+    promptId,
+    timestamp: Date.now()
+  }
+})
+
+// Clear rerun request (after it's been handled)
+export const clearRerunRequest = () => ({
+  type: 'CLEAR_RERUN_REQUEST',
   payload: {}
 })
 
@@ -470,7 +478,7 @@ export const cancelStoryReview = () => ({
 export const storyDerivationError = (error) => ({
   type: 'STORY_DERIVATION_ERROR',
   payload: {
-    error: error.message || error,
+    error: error.error || error.message || error,
     timestamp: Date.now()
   }
 })
@@ -506,4 +514,184 @@ export const showModal = (modalType, data = {}) => ({
 export const hideModal = () => ({
   type: 'HIDE_MODAL',
   payload: {}
+})
+
+/**
+ * Activity Tracking Actions
+ */
+
+// Set the current tool being used
+export const setCurrentTool = (name, input = null) => ({
+  type: 'SET_CURRENT_TOOL',
+  payload: {
+    name,
+    input,
+    timestamp: Date.now()
+  }
+})
+
+// Clear current tool (return to idle/thinking)
+export const clearCurrentTool = () => ({
+  type: 'CLEAR_CURRENT_TOOL',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Add a file to the modified files list
+export const addModifiedFile = (filePath, action) => ({
+  type: 'ADD_MODIFIED_FILE',
+  payload: {
+    filePath,
+    action, // 'read', 'write', 'edit'
+    timestamp: Date.now()
+  }
+})
+
+// Clear the modified files list
+export const clearModifiedFiles = () => ({
+  type: 'CLEAR_MODIFIED_FILES',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Set the overall activity status
+export const setActivityStatus = (status) => ({
+  type: 'SET_ACTIVITY_STATUS',
+  payload: {
+    status, // 'idle', 'thinking', 'tool-use', 'complete'
+    timestamp: Date.now()
+  }
+})
+
+// Start a tool (for tracking concurrent tools)
+export const toolStart = (id, name, input = null) => ({
+  type: 'TOOL_START',
+  payload: {
+    id,
+    name,
+    input,
+    timestamp: Date.now()
+  }
+})
+
+// End a tool (removes from active tools)
+export const toolEnd = (id, filePath = null, action = null) => ({
+  type: 'TOOL_END',
+  payload: {
+    id,
+    filePath,
+    action,
+    timestamp: Date.now()
+  }
+})
+
+// Clear all activity state (reset to idle)
+export const clearActivity = () => ({
+  type: 'CLEAR_ACTIVITY',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Developer Profile Actions
+ */
+
+// Start GitHub authentication flow
+export const startGithubAuth = () => ({
+  type: 'START_GITHUB_AUTH',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// GitHub authentication succeeded
+export const githubAuthSuccess = (profile) => ({
+  type: 'GITHUB_AUTH_SUCCESS',
+  payload: {
+    profile,
+    timestamp: Date.now()
+  }
+})
+
+// GitHub authentication failed
+export const githubAuthError = (error) => ({
+  type: 'GITHUB_AUTH_ERROR',
+  payload: {
+    error: error.message || error,
+    timestamp: Date.now()
+  }
+})
+
+// Logout from GitHub
+export const githubLogout = () => ({
+  type: 'GITHUB_LOGOUT',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Load GitHub repositories
+export const loadGithubRepositories = (repositories) => ({
+  type: 'LOAD_GITHUB_REPOSITORIES',
+  payload: {
+    repositories,
+    timestamp: Date.now()
+  }
+})
+
+// Select a GitHub repository
+export const selectGithubRepository = (repositoryId) => ({
+  type: 'SELECT_GITHUB_REPOSITORY',
+  payload: {
+    repositoryId
+  }
+})
+
+// Load GitHub activity events
+export const loadGithubActivity = (events) => ({
+  type: 'LOAD_GITHUB_ACTIVITY',
+  payload: {
+    events,
+    timestamp: Date.now()
+  }
+})
+
+// Update GitHub contributions data
+export const updateGithubContributions = (contributions) => ({
+  type: 'UPDATE_GITHUB_CONTRIBUTIONS',
+  payload: {
+    ...contributions,
+    timestamp: Date.now()
+  }
+})
+
+// Update GitHub integration settings
+export const updateGithubSettings = (settings) => ({
+  type: 'UPDATE_GITHUB_SETTINGS',
+  payload: {
+    ...settings,
+    timestamp: Date.now()
+  }
+})
+
+// Update GitHub API rate limit info
+export const updateGithubRateLimit = (remaining, reset) => ({
+  type: 'UPDATE_GITHUB_RATE_LIMIT',
+  payload: {
+    remaining,
+    reset,
+    timestamp: Date.now()
+  }
+})
+
+// Load developer profile from storage
+export const loadDeveloperProfile = (profile) => ({
+  type: 'LOAD_DEVELOPER_PROFILE',
+  payload: {
+    profile,
+    timestamp: Date.now()
+  }
 })

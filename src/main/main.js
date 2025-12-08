@@ -7,7 +7,7 @@
  * Puffin opens a directory (like VSCode) and stores state in .puffin/
  */
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
 const { setupIpcHandlers } = require('./ipc-handlers')
 
@@ -16,6 +16,174 @@ let mainWindow = null
 
 // The directory Puffin is currently working with
 let currentProjectPath = null
+
+/**
+ * Create the application menu
+ */
+function createMenu() {
+  const isMac = process.platform === 'darwin'
+
+  const template = [
+    // App Menu (macOS only)
+    ...(isMac ? [{
+      label: app.getName(),
+      submenu: [
+        { label: 'About Puffin', role: 'about' },
+        { type: 'separator' },
+        { label: 'Hide Puffin', role: 'hide' },
+        { label: 'Hide Others', role: 'hideothers' },
+        { label: 'Show All', role: 'unhide' },
+        { type: 'separator' },
+        { label: 'Quit', role: 'quit' }
+      ]
+    }] : []),
+
+    // File Menu
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Profile',
+          submenu: [
+            {
+              label: 'View Profile',
+              accelerator: 'CmdOrCtrl+Shift+P',
+              click: () => {
+                if (mainWindow) {
+                  mainWindow.webContents.send('profile:view')
+                }
+              }
+            },
+            {
+              label: 'Create Profile',
+              click: () => {
+                if (mainWindow) {
+                  mainWindow.webContents.send('profile:create')
+                }
+              }
+            },
+            {
+              label: 'Edit Profile',
+              click: () => {
+                if (mainWindow) {
+                  mainWindow.webContents.send('profile:edit')
+                }
+              }
+            },
+            { type: 'separator' },
+            {
+              label: 'Export Profile...',
+              click: () => {
+                if (mainWindow) {
+                  mainWindow.webContents.send('profile:export')
+                }
+              }
+            },
+            {
+              label: 'Import Profile...',
+              click: () => {
+                if (mainWindow) {
+                  mainWindow.webContents.send('profile:import')
+                }
+              }
+            },
+            { type: 'separator' },
+            {
+              label: 'Delete Profile',
+              click: () => {
+                if (mainWindow) {
+                  mainWindow.webContents.send('profile:delete')
+                }
+              }
+            }
+          ]
+        },
+        { type: 'separator' },
+        ...(isMac ? [
+          { label: 'Close', role: 'close' }
+        ] : [
+          { label: 'Exit', role: 'quit' }
+        ])
+      ]
+    },
+
+    // Edit Menu
+    {
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', role: 'undo' },
+        { label: 'Redo', role: 'redo' },
+        { type: 'separator' },
+        { label: 'Cut', role: 'cut' },
+        { label: 'Copy', role: 'copy' },
+        { label: 'Paste', role: 'paste' },
+        ...(isMac ? [
+          { label: 'Paste and Match Style', role: 'pasteandmatchstyle' },
+          { label: 'Delete', role: 'delete' },
+          { label: 'Select All', role: 'selectall' },
+          { type: 'separator' },
+          {
+            label: 'Speech',
+            submenu: [
+              { label: 'Start Speaking', role: 'startspeaking' },
+              { label: 'Stop Speaking', role: 'stopspeaking' }
+            ]
+          }
+        ] : [
+          { label: 'Delete', role: 'delete' },
+          { type: 'separator' },
+          { label: 'Select All', role: 'selectall' }
+        ])
+      ]
+    },
+
+    // View Menu
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Reload', role: 'reload' },
+        { label: 'Force Reload', role: 'forcereload' },
+        { label: 'Toggle Developer Tools', role: 'toggledevtools' },
+        { type: 'separator' },
+        { label: 'Actual Size', role: 'resetzoom' },
+        { label: 'Zoom In', role: 'zoomin' },
+        { label: 'Zoom Out', role: 'zoomout' },
+        { type: 'separator' },
+        { label: 'Toggle Fullscreen', role: 'togglefullscreen' }
+      ]
+    },
+
+    // Window Menu
+    {
+      label: 'Window',
+      submenu: [
+        { label: 'Minimize', role: 'minimize' },
+        { label: 'Close', role: 'close' },
+        ...(isMac ? [
+          { type: 'separator' },
+          { label: 'Bring All to Front', role: 'front' }
+        ] : [])
+      ]
+    },
+
+    // Help Menu
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'About Puffin',
+          click: async () => {
+            const { shell } = require('electron')
+            await shell.openExternal('https://github.com/your-repo/puffin')
+          }
+        }
+      ]
+    }
+  ]
+
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
+}
 
 /**
  * Create the main application window
@@ -130,6 +298,9 @@ app.whenReady().then(async () => {
 
   // Setup IPC handlers before creating window
   setupIpcHandlers(ipcMain, currentProjectPath)
+
+  // Create the application menu
+  createMenu()
 
   createWindow()
 

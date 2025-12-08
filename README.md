@@ -16,7 +16,11 @@ Puffin is an Electron-based application that provides a visual interface for [Cl
 - **Claude Guidance Options**: Set preferences for programming style (OOP, FP, Temporal Logic), testing approach, documentation level, and more
 - **Branched Conversations**: Organize prompts into branches (Specifications, Architecture, UI, Backend, Deployment) with tree-based history navigation
 - **GUI Designer**: Visual drag-and-drop interface for designing UI layouts that can be described to Claude
+- **User Stories Management**: Full CRUD lifecycle for user stories with intelligent derivation from specifications using Claude
+- **Story Derivation Workflow**: Extract user stories from project specifications, review and refine them, then generate implementation prompts
+- **Real-time Activity Tracking**: Monitor Claude's tool execution in real-time, showing current tools, file operations, and processing status
 - **Architecture Document**: Living documentation that evolves with Claude reviews
+- **Intelligent Title Generation**: Automatic prompt title generation using Claude API with smart fallback mechanisms
 - **CLI Output View**: Real-time streaming of Claude's raw JSON output for debugging and transparency
 
 ## How It Works
@@ -158,6 +162,14 @@ Visual GUI designer with:
 - Property inspector for selected elements
 - Export to Claude-readable description
 
+### User Stories View
+Comprehensive user story management interface with:
+- Full CRUD operations for user stories (create, edit, delete)
+- Status tracking from pending to completed
+- Story derivation from specifications using Claude
+- Interactive review workflow for derived stories
+- Implementation prompt generation for approved stories
+
 ### Architecture View
 Markdown editor for documenting your system architecture, with "Review with Claude" for AI feedback.
 
@@ -166,6 +178,34 @@ Real-time streaming of Claude Code's output:
 - Live Stream tab: Raw text output as it streams
 - Messages tab: Parsed message blocks
 - Raw JSON tab: Full JSON output for debugging
+
+## Latest Features
+
+### User Stories Management
+Comprehensive user story lifecycle management with intelligent Claude integration:
+- **CRUD Operations**: Create, read, update, and delete user stories with full persistence
+- **Status Tracking**: Monitor story progress from pending → ready → implementing → completed
+- **Source Linking**: Connect stories to their originating prompts for full traceability
+
+### Story Derivation Workflow
+Advanced workflow for extracting and implementing user stories:
+1. **Derive**: Submit specifications to Claude for automatic user story extraction
+2. **Review**: Interactive review interface to refine, edit, or discard proposed stories
+3. **Implement**: Generate targeted implementation prompts for approved stories
+4. **Iterate**: Request changes and refinements from Claude based on feedback
+
+### Real-time Activity Tracking
+Enhanced transparency during prompt execution:
+- **Tool Monitoring**: Real-time display of active Claude tools (Read, Write, Bash, etc.)
+- **File Operations**: Track which files are being read, written, or edited
+- **Status Indicators**: Visual feedback showing thinking, tool-use, and completion states
+- **Concurrent Support**: Monitor multiple simultaneous tool executions
+
+### Intelligent Title Generation
+Automatic prompt title generation with fallback mechanisms:
+- **Claude Integration**: Uses Claude API for contextual title generation
+- **Smart Fallbacks**: NLP-based extraction when Claude is unavailable
+- **Action Detection**: Identifies key action words (implement, create, fix) for meaningful titles
 
 ## License
 

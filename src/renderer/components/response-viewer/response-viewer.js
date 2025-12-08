@@ -25,37 +25,27 @@ export class ResponseViewerComponent {
   subscribeToState() {
     document.addEventListener('puffin-state-change', (e) => {
       const { state } = e.detail
-      this.render(state.prompt, state.history)
+      this.render(state.prompt, state.history, state.storyDerivation, state.activity)
     })
   }
 
   /**
    * Render component based on state
    */
-  render(promptState, historyState) {
-    console.log('[SAM-DEBUG] ResponseViewer.render called')
-    console.log('[SAM-DEBUG] promptState.hasStreamingResponse:', promptState.hasStreamingResponse)
-    console.log('[SAM-DEBUG] historyState.selectedPrompt:', historyState.selectedPrompt ? 'exists' : 'null')
-    if (historyState.selectedPrompt) {
-      console.log('[SAM-DEBUG] historyState.selectedPrompt.response:', historyState.selectedPrompt.response ? 'exists' : 'null')
-      if (historyState.selectedPrompt.response) {
-        console.log('[SAM-DEBUG] response.content length:', historyState.selectedPrompt.response.content?.length || 0)
-        console.log('[SAM-DEBUG] response.content preview:', historyState.selectedPrompt.response.content?.substring(0, 100) || '(empty)')
-      }
-    }
+  render(promptState, historyState, storyDerivationState, activityState) {
+    // Store activity state for use in rendering
+    this.activityState = activityState
 
-    // Priority: streaming response > selected prompt response > placeholder
-    if (promptState.hasStreamingResponse) {
-      console.log('[SAM-DEBUG] -> Rendering streaming response')
-      this.renderStreaming(promptState.streamingResponse)
+    // Priority: story derivation error > streaming response > selected prompt response > placeholder
+    if (storyDerivationState?.error) {
+      this.renderStoryDerivationError(storyDerivationState.error, historyState.selectedPrompt)
+    } else if (promptState.hasStreamingResponse) {
+      this.renderStreaming(promptState.streamingResponse, activityState)
     } else if (historyState.selectedPrompt?.response) {
-      console.log('[SAM-DEBUG] -> Rendering completed response')
       this.renderResponse(historyState.selectedPrompt)
     } else if (historyState.selectedPrompt) {
-      console.log('[SAM-DEBUG] -> Rendering prompt only (no response yet)')
       this.renderPromptOnly(historyState.selectedPrompt)
     } else {
-      console.log('[SAM-DEBUG] -> Rendering placeholder')
       this.renderPlaceholder()
     }
   }
@@ -63,9 +53,12 @@ export class ResponseViewerComponent {
   /**
    * Render streaming response
    */
-  renderStreaming(content) {
+  renderStreaming(content, activityState) {
     const html = this.parseMarkdown(content)
+    const activityPanelHtml = this.renderActivityPanel(activityState)
+
     this.container.innerHTML = `
+      ${activityPanelHtml}
       <div class="response-message streaming">
         ${html}
         <span class="streaming-cursor"></span>
@@ -75,21 +68,97 @@ export class ResponseViewerComponent {
   }
 
   /**
+   * Render activity panel showing current tool and modified files
+   */
+  renderActivityPanel(activityState) {
+    if (!activityState) return ''
+
+    const { currentTool, activeTools, filesModified, status } = activityState
+
+    // Don't show if idle with no files
+    if (status === 'idle' && (!filesModified || filesModified.length === 0)) {
+      return ''
+    }
+
+    let toolHtml = ''
+    if (currentTool) {
+      const emoji = this.getToolEmoji(currentTool.name)
+      toolHtml = `
+        <div class="activity-current-tool">
+          <span class="tool-indicator">${emoji}</span>
+          <span class="tool-name">${this.escapeHtml(currentTool.name)}</span>
+          ${currentTool.input?.file_path ? `<span class="tool-file">${this.escapeHtml(this.shortenPath(currentTool.input.file_path))}</span>` : ''}
+        </div>
+      `
+    } else if (status === 'thinking' || (activeTools && activeTools.length === 0 && status !== 'idle')) {
+      toolHtml = `
+        <div class="activity-current-tool thinking">
+          <span class="tool-indicator">💭</span>
+          <span class="tool-name">Thinking...</span>
+        </div>
+      `
+    }
+
+    let filesHtml = ''
+    if (filesModified && filesModified.length > 0) {
+      const fileItems = filesModified.map(f => {
+        const actionIcon = f.action === 'write' ? '✏️' : f.action === 'read' ? '📖' : '📄'
+        return `<li>${actionIcon} ${this.escapeHtml(this.shortenPath(f.path))}</li>`
+      }).join('')
+      filesHtml = `
+        <div class="activity-files">
+          <div class="activity-files-label">Files touched:</div>
+          <ul class="activity-files-list">${fileItems}</ul>
+        </div>
+      `
+    }
+
+    if (!toolHtml && !filesHtml) return ''
+
+    return `
+      <div class="activity-panel">
+        ${toolHtml}
+        ${filesHtml}
+      </div>
+    `
+  }
+
+  /**
+   * Get emoji for tool name
+   */
+  getToolEmoji(toolName) {
+    const emojis = {
+      Read: '📖',
+      Edit: '✏️',
+      Write: '📝',
+      Grep: '🔍',
+      Glob: '🔍',
+      Bash: '💻',
+      WebFetch: '🌐',
+      WebSearch: '🔎',
+      Task: '🤖',
+      NotebookEdit: '📓',
+      TodoWrite: '📋'
+    }
+    return emojis[toolName] || '⚙️'
+  }
+
+  /**
+   * Shorten file path for display
+   */
+  shortenPath(filePath) {
+    if (!filePath) return ''
+    // Show last 2-3 path segments
+    const parts = filePath.split(/[/\\]/)
+    if (parts.length <= 3) return filePath
+    return '...' + parts.slice(-3).join('/')
+  }
+
+  /**
    * Render complete response
    */
   renderResponse(prompt) {
-    console.log('[SAM-DEBUG] renderResponse called')
-    console.log('[SAM-DEBUG] prompt.id:', prompt.id)
-    console.log('[SAM-DEBUG] prompt.content length:', prompt.content?.length || 0)
-    console.log('[SAM-DEBUG] prompt.response:', prompt.response ? 'exists' : 'null')
-    console.log('[SAM-DEBUG] prompt.response.content:', prompt.response?.content || '(undefined/null)')
-    console.log('[SAM-DEBUG] prompt.response.content length:', prompt.response?.content?.length || 0)
-    console.log('[SAM-DEBUG] prompt.response.content type:', typeof prompt.response?.content)
-
     const html = this.parseMarkdown(prompt.response.content)
-    console.log('[SAM-DEBUG] parseMarkdown result length:', html?.length || 0)
-    console.log('[SAM-DEBUG] parseMarkdown result preview:', html?.substring(0, 100) || '(empty)')
-
     const response = prompt.response
 
     // Build metadata string
@@ -104,6 +173,22 @@ export class ResponseViewerComponent {
       metaParts.push(`${(response.duration / 1000).toFixed(1)}s`)
     }
 
+    // Show files modified if available (from response data)
+    let filesModifiedHtml = ''
+    const filesModified = response.filesModified || []
+    if (filesModified.length > 0) {
+      const fileItems = filesModified.map(f => {
+        const actionIcon = f.action === 'write' ? '✏️' : f.action === 'read' ? '📖' : '📄'
+        return `<li>${actionIcon} ${this.escapeHtml(this.shortenPath(f.path))}</li>`
+      }).join('')
+      filesModifiedHtml = `
+        <div class="response-files-modified">
+          <div class="files-label">${filesModified.length} file${filesModified.length !== 1 ? 's' : ''} modified:</div>
+          <ul class="files-list">${fileItems}</ul>
+        </div>
+      `
+    }
+
     this.container.innerHTML = `
       <div class="prompt-display">
         <div class="prompt-label">You</div>
@@ -112,12 +197,12 @@ export class ResponseViewerComponent {
       <div class="response-display">
         <div class="response-label">Claude</div>
         <div class="response-message">${html}</div>
+        ${filesModifiedHtml}
         <div class="response-meta">
           ${metaParts.join(' • ')}
         </div>
       </div>
     `
-    console.log('[SAM-DEBUG] renderResponse finished rendering')
   }
 
   /**
@@ -142,6 +227,42 @@ export class ResponseViewerComponent {
   renderPlaceholder() {
     this.container.innerHTML = `
       <p class="placeholder">Claude's responses will appear here...</p>
+    `
+  }
+
+  /**
+   * Render story derivation error
+   */
+  renderStoryDerivationError(error, prompt) {
+    const promptHtml = prompt ? `
+      <div class="prompt-display">
+        <div class="prompt-label">You</div>
+        <div class="prompt-content">${this.escapeHtml(prompt.content)}</div>
+      </div>
+    ` : ''
+
+    // Also show the response if it exists (Claude's response before error)
+    const responseHtml = prompt?.response?.content ? `
+      <div class="response-display">
+        <div class="response-label">Claude</div>
+        <div class="response-message">${this.parseMarkdown(prompt.response.content)}</div>
+      </div>
+    ` : ''
+
+    this.container.innerHTML = `
+      ${promptHtml}
+      ${responseHtml}
+      <div class="error-display">
+        <div class="error-icon">⚠️</div>
+        <div class="error-content">
+          <div class="error-title">Story Derivation Failed</div>
+          <div class="error-message">${this.escapeHtml(error)}</div>
+          <div class="error-hint">
+            Try submitting the prompt again without "Derive User Stories" enabled,
+            or rephrase your request to be more specific about the features you want.
+          </div>
+        </div>
+      </div>
     `
   }
 

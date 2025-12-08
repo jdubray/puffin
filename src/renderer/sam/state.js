@@ -45,7 +45,13 @@ export function computeState(model) {
     storyDerivation: computeStoryDerivationState(model),
 
     // UI state
-    ui: computeUIState(model)
+    ui: computeUIState(model),
+
+    // Rerun request (for triggering prompt resubmission)
+    rerunRequest: model.rerunRequest || null,
+
+    // Activity tracking state
+    activity: computeActivityState(model)
   }
 }
 
@@ -241,6 +247,63 @@ function computeUIState(model) {
 
     // Navigation state
     canNavigate: !model.pendingPromptId
+  }
+}
+
+/**
+ * Activity tracking state computation
+ */
+function computeActivityState(model) {
+  const activity = model.activity || {
+    currentTool: null,
+    activeTools: [],
+    filesModified: [],
+    status: 'idle'
+  }
+
+  return {
+    // Current status
+    status: activity.status,
+    isIdle: activity.status === 'idle',
+    isThinking: activity.status === 'thinking',
+    isToolUse: activity.status === 'tool-use',
+    isComplete: activity.status === 'complete',
+
+    // Current tool info
+    currentTool: activity.currentTool,
+    currentToolName: activity.currentTool?.name || null,
+    currentToolInput: activity.currentTool?.input || null,
+    hasActiveTool: !!activity.currentTool,
+
+    // Active tools (for concurrent execution)
+    activeTools: activity.activeTools || [],
+    activeToolCount: (activity.activeTools || []).length,
+
+    // File modifications
+    filesModified: activity.filesModified || [],
+    modifiedFileCount: (activity.filesModified || []).length,
+    hasModifiedFiles: (activity.filesModified || []).length > 0,
+
+    // Derived helpers
+    statusText: getActivityStatusText(activity.status, activity.currentTool)
+  }
+}
+
+/**
+ * Get human-readable status text
+ */
+function getActivityStatusText(status, currentTool) {
+  switch (status) {
+    case 'idle':
+      return 'Idle'
+    case 'thinking':
+      return 'Thinking...'
+    case 'tool-use':
+      return currentTool?.name ? `Running ${currentTool.name}...` : 'Using tool...'
+    case 'complete':
+      return 'Complete'
+    default:
+      return 'Unknown'
   }
 }
 

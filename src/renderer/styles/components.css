@@ -97,6 +97,31 @@
   color: var(--text-primary);
 }
 
+/* Rerun button */
+.history-rerun-btn {
+  opacity: 0;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  padding: 0.125rem 0.375rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.history-item:hover .history-rerun-btn {
+  opacity: 1;
+}
+
+.history-rerun-btn:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
 .history-empty {
   padding: 1rem 0.75rem;
   color: var(--text-muted);
@@ -1094,6 +1119,13 @@
   color: var(--text-secondary);
 }
 
+.stream-line.result-file {
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.8125rem;
+  padding-left: 0.5rem;
+}
+
 .stream-line.divider {
   color: var(--border-color);
 }
@@ -1814,4 +1846,226 @@
 
 .story-review-summary strong {
   color: var(--success-color);
+}
+
+/* Error Display */
+.error-display {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  margin-top: 1rem;
+  background: rgba(245, 101, 101, 0.1);
+  border: 1px solid var(--error-color);
+  border-radius: var(--radius-md);
+}
+
+.error-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.error-content {
+  flex: 1;
+}
+
+.error-title {
+  font-weight: 600;
+  color: var(--error-color);
+  margin-bottom: 0.5rem;
+}
+
+.error-message {
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.875rem;
+  background: var(--bg-tertiary);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+}
+
+.error-hint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Activity Panel */
+.activity-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+}
+
+.activity-current-tool {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.activity-current-tool:last-child {
+  margin-bottom: 0;
+}
+
+.activity-current-tool .tool-indicator {
+  font-size: 1.25rem;
+  animation: tool-pulse 1s ease-in-out infinite;
+}
+
+.activity-current-tool.thinking .tool-indicator {
+  animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes tool-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.activity-current-tool .tool-name {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.activity-current-tool .tool-file {
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.activity-files {
+  border-top: 1px solid var(--border-color);
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.activity-files-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.activity-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.activity-files-list li {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Response Files Modified */
+.response-files-modified {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  margin-top: 1rem;
+  font-size: 0.8125rem;
+}
+
+.response-files-modified .files-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.response-files-modified .files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.response-files-modified .files-list li {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Profile Modal Styles */
+.profile-view,
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.profile-field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.profile-value {
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+  padding: 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.profile-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.profile-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.profile-form .form-group label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.profile-form .form-group input,
+.profile-form .form-group select {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.profile-form .form-group input:focus,
+.profile-form .form-group select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
 }

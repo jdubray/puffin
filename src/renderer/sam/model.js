@@ -130,6 +130,65 @@ export const initialModel = {
     originalPrompt: null, // The prompt that triggered derivation
     branchId: null, // Branch context for the stories
     error: null
+  },
+
+  // Activity tracking state (for prompt status feedback)
+  activity: {
+    currentTool: null, // { name: string, input?: object } - currently executing tool
+    activeTools: [], // Array of { id, name, startTime } for concurrent tools
+    filesModified: [], // Array of { path, action, timestamp } - files changed during this prompt
+    status: 'idle' // 'idle' | 'thinking' | 'tool-use' | 'complete'
+  },
+
+  // Developer profile state (GitHub integration)
+  developerProfile: {
+    // Authentication state
+    isAuthenticated: false,
+    isAuthenticating: false,
+    authError: null,
+
+    // Profile information
+    profile: {
+      id: null,
+      login: null,
+      name: null,
+      email: null,
+      avatarUrl: null,
+      company: null,
+      location: null,
+      bio: null,
+      publicRepos: 0,
+      publicGists: 0,
+      followers: 0,
+      following: 0,
+      createdAt: null,
+      updatedAt: null
+    },
+
+    // Repository data
+    repositories: [],
+    selectedRepository: null,
+
+    // Activity data
+    recentActivity: [],
+    contributions: {
+      total: 0,
+      thisWeek: 0,
+      thisMonth: 0
+    },
+
+    // Integration settings
+    settings: {
+      syncEnabled: true,
+      autoFetchActivity: true,
+      showPrivateRepos: false,
+      activityRefreshInterval: 300000 // 5 minutes
+    },
+
+    // Cache and metadata
+    lastFetched: null,
+    rateLimitRemaining: null,
+    rateLimitReset: null
   }
 }
 
@@ -247,6 +306,7 @@ export const submitPromptAcceptor = model => proposal => {
       id: proposal.payload.id,
       parentId: proposal.payload.parentId,
       content: proposal.payload.content,
+      title: proposal.payload.title || null,
       timestamp: proposal.payload.timestamp,
       response: null,
       children: []
@@ -256,6 +316,11 @@ export const submitPromptAcceptor = model => proposal => {
     model.pendingPromptId = prompt.id
     model.streamingResponse = ''
     model.currentPrompt = { content: '', branchId: null }
+
+    // Clear any story derivation error when submitting a new prompt
+    if (model.storyDerivation) {
+      model.storyDerivation.error = null
+    }
 
     // Update parent's children array if this is a child prompt
     if (proposal.payload.parentId) {
@@ -275,50 +340,58 @@ export const receiveResponseChunkAcceptor = model => proposal => {
 }
 
 export const completeResponseAcceptor = model => proposal => {
-  if (proposal?.type === 'COMPLETE_RESPONSE') {
-    console.log('[SAM-DEBUG] completeResponseAcceptor triggered')
-    console.log('[SAM-DEBUG] pendingPromptId:', model.pendingPromptId)
-    console.log('[SAM-DEBUG] proposal.payload:', JSON.stringify(proposal.payload, null, 2))
-    console.log('[SAM-DEBUG] payload.content length:', proposal.payload?.content?.length || 0)
-    console.log('[SAM-DEBUG] payload.content preview:', proposal.payload?.content?.substring(0, 200) || '(empty)')
+  // Log all proposals to see what we're getting
+  if (proposal) {
+    const proposalType = proposal.type || proposal.__actionName || 'UNKNOWN'
+    if (proposalType === 'COMPLETE_RESPONSE' || proposalType.includes('COMPLETE')) {
+      console.log('[ACCEPTOR-DEBUG] COMPLETE_RESPONSE received')
+      console.log('[ACCEPTOR-DEBUG] proposal.type:', proposal.type)
+      console.log('[ACCEPTOR-DEBUG] proposal.__actionName:', proposal.__actionName)
+      console.log('[ACCEPTOR-DEBUG] pendingPromptId:', model.pendingPromptId)
+      console.log('[ACCEPTOR-DEBUG] payload.content length:', proposal.payload?.content?.length || 0)
+    }
+  }
+
+  // Check for COMPLETE_RESPONSE - handle both type and __actionName
+  const isCompleteResponse = proposal?.type === 'COMPLETE_RESPONSE' || proposal?.__actionName === 'COMPLETE_RESPONSE'
+
+  if (isCompleteResponse) {
 
     if (!model.pendingPromptId) {
-      console.warn('[SAM-DEBUG] WARNING: No pendingPromptId - response will be dropped!')
+      console.log('[ACCEPTOR-DEBUG] ERROR: No pendingPromptId! Response will NOT be saved.')
       return
     }
 
     // Find the prompt and update its response
-    let promptFound = false
+    let foundPrompt = false
     for (const [branchId, branch] of Object.entries(model.history.branches)) {
       const prompt = branch.prompts.find(p => p.id === model.pendingPromptId)
       if (prompt) {
-        console.log('[SAM-DEBUG] Found prompt in branch:', branchId, 'promptId:', prompt.id)
+        console.log('[ACCEPTOR-DEBUG] Found prompt in branch:', branchId, 'promptId:', prompt.id)
+
         prompt.response = {
           content: proposal.payload.content,
           sessionId: proposal.payload.sessionId,
           cost: proposal.payload.cost,
           turns: proposal.payload.turns,
           duration: proposal.payload.duration,
+          filesModified: proposal.payload.filesModified || [],
           timestamp: proposal.payload.timestamp
         }
-        console.log('[SAM-DEBUG] Set prompt.response.content length:', prompt.response.content?.length || 0)
         model.history.activePromptId = prompt.id
-        promptFound = true
+        foundPrompt = true
+
+        console.log('[ACCEPTOR-DEBUG] SUCCESS: Response saved. Content length:', prompt.response.content?.length || 0)
         break
       }
     }
 
-    if (!promptFound) {
-      console.error('[SAM-DEBUG] ERROR: Could not find prompt with id:', model.pendingPromptId)
-      console.error('[SAM-DEBUG] Available branches:', Object.keys(model.history.branches))
-      for (const [branchId, branch] of Object.entries(model.history.branches)) {
-        console.error('[SAM-DEBUG] Branch', branchId, 'prompts:', branch.prompts.map(p => p.id))
-      }
+    if (!foundPrompt) {
+      console.log('[ACCEPTOR-DEBUG] ERROR: Prompt not found in any branch! pendingPromptId:', model.pendingPromptId)
     }
 
     model.pendingPromptId = null
     model.streamingResponse = ''
-    console.log('[SAM-DEBUG] completeResponseAcceptor finished. activePromptId:', model.history.activePromptId)
   }
 }
 
@@ -337,6 +410,49 @@ export const cancelPromptAcceptor = model => proposal => {
   if (proposal?.type === 'CANCEL_PROMPT') {
     model.pendingPromptId = null
     model.streamingResponse = ''
+  }
+}
+
+export const rerunPromptAcceptor = model => proposal => {
+  if (proposal?.type === 'RERUN_PROMPT') {
+    const { promptId } = proposal.payload
+
+    // Find the prompt in any branch
+    let foundPrompt = null
+    let foundBranchId = null
+
+    for (const [branchId, branch] of Object.entries(model.history.branches)) {
+      const prompt = branch.prompts.find(p => p.id === promptId)
+      if (prompt) {
+        foundPrompt = prompt
+        foundBranchId = branchId
+        break
+      }
+    }
+
+    if (!foundPrompt) {
+      model.appError = { message: 'Prompt not found' }
+      return
+    }
+
+    // Store the rerun request for the app to handle
+    model.rerunRequest = {
+      promptId: foundPrompt.id,
+      branchId: foundBranchId,
+      content: foundPrompt.content,
+      timestamp: proposal.payload.timestamp
+    }
+
+    // Clear any story derivation error
+    if (model.storyDerivation) {
+      model.storyDerivation.error = null
+    }
+  }
+}
+
+export const clearRerunRequestAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_RERUN_REQUEST') {
+    model.rerunRequest = null
   }
 }
 
@@ -739,12 +855,297 @@ export const storyDerivationErrorAcceptor = model => proposal => {
 }
 
 /**
+ * Activity Tracking Acceptors
+ */
+
+export const setCurrentToolAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_CURRENT_TOOL') {
+    const { name, input } = proposal.payload
+    model.activity.currentTool = { name, input }
+    model.activity.status = 'tool-use'
+  }
+}
+
+export const clearCurrentToolAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_CURRENT_TOOL') {
+    model.activity.currentTool = null
+    // Only set to thinking if there are no active tools
+    if (model.activity.activeTools.length === 0) {
+      model.activity.status = 'thinking'
+    }
+  }
+}
+
+export const addModifiedFileAcceptor = model => proposal => {
+  if (proposal?.type === 'ADD_MODIFIED_FILE') {
+    const { filePath, action, timestamp } = proposal.payload
+    // Check if file is already tracked
+    const existingIndex = model.activity.filesModified.findIndex(f => f.path === filePath)
+    if (existingIndex === -1) {
+      model.activity.filesModified.push({
+        path: filePath,
+        action,
+        timestamp
+      })
+    } else {
+      // Update existing entry
+      model.activity.filesModified[existingIndex].action = action
+      model.activity.filesModified[existingIndex].timestamp = timestamp
+    }
+  }
+}
+
+export const clearModifiedFilesAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_MODIFIED_FILES') {
+    model.activity.filesModified = []
+  }
+}
+
+export const setActivityStatusAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_ACTIVITY_STATUS') {
+    model.activity.status = proposal.payload.status
+  }
+}
+
+export const updateActivityStatusAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_ACTIVITY_STATUS') {
+    model.activity.status = proposal.payload.status
+  }
+}
+
+export const toolStartAcceptor = model => proposal => {
+  if (proposal?.type === 'TOOL_START') {
+    const { id, name, input } = proposal.payload
+    model.activity.currentTool = { name, input }
+    model.activity.status = 'tool-use'
+    model.activity.activeTools.push({
+      id,
+      name,
+      input, // Store input so we can extract file path when tool completes
+      startTime: Date.now()
+    })
+  }
+}
+
+export const toolEndAcceptor = model => proposal => {
+  if (proposal?.type === 'TOOL_END') {
+    const { id, filePath, action } = proposal.payload
+
+    // Remove from active tools
+    model.activity.activeTools = model.activity.activeTools.filter(t => t.id !== id)
+
+    // Track file modification if applicable
+    if (filePath && action) {
+      // Check if we already tracked this file
+      const existingIndex = model.activity.filesModified.findIndex(f => f.path === filePath)
+      if (existingIndex === -1) {
+        model.activity.filesModified.push({
+          path: filePath,
+          action, // 'read', 'write', 'edit'
+          timestamp: Date.now()
+        })
+      } else {
+        // Update existing entry with latest action
+        model.activity.filesModified[existingIndex].action = action
+        model.activity.filesModified[existingIndex].timestamp = Date.now()
+      }
+    }
+
+    // Update current tool status
+    if (model.activity.activeTools.length === 0) {
+      model.activity.currentTool = null
+      model.activity.status = 'thinking'
+    } else {
+      // Show the most recent active tool
+      const latestTool = model.activity.activeTools[model.activity.activeTools.length - 1]
+      model.activity.currentTool = { name: latestTool.name }
+    }
+  }
+}
+
+export const clearActivityAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_ACTIVITY') {
+    model.activity = {
+      currentTool: null,
+      activeTools: [],
+      filesModified: [],
+      status: 'idle'
+    }
+  }
+}
+
+/**
+ * Developer Profile Acceptors
+ */
+
+export const startGithubAuthAcceptor = model => proposal => {
+  if (proposal?.type === 'START_GITHUB_AUTH') {
+    model.developerProfile.isAuthenticating = true
+    model.developerProfile.authError = null
+  }
+}
+
+export const githubAuthSuccessAcceptor = model => proposal => {
+  if (proposal?.type === 'GITHUB_AUTH_SUCCESS') {
+    const { profile } = proposal.payload
+    model.developerProfile.isAuthenticated = true
+    model.developerProfile.isAuthenticating = false
+    model.developerProfile.authError = null
+    model.developerProfile.profile = {
+      id: profile.id,
+      login: profile.login,
+      name: profile.name,
+      email: profile.email,
+      avatarUrl: profile.avatar_url,
+      company: profile.company,
+      location: profile.location,
+      bio: profile.bio,
+      publicRepos: profile.public_repos,
+      publicGists: profile.public_gists,
+      followers: profile.followers,
+      following: profile.following,
+      createdAt: profile.created_at,
+      updatedAt: profile.updated_at
+    }
+    model.developerProfile.lastFetched = Date.now()
+  }
+}
+
+export const githubAuthErrorAcceptor = model => proposal => {
+  if (proposal?.type === 'GITHUB_AUTH_ERROR') {
+    model.developerProfile.isAuthenticated = false
+    model.developerProfile.isAuthenticating = false
+    model.developerProfile.authError = proposal.payload.error
+  }
+}
+
+export const githubLogoutAcceptor = model => proposal => {
+  if (proposal?.type === 'GITHUB_LOGOUT') {
+    model.developerProfile = {
+      isAuthenticated: false,
+      isAuthenticating: false,
+      authError: null,
+      profile: {
+        id: null,
+        login: null,
+        name: null,
+        email: null,
+        avatarUrl: null,
+        company: null,
+        location: null,
+        bio: null,
+        publicRepos: 0,
+        publicGists: 0,
+        followers: 0,
+        following: 0,
+        createdAt: null,
+        updatedAt: null
+      },
+      repositories: [],
+      selectedRepository: null,
+      recentActivity: [],
+      contributions: {
+        total: 0,
+        thisWeek: 0,
+        thisMonth: 0
+      },
+      settings: model.developerProfile.settings,
+      lastFetched: null,
+      rateLimitRemaining: null,
+      rateLimitReset: null
+    }
+  }
+}
+
+export const loadGithubRepositoriesAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_GITHUB_REPOSITORIES') {
+    model.developerProfile.repositories = proposal.payload.repositories.map(repo => ({
+      id: repo.id,
+      name: repo.name,
+      fullName: repo.full_name,
+      description: repo.description,
+      private: repo.private,
+      htmlUrl: repo.html_url,
+      language: repo.language,
+      stargazersCount: repo.stargazers_count,
+      forksCount: repo.forks_count,
+      updatedAt: repo.updated_at,
+      pushedAt: repo.pushed_at
+    }))
+    model.developerProfile.lastFetched = Date.now()
+  }
+}
+
+export const selectGithubRepositoryAcceptor = model => proposal => {
+  if (proposal?.type === 'SELECT_GITHUB_REPOSITORY') {
+    model.developerProfile.selectedRepository = proposal.payload.repositoryId
+  }
+}
+
+export const loadGithubActivityAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_GITHUB_ACTIVITY') {
+    model.developerProfile.recentActivity = proposal.payload.events.map(event => ({
+      id: event.id,
+      type: event.type,
+      repo: event.repo?.name,
+      createdAt: event.created_at,
+      payload: {
+        action: event.payload?.action,
+        ref: event.payload?.ref,
+        refType: event.payload?.ref_type,
+        commits: event.payload?.commits?.length || 0
+      }
+    }))
+    model.developerProfile.lastFetched = Date.now()
+  }
+}
+
+export const updateGithubContributionsAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_GITHUB_CONTRIBUTIONS') {
+    model.developerProfile.contributions = {
+      total: proposal.payload.total || 0,
+      thisWeek: proposal.payload.thisWeek || 0,
+      thisMonth: proposal.payload.thisMonth || 0
+    }
+  }
+}
+
+export const updateGithubSettingsAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_GITHUB_SETTINGS') {
+    model.developerProfile.settings = {
+      ...model.developerProfile.settings,
+      ...proposal.payload
+    }
+  }
+}
+
+export const updateGithubRateLimitAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_GITHUB_RATE_LIMIT') {
+    model.developerProfile.rateLimitRemaining = proposal.payload.remaining
+    model.developerProfile.rateLimitReset = proposal.payload.reset
+  }
+}
+
+export const loadDeveloperProfileAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_DEVELOPER_PROFILE') {
+    const { profile } = proposal.payload
+    if (profile) {
+      model.developerProfile = {
+        ...model.developerProfile,
+        ...profile,
+        isAuthenticated: !!profile.profile?.id
+      }
+    }
+  }
+}
+
+/**
  * UI Navigation Acceptors
  */
 
 export const switchViewAcceptor = model => proposal => {
   if (proposal?.type === 'SWITCH_VIEW') {
-    const validViews = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output']
+    const validViews = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'profile']
     if (validViews.includes(proposal.payload.view)) {
       model.currentView = proposal.payload.view
     }
@@ -794,6 +1195,8 @@ export const acceptors = [
   completeResponseAcceptor,
   responseErrorAcceptor,
   cancelPromptAcceptor,
+  rerunPromptAcceptor,
+  clearRerunRequestAcceptor,
   selectBranchAcceptor,
   createBranchAcceptor,
   deleteBranchAcceptor,
@@ -838,5 +1241,29 @@ export const acceptors = [
   switchViewAcceptor,
   toggleSidebarAcceptor,
   showModalAcceptor,
-  hideModalAcceptor
+  hideModalAcceptor,
+
+  // Activity Tracking
+  setCurrentToolAcceptor,
+  clearCurrentToolAcceptor,
+  addModifiedFileAcceptor,
+  clearModifiedFilesAcceptor,
+  setActivityStatusAcceptor,
+  updateActivityStatusAcceptor,
+  toolStartAcceptor,
+  toolEndAcceptor,
+  clearActivityAcceptor,
+
+  // Developer Profile
+  startGithubAuthAcceptor,
+  githubAuthSuccessAcceptor,
+  githubAuthErrorAcceptor,
+  githubLogoutAcceptor,
+  loadGithubRepositoriesAcceptor,
+  selectGithubRepositoryAcceptor,
+  loadGithubActivityAcceptor,
+  updateGithubContributionsAcceptor,
+  updateGithubSettingsAcceptor,
+  updateGithubRateLimitAcceptor,
+  loadDeveloperProfileAcceptor
 ]

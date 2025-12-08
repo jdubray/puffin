@@ -173,6 +173,7 @@ export function buildProjectContext(project) {
 
 /**
  * Convert prompt history tree to flat array with depth
+ * Shows newest prompts first while maintaining parent-child hierarchy
  * @param {Object} branch - Branch with prompts
  * @returns {Object[]}
  */
@@ -180,12 +181,16 @@ export function flattenPromptTree(branch) {
   const result = []
 
   function traverse(prompts, depth = 0, parentId = null) {
-    prompts
+    const children = prompts
       .filter(p => p.parentId === parentId)
-      .forEach(prompt => {
-        result.push({ ...prompt, depth })
-        traverse(prompts, depth + 1, prompt.id)
-      })
+      // Sort by timestamp descending (newest first)
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+
+    children.forEach(prompt => {
+      result.push({ ...prompt, depth })
+      // Recursively traverse children (which will also be in newest-first order)
+      traverse(prompts, depth + 1, prompt.id)
+    })
   }
 
   if (branch && branch.prompts) {

@@ -179,6 +179,9 @@ a:hover {
   overflow-y: auto;
   flex-shrink: 0;
   transition: width 0.2s ease, opacity 0.2s ease;
+  position: relative;
+  min-width: 200px;
+  max-width: 500px;
 }
 
 #sidebar.hidden {
@@ -198,6 +201,34 @@ a:hover {
   color: var(--text-muted);
   margin-bottom: 0.75rem;
   letter-spacing: 0.05em;
+}
+
+/* Sidebar Resizer */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-resizer:hover .resizer-handle,
+.sidebar-resizer.resizing .resizer-handle {
+  opacity: 1;
+}
+
+.resizer-handle {
+  width: 2px;
+  height: 30px;
+  background: var(--accent-primary);
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 /* View Container */

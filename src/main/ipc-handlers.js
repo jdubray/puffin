@@ -8,9 +8,11 @@
 const { dialog } = require('electron')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
+const { DeveloperProfileManager } = require('./developer-profile')
 
 let puffinState = null
 let claudeService = null
+let developerProfile = null
 let projectPath = null
 
 /**
@@ -22,6 +24,7 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
   projectPath = initialProjectPath
   puffinState = new PuffinState()
   claudeService = new ClaudeService()
+  developerProfile = new DeveloperProfileManager()
 
   // Set Claude CLI working directory to the project path
   claudeService.setProjectPath(projectPath)
@@ -34,6 +37,9 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
 
   // File handlers
   setupFileHandlers(ipcMain)
+
+  // Developer profile handlers
+  setupProfileHandlers(ipcMain)
 }
 
 /**
@@ -497,6 +503,255 @@ function setupFileHandlers(ipcMain) {
       }
 
       return { success: false, error: 'Import cancelled' }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+/**
+ * Developer profile IPC handlers
+ */
+function setupProfileHandlers(ipcMain) {
+  // Get developer profile
+  ipcMain.handle('profile:get', async () => {
+    try {
+      const profile = await developerProfile.get()
+      return { success: true, profile }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Check if profile exists
+  ipcMain.handle('profile:exists', async () => {
+    try {
+      const exists = await developerProfile.exists()
+      return { success: true, exists }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Create developer profile
+  ipcMain.handle('profile:create', async (event, profileData) => {
+    try {
+      // Validate first
+      const validation = developerProfile.validate(profileData)
+      if (!validation.isValid) {
+        return { success: false, errors: validation.errors }
+      }
+
+      const profile = await developerProfile.create(profileData)
+      return { success: true, profile }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Update developer profile
+  ipcMain.handle('profile:update', async (event, updates) => {
+    try {
+      // Validate updates
+      const currentProfile = await developerProfile.get()
+      if (!currentProfile) {
+        return { success: false, error: 'No profile exists to update' }
+      }
+
+      const mergedData = { ...currentProfile, ...updates }
+      const validation = developerProfile.validate(mergedData)
+      if (!validation.isValid) {
+        return { success: false, errors: validation.errors }
+      }
+
+      const profile = await developerProfile.update(updates)
+      return { success: true, profile }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Delete developer profile
+  ipcMain.handle('profile:delete', async () => {
+    try {
+      const deleted = await developerProfile.delete()
+      return { success: true, deleted }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Export developer profile
+  ipcMain.handle('profile:export', async () => {
+    try {
+      const profileJson = await developerProfile.exportProfile()
+
+      // Show save dialog
+      const { filePath } = await dialog.showSaveDialog({
+        title: 'Export Developer Profile',
+        defaultPath: 'developer-profile.json',
+        filters: [
+          { name: 'JSON', extensions: ['json'] }
+        ]
+      })
+
+      if (filePath) {
+        const fs = require('fs').promises
+        await fs.writeFile(filePath, profileJson, 'utf-8')
+        return { success: true, filePath }
+      }
+
+      return { success: false, error: 'Export cancelled' }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Import developer profile
+  ipcMain.handle('profile:import', async (event, { overwrite = false } = {}) => {
+    try {
+      // Show open dialog
+      const { filePaths } = await dialog.showOpenDialog({
+        title: 'Import Developer Profile',
+        filters: [
+          { name: 'JSON', extensions: ['json'] }
+        ],
+        properties: ['openFile']
+      })
+
+      if (filePaths && filePaths.length > 0) {
+        const fs = require('fs').promises
+        const content = await fs.readFile(filePaths[0], 'utf-8')
+
+        // Validate JSON before importing
+        let parsedContent
+        try {
+          parsedContent = JSON.parse(content)
+        } catch {
+          return { success: false, error: 'Invalid JSON file' }
+        }
+
+        // Check if we need to warn about overwrite
+        const exists = await developerProfile.exists()
+        if (exists && !overwrite) {
+          return {
+            success: false,
+            error: 'Profile already exists',
+            requiresOverwrite: true
+          }
+        }
+
+        const profile = await developerProfile.importProfile(content, overwrite)
+        return { success: true, profile }
+      }
+
+      return { success: false, error: 'Import cancelled' }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get available coding style options
+  ipcMain.handle('profile:getOptions', async () => {
+    try {
+      const options = developerProfile.getOptions()
+      return { success: true, options }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Validate profile data without saving
+  ipcMain.handle('profile:validate', async (event, profileData) => {
+    try {
+      const validation = developerProfile.validate(profileData)
+      return { success: true, ...validation }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ============================================
+  // GitHub Integration Handlers
+  // ============================================
+
+  // Start GitHub OAuth Device Flow
+  ipcMain.handle('github:startAuth', async () => {
+    try {
+      const deviceInfo = await developerProfile.startGithubAuth()
+      return { success: true, ...deviceInfo }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Open GitHub verification URL in browser
+  ipcMain.handle('github:openAuth', async (event, verificationUri) => {
+    try {
+      await developerProfile.openGithubAuth(verificationUri)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Poll for GitHub token (this runs in background)
+  ipcMain.handle('github:pollToken', async (event, { deviceCode, interval, expiresIn }) => {
+    try {
+      const tokenInfo = await developerProfile.pollForGithubToken(deviceCode, interval, expiresIn)
+      // Complete authentication and update profile
+      const profile = await developerProfile.completeGithubAuth(tokenInfo)
+      return { success: true, profile }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Check if GitHub is connected
+  ipcMain.handle('github:isConnected', async () => {
+    try {
+      const connected = await developerProfile.isGithubConnected()
+      return { success: true, connected }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Disconnect GitHub
+  ipcMain.handle('github:disconnect', async () => {
+    try {
+      const profile = await developerProfile.disconnectGithub()
+      return { success: true, profile }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Refresh GitHub profile data
+  ipcMain.handle('github:refreshProfile', async () => {
+    try {
+      const profile = await developerProfile.refreshGithubProfile()
+      return { success: true, profile }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Fetch GitHub repositories
+  ipcMain.handle('github:getRepositories', async (event, options = {}) => {
+    try {
+      const { repositories, rateLimit } = await developerProfile.fetchGithubRepositories(options)
+      return { success: true, repositories, rateLimit }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Fetch GitHub activity
+  ipcMain.handle('github:getActivity', async (event, perPage = 30) => {
+    try {
+      const { events, rateLimit } = await developerProfile.fetchGithubActivity(perPage)
+      return { success: true, events, rateLimit }
     } catch (error) {
       return { success: false, error: error.message }
     }

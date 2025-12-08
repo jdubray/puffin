@@ -24,6 +24,7 @@ import { DebuggerComponent } from './components/debugger/debugger.js'
 import { CliOutputComponent } from './components/cli-output/cli-output.js'
 import { UserStoriesComponent } from './components/user-stories/user-stories.js'
 import { UserStoryReviewModalComponent } from './components/user-story-review-modal/user-story-review-modal.js'
+import { DeveloperProfileComponent } from './components/developer-profile/developer-profile.js'
 
 /**
  * Main application class
@@ -54,6 +55,9 @@ class PuffinApp {
 
     // Setup Claude API listeners
     this.setupClaudeListeners()
+
+    // Setup menu event listeners (Electron menu actions)
+    this.setupMenuListeners()
 
     // Wait for app ready signal with project path
     if (window.puffin) {
@@ -118,6 +122,8 @@ class PuffinApp {
       'updateConfig', 'updateOptions',
       'startCompose', 'updatePromptContent', 'submitPrompt',
       'receiveResponseChunk', 'completeResponse', 'responseError', 'cancelPrompt',
+      // Rerun prompt (after cancelPrompt, before branch actions)
+      'rerunPrompt', 'clearRerunRequest',
       'selectBranch', 'createBranch', 'deleteBranch', 'selectPrompt',
       'addGuiElement', 'updateGuiElement', 'deleteGuiElement',
       'moveGuiElement', 'resizeGuiElement', 'selectGuiElement',
@@ -130,7 +136,11 @@ class PuffinApp {
       'deriveUserStories', 'receiveDerivedStories', 'markStoryReady', 'unmarkStoryReady',
       'updateDerivedStory', 'deleteDerivedStory', 'requestStoryChanges',
       'implementStories', 'cancelStoryReview', 'storyDerivationError',
-      'switchView', 'toggleSidebar', 'showModal', 'hideModal'
+      'switchView', 'toggleSidebar', 'showModal', 'hideModal',
+      // Activity tracking actions
+      'toolStart', 'toolEnd', 'clearActivity',
+      // Developer profile actions
+      'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity'
     ]
 
     const samResult = SAM({
@@ -158,6 +168,10 @@ class PuffinApp {
           promptFsm.addAction(actions.completeResponse, 'COMPLETE_RESPONSE'),
           promptFsm.addAction(actions.responseError, 'RESPONSE_ERROR'),
           promptFsm.addAction(actions.cancelPrompt, 'CANCEL_PROMPT'),
+
+          // Rerun prompt actions
+          ['RERUN_PROMPT', actions.rerunPrompt],
+          ['CLEAR_RERUN_REQUEST', actions.clearRerunRequest],
 
           // Branch/History actions (no FSM needed)
           ['SELECT_BRANCH', actions.selectBranch],
@@ -208,7 +222,17 @@ class PuffinApp {
           ['SWITCH_VIEW', actions.switchView],
           ['TOGGLE_SIDEBAR', actions.toggleSidebar],
           ['SHOW_MODAL', actions.showModal],
-          ['HIDE_MODAL', actions.hideModal]
+          ['HIDE_MODAL', actions.hideModal],
+
+          // Activity tracking actions
+          ['TOOL_START', actions.toolStart],
+          ['TOOL_END', actions.toolEnd],
+          ['CLEAR_ACTIVITY', actions.clearActivity],
+
+          // Developer profile actions
+          ['LOAD_DEVELOPER_PROFILE', actions.loadDeveloperProfile],
+          ['LOAD_GITHUB_REPOSITORIES', actions.loadGithubRepositories],
+          ['LOAD_GITHUB_ACTIVITY', actions.loadGithubActivity]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -224,14 +248,15 @@ class PuffinApp {
         const previousState = this.state
         this.state = computeState(model)
 
-        // Get action type - prefer proposal.type if available
-        const actionType = proposal?.type || this.lastAction?.type || 'UNKNOWN'
+        // Get action type - SAM pattern stores it on the model as __actionName
+        // Also check proposal (which might be the model in some cases) and lastAction fallback
+        const actionType = model?.__actionName || proposal?.__actionName || proposal?.type || this.lastAction?.type || 'UNKNOWN'
 
         // Record action in debugger
         const actionInfo = proposal || this.lastAction || { type: actionType }
         samDebugger.recordAction(actionType, actionInfo, model, this.state)
 
-        console.log('SAM render - actionType:', actionType, 'proposal:', proposal)
+        console.log('[SAM-RENDER] actionType:', actionType, 'model.__actionName:', model?.__actionName)
 
         this.lastAction = null
 
@@ -269,6 +294,9 @@ class PuffinApp {
       return
     }
 
+    // Normalize action type (handle both SCREAMING_SNAKE and potential variations)
+    const normalizedType = actionType?.toUpperCase?.() || actionType
+
     // Only persist for certain action types
     const persistActions = [
       'UPDATE_CONFIG', 'UPDATE_OPTIONS',
@@ -281,31 +309,56 @@ class PuffinApp {
       'IMPLEMENT_STORIES' // Persist user stories when implementing
     ]
 
-    if (!persistActions.includes(actionType)) return
+    if (!persistActions.includes(normalizedType)) {
+      console.log('[PERSIST-DEBUG] Skipping persist for action:', actionType, '(normalized:', normalizedType, ')')
+      return
+    }
 
     try {
       // Persist based on what changed
-      if (['UPDATE_CONFIG', 'UPDATE_OPTIONS'].includes(actionType)) {
+      if (['UPDATE_CONFIG', 'UPDATE_OPTIONS'].includes(normalizedType)) {
         console.log('Persisting config:', this.state.config)
         const result = await window.puffin.state.updateConfig(this.state.config)
         console.log('Config persist result:', result)
       }
 
-      if (['SUBMIT_PROMPT', 'COMPLETE_RESPONSE', 'SELECT_BRANCH', 'CREATE_BRANCH', 'DELETE_BRANCH'].includes(actionType)) {
+      if (['SUBMIT_PROMPT', 'COMPLETE_RESPONSE', 'SELECT_BRANCH', 'CREATE_BRANCH', 'DELETE_BRANCH'].includes(normalizedType)) {
+        console.log('[PERSIST-DEBUG] Action:', normalizedType)
+
+        // For COMPLETE_RESPONSE, verify the response is in the history before persisting
+        if (normalizedType === 'COMPLETE_RESPONSE') {
+          const activePrompt = this.state.history.selectedPrompt
+          console.log('[PERSIST-DEBUG] selectedPrompt.id:', activePrompt?.id)
+          console.log('[PERSIST-DEBUG] selectedPrompt.response:', activePrompt?.response ? 'EXISTS' : 'NULL')
+
+          // Also check directly in raw history
+          const activeBranch = this.state.history.activeBranch
+          const branchData = this.state.history.raw?.branches?.[activeBranch]
+          if (branchData) {
+            const lastPrompt = branchData.prompts[branchData.prompts.length - 1]
+            console.log('[PERSIST-DEBUG] Last prompt in branch:', lastPrompt?.id)
+            console.log('[PERSIST-DEBUG] Last prompt response:', lastPrompt?.response ? 'EXISTS' : 'NULL')
+            if (lastPrompt?.response) {
+              console.log('[PERSIST-DEBUG] Last prompt response content length:', lastPrompt.response.content?.length || 0)
+            }
+          }
+        }
+
         await window.puffin.state.updateHistory(this.state.history.raw)
+        console.log('[PERSIST-DEBUG] History persisted successfully')
 
         // Auto-extract user stories from specifications branch responses
-        if (actionType === 'COMPLETE_RESPONSE' && this.state.history.activeBranch === 'specifications') {
+        if (normalizedType === 'COMPLETE_RESPONSE' && this.state.history.activeBranch === 'specifications') {
           await this.extractUserStoriesFromResponse()
         }
       }
 
-      if (actionType === 'UPDATE_ARCHITECTURE') {
+      if (normalizedType === 'UPDATE_ARCHITECTURE') {
         await window.puffin.state.updateArchitecture(this.state.architecture.content)
       }
 
       // Persist user stories and history when implementing from derivation
-      if (actionType === 'IMPLEMENT_STORIES') {
+      if (normalizedType === 'IMPLEMENT_STORIES') {
         // Persist history (we added a prompt entry)
         await window.puffin.state.updateHistory(this.state.history.raw)
 
@@ -322,7 +375,7 @@ class PuffinApp {
         }
       }
 
-      console.log('State persisted for action:', actionType)
+      console.log('[PERSIST-DEBUG] State persisted for action:', normalizedType)
     } catch (error) {
       console.error('Failed to persist state:', error)
     }
@@ -365,7 +418,8 @@ class PuffinApp {
       debugger: new DebuggerComponent(this.intents),
       cliOutput: new CliOutputComponent(this.intents),
       userStories: new UserStoriesComponent(this.intents),
-      userStoryReviewModal: new UserStoryReviewModalComponent(this.intents)
+      userStoryReviewModal: new UserStoryReviewModalComponent(this.intents),
+      developerProfile: new DeveloperProfileComponent(this.intents)
     }
 
     // Initialize each component
@@ -411,9 +465,197 @@ class PuffinApp {
       this.onStateChange(e.detail)
     })
 
+    // Sidebar resizer
+    this.setupSidebarResize()
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       this.handleKeyDown(e)
+    })
+
+    // Profile menu IPC handlers
+    this.setupProfileMenuHandlers()
+  }
+
+  /**
+   * Setup profile menu IPC message handlers
+   */
+  setupProfileMenuHandlers() {
+    if (!window.puffin?.menu) return
+
+    // Listen for profile menu actions from Electron main process
+    window.puffin.menu.onProfileView(() => this.handleProfileAction('view'))
+    window.puffin.menu.onProfileCreate(() => this.handleProfileAction('create'))
+    window.puffin.menu.onProfileEdit(() => this.handleProfileAction('edit'))
+    window.puffin.menu.onProfileExport(() => this.handleProfileAction('export'))
+    window.puffin.menu.onProfileImport(() => this.handleProfileAction('import'))
+    window.puffin.menu.onProfileDelete(() => this.handleProfileAction('delete'))
+  }
+
+  /**
+   * Handle profile menu actions
+   * @param {string} action - The profile action to perform
+   */
+  async handleProfileAction(action) {
+    console.log(`Profile action: ${action}`)
+
+    switch (action) {
+      case 'view':
+        // Switch to profile view
+        this.intents.switchView('profile')
+        break
+
+      case 'create':
+        // Switch to profile view and trigger create
+        this.intents.switchView('profile')
+        // Let the profile component handle the creation through its form
+        break
+
+      case 'edit':
+        // Switch to profile view (will show edit form if profile exists)
+        this.intents.switchView('profile')
+        break
+
+      case 'export':
+        // Delegate to profile component
+        if (this.components.developerProfile) {
+          await this.components.developerProfile.handleExport()
+        }
+        break
+
+      case 'import':
+        // Delegate to profile component
+        if (this.components.developerProfile) {
+          await this.components.developerProfile.handleImport()
+        }
+        break
+
+      case 'delete':
+        // Delegate to profile component
+        if (this.components.developerProfile) {
+          await this.components.developerProfile.handleDelete()
+        }
+        break
+
+      default:
+        console.warn(`Unknown profile action: ${action}`)
+    }
+  }
+
+  /**
+   * Setup sidebar resize functionality
+   */
+  setupSidebarResize() {
+    const sidebar = document.getElementById('sidebar')
+    const resizer = document.getElementById('sidebar-resizer')
+
+    if (!sidebar || !resizer) return
+
+    let isResizing = false
+    let startX = 0
+    let startWidth = 0
+
+    resizer.addEventListener('mousedown', (e) => {
+      isResizing = true
+      startX = e.clientX
+      startWidth = sidebar.offsetWidth
+
+      resizer.classList.add('resizing')
+      document.body.style.cursor = 'ew-resize'
+      document.body.style.userSelect = 'none'
+
+      e.preventDefault()
+    })
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return
+
+      const width = startWidth + (e.clientX - startX)
+      const minWidth = 200
+      const maxWidth = 500
+
+      const newWidth = Math.max(minWidth, Math.min(width, maxWidth))
+      sidebar.style.width = `${newWidth}px`
+
+      e.preventDefault()
+    })
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false
+        resizer.classList.remove('resizing')
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    })
+  }
+
+  /**
+   * Setup menu event listeners (for Electron menu actions)
+   */
+  setupMenuListeners() {
+    if (!window.puffin?.menu) return
+
+    // Profile menu actions
+    window.puffin.menu.onProfileView(() => {
+      console.log('Menu: Profile View')
+      this.intents.showModal('profile-view', {})
+    })
+
+    window.puffin.menu.onProfileCreate(() => {
+      console.log('Menu: Profile Create')
+      this.intents.showModal('profile-create', {})
+    })
+
+    window.puffin.menu.onProfileEdit(() => {
+      console.log('Menu: Profile Edit')
+      this.intents.showModal('profile-edit', {})
+    })
+
+    window.puffin.menu.onProfileExport(async () => {
+      console.log('Menu: Profile Export')
+      try {
+        const result = await window.puffin.profile.export()
+        if (result.success) {
+          this.showToast('Profile exported successfully', 'success')
+        } else if (result.error) {
+          this.showToast('Export failed: ' + result.error, 'error')
+        }
+      } catch (error) {
+        this.showToast('Export failed: ' + error.message, 'error')
+      }
+    })
+
+    window.puffin.menu.onProfileImport(async () => {
+      console.log('Menu: Profile Import')
+      try {
+        const result = await window.puffin.profile.import()
+        if (result.success) {
+          this.showToast('Profile imported successfully', 'success')
+          // Reload state to reflect imported profile
+          await this.loadState()
+        } else if (result.error) {
+          this.showToast('Import failed: ' + result.error, 'error')
+        }
+      } catch (error) {
+        this.showToast('Import failed: ' + error.message, 'error')
+      }
+    })
+
+    window.puffin.menu.onProfileDelete(async () => {
+      console.log('Menu: Profile Delete')
+      if (confirm('Are you sure you want to delete your profile? This cannot be undone.')) {
+        try {
+          const result = await window.puffin.profile.delete()
+          if (result.success) {
+            this.showToast('Profile deleted', 'success')
+          } else {
+            this.showToast('Delete failed: ' + result.error, 'error')
+          }
+        } catch (error) {
+          this.showToast('Delete failed: ' + error.message, 'error')
+        }
+      }
     })
   }
 
@@ -423,9 +665,11 @@ class PuffinApp {
   setupClaudeListeners() {
     if (!window.puffin) return
 
-    // Raw message streaming (for CLI Output view)
+    // Raw message streaming (for CLI Output view and activity tracking)
     const unsubRaw = window.puffin.claude.onRawMessage((jsonLine) => {
       this.components.cliOutput.handleRawMessage(jsonLine)
+      // Also process for activity tracking
+      this.processRawMessageForActivity(jsonLine)
     })
     this.claudeListeners.push(unsubRaw)
 
@@ -443,7 +687,13 @@ class PuffinApp {
       console.log('[SAM-DEBUG] response.content length:', response?.content?.length || 0)
       console.log('[SAM-DEBUG] response.content preview:', response?.content?.substring(0, 200) || '(empty)')
       console.log('[SAM-DEBUG] response.content type:', typeof response?.content)
-      this.intents.completeResponse(response)
+      // Pass the files modified from activity state before it gets cleared
+      const filesModified = this.state?.activity?.filesModified || []
+      console.log('[SAM-DEBUG] filesModified at completion:', filesModified.length, 'files')
+      console.log('[SAM-DEBUG] filesModified data:', JSON.stringify(filesModified))
+      this.intents.completeResponse(response, filesModified)
+      // Now clear activity state after we've captured filesModified
+      this.intents.clearActivity()
       this.components.cliOutput.setProcessing(false)
     })
     this.claudeListeners.push(unsubComplete)
@@ -489,6 +739,11 @@ class PuffinApp {
 
     // Update header indicators
     this.updateHeader(state)
+
+    // Handle rerun request
+    if (state.rerunRequest) {
+      this.handleRerunRequest(state.rerunRequest, state)
+    }
   }
 
   /**
@@ -534,7 +789,10 @@ class PuffinApp {
 
       // Render modal content based on type
       if (state.ui.hasModal && state.ui.modal) {
-        this.renderModalContent(state.ui.modal)
+        // Track current modal render to prevent stale async renders
+        const modalType = state.ui.modal.type
+        this._currentModalRender = modalType
+        this.renderModalContent(state.ui.modal, modalType)
       }
     }
   }
@@ -542,10 +800,18 @@ class PuffinApp {
   /**
    * Render modal content based on type
    */
-  async renderModalContent(modal) {
+  async renderModalContent(modal, renderToken) {
     const modalTitle = document.getElementById('modal-title')
     const modalContent = document.getElementById('modal-content')
     const modalActions = document.getElementById('modal-actions')
+
+    // Immediately clear old content to prevent stale event handlers
+    modalTitle.textContent = 'Loading...'
+    modalContent.innerHTML = ''
+    modalActions.innerHTML = ''
+
+    // Helper to check if this render is still current
+    const isStale = () => renderToken && this._currentModalRender !== renderToken
 
     switch (modal.type) {
       case 'save-gui-definition':
@@ -559,6 +825,15 @@ class PuffinApp {
         break
       case 'user-story-review':
         // Handled by UserStoryReviewModalComponent which subscribes to state changes
+        break
+      case 'profile-view':
+        await this.renderProfileViewModal(modalTitle, modalContent, modalActions, isStale)
+        break
+      case 'profile-create':
+        await this.renderProfileCreateModal(modalTitle, modalContent, modalActions, isStale)
+        break
+      case 'profile-edit':
+        await this.renderProfileEditModal(modalTitle, modalContent, modalActions, isStale)
         break
       default:
         console.log('Unknown modal type:', modal.type)
@@ -713,6 +988,295 @@ class PuffinApp {
   }
 
   /**
+   * Render profile view modal
+   */
+  async renderProfileViewModal(title, content, actions, isStale = () => false) {
+    title.textContent = 'Developer Profile'
+
+    try {
+      const result = await window.puffin.profile.get()
+
+      // Check if this render is still current after async operation
+      if (isStale()) {
+        console.log('Profile view modal render cancelled - stale')
+        return
+      }
+      if (!result.success || !result.profile) {
+        content.innerHTML = `
+          <div class="profile-empty">
+            <p>No profile found. Create one to get started.</p>
+          </div>
+        `
+        actions.innerHTML = `
+          <button class="btn secondary" id="modal-cancel-btn">Close</button>
+          <button class="btn primary" id="profile-create-btn">Create Profile</button>
+        `
+        document.getElementById('modal-cancel-btn').addEventListener('click', () => this.intents.hideModal())
+        document.getElementById('profile-create-btn').addEventListener('click', () => {
+          this.intents.showModal('profile-create', {})
+        })
+        return
+      }
+
+      const profile = result.profile
+      content.innerHTML = `
+        <div class="profile-view">
+          <div class="profile-field">
+            <label>Name</label>
+            <div class="profile-value">${this.escapeHtml(profile.name || 'Not set')}</div>
+          </div>
+          <div class="profile-field">
+            <label>Email</label>
+            <div class="profile-value">${this.escapeHtml(profile.email || 'Not set')}</div>
+          </div>
+          <div class="profile-field">
+            <label>GitHub</label>
+            <div class="profile-value">${profile.github?.login ? `@${this.escapeHtml(profile.github.login)}` : 'Not connected'}</div>
+          </div>
+          ${profile.preferences ? `
+            <div class="profile-field">
+              <label>Programming Style</label>
+              <div class="profile-value">${this.escapeHtml(profile.preferences.programmingStyle || 'Not set')}</div>
+            </div>
+            <div class="profile-field">
+              <label>Testing Approach</label>
+              <div class="profile-value">${this.escapeHtml(profile.preferences.testingApproach || 'Not set')}</div>
+            </div>
+          ` : ''}
+        </div>
+      `
+      actions.innerHTML = `
+        <button class="btn secondary" id="modal-cancel-btn">Close</button>
+        <button class="btn primary" id="profile-edit-btn">Edit Profile</button>
+      `
+      document.getElementById('modal-cancel-btn').addEventListener('click', () => this.intents.hideModal())
+      document.getElementById('profile-edit-btn').addEventListener('click', () => {
+        // Directly show the edit modal - no need to hide first
+        this.intents.showModal('profile-edit', {})
+      })
+    } catch (error) {
+      content.innerHTML = `<p class="error">Failed to load profile: ${this.escapeHtml(error.message)}</p>`
+      actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Close</button>'
+      document.getElementById('modal-cancel-btn').addEventListener('click', () => this.intents.hideModal())
+    }
+  }
+
+  /**
+   * Render profile create modal
+   */
+  async renderProfileCreateModal(title, content, actions, isStale = () => false) {
+    title.textContent = 'Create Developer Profile'
+
+    // Get available options
+    let options = {}
+    try {
+      const result = await window.puffin.profile.getOptions()
+      if (result.success) {
+        options = result.options
+      }
+    } catch (e) {
+      console.error('Failed to get profile options:', e)
+    }
+
+    // Check if this render is still current after async operation
+    if (isStale()) {
+      console.log('Profile create modal render cancelled - stale')
+      return
+    }
+
+    content.innerHTML = `
+      <div class="profile-form">
+        <div class="form-group">
+          <label for="modal-profile-name">Name *</label>
+          <input type="text" id="modal-profile-name" placeholder="Your name" required>
+        </div>
+        <div class="form-group">
+          <label for="modal-profile-email">Email</label>
+          <input type="email" id="modal-profile-email" placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+          <label for="modal-profile-programming-style">Programming Style</label>
+          <select id="modal-profile-programming-style">
+            <option value="">Select...</option>
+            ${(options.programmingStyles || ['OOP', 'FP', 'HYBRID', 'TEMPORAL']).map(s =>
+              `<option value="${s}">${s}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="modal-profile-testing-approach">Testing Approach</label>
+          <select id="modal-profile-testing-approach">
+            <option value="">Select...</option>
+            ${(options.testingApproaches || ['TDD', 'BDD', 'INTEGRATION', 'MINIMAL']).map(s =>
+              `<option value="${s}">${s}</option>`
+            ).join('')}
+          </select>
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
+      <button class="btn primary" id="modal-profile-save-btn">Create Profile</button>
+    `
+
+    const cancelBtn = document.getElementById('modal-cancel-btn')
+    const saveBtn = document.getElementById('modal-profile-save-btn')
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.intents.hideModal())
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        const nameInput = document.getElementById('modal-profile-name')
+        const emailInput = document.getElementById('modal-profile-email')
+        const styleSelect = document.getElementById('modal-profile-programming-style')
+        const testingSelect = document.getElementById('modal-profile-testing-approach')
+
+        if (!nameInput || !nameInput.value) {
+          console.error('Profile form elements not found or invalid')
+          return
+        }
+
+        const name = (nameInput.value || '').trim()
+        const email = (emailInput?.value || '').trim()
+        const programmingStyle = styleSelect?.value || ''
+        const testingApproach = testingSelect?.value || ''
+
+        if (!name) {
+          alert('Name is required')
+          return
+        }
+
+        try {
+          const result = await window.puffin.profile.create({
+            name,
+            email,
+            preferredCodingStyle: programmingStyle || 'HYBRID',
+            preferences: {
+              programmingStyle: programmingStyle || 'HYBRID',
+              testingApproach: testingApproach || 'TDD'
+            }
+          })
+          if (result.success) {
+            this.showToast('Profile created!', 'success')
+            this.intents.hideModal()
+          } else {
+            throw new Error(result.error || result.errors?.map(e => e.message).join(', '))
+          }
+        } catch (error) {
+          alert('Failed to create profile: ' + error.message)
+        }
+      })
+    }
+
+    setTimeout(() => document.getElementById('modal-profile-name')?.focus(), 100)
+  }
+
+  /**
+   * Render profile edit modal
+   */
+  async renderProfileEditModal(title, content, actions, isStale = () => false) {
+    title.textContent = 'Edit Developer Profile'
+
+    let profile = null
+    let options = {}
+
+    try {
+      const [profileResult, optionsResult] = await Promise.all([
+        window.puffin.profile.get(),
+        window.puffin.profile.getOptions()
+      ])
+      if (profileResult.success) profile = profileResult.profile
+      if (optionsResult.success) options = optionsResult.options
+    } catch (e) {
+      console.error('Failed to load profile data:', e)
+    }
+
+    // Check if this render is still current after async operation
+    if (isStale()) {
+      console.log('Profile edit modal render cancelled - stale')
+      return
+    }
+
+    if (!profile) {
+      content.innerHTML = '<p>No profile found. Please create one first.</p>'
+      actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Close</button>'
+      document.getElementById('modal-cancel-btn').addEventListener('click', () => this.intents.hideModal())
+      return
+    }
+
+    content.innerHTML = `
+      <div class="profile-form">
+        <div class="form-group">
+          <label for="modal-profile-name">Name *</label>
+          <input type="text" id="modal-profile-name" value="${this.escapeHtml(profile.name || '')}" required>
+        </div>
+        <div class="form-group">
+          <label for="modal-profile-email">Email</label>
+          <input type="email" id="modal-profile-email" value="${this.escapeHtml(profile.email || '')}">
+        </div>
+        <div class="form-group">
+          <label for="modal-profile-programming-style">Programming Style</label>
+          <select id="modal-profile-programming-style">
+            <option value="">Select...</option>
+            ${(options.programmingStyles || ['OOP', 'FP', 'HYBRID', 'TEMPORAL']).map(s =>
+              `<option value="${s}" ${profile.preferences?.programmingStyle === s ? 'selected' : ''}>${s}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="modal-profile-testing-approach">Testing Approach</label>
+          <select id="modal-profile-testing-approach">
+            <option value="">Select...</option>
+            ${(options.testingApproaches || ['TDD', 'BDD', 'INTEGRATION', 'MINIMAL']).map(s =>
+              `<option value="${s}" ${profile.preferences?.testingApproach === s ? 'selected' : ''}>${s}</option>`
+            ).join('')}
+          </select>
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
+      <button class="btn primary" id="modal-profile-save-btn">Save Changes</button>
+    `
+
+    document.getElementById('modal-cancel-btn').addEventListener('click', () => this.intents.hideModal())
+    document.getElementById('modal-profile-save-btn').addEventListener('click', async () => {
+      const name = document.getElementById('modal-profile-name').value.trim()
+      const email = document.getElementById('modal-profile-email').value.trim()
+      const programmingStyle = document.getElementById('modal-profile-programming-style').value
+      const testingApproach = document.getElementById('modal-profile-testing-approach').value
+
+      if (!name) {
+        alert('Name is required')
+        return
+      }
+
+      try {
+        const result = await window.puffin.profile.update({
+          name,
+          email,
+          preferences: {
+            programmingStyle,
+            testingApproach
+          }
+        })
+        if (result.success) {
+          this.showToast('Profile updated!', 'success')
+          this.intents.hideModal()
+        } else {
+          throw new Error(result.error)
+        }
+      } catch (error) {
+        alert('Failed to update profile: ' + error.message)
+      }
+    })
+  }
+
+  /**
    * Escape HTML for safe rendering
    */
   escapeHtml(str) {
@@ -734,6 +1298,104 @@ class PuffinApp {
       projectName.textContent = state.projectName || ''
       projectName.title = state.projectPath || ''
     }
+  }
+
+  /**
+   * Handle rerun request from state
+   */
+  handleRerunRequest(rerunRequest, state) {
+    // Clear the request immediately to prevent re-triggering
+    this.intents.clearRerunRequest()
+
+    const { branchId, content } = rerunRequest
+
+    console.log('Rerunning prompt:', { branchId, contentPreview: content.substring(0, 100) })
+
+    // Submit the prompt through SAM
+    this.intents.submitPrompt({
+      branchId,
+      content,
+      parentId: null
+    })
+
+    // Get session ID for conversation continuity
+    const branch = state.history.raw?.branches?.[branchId]
+    const lastPromptWithResponse = branch?.prompts
+      ?.filter(p => p.response?.sessionId)
+      ?.pop()
+    const sessionId = lastPromptWithResponse?.response?.sessionId || null
+
+    // Trigger the actual Claude CLI submission
+    window.puffin.claude.submit({
+      prompt: content,
+      branchId,
+      sessionId,
+      project: state.config ? {
+        name: state.config.name,
+        description: state.config.description
+      } : null
+    })
+
+    // Switch to prompt view to show the response
+    this.intents.switchView('prompt')
+  }
+
+  /**
+   * Process raw JSON message for activity tracking
+   */
+  processRawMessageForActivity(jsonLine) {
+    try {
+      const msg = JSON.parse(jsonLine)
+
+      if (msg.type === 'assistant' && msg.message?.content) {
+        for (const block of msg.message.content) {
+          if (block.type === 'tool_use') {
+            // Tool started - extract file path from input if available
+            console.log('[ACTIVITY-DEBUG] Tool start:', block.name, 'id:', block.id)
+            console.log('[ACTIVITY-DEBUG] Tool input:', JSON.stringify(block.input)?.substring(0, 200))
+            this.intents.toolStart(block.id, block.name, block.input)
+          }
+        }
+      } else if (msg.type === 'user' && msg.message?.content) {
+        for (const block of msg.message.content) {
+          if (block.type === 'tool_result') {
+            // Tool completed - extract any file path that was modified
+            const toolInfo = this.state?.activity?.activeTools?.find(t => t.id === block.tool_use_id)
+            const filePath = toolInfo ? this.extractFilePathFromToolInput(toolInfo.name, toolInfo.input) : null
+            const action = toolInfo?.name === 'Write' || toolInfo?.name === 'Edit' ? 'write' :
+                          toolInfo?.name === 'Read' ? 'read' : null
+            console.log('[ACTIVITY-DEBUG] Tool end:', toolInfo?.name, 'id:', block.tool_use_id, 'filePath:', filePath, 'action:', action)
+            this.intents.toolEnd(block.tool_use_id, filePath, action)
+          }
+        }
+      } else if (msg.type === 'result') {
+        // Response complete - clear activity
+        // NOTE: Don't clear here! We need filesModified for the completion handler
+        // The clearActivity will be called after completeResponse captures the data
+        console.log('[ACTIVITY-DEBUG] Result received, NOT clearing activity yet (filesModified count:', this.state?.activity?.filesModified?.length || 0, ')')
+      }
+    } catch (e) {
+      // Not valid JSON, ignore
+    }
+  }
+
+  /**
+   * Extract file path from tool input
+   */
+  extractFilePathFromToolInput(toolName, input) {
+    if (!input) return null
+
+    // Different tools have different input shapes
+    if (toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') {
+      return input.file_path || input.path || null
+    }
+    if (toolName === 'Bash') {
+      return null // Bash doesn't have a specific file path
+    }
+    if (toolName === 'Grep' || toolName === 'Glob') {
+      return input.path || null
+    }
+    return null
   }
 
   /**

@@ -106,10 +106,21 @@ export class HistoryTreeComponent {
       item.innerHTML = `
         <span class="status ${prompt.hasResponse ? 'has-response' : ''}"></span>
         <span class="preview">${this.escapeHtml(prompt.preview)}</span>
+        <button class="history-rerun-btn" title="Rerun this prompt">↻</button>
       `
 
-      item.addEventListener('click', () => {
+      // Click on item to select
+      item.addEventListener('click', (e) => {
+        // Don't select if clicking the rerun button
+        if (e.target.classList.contains('history-rerun-btn')) return
         this.intents.selectPrompt(prompt.id)
+      })
+
+      // Rerun button click
+      const rerunBtn = item.querySelector('.history-rerun-btn')
+      rerunBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this.intents.rerunPrompt(prompt.id)
       })
 
       // Right-click to add child prompt

@@ -63,6 +63,7 @@ export class CliOutputComponent {
     this.totalCost = 0
     this.totalTurns = 0
     this.activeTools = new Map() // Track active tools by ID
+    this.modifiedFiles = new Set() // Track files modified during session
   }
 
   /**
@@ -204,7 +205,8 @@ export class CliOutputComponent {
           // Track active tool
           this.activeTools.set(block.id, {
             name: block.name,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            input: block.input // Store input for file path extraction
           })
 
           // Create emoji element with tooltip and animation
@@ -230,9 +232,16 @@ export class CliOutputComponent {
       for (const block of msg.message.content) {
         if (block.type === 'tool_result') {
           // Remove active animation for completed tool
+          let toolName = null
           if (this.activeTools.has(block.tool_use_id)) {
+            toolName = this.activeTools.get(block.tool_use_id).name
             this.removeActiveToolAnimation(block.tool_use_id)
             this.activeTools.delete(block.tool_use_id)
+          }
+
+          // Track modified files for file operations
+          if (!block.is_error && toolName) {
+            this.extractAndTrackModifiedFiles(toolName, block.content)
           }
 
           const status = block.is_error ? '❌' : '✅'
@@ -282,6 +291,18 @@ export class CliOutputComponent {
     this.appendToStream(`  Turns: ${msg.num_turns}`, 'result-info')
     this.appendToStream(`  Cost: $${(msg.cost_usd || 0).toFixed(4)}`, 'result-info')
     this.appendToStream(`  Duration: ${msg.duration_ms}ms`, 'result-info')
+
+    // Display modified files if any
+    if (this.modifiedFiles.size > 0) {
+      this.appendToStream(`  Files modified: ${this.modifiedFiles.size}`, 'result-info')
+      const sortedFiles = Array.from(this.modifiedFiles).sort()
+      for (const filePath of sortedFiles) {
+        this.appendToStream(`    📝 ${filePath}`, 'result-file')
+      }
+      // Clear the modified files for next session
+      this.modifiedFiles.clear()
+    }
+
     this.appendToStream('─'.repeat(50) + '\n', 'divider')
 
     this.updateSessionInfo()
@@ -427,6 +448,7 @@ export class CliOutputComponent {
     this.messages = []
     this.rawMessages = []
     this.streamBuffer = ''
+    this.modifiedFiles.clear() // Clear modified files tracking
 
     this.updateStreamView()
     this.renderMessages()
@@ -457,6 +479,49 @@ export class CliOutputComponent {
     a.click()
 
     URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Extract and track files that were modified by tool operations
+   * @param {string} toolName - The name of the tool that was used
+   * @param {*} toolResult - The result content from the tool
+   */
+  extractAndTrackModifiedFiles(toolName, toolResult) {
+    // Extract file paths from successful tool operations
+    const fileModifyingTools = ['Write', 'Edit', 'NotebookEdit']
+
+    if (!fileModifyingTools.includes(toolName)) return
+
+    let resultText = ''
+    if (typeof toolResult === 'string') {
+      resultText = toolResult
+    } else if (Array.isArray(toolResult)) {
+      resultText = toolResult
+        .filter(item => item.type === 'text')
+        .map(item => item.text)
+        .join(' ')
+    }
+
+    // Extract file paths from common success messages
+    const pathPatterns = [
+      // "The file C:\path\to\file.js has been updated"
+      /(?:file|updated?|written|modified|created?)\s+([A-Za-z]:[\\\/][\w\s\\\/.-]+\.\w+)/gi,
+      // "C:\path\to\file.js has been"
+      /^([A-Za-z]:[\\\/][\w\s\\\/.-]+\.\w+)\s+has\s+been/gi,
+      // "/path/to/file.js" or "src/file.js" patterns
+      /((?:[A-Za-z]:[\\\/])?(?:[\w.-]+[\\\/])*[\w.-]+\.\w+)/gi
+    ]
+
+    for (const pattern of pathPatterns) {
+      let match
+      while ((match = pattern.exec(resultText)) !== null) {
+        const filePath = match[1].trim()
+        // Filter out obvious false positives
+        if (filePath.length > 5 && filePath.includes('.')) {
+          this.modifiedFiles.add(filePath)
+        }
+      }
+    }
   }
 
   /**

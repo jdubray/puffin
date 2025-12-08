@@ -161,6 +161,68 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * Developer profile operations
+   */
+  profile: {
+    // Get the current developer profile
+    get: () => ipcRenderer.invoke('profile:get'),
+
+    // Check if a profile exists
+    exists: () => ipcRenderer.invoke('profile:exists'),
+
+    // Create a new developer profile
+    create: (profileData) => ipcRenderer.invoke('profile:create', profileData),
+
+    // Update the developer profile
+    update: (updates) => ipcRenderer.invoke('profile:update', updates),
+
+    // Delete the developer profile
+    delete: () => ipcRenderer.invoke('profile:delete'),
+
+    // Export profile to file (opens save dialog)
+    export: () => ipcRenderer.invoke('profile:export'),
+
+    // Import profile from file (opens open dialog)
+    import: (options) => ipcRenderer.invoke('profile:import', options),
+
+    // Get available coding style options
+    getOptions: () => ipcRenderer.invoke('profile:getOptions'),
+
+    // Validate profile data without saving
+    validate: (profileData) => ipcRenderer.invoke('profile:validate', profileData)
+  },
+
+  /**
+   * GitHub integration operations
+   */
+  github: {
+    // Start OAuth Device Flow authentication
+    startAuth: () => ipcRenderer.invoke('github:startAuth'),
+
+    // Open GitHub verification URL in browser
+    openAuth: (verificationUri) => ipcRenderer.invoke('github:openAuth', verificationUri),
+
+    // Poll for access token (call after user authorizes in browser)
+    pollToken: (deviceCode, interval, expiresIn) =>
+      ipcRenderer.invoke('github:pollToken', { deviceCode, interval, expiresIn }),
+
+    // Check if GitHub is connected
+    isConnected: () => ipcRenderer.invoke('github:isConnected'),
+
+    // Disconnect GitHub from profile
+    disconnect: () => ipcRenderer.invoke('github:disconnect'),
+
+    // Refresh GitHub profile data
+    refreshProfile: () => ipcRenderer.invoke('github:refreshProfile'),
+
+    // Fetch user's repositories
+    getRepositories: (options) => ipcRenderer.invoke('github:getRepositories', options),
+
+    // Fetch user's activity events
+    getActivity: (perPage) => ipcRenderer.invoke('github:getActivity', perPage)
+  },
+
+  /**
    * App lifecycle
    */
   app: {
@@ -169,6 +231,43 @@ contextBridge.exposeInMainWorld('puffin', {
       const handler = (event, data) => callback(data)
       ipcRenderer.on('app:ready', handler)
       return () => ipcRenderer.removeListener('app:ready', handler)
+    }
+  },
+
+  /**
+   * Menu event listeners (for Electron menu actions)
+   */
+  menu: {
+    // Profile menu actions
+    onProfileView: (callback) => {
+      const handler = () => callback()
+      ipcRenderer.on('profile:view', handler)
+      return () => ipcRenderer.removeListener('profile:view', handler)
+    },
+    onProfileCreate: (callback) => {
+      const handler = () => callback()
+      ipcRenderer.on('profile:create', handler)
+      return () => ipcRenderer.removeListener('profile:create', handler)
+    },
+    onProfileEdit: (callback) => {
+      const handler = () => callback()
+      ipcRenderer.on('profile:edit', handler)
+      return () => ipcRenderer.removeListener('profile:edit', handler)
+    },
+    onProfileExport: (callback) => {
+      const handler = () => callback()
+      ipcRenderer.on('profile:export', handler)
+      return () => ipcRenderer.removeListener('profile:export', handler)
+    },
+    onProfileImport: (callback) => {
+      const handler = () => callback()
+      ipcRenderer.on('profile:import', handler)
+      return () => ipcRenderer.removeListener('profile:import', handler)
+    },
+    onProfileDelete: (callback) => {
+      const handler = () => callback()
+      ipcRenderer.on('profile:delete', handler)
+      return () => ipcRenderer.removeListener('profile:delete', handler)
     }
   },
 

@@ -389,13 +389,18 @@ function setupClaudeHandlers(ipcMain) {
           originalPrompt: data.prompt
         })
       } else {
+        // Include helpful context for the user to retry
         event.sender.send('claude:storyDerivationError', {
-          error: result.error
+          error: result.error,
+          rawResponse: result.rawResponse,
+          canRetry: true,
+          suggestion: 'Try rephrasing your request with more specific details about what you want to build.'
         })
       }
     } catch (error) {
       event.sender.send('claude:storyDerivationError', {
-        error: error.message
+        error: error.message,
+        canRetry: true
       })
     }
   })

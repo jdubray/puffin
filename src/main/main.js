@@ -174,7 +174,7 @@ function createMenu() {
           label: 'About Puffin',
           click: async () => {
             const { shell } = require('electron')
-            await shell.openExternal('https://github.com/your-repo/puffin')
+            await shell.openExternal('https://github.com/jdubray/puffin')
           }
         }
       ]

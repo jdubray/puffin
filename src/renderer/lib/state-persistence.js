@@ -1,0 +1,216 @@
+/**
+ * State Persistence Manager
+ *
+ * Handles persisting state changes to the .puffin/ directory.
+ * Extracted from app.js for better separation of concerns.
+ */
+
+export class StatePersistence {
+  constructor(getState, intents, showToast) {
+    this.getState = getState
+    this.intents = intents
+    this.showToast = showToast
+  }
+
+  /**
+   * Persist state changes based on action type
+   * @param {string} actionType - The action that triggered the persist
+   */
+  async persist(actionType) {
+    if (!window.puffin) {
+      console.log('Persist skipped: no window.puffin')
+      return
+    }
+
+    const state = this.getState()
+
+    // Normalize action type
+    const normalizedType = actionType?.toUpperCase?.() || actionType
+
+    // Only persist for certain action types
+    const persistActions = [
+      'UPDATE_CONFIG', 'UPDATE_OPTIONS',
+      'SUBMIT_PROMPT', 'COMPLETE_RESPONSE',
+      'SELECT_BRANCH', 'CREATE_BRANCH', 'DELETE_BRANCH',
+      'UPDATE_ARCHITECTURE',
+      'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
+      'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
+      'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
+      'IMPLEMENT_STORIES'
+    ]
+
+    if (!persistActions.includes(normalizedType)) {
+      console.log('[PERSIST-DEBUG] Skipping persist for action:', actionType, '(normalized:', normalizedType, ')')
+      return
+    }
+
+    try {
+      // Persist based on what changed
+      if (['UPDATE_CONFIG', 'UPDATE_OPTIONS'].includes(normalizedType)) {
+        console.log('Persisting config:', state.config)
+        const result = await window.puffin.state.updateConfig(state.config)
+        console.log('Config persist result:', result)
+      }
+
+      if (['SUBMIT_PROMPT', 'COMPLETE_RESPONSE', 'SELECT_BRANCH', 'CREATE_BRANCH', 'DELETE_BRANCH'].includes(normalizedType)) {
+        console.log('[PERSIST-DEBUG] Action:', normalizedType)
+
+        // For COMPLETE_RESPONSE, verify the response is in the history before persisting
+        if (normalizedType === 'COMPLETE_RESPONSE') {
+          const activePrompt = state.history.selectedPrompt
+          console.log('[PERSIST-DEBUG] selectedPrompt.id:', activePrompt?.id)
+          console.log('[PERSIST-DEBUG] selectedPrompt.response:', activePrompt?.response ? 'EXISTS' : 'NULL')
+
+          // Also check directly in raw history
+          const activeBranch = state.history.activeBranch
+          const branchData = state.history.raw?.branches?.[activeBranch]
+          if (branchData) {
+            const lastPrompt = branchData.prompts[branchData.prompts.length - 1]
+            console.log('[PERSIST-DEBUG] Last prompt in branch:', lastPrompt?.id)
+            console.log('[PERSIST-DEBUG] Last prompt response:', lastPrompt?.response ? 'EXISTS' : 'NULL')
+            if (lastPrompt?.response) {
+              console.log('[PERSIST-DEBUG] Last prompt response content length:', lastPrompt.response.content?.length || 0)
+            }
+          }
+        }
+
+        await window.puffin.state.updateHistory(state.history.raw)
+        console.log('[PERSIST-DEBUG] History persisted successfully')
+
+        // Auto-extract user stories from specifications branch responses
+        if (normalizedType === 'COMPLETE_RESPONSE' && state.history.activeBranch === 'specifications') {
+          await this.extractUserStoriesFromResponse(state)
+        }
+      }
+
+      if (normalizedType === 'UPDATE_ARCHITECTURE') {
+        await window.puffin.state.updateArchitecture(state.architecture.content)
+      }
+
+      // Persist user stories and history when implementing from derivation
+      if (normalizedType === 'IMPLEMENT_STORIES') {
+        // Persist history (we added a prompt entry)
+        await window.puffin.state.updateHistory(state.history.raw)
+
+        // The stories have been added to state.userStories via the acceptor
+        for (const story of state.userStories) {
+          try {
+            await window.puffin.state.addUserStory(story)
+          } catch (e) {
+            // Story might already exist, update instead
+            await window.puffin.state.updateUserStory(story.id, story)
+          }
+        }
+      }
+
+      console.log('[PERSIST-DEBUG] State persisted for action:', normalizedType)
+    } catch (error) {
+      console.error('Failed to persist state:', error)
+    }
+  }
+
+  /**
+   * Extract user stories from specifications response
+   * @param {Object} state - Current app state
+   */
+  async extractUserStoriesFromResponse(state) {
+    try {
+      const specBranch = state.history.raw.branches.specifications
+      if (!specBranch || !specBranch.prompts.length) return
+
+      // Get the most recent prompt with a response
+      const recentPrompt = [...specBranch.prompts].reverse().find(p => p.response)
+      if (!recentPrompt || !recentPrompt.response?.content) return
+
+      const content = recentPrompt.content + '\n' + recentPrompt.response.content
+      const extractedStories = this.parseUserStories(content)
+
+      if (extractedStories.length === 0) {
+        console.log('No user stories found in specifications response')
+        return
+      }
+
+      // Add each extracted story
+      for (const story of extractedStories) {
+        // Check if a similar story already exists (by title)
+        const exists = state.userStories?.some(
+          s => s.title.toLowerCase() === story.title.toLowerCase()
+        )
+
+        if (!exists) {
+          await window.puffin.state.addUserStory({
+            ...story,
+            sourcePromptId: recentPrompt.id
+          })
+          console.log('Auto-extracted user story:', story.title)
+        }
+      }
+
+      // Reload user stories to update state
+      const result = await window.puffin.state.getUserStories()
+      if (result.success) {
+        this.intents.loadUserStories(result.stories)
+      }
+
+      if (extractedStories.length > 0) {
+        this.showToast(`Extracted ${extractedStories.length} user ${extractedStories.length === 1 ? 'story' : 'stories'} from specifications`, 'success')
+      }
+    } catch (error) {
+      console.error('Failed to extract user stories:', error)
+    }
+  }
+
+  /**
+   * Parse user stories from text content
+   * @param {string} content - Text content to parse
+   * @returns {Array} Extracted user stories
+   */
+  parseUserStories(content) {
+    const stories = []
+
+    // Pattern 1: "As a [user], I want [action] so that [benefit]"
+    const asAUserPattern = /as an? ([^,]+),?\s+i want\s+(.+?)\s+so that\s+(.+?)(?:\.|$)/gi
+    let match
+    while ((match = asAUserPattern.exec(content)) !== null) {
+      const [, user, action, benefit] = match
+      stories.push({
+        title: `${action.trim()}`.substring(0, 100),
+        description: `As a ${user.trim()}, I want ${action.trim()} so that ${benefit.trim()}.`,
+        acceptanceCriteria: [],
+        status: 'pending'
+      })
+    }
+
+    // Pattern 2: "User Story:" or "Story:" headers
+    const storyHeaderPattern = /(?:user\s+)?story[:\s]+([^\n]+)/gi
+    while ((match = storyHeaderPattern.exec(content)) !== null) {
+      const title = match[1].trim()
+      if (title.length > 5 && !stories.some(s => s.title === title)) {
+        stories.push({
+          title: title.substring(0, 100),
+          description: '',
+          acceptanceCriteria: [],
+          status: 'pending'
+        })
+      }
+    }
+
+    // Pattern 3: Feature descriptions with "should" or "must"
+    const featurePattern = /(?:the\s+)?(?:system|app|application|user)\s+(?:should|must|can|will)\s+(?:be able to\s+)?([^.]{15,100})/gi
+    while ((match = featurePattern.exec(content)) !== null) {
+      const feature = match[1].trim()
+      const title = feature.charAt(0).toUpperCase() + feature.slice(1)
+      if (!stories.some(s => s.title.toLowerCase() === title.toLowerCase())) {
+        stories.push({
+          title: title.substring(0, 100),
+          description: `The system should ${feature}.`,
+          acceptanceCriteria: [],
+          status: 'pending'
+        })
+      }
+    }
+
+    // Limit to avoid creating too many stories at once
+    return stories.slice(0, 10)
+  }
+}

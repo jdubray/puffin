@@ -24,9 +24,10 @@ const PROFILE_FILE = 'developer-profile.json'
 const GITHUB_CREDENTIALS_FILE = 'github-credentials.json'
 
 // GitHub OAuth Configuration
-// Note: In production, use your own GitHub OAuth App credentials
+// Client ID is intentionally public - OAuth Device Flow does not use a client secret.
+// This is the standard approach for desktop/CLI apps (used by VS Code, GitHub Desktop, etc.)
 const GITHUB_CONFIG = {
-  clientId: 'Ov23liUkVBHmYgqhqfnP', // Puffin GitHub OAuth App
+  clientId: 'Ov23liUkVBHmYgqhqfnP', // Puffin GitHub OAuth App (registered at github.com/settings/developers)
   scope: 'read:user user:email repo',
   deviceAuthUrl: 'https://github.com/login/device/code',
   tokenUrl: 'https://github.com/login/oauth/access_token',

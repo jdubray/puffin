@@ -601,6 +601,167 @@ When asked to create documents, lists, or summaries, include the full content in
   }
 
   /**
+   * Extract and validate user stories from Claude's response
+   * Uses multiple strategies to find valid JSON array
+   * @param {string} responseText - Raw response text from Claude
+   * @returns {{success: boolean, stories?: Array, error?: string}}
+   */
+  extractStoriesFromResponse(responseText) {
+    if (!responseText || responseText.trim().length === 0) {
+      return { success: false, error: 'Empty response from Claude' }
+    }
+
+    // Strategy 1: Try to find a JSON array using bracket matching
+    // This is more robust than a simple regex for nested structures
+    const strategies = [
+      // Strategy 1: Look for array starting with [ and properly closed
+      () => this.findJsonArray(responseText),
+      // Strategy 2: Try parsing the entire response as JSON
+      () => {
+        const parsed = JSON.parse(responseText.trim())
+        return Array.isArray(parsed) ? parsed : null
+      },
+      // Strategy 3: Look for ```json code blocks
+      () => {
+        const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (codeBlockMatch) {
+          const parsed = JSON.parse(codeBlockMatch[1].trim())
+          return Array.isArray(parsed) ? parsed : null
+        }
+        return null
+      },
+      // Strategy 4: Simple regex for array (fallback)
+      () => {
+        const match = responseText.match(/\[\s*\{[\s\S]*?\}\s*\]/)
+        if (match) {
+          return JSON.parse(match[0])
+        }
+        return null
+      }
+    ]
+
+    let stories = null
+    let lastError = null
+
+    for (const strategy of strategies) {
+      try {
+        stories = strategy()
+        if (stories && Array.isArray(stories)) {
+          break
+        }
+      } catch (e) {
+        lastError = e
+        // Try next strategy
+      }
+    }
+
+    if (!stories || !Array.isArray(stories)) {
+      return {
+        success: false,
+        error: 'Could not find valid JSON array in response. Claude may have returned an unexpected format.'
+      }
+    }
+
+    // Validate stories array is not empty
+    if (stories.length === 0) {
+      return {
+        success: false,
+        error: 'Claude returned an empty stories array. Please try rephrasing your request with more specific requirements.'
+      }
+    }
+
+    // Validate each story has required fields
+    const validatedStories = []
+    const validationErrors = []
+
+    for (let i = 0; i < stories.length; i++) {
+      const story = stories[i]
+
+      if (!story || typeof story !== 'object') {
+        validationErrors.push(`Story ${i + 1}: Invalid format (not an object)`)
+        continue
+      }
+
+      if (!story.title || typeof story.title !== 'string' || story.title.trim().length === 0) {
+        validationErrors.push(`Story ${i + 1}: Missing or empty title`)
+        continue
+      }
+
+      // Story is valid - normalize it
+      validatedStories.push({
+        title: story.title.trim(),
+        description: (story.description || '').trim(),
+        acceptanceCriteria: Array.isArray(story.acceptanceCriteria)
+          ? story.acceptanceCriteria.filter(c => typeof c === 'string' && c.trim().length > 0)
+          : []
+      })
+    }
+
+    if (validatedStories.length === 0) {
+      return {
+        success: false,
+        error: `No valid stories found. Issues: ${validationErrors.join('; ')}`
+      }
+    }
+
+    // Log if some stories were filtered out
+    if (validationErrors.length > 0) {
+      console.warn('[STORY-DERIVATION] Some stories were invalid:', validationErrors)
+    }
+
+    return { success: true, stories: validatedStories }
+  }
+
+  /**
+   * Find a JSON array in text using bracket matching
+   * @param {string} text - Text to search
+   * @returns {Array|null} Parsed array or null
+   */
+  findJsonArray(text) {
+    // Find the first '[' character
+    const startIdx = text.indexOf('[')
+    if (startIdx === -1) return null
+
+    // Track bracket depth to find matching ']'
+    let depth = 0
+    let inString = false
+    let escapeNext = false
+
+    for (let i = startIdx; i < text.length; i++) {
+      const char = text[i]
+
+      if (escapeNext) {
+        escapeNext = false
+        continue
+      }
+
+      if (char === '\\' && inString) {
+        escapeNext = true
+        continue
+      }
+
+      if (char === '"' && !escapeNext) {
+        inString = !inString
+        continue
+      }
+
+      if (!inString) {
+        if (char === '[') depth++
+        if (char === ']') {
+          depth--
+          if (depth === 0) {
+            // Found matching bracket
+            const jsonStr = text.substring(startIdx, i + 1)
+            return JSON.parse(jsonStr)
+          }
+        }
+      }
+    }
+
+    return null
+  }
+
+  /**
    * Check if Claude CLI is available
    * @returns {Promise<boolean>}
    */
@@ -656,9 +817,11 @@ When asked to create documents, lists, or summaries, include the full content in
    * @param {string} prompt - The original prompt
    * @param {string} projectPath - Project directory path
    * @param {Object} project - Project context
-   * @returns {Promise<{success: boolean, stories?: Array, error?: string}>}
+   * @returns {Promise<{success: boolean, stories?: Array, error?: string, rawResponse?: string}>}
    */
   async deriveStories(prompt, projectPath, project = null) {
+    console.log('[STORY-DERIVATION] Starting story derivation for prompt:', prompt.substring(0, 100) + '...')
+
     const systemPrompt = `You are a requirements analyst. Your task is to derive user stories from the following request.
 
 Output ONLY a valid JSON array of user stories in this exact format:
@@ -674,7 +837,8 @@ Guidelines:
 - Each story should be focused on a single feature or capability
 - Write clear, actionable acceptance criteria
 - Keep stories at a granular enough level to be implemented individually
-- Output ONLY the JSON array, no other text or markdown`
+- Output ONLY the JSON array, no other text or markdown
+- You MUST output at least one user story`
 
     const fullPrompt = `${systemPrompt}
 
@@ -727,12 +891,15 @@ ${prompt}`
               resultText = json.result
             }
           } catch (e) {
-            // Not JSON
+            // Expected: Claude CLI outputs mixed JSON and non-JSON lines during streaming.
+            // Non-JSON lines (progress indicators, etc.) are safely skipped.
           }
         }
       })
 
       proc.on('close', (code) => {
+        console.log('[STORY-DERIVATION] Process closed with code:', code)
+
         // Process remaining buffer
         if (buffer.trim()) {
           try {
@@ -741,21 +908,26 @@ ${prompt}`
               resultText = json.result
             }
           } catch (e) {
-            // Not JSON
+            // Expected: Remaining buffer may not be valid JSON (incomplete line or non-JSON output)
           }
         }
 
-        try {
-          // Extract JSON array from the response
-          const jsonMatch = resultText.match(/\[[\s\S]*\]/)
-          if (jsonMatch) {
-            const stories = JSON.parse(jsonMatch[0])
-            resolve({ success: true, stories })
-          } else {
-            resolve({ success: false, error: 'Could not parse stories from response' })
-          }
-        } catch (e) {
-          resolve({ success: false, error: `Failed to parse stories: ${e.message}` })
+        console.log('[STORY-DERIVATION] Raw response length:', resultText.length)
+        console.log('[STORY-DERIVATION] Raw response preview:', resultText.substring(0, 500))
+
+        // Try to extract and parse JSON array from the response
+        const parseResult = this.extractStoriesFromResponse(resultText)
+
+        if (parseResult.success) {
+          console.log('[STORY-DERIVATION] Successfully parsed', parseResult.stories.length, 'stories')
+          resolve(parseResult)
+        } else {
+          console.error('[STORY-DERIVATION] Parse failed:', parseResult.error)
+          resolve({
+            success: false,
+            error: parseResult.error,
+            rawResponse: resultText.substring(0, 1000) // Include raw response for debugging
+          })
         }
       })
 

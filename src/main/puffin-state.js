@@ -253,6 +253,7 @@ class PuffinState {
    * @param {string} filename - Design filename
    */
   async loadGuiDesign(filename) {
+    this.validateFilename(filename)
     const filepath = path.join(this.puffinPath, GUI_DESIGNS_DIR, filename)
     const content = await fs.readFile(filepath, 'utf-8')
     return JSON.parse(content)
@@ -320,6 +321,7 @@ class PuffinState {
    * @param {string} filename - Definition filename
    */
   async loadGuiDefinition(filename) {
+    this.validateFilename(filename)
     const filepath = path.join(this.puffinPath, GUI_DEFINITIONS_DIR, filename)
     const content = await fs.readFile(filepath, 'utf-8')
     return JSON.parse(content)
@@ -331,6 +333,7 @@ class PuffinState {
    * @param {Object} updates - Partial updates to apply
    */
   async updateGuiDefinition(filename, updates) {
+    this.validateFilename(filename)
     const definition = await this.loadGuiDefinition(filename)
     const updatedDefinition = {
       ...definition,
@@ -351,6 +354,7 @@ class PuffinState {
    * @param {string} filename - Definition filename
    */
   async deleteGuiDefinition(filename) {
+    this.validateFilename(filename)
     const filepath = path.join(this.puffinPath, GUI_DEFINITIONS_DIR, filename)
     await fs.unlink(filepath)
     return true
@@ -1118,6 +1122,24 @@ Document your API endpoints...
    */
   sanitizeFilename(name) {
     return name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase()
+  }
+
+  /**
+   * Validate filename to prevent path traversal attacks
+   * @param {string} filename - Filename to validate
+   * @throws {Error} If filename contains path traversal characters
+   * @private
+   */
+  validateFilename(filename) {
+    if (!filename || typeof filename !== 'string') {
+      throw new Error('Invalid filename: must be a non-empty string')
+    }
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      throw new Error('Invalid filename: path traversal not allowed')
+    }
+    if (!filename.endsWith('.json')) {
+      throw new Error('Invalid filename: must be a .json file')
+    }
   }
 
   /**

@@ -4,21 +4,26 @@
 
 # Puffin
 
-A GUI for Claude Code to help you "clode" new projects.
+A GUI for Claude Code to help cloders collaborate on new projects.
 
 ## Overview
 
-Puffin is an Electron-based application that provides a visual interface for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Anthropic's official CLI for Claude. Rather than replacing the terminal, Puffin wraps it—giving you full agentic capabilities (file read/write, bash execution, tool use) with a structured workflow for managing AI-assisted development projects.
+Puffin is an Electron-based application that provides a visual interface for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Anthropic's official CLI for Claude. Rather than replacing the terminal, Puffin wraps it—giving you full agentic capabilities (file read/write, bash execution, tool use) with a structured workflow for managing cloding projects.
+
+**Puffin's philosophy** is to provide a hierarchical view of the tasks being performed by Claude with traceability to architecture and user stories so that it becomes easier to work collaboratively with Claude and other cloders, rather than just being a passive tester.
+
+You can't "prompt along" a coding agent, just like you can't "prompt along" a developer—there are good reasons why we came up with processes and methodologies to build complex solutions. Processes and methodologies for cloding are yet to be built, but they are coming. Puffin serves as a foundation for structured collaboration between humans and AI coding agents.
+
 
 **Key Features:**
 
 - **Project Configuration**: Define your project's description, assumptions, technical architecture, and data model
 - **Claude Guidance Options**: Set preferences for programming style (OOP, FP, Temporal Logic), testing approach, documentation level, and more
 - **Branched Conversations**: Organize prompts into branches (Specifications, Architecture, UI, Backend, Deployment) with tree-based history navigation
+- **Real-time Activity Tracking**: Monitor Claude's tool execution in real-time, showing current tools, file operations, and processing status
+- **User Story Derivation Workflow**: Extract user stories from project specifications, review and refine them, then generate implementation prompts
 - **GUI Designer**: Visual drag-and-drop interface for designing UI layouts that can be described to Claude
 - **User Stories Management**: Full CRUD lifecycle for user stories with intelligent derivation from specifications using Claude
-- **Story Derivation Workflow**: Extract user stories from project specifications, review and refine them, then generate implementation prompts
-- **Real-time Activity Tracking**: Monitor Claude's tool execution in real-time, showing current tools, file operations, and processing status
 - **Architecture Document**: Living documentation that evolves with Claude reviews
 - **Intelligent Title Generation**: Automatic prompt title generation using Claude API with smart fallback mechanisms
 - **CLI Output View**: Real-time streaming of Claude's raw JSON output for debugging and transparency
@@ -52,6 +57,39 @@ Your Project/
 - Node.js 18+
 - Claude Code CLI installed globally: `npm install -g @anthropic-ai/claude-code`
 - Active Claude Code subscription or API access
+
+### Claude Authentication
+
+Before using Puffin, you must authenticate Claude Code CLI in your terminal:
+
+1. **Install Claude Code CLI** (if not already installed):
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   ```
+
+2. **Authenticate Claude** in your terminal:
+   ```bash
+   claude auth
+   ```
+   This will open a browser window where you'll log in to your Claude account and authorize the CLI.
+
+3. **Verify authentication**:
+   ```bash
+   claude --version
+   ```
+   You should see the version number without any authentication errors.
+
+**Important**: The authentication happens at the system level through the Claude CLI. Once authenticated, Puffin will inherit this authentication when it spawns Claude as a subprocess. You don't need to re-authenticate within Puffin itself.
+
+**For PowerShell users**: If you prefer to start Claude in PowerShell first and then run Puffin, you can:
+```powershell
+# Start Claude in the background (optional)
+claude
+
+# In the same or different PowerShell window
+npm start
+```
+This approach ensures Claude is fully initialized before Puffin attempts to use it.
 
 ### Installation
 

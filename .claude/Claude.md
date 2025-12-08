@@ -35,30 +35,51 @@ Puffin is an Electron-based GUI application that serves as a **management layer*
 
 ## Architecture
 
-# puffin Architecture
+Puffin follows an Electron architecture with clear separation between main and renderer processes, using the SAM (State-Action-Model) pattern for predictable state management.
 
-## Overview
+### Process Structure
 
-Describe the overall system architecture...
+- **Main Process** (`src/main/`): Node.js runtime handling system operations
+  - `main.js` - Window creation, menu, app lifecycle
+  - `preload.js` - Secure IPC bridge via contextBridge
+  - `ipc-handlers.js` - IPC communication handlers
+  - `puffin-state.js` - `.puffin/` directory state persistence
+  - `claude-service.js` - Claude Code CLI subprocess management
+  - `developer-profile.js` - Developer profile with GitHub OAuth
 
-## Components
+- **Renderer Process** (`src/renderer/`): Browser runtime for UI
+  - `app.js` - Application bootstrap and SAM setup
+  - `sam/` - SAM pattern implementation (model, state, actions, instance)
+  - `components/` - UI components (prompt-editor, response-viewer, gui-designer, etc.)
 
-List and describe the main components...
+### Data Flow
 
-## Data Flow
+```
+User Intent → Action → Model (acceptors) → State → View → User Intent...
+```
 
-Explain how data flows through the system...
+Two FSMs control application flow:
+- **App FSM**: INITIALIZING → LOADING → READY ↔ PROCESSING → ERROR
+- **Prompt FSM**: IDLE → COMPOSING → SUBMITTED → AWAITING → COMPLETED/FAILED
 
-## APIs
+### State Persistence
 
-Document your API endpoints...
+All project state is stored in `.puffin/` within the target project:
+- `config.json` - Project configuration and Claude options
+- `history.json` - Branched conversation history
+- `architecture.md` - Architecture documentation
+- `user-stories.json` - User stories data
+- `ui-guidelines.json` - Design system tokens and patterns
+- `gui-definitions/` - Saved GUI layouts
 
-## Technology Stack
+### Technology Stack
 
-- Frontend:
-- Backend:
-- Database:
-- Infrastructure:
+- **Platform**: Electron 33+
+- **Frontend**: Vanilla JavaScript (ES6+ modules)
+- **State Management**: SAM Pattern (sam-pattern, sam-fsm)
+- **Markdown**: marked for response rendering
+- **CLI Integration**: Claude Code spawned as subprocess with JSON streaming
+- **Storage**: File-based JSON in `.puffin/` directory
 
 
 ## UI Guidelines

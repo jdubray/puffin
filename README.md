@@ -6,6 +6,21 @@
 
 A GUI for Claude Code to help cloders collaborate on new projects.
 
+## Why Puffin?
+
+Claude Code is extraordinary out of the box. It can take you to production for projects in the 10k-100k LoC range. But as projects grow, maintaining context, traceability, and structured collaboration becomes critical.
+
+**Puffin helps you get there faster, in a more maintainable way, with full traceability.**
+
+The key insight: prompts alone create confusion. Claude responds much better to a **backlog-driven workflow**:
+
+1. **Prompts generate user stories** - Your specifications become structured, reviewable stories
+2. **Stories live in a backlog** - A clear queue of work, not scattered across conversation threads
+3. **Pull stories into implementation threads** - Focused context for each piece of work
+4. **Mark complete when done** - Clear progress tracking and history
+
+This history, captured outside of Claude's context window, lets you charge ahead and grow your project without losing track of what was built, why, and how.
+
 ## Overview
 
 Puffin is an Electron-based application that provides a visual interface for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Anthropic's official CLI for Claude. Rather than replacing the terminal, Puffin wraps it—giving you full agentic capabilities (file read/write, bash execution, tool use) with a structured workflow for managing cloding projects.
@@ -221,20 +236,26 @@ Real-time streaming of Claude Code's output:
 
 ## Latest Features
 
-### Backlog Management
-Comprehensive user story lifecycle management with intelligent Claude integration:
-- **CRUD Operations**: Create, read, update, and delete user stories with full persistence
-- **Status Tracking**: Monitor story progress from Pending → In Progress → Completed
-- **Source Linking**: Connect stories to their originating prompts for full traceability
-- **Batch Operations**: Select multiple stories for bulk implementation
+### Backlog-Driven Workflow
+The core of Puffin's approach to structured cloding:
 
-### Story Derivation Workflow
-Advanced workflow for extracting and implementing user stories:
-1. **Derive**: Submit specifications to Claude for automatic user story extraction
-2. **Review**: Interactive review interface to refine, edit, or discard proposed stories
-3. **Add to Backlog**: Approved stories are added to the backlog for tracking
-4. **Start Implementation**: Select stories and generate implementation prompts with planning instructions
-5. **Mark Complete**: Close stories when implementation is finished
+```
+Prompt → Derive Stories → Review → Backlog → Pull → Thread → Implement → Complete
+```
+
+- **Story Derivation**: Claude extracts user stories from your specifications
+- **Review Interface**: Refine, edit, or discard proposed stories before committing
+- **Backlog Management**: Stories queue up with status tracking (Pending → In Progress → Completed)
+- **Implementation Threads**: Each story gets its own focused thread with full context
+- **Completion Tracking**: Mark stories and threads complete for clear progress visibility
+
+### Expandable Thread History
+Navigate complex project histories with ease:
+- **Collapsible Threads**: All threads start collapsed for a clean overview
+- **Expand on Click**: Click to expand and see child prompts
+- **Visual Indicators**: Arrows show expandable threads, checkmarks show completed ones
+- **Context Menu**: Right-click to mark complete, expand/collapse, or reply
+- **Strikethrough Styling**: Completed threads are visually distinct
 
 ### Real-time Activity Tracking
 Enhanced transparency during prompt execution:
@@ -243,11 +264,11 @@ Enhanced transparency during prompt execution:
 - **Status Indicators**: Visual feedback showing thinking, tool-use, and completion states
 - **Concurrent Support**: Monitor multiple simultaneous tool executions
 
-### Intelligent Title Generation
-Automatic prompt title generation with fallback mechanisms:
-- **Claude Integration**: Uses Claude API for contextual title generation
-- **Smart Fallbacks**: NLP-based extraction when Claude is unavailable
-- **Action Detection**: Identifies key action words (implement, create, fix) for meaningful titles
+### Context Window Management
+Keep Claude focused on what matters:
+- **Visual Context Indicator**: See which prompts are in Claude's context window
+- **Session Resumption**: Automatically resumes Claude sessions to maintain context
+- **Smart History**: Only sends relevant context when resuming, not redundant history
 
 ## License
 

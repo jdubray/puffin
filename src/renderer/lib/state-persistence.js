@@ -36,7 +36,7 @@ export class StatePersistence {
       'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
       'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
-      'IMPLEMENT_STORIES'
+      'ADD_STORIES_TO_BACKLOG', 'START_STORY_IMPLEMENTATION'
     ]
 
     if (!persistActions.includes(normalizedType)) {
@@ -77,18 +77,36 @@ export class StatePersistence {
         await window.puffin.state.updateHistory(state.history.raw)
         console.log('[PERSIST-DEBUG] History persisted successfully')
 
-        // Auto-extract user stories from specifications branch responses
-        if (normalizedType === 'COMPLETE_RESPONSE' && state.history.activeBranch === 'specifications') {
-          await this.extractUserStoriesFromResponse(state)
-        }
+        // NOTE: Auto-extraction of user stories is disabled.
+        // Use the explicit "Derive User Stories" checkbox instead, which provides
+        // better control and a review modal before adding stories.
+        // The old auto-extraction was creating too many false positives.
       }
 
       if (normalizedType === 'UPDATE_ARCHITECTURE') {
         await window.puffin.state.updateArchitecture(state.architecture.content)
       }
 
-      // Persist user stories and history when implementing from derivation
-      if (normalizedType === 'IMPLEMENT_STORIES') {
+      // Persist individual user story updates (status changes, edits)
+      if (['ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY'].includes(normalizedType)) {
+        // Persist all user stories
+        for (const story of state.userStories) {
+          try {
+            await window.puffin.state.updateUserStory(story.id, story)
+          } catch (e) {
+            // Story might not exist yet, try adding it
+            try {
+              await window.puffin.state.addUserStory(story)
+            } catch (e2) {
+              console.error('Failed to persist story:', story.id, e2)
+            }
+          }
+        }
+        console.log('[PERSIST-DEBUG] User stories persisted')
+      }
+
+      // Persist user stories and history when adding to backlog from derivation
+      if (normalizedType === 'ADD_STORIES_TO_BACKLOG') {
         // Persist history (we added a prompt entry)
         await window.puffin.state.updateHistory(state.history.raw)
 
@@ -100,6 +118,45 @@ export class StatePersistence {
             // Story might already exist, update instead
             await window.puffin.state.updateUserStory(story.id, story)
           }
+        }
+      }
+
+      // Handle start story implementation - persist and submit to Claude
+      if (normalizedType === 'START_STORY_IMPLEMENTATION') {
+        // Persist updated user stories (status changed to in-progress)
+        for (const story of state.userStories) {
+          try {
+            await window.puffin.state.updateUserStory(story.id, story)
+          } catch (e) {
+            console.error('Failed to update story:', story.id, e)
+          }
+        }
+
+        // Persist history (we added a prompt entry)
+        await window.puffin.state.updateHistory(state.history.raw)
+
+        // Check if there's a pending implementation to submit
+        const pendingImpl = state._pendingImplementation
+        if (pendingImpl) {
+          console.log('[IMPLEMENT] Submitting implementation prompt to Claude')
+
+          // Get session ID from last successful prompt in backend branch
+          const backendBranch = state.history.raw?.branches?.backend
+          const lastPromptWithResponse = backendBranch?.prompts
+            ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
+            ?.pop()
+          const sessionId = lastPromptWithResponse?.response?.sessionId || null
+
+          // Submit to Claude
+          await window.puffin.claude.submit({
+            prompt: pendingImpl.promptContent,
+            branchId: pendingImpl.branchId,
+            sessionId,
+            project: state.config ? {
+              name: state.config.name,
+              description: state.config.description
+            } : null
+          })
         }
       }
 

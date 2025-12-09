@@ -236,49 +236,24 @@ class ClaudeService {
 
           // Try to extract the best content in order of preference:
           // 1. resultData.result (if substantial)
-          // 2. Look for the final assistant message with actual content (not just "thinking" text)
-          // 3. streamedContent (accumulated text from all assistant messages)
-          // 4. fullOutput (non-JSON fallback)
+          // 2. streamedContent (accumulated text from ALL assistant messages - preferred for multi-turn responses)
+          // 3. fullOutput (non-JSON fallback)
+          //
+          // NOTE: Previously we tried to find the "last substantial assistant message" but this
+          // fails when Claude sends multiple text blocks interspersed with tool_use blocks.
+          // Using streamedContent ensures we capture ALL text content from the entire conversation.
 
           if (resultData?.result && resultData.result.length > 100) {
             responseContent = resultData.result
             console.log('[CLAUDE-DEBUG]   -> Using resultData.result (substantial content)')
+          } else if (streamedContent && streamedContent.length > 0) {
+            // Use accumulated streamed content - this captures ALL text from all assistant messages
+            responseContent = streamedContent
+            console.log('[CLAUDE-DEBUG]   -> Using streamedContent (accumulated from all assistant messages)')
           } else {
-            // Look for the last assistant message that contains substantial content
-            // This handles the case where Claude outputs a final response after tool use
-            const assistantMessages = allMessages.filter(m => m.type === 'assistant')
-            console.log('[CLAUDE-DEBUG]   Assistant messages count:', assistantMessages.length)
-
-            // Find the last assistant message with substantial text content
-            for (let i = assistantMessages.length - 1; i >= 0; i--) {
-              const msg = assistantMessages[i]
-              if (msg.message?.content) {
-                let textContent = ''
-                for (const block of msg.message.content) {
-                  if (block.type === 'text') {
-                    textContent += block.text
-                  }
-                }
-                // If this message has substantial content (not just short thinking text)
-                if (textContent.length > 200) {
-                  responseContent = textContent
-                  console.log('[CLAUDE-DEBUG]   -> Using last substantial assistant message:', textContent.length, 'chars')
-                  break
-                }
-              }
-            }
-
-            // If we still don't have content, use streamedContent
-            if (!responseContent && streamedContent && streamedContent.length > 0) {
-              responseContent = streamedContent
-              console.log('[CLAUDE-DEBUG]   -> Using streamedContent (accumulated)')
-            }
-
             // Last resort: use result even if short, or fullOutput
-            if (!responseContent) {
-              responseContent = resultData?.result || fullOutput || ''
-              console.log('[CLAUDE-DEBUG]   -> Using fallback:', responseContent.length, 'chars')
-            }
+            responseContent = resultData?.result || fullOutput || ''
+            console.log('[CLAUDE-DEBUG]   -> Using fallback:', responseContent.length, 'chars')
           }
 
           console.log('[CLAUDE-DEBUG]   -> Final content:', responseContent ? `${responseContent.length} chars` : 'EMPTY!')
@@ -404,12 +379,19 @@ class ClaudeService {
 
   /**
    * Build the prompt with optional context
+   *
+   * Context strategy:
+   * - When resuming a session: Claude CLI has full history server-side,
+   *   so we only add lightweight context (branch tag, updated user stories)
+   * - When starting new: Full project context + user stories + branch tag
+   *
    * @private
    */
   buildPrompt(data) {
     let prompt = data.prompt
+    const isResumingSession = !!data.sessionId
 
-    // Add branch tag/context at the start
+    // Branch tag is always useful - it reminds Claude of the focus area
     if (data.branchId) {
       const branchContext = this.getBranchContext(data.branchId)
       if (branchContext) {
@@ -417,20 +399,71 @@ class ClaudeService {
       }
     }
 
-    // Add GUI description if provided
+    // GUI description if provided (always include - it's specific to this prompt)
     if (data.guiDescription) {
       prompt += '\n\n## UI Layout Reference\n' + data.guiDescription
     }
 
-    // Add project context as part of the prompt if provided
-    if (data.project) {
+    // User stories - only include for new conversations
+    // When resuming a session, the stories are already in context and adding them
+    // again can cause "Prompt is too long" errors
+    if (data.userStories && data.userStories.length > 0 && !isResumingSession) {
+      const storiesContext = this.buildUserStoriesContext(data.userStories)
+      if (storiesContext) {
+        prompt = storiesContext + '\n\n' + prompt
+      }
+    }
+
+    // Project context - only for new conversations (resumed sessions already have it)
+    if (data.project && !isResumingSession) {
       const context = this.buildProjectContext(data.project)
       if (context) {
         prompt = context + '\n\n---\n\n' + prompt
       }
     }
 
+    console.log('[PROMPT-DEBUG] Built prompt:', {
+      isResumingSession,
+      hasProject: !!data.project && !isResumingSession,
+      hasUserStories: !isResumingSession && data.userStories?.length || 0,
+      hasGuiDescription: !!data.guiDescription,
+      hasBranchContext: !!data.branchId,
+      promptLength: prompt.length
+    })
+
     return prompt
+  }
+
+  /**
+   * Build user stories context string
+   * @private
+   */
+  buildUserStoriesContext(stories) {
+    if (!stories || stories.length === 0) return ''
+
+    const lines = ['## Active User Stories']
+    lines.push('')
+    lines.push('The following user stories are relevant to this conversation:')
+    lines.push('')
+
+    stories.forEach((story, i) => {
+      lines.push(`### ${i + 1}. ${story.title}`)
+      if (story.status) {
+        lines.push(`**Status:** ${story.status}`)
+      }
+      if (story.description) {
+        lines.push('')
+        lines.push(story.description)
+      }
+      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
+        lines.push('')
+        lines.push('**Acceptance Criteria:**')
+        story.acceptanceCriteria.forEach(c => lines.push(`- ${c}`))
+      }
+      lines.push('')
+    })
+
+    return lines.join('\n')
   }
 
   /**
@@ -981,62 +1014,121 @@ ${feedback}`
   }
 
   /**
-   * Implement user stories
-   * @param {Array} stories - Stories to implement
-   * @param {string} projectPath - Project directory path
-   * @param {Object} project - Project context
-   * @param {boolean} withPlanning - Whether to plan first
-   * @param {Function} onChunk - Streaming callback
-   * @param {Function} onComplete - Completion callback
-   * @param {Function} onRaw - Raw JSON callback
+   * Generate a title for a prompt using Claude
+   * @param {string} content - The prompt content
+   * @returns {Promise<string>} - Generated title
    */
-  async implementStories(stories, projectPath, project, withPlanning, onChunk, onComplete, onRaw) {
-    // Build implementation prompt from stories
-    let prompt = ''
+  async generateTitle(content) {
+    return new Promise((resolve, reject) => {
+      // Create a simple prompt for title generation
+      const titlePrompt = `Generate a concise 2-5 word title for this user request. Respond with ONLY the title, no quotes or additional text:
 
-    if (withPlanning) {
-      prompt = `Please analyze and create an implementation plan for the following user stories:
+${content}`
 
-${stories.map((s, i) => `### Story ${i + 1}: ${s.title}
-${s.description}
+      // Use minimal options for title generation
+      const args = ['--print', '--max-turns', '1', '--model', 'haiku', '-']
 
-Acceptance Criteria:
-${s.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
-`).join('\n')}
+      const cwd = this.projectPath || process.cwd()
+      const spawnOptions = this.getSpawnOptions(cwd)
+      spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
 
-First, create a detailed implementation plan covering:
-1. Technical approach for each story
-2. Files to create or modify
-3. Key components and their relationships
-4. Implementation order and dependencies
+      console.log('Generating title for prompt...')
 
-Then wait for my approval before implementing.`
-    } else {
-      prompt = `Please implement the following user stories:
+      const titleProcess = spawn('claude', args, spawnOptions)
 
-${stories.map((s, i) => `### Story ${i + 1}: ${s.title}
-${s.description}
+      let output = ''
+      let errorOutput = ''
 
-Acceptance Criteria:
-${s.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
-`).join('\n')}
+      // Write the title prompt
+      titleProcess.stdin.write(titlePrompt)
+      titleProcess.stdin.end()
 
-Implement each story ensuring all acceptance criteria are met.`
+      titleProcess.stdout.on('data', (chunk) => {
+        output += chunk.toString()
+      })
+
+      titleProcess.stderr.on('data', (chunk) => {
+        errorOutput += chunk.toString()
+      })
+
+      titleProcess.on('close', (code) => {
+        if (code === 0) {
+          // Extract just the text content from Claude's response
+          const lines = output.trim().split('\n')
+          const title = lines[lines.length - 1]?.trim() || 'New Request'
+
+          // Clean up the title (remove quotes, limit length)
+          const cleanTitle = title
+            .replace(/^["']|["']$/g, '')
+            .replace(/[^\w\s-]/g, '')
+            .trim()
+            .substring(0, 50)
+
+          resolve(cleanTitle || 'New Request')
+        } else {
+          console.warn('Title generation failed, using fallback')
+          resolve(this.generateFallbackTitle(content))
+        }
+      })
+
+      titleProcess.on('error', (error) => {
+        console.warn('Title generation process error:', error)
+        resolve(this.generateFallbackTitle(content))
+      })
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (titleProcess) {
+          titleProcess.kill()
+          resolve(this.generateFallbackTitle(content))
+        }
+      }, 10000)
+    })
+  }
+
+  /**
+   * Generate a fallback title from content
+   * @param {string} content - The prompt content
+   * @returns {string} - Fallback title
+   */
+  generateFallbackTitle(content) {
+    // Clean the content
+    const cleaned = content.trim()
+      .replace(/\n/g, ' ')
+      .replace(/\s+/g, ' ')
+      .substring(0, 100)
+
+    // Try to extract a meaningful title from the first sentence
+    const firstSentence = cleaned.split(/[.!?]/)[0]
+
+    // Look for action words and extract intent
+    const actionWords = [
+      'implement', 'create', 'build', 'add', 'fix', 'update', 'refactor',
+      'design', 'optimize', 'test', 'deploy', 'configure', 'setup',
+      'develop', 'write', 'generate', 'analyze', 'review', 'debug'
+    ]
+
+    for (const action of actionWords) {
+      const regex = new RegExp(`\\b${action}\\b`, 'i')
+      if (regex.test(firstSentence)) {
+        // Extract the object of the action
+        const words = firstSentence.toLowerCase().split(' ')
+        const actionIndex = words.findIndex(word => word.includes(action.toLowerCase()))
+
+        if (actionIndex !== -1 && actionIndex < words.length - 1) {
+          const titleWords = words.slice(actionIndex, Math.min(actionIndex + 4, words.length))
+          const title = titleWords.join(' ').replace(/[^\w\s]/g, '').trim()
+          return title || 'New Request'
+        }
+      }
     }
 
-    // Use the existing submit method
-    return this.submit(
-      {
-        prompt,
-        projectPath,
-        project,
-        branchId: 'backend', // Default to backend for implementation
-        maxTurns: 20
-      },
-      onChunk,
-      onComplete,
-      onRaw
+    // If no action word found, take first few meaningful words
+    const words = firstSentence.split(' ').filter(word =>
+      word.length > 2 && !['the', 'and', 'for', 'with', 'that', 'this'].includes(word.toLowerCase())
     )
+
+    return words.slice(0, 4).join(' ').substring(0, 30) || 'New Request'
   }
 }
 

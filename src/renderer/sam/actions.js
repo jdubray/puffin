@@ -458,12 +458,11 @@ export const requestStoryChanges = (feedback) => ({
   }
 })
 
-// Accept and implement ready stories
-export const implementStories = (storyIds, withPlanning = false) => ({
-  type: 'IMPLEMENT_STORIES',
+// Add selected stories to backlog
+export const addStoriesToBacklog = (storyIds) => ({
+  type: 'ADD_STORIES_TO_BACKLOG',
   payload: {
     storyIds,
-    withPlanning,
     timestamp: Date.now()
   }
 })
@@ -479,6 +478,15 @@ export const storyDerivationError = (error) => ({
   type: 'STORY_DERIVATION_ERROR',
   payload: {
     error: error.error || error.message || error,
+    timestamp: Date.now()
+  }
+})
+
+// Start implementation for selected stories (moves from backlog to in-progress)
+export const startStoryImplementation = (stories) => ({
+  type: 'START_STORY_IMPLEMENTATION',
+  payload: {
+    stories,
     timestamp: Date.now()
   }
 })

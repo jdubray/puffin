@@ -159,7 +159,7 @@ class PuffinApp {
       'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories',
       'deriveUserStories', 'receiveDerivedStories', 'markStoryReady', 'unmarkStoryReady',
       'updateDerivedStory', 'deleteDerivedStory', 'requestStoryChanges',
-      'implementStories', 'cancelStoryReview', 'storyDerivationError',
+      'addStoriesToBacklog', 'cancelStoryReview', 'storyDerivationError', 'startStoryImplementation',
       'switchView', 'toggleSidebar', 'showModal', 'hideModal',
       'toolStart', 'toolEnd', 'clearActivity',
       'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity'
@@ -236,9 +236,10 @@ class PuffinApp {
           ['UPDATE_DERIVED_STORY', actions.updateDerivedStory],
           ['DELETE_DERIVED_STORY', actions.deleteDerivedStory],
           ['REQUEST_STORY_CHANGES', actions.requestStoryChanges],
-          ['IMPLEMENT_STORIES', actions.implementStories],
+          ['ADD_STORIES_TO_BACKLOG', actions.addStoriesToBacklog],
           ['CANCEL_STORY_REVIEW', actions.cancelStoryReview],
           ['STORY_DERIVATION_ERROR', actions.storyDerivationError],
+          ['START_STORY_IMPLEMENTATION', actions.startStoryImplementation],
 
           // UI Navigation actions
           ['SWITCH_VIEW', actions.switchView],
@@ -596,7 +597,11 @@ class PuffinApp {
 
     // Story derivation - stories derived
     const unsubStoriesDerived = window.puffin.claude.onStoriesDerived((data) => {
-      console.log('Stories derived:', data)
+      console.log('[STORY-DERIVATION] Stories derived event received')
+      console.log('[STORY-DERIVATION] data:', data)
+      console.log('[STORY-DERIVATION] data.stories:', data?.stories)
+      console.log('[STORY-DERIVATION] data.stories length:', data?.stories?.length || 0)
+      console.log('[STORY-DERIVATION] data.originalPrompt:', data?.originalPrompt?.substring(0, 100))
       this.intents.receiveDerivedStories(data.stories, data.originalPrompt)
     })
     this.claudeListeners.push(unsubStoriesDerived)
@@ -697,10 +702,28 @@ class PuffinApp {
     })
 
     const branch = state.history.raw?.branches?.[branchId]
+
+    // Collect all dead sessions (hit context limit)
+    const deadSessions = new Set()
+    if (branch?.prompts) {
+      for (const prompt of branch.prompts) {
+        if (prompt.response?.content === 'Prompt is too long' && prompt.response?.sessionId) {
+          deadSessions.add(prompt.response.sessionId)
+        }
+      }
+    }
+
+    // Find the last prompt with a valid (non-dead) session
     const lastPromptWithResponse = branch?.prompts
-      ?.filter(p => p.response?.sessionId)
+      ?.filter(p => p.response?.sessionId && !deadSessions.has(p.response.sessionId))
       ?.pop()
     const sessionId = lastPromptWithResponse?.response?.sessionId || null
+
+    console.log('Rerun session lookup:', {
+      foundSession: !!sessionId,
+      deadSessions: deadSessions.size,
+      sessionId: sessionId?.substring(0, 20)
+    })
 
     window.puffin.claude.submit({
       prompt: content,

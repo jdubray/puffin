@@ -376,6 +376,9 @@ function setupClaudeHandlers(ipcMain) {
 
   // Derive user stories from a prompt
   ipcMain.on('claude:deriveStories', async (event, data) => {
+    console.log('[IPC] claude:deriveStories received')
+    console.log('[IPC] prompt length:', data?.prompt?.length || 0)
+    console.log('[IPC] projectPath:', projectPath)
     try {
       const result = await claudeService.deriveStories(
         data.prompt,
@@ -383,7 +386,10 @@ function setupClaudeHandlers(ipcMain) {
         data.project
       )
 
+      console.log('[IPC] deriveStories result:', result?.success, 'stories:', result?.stories?.length || 0)
+
       if (result.success) {
+        console.log('[IPC] Sending claude:storiesDerived with', result.stories.length, 'stories')
         event.sender.send('claude:storiesDerived', {
           stories: result.stories,
           originalPrompt: data.prompt
@@ -432,29 +438,14 @@ function setupClaudeHandlers(ipcMain) {
     }
   })
 
-  // Implement user stories
-  ipcMain.on('claude:implementStories', async (event, data) => {
+  // Generate title for a prompt
+  ipcMain.handle('claude:generateTitle', async (event, content) => {
     try {
-      await claudeService.implementStories(
-        data.stories,
-        projectPath,
-        data.project,
-        data.withPlanning,
-        // On chunk received (streaming output)
-        (chunk) => {
-          event.sender.send('claude:response', chunk)
-        },
-        // On complete
-        (response) => {
-          event.sender.send('claude:complete', response)
-        },
-        // On raw JSON line
-        (jsonLine) => {
-          event.sender.send('claude:raw', jsonLine)
-        }
-      )
+      const title = await claudeService.generateTitle(content)
+      return { success: true, title }
     } catch (error) {
-      event.sender.send('claude:error', { message: error.message })
+      console.warn('Title generation failed:', error)
+      return { success: true, title: claudeService.generateFallbackTitle(content) }
     }
   })
 }

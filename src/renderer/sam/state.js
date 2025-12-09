@@ -51,7 +51,10 @@ export function computeState(model) {
     rerunRequest: model.rerunRequest || null,
 
     // Activity tracking state
-    activity: computeActivityState(model)
+    activity: computeActivityState(model),
+
+    // Pending implementation context (for Claude submission)
+    _pendingImplementation: model._pendingImplementation || null
   }
 }
 
@@ -152,16 +155,28 @@ function computeHistoryState(model) {
     activePromptId,
     promptTree: promptTree.map(p => ({
       ...p,
-      preview: truncate(p.content, 50),
+      preview: truncate(p.type === 'story-thread' ? `📖 ${p.title}` : p.content, 50),
       hasResponse: !!p.response,
-      isSelected: p.id === activePromptId
+      isSelected: p.id === activePromptId,
+      // Story thread specific fields
+      isStoryThread: p.type === 'story-thread',
+      isDerivation: p.type === 'derivation',
+      storyStatus: p.type === 'story-thread' ? p.status : null,
+      storyTitle: p.type === 'story-thread' ? p.title : null
     })),
     selectedPrompt: selectedPrompt ? {
       id: selectedPrompt.id,
+      type: selectedPrompt.type || 'prompt',
       content: selectedPrompt.content,
       timestamp: selectedPrompt.timestamp,
       response: selectedPrompt.response,
-      hasChildren: selectedPrompt.children && selectedPrompt.children.length > 0
+      hasChildren: selectedPrompt.children && selectedPrompt.children.length > 0,
+      // Story thread specific fields
+      isStoryThread: selectedPrompt.type === 'story-thread',
+      story: selectedPrompt.story || null,
+      plan: selectedPrompt.plan || null,
+      storyStatus: selectedPrompt.status || null,
+      sessionId: selectedPrompt.sessionId || null
     } : null,
     isEmpty: promptTree.length === 0
   }

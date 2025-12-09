@@ -34,6 +34,13 @@ export class UserStoryReviewModalComponent {
    * Render the modal content
    */
   render(derivationState, modal) {
+    console.log('[STORY-MODAL] Rendering modal')
+    console.log('[STORY-MODAL] derivationState.status:', derivationState?.status)
+    console.log('[STORY-MODAL] derivationState.isDeriving:', derivationState?.isDeriving)
+    console.log('[STORY-MODAL] derivationState.isReviewing:', derivationState?.isReviewing)
+    console.log('[STORY-MODAL] derivationState.pendingStories:', derivationState?.pendingStories?.length || 0)
+    console.log('[STORY-MODAL] derivationState.pendingStories data:', derivationState?.pendingStories)
+
     const modalContainer = document.getElementById('modal-container')
     const modalEl = modalContainer.querySelector('.modal')
     const modalTitle = document.getElementById('modal-title')
@@ -55,8 +62,11 @@ export class UserStoryReviewModalComponent {
     // Show the modal
     modalContainer.classList.remove('hidden')
 
-    // Bind events
-    this.bindEvents(derivationState)
+    // Bind events after a brief delay to prevent race conditions with modal display
+    // This ensures the modal is fully rendered before attaching event handlers
+    setTimeout(() => {
+      this.bindEvents(derivationState)
+    }, 50)
   }
 
   /**
@@ -160,18 +170,15 @@ export class UserStoryReviewModalComponent {
     return `
       <div class="story-review-footer">
         <span class="story-review-summary">
-          <strong>${readyCount}</strong> of ${totalCount} stories ready
+          <strong>${readyCount}</strong> of ${totalCount} stories selected
         </span>
         <div class="btn-group">
           <button class="btn secondary" data-action="cancel">Cancel</button>
           <button class="btn secondary" data-action="request-changes" ${totalCount === 0 ? 'disabled' : ''}>
             Request Changes
           </button>
-          <button class="btn secondary" data-action="implement-with-plan" ${!hasReady ? 'disabled' : ''}>
-            Plan First
-          </button>
-          <button class="btn primary" data-action="implement" ${!hasReady ? 'disabled' : ''}>
-            Implement (${readyCount})
+          <button class="btn primary" data-action="add-to-backlog" ${!hasReady ? 'disabled' : ''}>
+            Add to Backlog (${readyCount})
           </button>
         </div>
       </div>
@@ -223,24 +230,12 @@ export class UserStoryReviewModalComponent {
             }
             break
 
-          case 'implement':
+          case 'add-to-backlog':
             const readyStories = state.pendingStories
               .filter(s => s.status === 'ready')
             const readyIds = readyStories.map(s => s.id)
-            // Update SAM state
-            this.intents.implementStories(readyIds, false)
-            // Trigger actual implementation via IPC
-            this.triggerImplementation(readyStories, state.branchId, false)
-            break
-
-          case 'implement-with-plan':
-            const readyStoriesWithPlan = state.pendingStories
-              .filter(s => s.status === 'ready')
-            const readyIdsWithPlan = readyStoriesWithPlan.map(s => s.id)
-            // Update SAM state
-            this.intents.implementStories(readyIdsWithPlan, true)
-            // Trigger actual implementation via IPC
-            this.triggerImplementation(readyStoriesWithPlan, state.branchId, true)
+            // Add selected stories to backlog
+            this.intents.addStoriesToBacklog(readyIds)
             break
         }
       })
@@ -249,7 +244,12 @@ export class UserStoryReviewModalComponent {
     // Close modal on backdrop click
     const modalBackdrop = document.querySelector('.modal-backdrop')
     if (modalBackdrop) {
-      modalBackdrop.addEventListener('click', () => {
+      // Remove old listeners by cloning the element
+      const newBackdrop = modalBackdrop.cloneNode(true)
+      modalBackdrop.parentNode.replaceChild(newBackdrop, modalBackdrop)
+      newBackdrop.addEventListener('click', (e) => {
+        console.log('[STORY-MODAL] Backdrop clicked')
+        e.stopPropagation()
         this.intents.cancelStoryReview()
       })
     }
@@ -257,43 +257,15 @@ export class UserStoryReviewModalComponent {
     // Close button
     const closeBtn = document.querySelector('.modal-close')
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
+      // Remove old listeners by cloning the element
+      const newCloseBtn = closeBtn.cloneNode(true)
+      closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn)
+      newCloseBtn.addEventListener('click', (e) => {
+        console.log('[STORY-MODAL] Close button clicked')
+        e.stopPropagation()
         this.intents.cancelStoryReview()
       })
     }
-  }
-
-  /**
-   * Trigger implementation of stories via IPC
-   */
-  triggerImplementation(stories, branchId, withPlanning) {
-    if (!window.puffin || !window.puffin.claude.implementStories) {
-      console.error('IPC not available for story implementation')
-      return
-    }
-
-    const appState = window.puffinApp?.state
-    const project = appState?.config ? {
-      name: appState.config.name,
-      description: appState.config.description
-    } : null
-
-    console.log('Triggering story implementation:', {
-      storyCount: stories.length,
-      branchId,
-      withPlanning
-    })
-
-    window.puffin.claude.implementStories({
-      stories: stories.map(s => ({
-        title: s.title,
-        description: s.description,
-        acceptanceCriteria: s.acceptanceCriteria
-      })),
-      branchId,
-      withPlanning,
-      project
-    })
   }
 
   /**

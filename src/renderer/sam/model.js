@@ -758,80 +758,80 @@ export const requestStoryChangesAcceptor = model => proposal => {
   }
 }
 
-export const implementStoriesAcceptor = model => proposal => {
-  if (proposal?.type === 'IMPLEMENT_STORIES') {
-    const { storyIds, withPlanning } = proposal.payload
+export const addStoriesToBacklogAcceptor = model => proposal => {
+  if (proposal?.type === 'ADD_STORIES_TO_BACKLOG') {
+    const { storyIds } = proposal.payload
 
-    // Get ready stories
-    const readyStories = model.storyDerivation.pendingStories.filter(
+    // Get selected stories from pending
+    const selectedStories = model.storyDerivation.pendingStories.filter(
       s => storyIds.includes(s.id)
     )
 
-    // Add them to the user stories with branchId
-    const branchId = model.storyDerivation.branchId
-    readyStories.forEach(story => {
+    // Add each story to the backlog (userStories)
+    selectedStories.forEach(story => {
       model.userStories.push({
         id: story.id,
-        branchId: branchId,
         title: story.title,
         description: story.description,
         acceptanceCriteria: story.acceptanceCriteria,
         status: 'pending',
-        sourcePromptId: null,
         createdAt: Date.now(),
         updatedAt: Date.now()
       })
     })
 
-    // Set implementation status
-    model.storyDerivation.status = 'implementing'
+    // Add the original prompt to the branch history
+    const branchId = model.storyDerivation.branchId
+    const originalPrompt = model.storyDerivation.originalPrompt
+
+    if (branchId && originalPrompt) {
+      // Ensure branch exists
+      if (!model.history.branches[branchId]) {
+        model.history.branches[branchId] = {
+          id: branchId,
+          name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
+          prompts: []
+        }
+      }
+
+      // Build response content listing the added stories
+      const storyList = selectedStories.map(s => `- ${s.title}`).join('\n')
+      const responseContent = `Derived ${selectedStories.length} user ${selectedStories.length === 1 ? 'story' : 'stories'} and added to backlog:\n\n${storyList}`
+
+      // Create prompt entry with response
+      const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+      const prompt = {
+        id: promptId,
+        content: originalPrompt,
+        parentId: null,
+        timestamp: Date.now(),
+        response: {
+          content: responseContent,
+          timestamp: Date.now()
+        }
+      }
+
+      // Add to branch
+      model.history.branches[branchId].prompts.push(prompt)
+      model.history.activeBranch = branchId
+      model.history.activePromptId = promptId
+    }
+
+    // Reset derivation state
+    model.storyDerivation.status = 'idle'
+    model.storyDerivation.pendingStories = []
+    model.storyDerivation.originalPrompt = null
+    model.storyDerivation.branchId = null
 
     // Close modal
     model.modal = null
-
-    // Clear pending stories
-    model.storyDerivation.pendingStories = []
-
-    // Create a prompt entry to track the implementation
-    const storyTitles = readyStories.map(s => s.title).join(', ')
-    const promptContent = withPlanning
-      ? `[Planning] Implementing user stories: ${storyTitles}`
-      : `[Implementing] User stories: ${storyTitles}`
-
-    // Generate prompt ID
-    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
-
-    // Add prompt to the branch
-    if (!model.history.branches[branchId]) {
-      model.history.branches[branchId] = {
-        id: branchId,
-        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
-        prompts: []
-      }
-    }
-
-    model.history.branches[branchId].prompts.push({
-      id: promptId,
-      content: promptContent,
-      parentId: null,
-      timestamp: Date.now(),
-      response: null
-    })
-
-    // Set as active prompt and switch to prompt view
-    model.history.activeBranch = branchId
-    model.history.activePromptId = promptId
-    model.pendingPromptId = promptId
-    model.currentView = 'prompt'
-
-    // Enable streaming response display
-    model.hasStreamingResponse = true
-    model.streamingResponse = ''
   }
 }
 
 export const cancelStoryReviewAcceptor = model => proposal => {
   if (proposal?.type === 'CANCEL_STORY_REVIEW') {
+    console.log('[CANCEL_STORY_REVIEW] Acceptor called - cancelling story review')
+    console.log('[CANCEL_STORY_REVIEW] Stack trace:', new Error().stack)
     model.storyDerivation = {
       status: 'idle',
       pendingStories: [],
@@ -850,6 +850,100 @@ export const storyDerivationErrorAcceptor = model => proposal => {
     model.appError = {
       message: `Story derivation failed: ${proposal.payload.error}`,
       timestamp: proposal.payload.timestamp
+    }
+  }
+}
+
+/**
+ * Start implementation for selected stories
+ * - Updates story status to 'in-progress'
+ * - Creates a prompt in the backend branch for implementation
+ * - Triggers Claude to plan and implement
+ */
+export const startStoryImplementationAcceptor = model => proposal => {
+  if (proposal?.type === 'START_STORY_IMPLEMENTATION') {
+    const { stories } = proposal.payload
+
+    if (!stories || stories.length === 0) return
+
+    // Update story statuses to in-progress
+    stories.forEach(story => {
+      const existingStory = model.userStories.find(s => s.id === story.id)
+      if (existingStory) {
+        existingStory.status = 'in-progress'
+        existingStory.updatedAt = Date.now()
+      }
+    })
+
+    // Build implementation prompt
+    const storyDescriptions = stories.map((story, i) => {
+      let desc = `### Story ${i + 1}: ${story.title}\n`
+      if (story.description) {
+        desc += `${story.description}\n`
+      }
+      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
+        desc += `\n**Acceptance Criteria:**\n`
+        desc += story.acceptanceCriteria.map(c => `- ${c}`).join('\n')
+      }
+      return desc
+    }).join('\n\n')
+
+    const promptContent = `Please implement the following user ${stories.length === 1 ? 'story' : 'stories'}:
+
+${storyDescriptions}
+
+**Instructions:**
+1. First, think hard about the implementation approach and create a detailed plan
+2. Consider the existing codebase structure and patterns
+3. Identify all files that need to be created or modified
+4. Then implement the changes step by step
+5. Ensure all acceptance criteria are met
+
+Please start by outlining your implementation plan, then proceed with the implementation.`
+
+    // Use backend branch for implementation
+    const branchId = 'backend'
+
+    // Ensure branch exists
+    if (!model.history.branches[branchId]) {
+      model.history.branches[branchId] = {
+        id: branchId,
+        name: 'Backend',
+        prompts: []
+      }
+    }
+
+    // Create prompt entry (response will be filled by Claude)
+    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+    const prompt = {
+      id: promptId,
+      content: promptContent,
+      parentId: null,
+      timestamp: Date.now(),
+      response: null, // Will be filled when Claude responds
+      storyIds: stories.map(s => s.id) // Track which stories this implements
+    }
+
+    // Add to branch
+    model.history.branches[branchId].prompts.push(prompt)
+
+    // Switch to backend branch and select the new prompt
+    model.history.activeBranch = branchId
+    model.history.activePromptId = promptId
+
+    // Set pending prompt for streaming
+    model.pendingPromptId = promptId
+    model.streamingResponse = ''
+
+    // Switch view to prompt
+    model.currentView = 'prompt'
+
+    // Store implementation context for IPC submission
+    model._pendingImplementation = {
+      promptId,
+      promptContent,
+      branchId,
+      storyIds: stories.map(s => s.id)
     }
   }
 }
@@ -1169,6 +1263,8 @@ export const showModalAcceptor = model => proposal => {
 
 export const hideModalAcceptor = model => proposal => {
   if (proposal?.type === 'HIDE_MODAL') {
+    console.log('[HIDE_MODAL] Acceptor called - hiding modal')
+    console.log('[HIDE_MODAL] Stack trace:', new Error().stack)
     model.modal = null
   }
 }
@@ -1233,9 +1329,10 @@ export const acceptors = [
   updateDerivedStoryAcceptor,
   deleteDerivedStoryAcceptor,
   requestStoryChangesAcceptor,
-  implementStoriesAcceptor,
+  addStoriesToBacklogAcceptor,
   cancelStoryReviewAcceptor,
   storyDerivationErrorAcceptor,
+  startStoryImplementationAcceptor,
 
   // UI Navigation
   switchViewAcceptor,

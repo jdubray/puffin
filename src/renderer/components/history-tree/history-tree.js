@@ -100,14 +100,37 @@ export class HistoryTreeComponent {
 
     promptTree.forEach(prompt => {
       const item = document.createElement('div')
-      item.className = `history-item ${prompt.isSelected ? 'selected' : ''}`
+
+      // Build class list based on prompt type
+      let classes = ['history-item']
+      if (prompt.isSelected) classes.push('selected')
+      if (prompt.isStoryThread) classes.push('story-thread')
+      if (prompt.isDerivation) classes.push('derivation')
+
+      item.className = classes.join(' ')
       item.style.setProperty('--depth', prompt.depth)
       item.dataset.promptId = prompt.id
-      item.innerHTML = `
-        <span class="status ${prompt.hasResponse ? 'has-response' : ''}"></span>
-        <span class="preview">${this.escapeHtml(prompt.preview)}</span>
-        <button class="history-rerun-btn" title="Rerun this prompt">↻</button>
-      `
+
+      // Different rendering for story threads vs regular prompts
+      if (prompt.isStoryThread) {
+        const statusClass = this.getStoryStatusClass(prompt.storyStatus)
+        const statusIcon = this.getStoryStatusIcon(prompt.storyStatus)
+        item.innerHTML = `
+          <span class="status-dot ${statusClass}" title="${prompt.storyStatus}">${statusIcon}</span>
+          <span class="preview story-title">${this.escapeHtml(prompt.storyTitle || prompt.preview)}</span>
+        `
+      } else if (prompt.isDerivation) {
+        item.innerHTML = `
+          <span class="status derivation-marker">📋</span>
+          <span class="preview">${this.escapeHtml(prompt.preview)}</span>
+        `
+      } else {
+        item.innerHTML = `
+          <span class="status ${prompt.hasResponse ? 'has-response' : ''}"></span>
+          <span class="preview">${this.escapeHtml(prompt.preview)}</span>
+          <button class="history-rerun-btn" title="Rerun this prompt">↻</button>
+        `
+      }
 
       // Click on item to select
       item.addEventListener('click', (e) => {
@@ -116,12 +139,14 @@ export class HistoryTreeComponent {
         this.intents.selectPrompt(prompt.id)
       })
 
-      // Rerun button click
+      // Rerun button click (only for regular prompts)
       const rerunBtn = item.querySelector('.history-rerun-btn')
-      rerunBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        this.intents.rerunPrompt(prompt.id)
-      })
+      if (rerunBtn) {
+        rerunBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          this.intents.rerunPrompt(prompt.id)
+        })
+      }
 
       // Right-click to add child prompt
       item.addEventListener('contextmenu', (e) => {
@@ -131,6 +156,36 @@ export class HistoryTreeComponent {
 
       this.historyTree.appendChild(item)
     })
+  }
+
+  /**
+   * Get CSS class for story status
+   */
+  getStoryStatusClass(status) {
+    const statusClasses = {
+      'pending': 'status-pending',
+      'planning': 'status-planning',
+      'planned': 'status-planned',
+      'implementing': 'status-implementing',
+      'completed': 'status-completed',
+      'failed': 'status-failed'
+    }
+    return statusClasses[status] || 'status-pending'
+  }
+
+  /**
+   * Get icon for story status
+   */
+  getStoryStatusIcon(status) {
+    const statusIcons = {
+      'pending': '🟡',
+      'planning': '🔵',
+      'planned': '🟠',
+      'implementing': '🔵',
+      'completed': '🟢',
+      'failed': '🔴'
+    }
+    return statusIcons[status] || '🟡'
   }
 
   /**

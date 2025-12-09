@@ -29,7 +29,7 @@
         <button class="nav-btn" data-view="config">Config</button>
         <button class="nav-btn active" data-view="prompt">Prompt</button>
         <button class="nav-btn" data-view="designer">Designer</button>
-        <button class="nav-btn" data-view="user-stories">User Stories</button>
+        <button class="nav-btn" data-view="user-stories">Backlog</button>
         <button class="nav-btn" data-view="architecture">Architecture</button>
         <button class="nav-btn" data-view="cli-output">CLI Output</button>
       </nav>
@@ -359,12 +359,12 @@
           </div>
         </section>
 
-        <!-- User Stories View -->
+        <!-- Backlog View -->
         <section id="user-stories-view" class="view">
           <div class="view-content user-stories-layout">
             <div class="user-stories-header">
-              <h2>User Stories</h2>
-              <p class="subtitle">Stories are automatically extracted from the Specifications branch</p>
+              <h2>Backlog</h2>
+              <p class="subtitle">User stories derived from prompts using "Derive User Stories"</p>
             </div>
             <div class="user-stories-toolbar">
               <div class="filter-group">
@@ -377,7 +377,7 @@
             </div>
             <div id="user-stories-list" class="user-stories-list">
               <!-- User stories rendered dynamically -->
-              <p class="placeholder">No user stories yet. Add prompts to the Specifications branch to auto-extract stories.</p>
+              <p class="placeholder">No user stories yet. Use "Derive User Stories" checkbox when submitting prompts.</p>
             </div>
           </div>
         </section>

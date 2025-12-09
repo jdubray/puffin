@@ -17,6 +17,7 @@ export class UserStoriesComponent {
     this.currentBranch = 'all' // Filter by branch
     this.stories = []
     this.branches = {}
+    this.selectedStoryIds = new Set() // Track selected stories for batch operations
   }
 
   /**
@@ -181,12 +182,21 @@ export class UserStoriesComponent {
   renderStoryCard(story) {
     const statusClass = story.status.replace('-', '')
     const criteriaCount = story.acceptanceCriteria?.length || 0
+    const isSelected = this.selectedStoryIds.has(story.id)
+    const canImplement = story.status === 'pending' // Only pending stories can be started
+    const canComplete = story.status === 'in-progress' // Only in-progress stories can be completed
 
     return `
-      <div class="story-card ${statusClass}" data-story-id="${story.id}">
+      <div class="story-card ${statusClass}${isSelected ? ' selected' : ''}" data-story-id="${story.id}">
         <div class="story-header">
+          ${canImplement ? `
+            <label class="story-checkbox-label">
+              <input type="checkbox" class="story-checkbox" ${isSelected ? 'checked' : ''}>
+            </label>
+          ` : ''}
           <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
           <div class="story-actions">
+            ${canComplete ? `<button class="story-action-btn complete-btn" title="Mark as completed">✓</button>` : ''}
             <button class="story-action-btn edit-btn" title="Edit story">✎</button>
             <button class="story-action-btn delete-btn" title="Delete story">×</button>
           </div>
@@ -214,6 +224,16 @@ export class UserStoriesComponent {
    * Bind events for story cards
    */
   bindCardEvents() {
+    // Checkbox selection
+    this.listContainer.querySelectorAll('.story-checkbox').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        e.stopPropagation()
+        const card = e.target.closest('.story-card')
+        const storyId = card.dataset.storyId
+        this.toggleStorySelection(storyId, e.target.checked)
+      })
+    })
+
     // Status change on click
     this.listContainer.querySelectorAll('.story-status').forEach(statusEl => {
       statusEl.addEventListener('click', (e) => {
@@ -241,6 +261,15 @@ export class UserStoriesComponent {
       })
     })
 
+    // Complete button (mark as completed)
+    this.listContainer.querySelectorAll('.complete-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const card = e.target.closest('.story-card')
+        const storyId = card.dataset.storyId
+        this.markStoryCompleted(storyId)
+      })
+    })
+
     // Expand/collapse criteria
     this.listContainer.querySelectorAll('.story-criteria').forEach(criteria => {
       criteria.addEventListener('click', () => {
@@ -248,6 +277,89 @@ export class UserStoriesComponent {
         list.classList.toggle('collapsed')
       })
     })
+  }
+
+  /**
+   * Toggle story selection for batch operations
+   */
+  toggleStorySelection(storyId, selected) {
+    if (selected) {
+      this.selectedStoryIds.add(storyId)
+    } else {
+      this.selectedStoryIds.delete(storyId)
+    }
+    this.updateActionBar()
+    // Update card visual state
+    const card = this.listContainer.querySelector(`[data-story-id="${storyId}"]`)
+    if (card) {
+      card.classList.toggle('selected', selected)
+    }
+  }
+
+  /**
+   * Update the action bar based on selection
+   */
+  updateActionBar() {
+    let actionBar = this.container.querySelector('.backlog-action-bar')
+
+    if (this.selectedStoryIds.size === 0) {
+      // Remove action bar if no selection
+      if (actionBar) {
+        actionBar.remove()
+      }
+      return
+    }
+
+    // Create or update action bar
+    if (!actionBar) {
+      actionBar = document.createElement('div')
+      actionBar.className = 'backlog-action-bar'
+      const toolbar = this.container.querySelector('.user-stories-toolbar')
+      toolbar.parentNode.insertBefore(actionBar, toolbar.nextSibling)
+    }
+
+    actionBar.innerHTML = `
+      <span class="selection-count">${this.selectedStoryIds.size} ${this.selectedStoryIds.size === 1 ? 'story' : 'stories'} selected</span>
+      <div class="action-buttons">
+        <button class="btn secondary clear-selection-btn">Clear Selection</button>
+        <button class="btn primary start-implementation-btn">Start Implementation</button>
+      </div>
+    `
+
+    // Bind action bar events
+    actionBar.querySelector('.clear-selection-btn').addEventListener('click', () => {
+      this.clearSelection()
+    })
+
+    actionBar.querySelector('.start-implementation-btn').addEventListener('click', () => {
+      this.startImplementation()
+    })
+  }
+
+  /**
+   * Clear all selections
+   */
+  clearSelection() {
+    this.selectedStoryIds.clear()
+    this.render()
+  }
+
+  /**
+   * Start implementation for selected stories
+   */
+  startImplementation() {
+    const selectedStories = this.stories.filter(s => this.selectedStoryIds.has(s.id))
+
+    if (selectedStories.length === 0) {
+      return
+    }
+
+    // Call intent to start implementation
+    this.intents.startStoryImplementation(selectedStories)
+
+    // Clear selection after starting
+    this.selectedStoryIds.clear()
+    this.updateActionBar()
   }
 
   /**
@@ -293,6 +405,13 @@ export class UserStoriesComponent {
         this.intents.updateUserStory(storyId, data)
       }
     })
+  }
+
+  /**
+   * Mark a story as completed
+   */
+  markStoryCompleted(storyId) {
+    this.intents.updateUserStory(storyId, { status: 'completed' })
   }
 
   /**

@@ -134,9 +134,6 @@ contextBridge.exposeInMainWorld('puffin', {
     // Modify stories based on feedback
     modifyStories: (data) => ipcRenderer.send('claude:modifyStories', data),
 
-    // Implement stories
-    implementStories: (data) => ipcRenderer.send('claude:implementStories', data),
-
     // Subscribe to stories derived event
     onStoriesDerived: (callback) => {
       const handler = (event, data) => callback(data)
@@ -149,7 +146,10 @@ contextBridge.exposeInMainWorld('puffin', {
       const handler = (event, error) => callback(error)
       ipcRenderer.on('claude:storyDerivationError', handler)
       return () => ipcRenderer.removeListener('claude:storyDerivationError', handler)
-    }
+    },
+
+    // Generate a title for a prompt (used for new threads)
+    generateTitle: (content) => ipcRenderer.invoke('claude:generateTitle', content)
   },
 
   /**

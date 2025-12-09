@@ -186,11 +186,34 @@ export class PromptEditorComponent {
       return
     }
 
+    // Calculate context window boundaries
+    const contextWindowSize = 5
+    const activePromptId = historyState.activePromptId
+    let endIndex = prompts.length
+    if (activePromptId) {
+      const activeIdx = prompts.findIndex(p => p.id === activePromptId)
+      if (activeIdx !== -1) endIndex = activeIdx + 1
+    }
+    const startIndex = Math.max(0, endIndex - contextWindowSize)
+
     let html = ''
 
+    // Show context indicator if there are prompts outside the window
+    if (startIndex > 0) {
+      html += `<div class="context-indicator">
+        <span class="context-divider"></span>
+        <span class="context-label">${startIndex} earlier message${startIndex > 1 ? 's' : ''} not in context</span>
+        <span class="context-divider"></span>
+      </div>`
+    }
+
     // Show conversation history
-    for (const prompt of prompts) {
-      html += `<div class="conversation-turn">
+    for (let i = 0; i < prompts.length; i++) {
+      const prompt = prompts[i]
+      const isInContext = i >= startIndex && i < endIndex
+      const isActive = prompt.id === activePromptId
+
+      html += `<div class="conversation-turn${isInContext ? ' in-context' : ' out-of-context'}${isActive ? ' active-prompt' : ''}" data-prompt-id="${prompt.id}">
         <div class="user-message">
           <strong>You:</strong>
           <p>${this.escapeHtml(prompt.content)}</p>
@@ -203,11 +226,20 @@ export class PromptEditorComponent {
         </div>`
       }
       html += '</div>'
+
+      // Add context window start indicator
+      if (i === startIndex - 1 && startIndex > 0) {
+        html += `<div class="context-indicator context-start">
+          <span class="context-divider"></span>
+          <span class="context-label">Context window starts here (${endIndex - startIndex} messages)</span>
+          <span class="context-divider"></span>
+        </div>`
+      }
     }
 
     // Show streaming response
     if (promptState.isProcessing && promptState.streamingResponse) {
-      html += `<div class="conversation-turn streaming">
+      html += `<div class="conversation-turn streaming in-context">
         <div class="assistant-message">
           <strong>Claude:</strong>
           <div class="response-text">${this.formatResponse(promptState.streamingResponse)}<span class="streaming-cursor"></span></div>
@@ -216,6 +248,16 @@ export class PromptEditorComponent {
     }
 
     responseContent.innerHTML = html
+
+    // Add click handlers for selecting prompts (to start sub-threads)
+    responseContent.querySelectorAll('.conversation-turn[data-prompt-id]').forEach(turn => {
+      turn.addEventListener('click', () => {
+        const promptId = turn.dataset.promptId
+        if (promptId && window.puffinApp?.intents?.selectPrompt) {
+          window.puffinApp.intents.selectPrompt(promptId)
+        }
+      })
+    })
 
     // Auto-scroll to bottom
     const responseArea = document.querySelector('.response-area')
@@ -308,10 +350,6 @@ export class PromptEditorComponent {
 
     // Submit to Claude via IPC
     if (window.puffin) {
-      // Build history context from the branch
-      const branch = state.history.branches.find(b => b.id === state.history.activeBranch)
-      const history = this.buildHistoryContext(state)
-
       // Get session ID to resume conversation (if continuing in same branch)
       const sessionId = this.getLastSessionId(state)
 
@@ -327,11 +365,23 @@ export class PromptEditorComponent {
         }
       }
 
+      // Get relevant user stories for this branch
+      const userStories = this.getRelevantUserStories(state)
+
+      // When resuming a session, Claude CLI already has the conversation history
+      // server-side. We only need to send our context (project, stories, GUI).
+      // Sending duplicate history would be redundant and consume tokens.
+      const isResumingSession = !!sessionId
+
+      console.log('[CONTEXT-DEBUG] Submit mode:', isResumingSession ? 'RESUME session' : 'NEW conversation')
+
       window.puffin.claude.submit({
         prompt: content,
         branchId: state.history.activeBranch,
-        sessionId: sessionId, // Resume previous session for conversation continuity
-        project: state.config ? {
+        sessionId: sessionId,
+        // Only send project context for new conversations or when it's changed
+        // For resumed sessions, Claude already has the context
+        project: !isResumingSession && state.config ? {
           name: state.config.name,
           description: state.config.description,
           assumptions: state.config.assumptions,
@@ -340,7 +390,8 @@ export class PromptEditorComponent {
           options: state.config.options,
           architecture: state.architecture
         } : null,
-        history: history,
+        // User stories are always relevant - they may have been updated
+        userStories: userStories,
         guiDescription: guiDescription,
         model: 'claude-sonnet-4-20250514'
       })
@@ -380,10 +431,16 @@ export class PromptEditorComponent {
         }
       }
 
+      // Get relevant user stories for this branch
+      const userStories = this.getRelevantUserStories(state)
+
+      console.log('[CONTEXT-DEBUG] Submit mode: NEW thread (fresh conversation)')
+
       window.puffin.claude.submit({
         prompt: content,
         branchId: state.history.activeBranch,
         sessionId: null, // No session resume - fresh conversation
+        // New thread gets full project context
         project: state.config ? {
           name: state.config.name,
           description: state.config.description,
@@ -393,7 +450,7 @@ export class PromptEditorComponent {
           options: state.config.options,
           architecture: state.architecture
         } : null,
-        history: [], // No history for new thread
+        userStories: userStories,
         guiDescription: guiDescription,
         model: 'claude-sonnet-4-20250514'
       })
@@ -570,44 +627,139 @@ export class PromptEditorComponent {
 
   /**
    * Build history context for Claude
+   * Returns the last N prompts leading up to the active prompt position,
+   * including full response content for each.
    */
   buildHistoryContext(state) {
-    // Get prompts from active branch up to the active prompt
     const activeBranch = state.history.branches.find(b => b.id === state.history.activeBranch)
     if (!activeBranch) return []
 
-    // For now, include last few prompts for context
-    // Could be enhanced to follow the tree path to activePromptId
-    const prompts = state.history.promptTree
-      .slice(-5) // Last 5 prompts for context
+    // Get raw prompts from the branch (these have full response content)
+    const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
+    if (!rawBranch || !rawBranch.prompts) return []
+
+    // Find the position of the active prompt (or use end of list)
+    const activePromptId = state.history.activePromptId
+    let endIndex = rawBranch.prompts.length
+
+    if (activePromptId) {
+      const activeIndex = rawBranch.prompts.findIndex(p => p.id === activePromptId)
+      if (activeIndex !== -1) {
+        endIndex = activeIndex + 1 // Include the active prompt
+      }
+    }
+
+    // Get the context window: last 5 prompts up to (and including) the active prompt
+    const contextWindowSize = 5
+    const startIndex = Math.max(0, endIndex - contextWindowSize)
+
+    const contextPrompts = rawBranch.prompts
+      .slice(startIndex, endIndex)
       .map(p => ({
         content: p.content,
-        response: p.hasResponse ? {
-          content: state.history.selectedPrompt?.id === p.id
-            ? state.history.selectedPrompt.response?.content
-            : null
+        response: p.response ? {
+          content: p.response.content || null
         } : null
       }))
       .filter(p => p.content)
 
-    return prompts
+    console.log('[CONTEXT-DEBUG] Building history context:', {
+      branchId: state.history.activeBranch,
+      activePromptId,
+      totalPrompts: rawBranch.prompts.length,
+      contextWindow: `${startIndex}-${endIndex}`,
+      promptsIncluded: contextPrompts.length,
+      withResponses: contextPrompts.filter(p => p.response?.content).length
+    })
+
+    return contextPrompts
   }
 
   /**
-   * Get the session ID from the last prompt in the branch to resume conversation
+   * Get the session ID from the active prompt to resume conversation.
+   * This ensures we resume from the correct point in the thread.
    */
   getLastSessionId(state) {
-    const promptTree = state.history.promptTree || []
-    if (promptTree.length === 0) return null
+    const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
+    if (!rawBranch || !rawBranch.prompts || rawBranch.prompts.length === 0) return null
 
-    // Find the last prompt that has a response with a sessionId
-    for (let i = promptTree.length - 1; i >= 0; i--) {
-      const prompt = promptTree[i]
-      if (prompt.response?.sessionId) {
+    // Collect all sessions that have hit "Prompt is too long" - these are dead sessions
+    const deadSessions = new Set()
+    for (const prompt of rawBranch.prompts) {
+      if (prompt.response?.content === 'Prompt is too long' && prompt.response?.sessionId) {
+        deadSessions.add(prompt.response.sessionId)
+      }
+    }
+
+    if (deadSessions.size > 0) {
+      console.log('[CONTEXT-DEBUG] Found dead sessions (hit context limit):', deadSessions.size)
+    }
+
+    // If there's an active prompt, try its session ID
+    const activePromptId = state.history.activePromptId
+    if (activePromptId) {
+      const activePrompt = rawBranch.prompts.find(p => p.id === activePromptId)
+      if (activePrompt?.response?.sessionId) {
+        // Skip if this session is dead
+        if (deadSessions.has(activePrompt.response.sessionId)) {
+          console.log('[CONTEXT-DEBUG] Active prompt session is dead - looking for alternative')
+        } else {
+          console.log('[CONTEXT-DEBUG] Using session from active prompt:', activePromptId)
+          return activePrompt.response.sessionId
+        }
+      }
+    }
+
+    // Fallback: find the last prompt with a sessionId that isn't dead
+    for (let i = rawBranch.prompts.length - 1; i >= 0; i--) {
+      const prompt = rawBranch.prompts[i]
+      if (prompt.response?.sessionId && !deadSessions.has(prompt.response.sessionId)) {
+        console.log('[CONTEXT-DEBUG] Using session from last valid prompt:', prompt.id)
         return prompt.response.sessionId
       }
     }
+
+    console.log('[CONTEXT-DEBUG] No valid sessions found - starting fresh conversation')
     return null
+  }
+
+  /**
+   * Get user stories relevant to the current branch.
+   * Only includes stories that are actively being worked on to avoid context bloat.
+   * Excludes completed stories.
+   * Limited to 10 stories max to prevent "Prompt is too long" errors.
+   */
+  getRelevantUserStories(state) {
+    const userStories = state.userStories || []
+    if (userStories.length === 0) return null
+
+    const branchId = state.history.activeBranch
+
+    // Only include stories that are actively being worked on
+    // Exclude completed stories - they don't need to be in context
+    const relevantStories = userStories.filter(story => {
+      // Never include completed stories
+      if (story.status === 'completed') return false
+      // Include if story is actively in progress
+      if (story.status === 'in-progress') return true
+      // Include if story is for this specific branch AND has a linked thread (being worked on)
+      if (story.branchId === branchId && story.threadId) return true
+      return false
+    })
+
+    // Limit to 10 most recent stories to prevent context bloat
+    const limitedStories = relevantStories.slice(-10)
+
+    if (limitedStories.length === 0) return null
+
+    console.log('[CONTEXT-DEBUG] Including user stories:', {
+      branchId,
+      totalStories: userStories.length,
+      relevantStories: relevantStories.length,
+      limited: limitedStories.length
+    })
+
+    return limitedStories
   }
 
   /**
@@ -649,6 +801,11 @@ export class PromptEditorComponent {
    * Derive user stories from the prompt before implementation
    */
   async deriveStories(content, state) {
+    console.log('[DERIVE-STORIES] Starting story derivation')
+    console.log('[DERIVE-STORIES] Content:', content?.substring(0, 100))
+    console.log('[DERIVE-STORIES] window.puffin:', !!window.puffin)
+    console.log('[DERIVE-STORIES] window.puffin.claude.deriveStories:', !!window.puffin?.claude?.deriveStories)
+
     // Dispatch action to show derivation is in progress
     this.intents.deriveUserStories({
       branchId: state.history.activeBranch,
@@ -661,6 +818,7 @@ export class PromptEditorComponent {
 
     // Call the IPC to derive stories
     if (window.puffin && window.puffin.claude.deriveStories) {
+      console.log('[DERIVE-STORIES] Calling IPC deriveStories...')
       window.puffin.claude.deriveStories({
         prompt: content,
         branchId: state.history.activeBranch,
@@ -669,6 +827,9 @@ export class PromptEditorComponent {
           description: state.config.description
         } : null
       })
+      console.log('[DERIVE-STORIES] IPC call sent')
+    } else {
+      console.error('[DERIVE-STORIES] IPC not available!')
     }
   }
 

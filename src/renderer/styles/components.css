@@ -129,6 +129,191 @@
   font-size: 0.8125rem;
 }
 
+/* Story Thread Items */
+.history-item.story-thread {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-xs);
+  margin: 0.125rem 0;
+}
+
+.history-item.story-thread .preview {
+  font-weight: 500;
+}
+
+.history-item.derivation {
+  opacity: 0.8;
+}
+
+.history-item.derivation .preview {
+  font-style: italic;
+}
+
+.status-dot {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.derivation-marker {
+  font-size: 0.875rem;
+}
+
+/* Story status colors */
+.history-item.story-thread.selected {
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.history-item .story-title {
+  color: var(--text-primary);
+}
+
+/* Story Thread Detail View */
+.story-thread-view {
+  padding: 1.5rem;
+}
+
+.story-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.story-status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.story-status-badge.status-pending {
+  background: var(--warning-color);
+  color: #000;
+}
+
+.story-status-badge.status-planning,
+.story-status-badge.status-implementing {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.story-status-badge.status-planned {
+  background: #f97316;
+  color: white;
+}
+
+.story-status-badge.status-completed {
+  background: var(--success-color);
+  color: white;
+}
+
+.story-status-badge.status-failed {
+  background: var(--error-color);
+  color: white;
+}
+
+.story-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.story-section {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.story-section:last-of-type {
+  border-bottom: none;
+}
+
+.story-section h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.story-section p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.acceptance-criteria {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-secondary);
+}
+
+.acceptance-criteria li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.plan-content {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  border-left: 3px solid var(--accent-primary);
+}
+
+.plan-pending {
+  color: var(--text-muted);
+}
+
+.implementation-section .response-text {
+  border-left-color: var(--success-color);
+}
+
+.implementation-section.streaming .response-text {
+  border-left-color: var(--accent-primary);
+}
+
+.story-actions {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.story-prompt-area textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  resize: vertical;
+}
+
+.story-prompt-area textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.story-complete-msg {
+  color: var(--success-color);
+  font-weight: 500;
+  margin: 0;
+}
+
 /* Branch Tabs */
 .branch-tabs {
   display: flex;
@@ -269,6 +454,86 @@
 
 .conversation-turn.streaming .response-text {
   border-left-color: var(--accent-primary);
+}
+
+/* Context Window Indicators */
+.conversation-turn.out-of-context {
+  opacity: 0.5;
+  position: relative;
+}
+
+.conversation-turn.out-of-context::before {
+  content: '';
+  position: absolute;
+  left: -1rem;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.conversation-turn.in-context {
+  opacity: 1;
+}
+
+.conversation-turn.active-prompt {
+  background: var(--bg-secondary);
+  margin-left: -1rem;
+  margin-right: -1rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  border-radius: var(--radius-sm);
+}
+
+.conversation-turn.active-prompt .user-message p {
+  border-left-color: var(--success-color);
+}
+
+.conversation-turn[data-prompt-id] {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.conversation-turn[data-prompt-id]:hover {
+  background: var(--bg-tertiary);
+  margin-left: -0.5rem;
+  margin-right: -0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+/* Context Indicator Divider */
+.context-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.context-divider {
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.context-label {
+  white-space: nowrap;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-xs);
+}
+
+.context-indicator.context-start {
+  margin-top: 1.5rem;
+}
+
+.context-indicator.context-start .context-label {
+  background: var(--success-color);
+  color: white;
 }
 
 .response-content code {

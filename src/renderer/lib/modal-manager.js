@@ -40,13 +40,20 @@ export class ModalManager {
     const modalContent = document.getElementById('modal-content')
     const modalActions = document.getElementById('modal-actions')
 
+    // Helper to check if this render is still current
+    const isStale = () => renderToken && this._currentModalRender !== renderToken
+
+    // Skip clearing content for modals handled by their own components
+    // These components subscribe to state changes and manage their own rendering
+    if (modal.type === 'user-story-review') {
+      // Handled by UserStoryReviewModalComponent which subscribes to state changes
+      return
+    }
+
     // Immediately clear old content to prevent stale event handlers
     modalTitle.textContent = 'Loading...'
     modalContent.innerHTML = ''
     modalActions.innerHTML = ''
-
-    // Helper to check if this render is still current
-    const isStale = () => renderToken && this._currentModalRender !== renderToken
 
     switch (modal.type) {
       case 'save-gui-definition':
@@ -57,9 +64,6 @@ export class ModalManager {
         break
       case 'gui-export':
         // Handled by gui-designer component
-        break
-      case 'user-story-review':
-        // Handled by UserStoryReviewModalComponent which subscribes to state changes
         break
       case 'profile-view':
         await this.renderProfileView(modalTitle, modalContent, modalActions, isStale)

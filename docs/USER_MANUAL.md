@@ -295,18 +295,17 @@ Configure selected elements:
 
 ---
 
-### User Story Management
+### Backlog Management
 
-Create, organize, and track user stories with AI-powered derivation from specifications.
+Create, organize, and track user stories with AI-powered derivation from specifications. The Backlog view provides a Kanban-style workflow for managing your project's user stories.
 
-![User Stories](screenshots/user-stories.png)
-*Screenshot placeholder: User stories list with filters and story cards*
+![Backlog](screenshots/user-stories.png)
+*Screenshot placeholder: Backlog list with filters and story cards*
 
 #### Story Lifecycle
-Stories progress through a defined workflow:
-- **Pending** 🟡: Newly created, needs review
-- **Ready** 🔵: Approved and ready for implementation
-- **Implementing** 🟠: Currently being worked on
+Stories progress through a simplified three-state workflow:
+- **Pending** 🟡: In the backlog, ready to be implemented
+- **In Progress** 🟠: Currently being worked on by Claude
 - **Completed** 🟢: Implementation finished
 
 #### Story Properties
@@ -320,23 +319,33 @@ Each story contains:
 - **Timestamps**: Created and last updated times
 
 #### Story Operations
+
 **Create Stories:**
-- Manual creation via "Add Story" button
-- AI derivation from specification responses
-- Import from external sources
+- Manual creation via "+ Add Story" button
+- AI derivation from specification responses (using "Derive User Stories" checkbox)
 
 **Edit Stories:**
-- Modify title, description, and acceptance criteria
-- Change status and priority
-- Add notes and comments
+- Click the ✎ button to modify title, description, and acceptance criteria
+- Click status badge to cycle through statuses
+
+**Start Implementation:**
+- Select one or more pending stories using checkboxes
+- Click "Start Implementation" button in the action bar
+- Puffin generates a detailed implementation prompt with planning instructions
+- Stories are automatically marked as "In Progress"
+- Prompt is submitted to Claude in the Backend branch
+
+**Mark Complete:**
+- Click the ✓ button on in-progress stories to mark them as completed
+- Completed stories are moved out of the active workflow
 
 **Filter & Search:**
-- Filter by status (All, Pending, Ready, Implementing, Completed)
+- Filter by status (All, Pending, In Progress, Completed)
 - Filter by source branch
 - Search by title or content
 
 **Delete Stories:**
-- Remove unwanted or duplicate stories
+- Click the × button to remove stories
 - Confirmation dialog prevents accidental deletion
 
 ---
@@ -365,11 +374,11 @@ Review modal allows you to:
 - **Delete Unwanted**: Remove irrelevant or duplicate stories
 - **Request Changes**: Ask Claude to revise based on your feedback
 
-**Step 3: Implement**
-- Select ready stories and click "Implement Selected"
-- Generates focused implementation prompt
-- Stories are moved to main user story list
-- New conversation branch created for implementation
+**Step 3: Add to Backlog**
+- Mark stories as ready by clicking the checkbox
+- Click "Add to Backlog" to add approved stories
+- Stories appear in the Backlog view with "Pending" status
+- Original prompt is recorded in branch history
 
 #### Refinement Loop
 If stories need changes:
@@ -492,8 +501,8 @@ Main development workspace with prompt editor and responses
 #### 3. **Designer View** 🎨
 Visual GUI design tool
 
-#### 4. **User Stories View** 📋
-Story management and tracking
+#### 4. **Backlog View** 📋
+Story management, implementation, and tracking
 
 #### 5. **Architecture View** 🏗️
 Architecture documentation editor
@@ -570,20 +579,21 @@ For projects using user story methodology:
 
 1. **Story Creation**
    - Submit product requirements to Specifications branch
-   - Enable "Derive User Stories" option
+   - Enable "Derive User Stories" checkbox
    - Review AI-extracted stories in modal
-   - Mark relevant stories as "Ready"
+   - Mark relevant stories as ready and add to backlog
 
 2. **Story Implementation**
-   - Select ready stories for implementation
-   - Generate implementation prompt automatically
-   - Monitor progress in User Stories view
-   - Update story status as work progresses
+   - Go to Backlog view
+   - Select pending stories using checkboxes
+   - Click "Start Implementation" to generate implementation prompt
+   - Claude receives a detailed prompt with planning instructions
+   - Stories automatically move to "In Progress" status
 
 3. **Story Completion**
-   - Mark stories as "Completed" when done
-   - Review acceptance criteria
-   - Document any deviations or changes
+   - Click the ✓ button on in-progress stories when done
+   - Stories move to "Completed" status
+   - Filter by status to review completed work
 
 ### GUI-First Design Workflow
 
@@ -853,10 +863,12 @@ Puffin uses Electron with modern web technologies:
 ## Glossary
 
 **3CLI**: Claude Code CLI, the command-line interface for Claude
+**Backlog**: Collection of user stories waiting to be implemented
 **Branch**: Organized conversation topic in Puffin
 **GUI Definition**: Saved visual design that can be reused
 **SAM Pattern**: State-Action-Model architecture pattern used by Puffin
 **Session ID**: Unique identifier for conversation continuity with Claude
+**Start Implementation**: Action that generates an implementation prompt for selected stories
 **Tool Execution**: When Claude uses tools like file reading, writing, or bash commands
 **User Story**: Structured requirement describing user needs and acceptance criteria
 

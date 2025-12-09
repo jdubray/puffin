@@ -703,3 +703,33 @@ export const loadDeveloperProfile = (profile) => ({
     timestamp: Date.now()
   }
 })
+
+/**
+ * Thread Expansion/Collapse Actions
+ */
+
+// Toggle thread expansion (expand if collapsed, collapse if expanded)
+export const toggleThreadExpanded = (promptId) => ({
+  type: 'TOGGLE_THREAD_EXPANDED',
+  payload: {
+    promptId
+  }
+})
+
+// Mark a thread as complete
+export const markThreadComplete = (promptId) => ({
+  type: 'MARK_THREAD_COMPLETE',
+  payload: {
+    promptId,
+    timestamp: Date.now()
+  }
+})
+
+// Unmark a thread as complete (set back to in-progress)
+export const unmarkThreadComplete = (promptId) => ({
+  type: 'UNMARK_THREAD_COMPLETE',
+  payload: {
+    promptId,
+    timestamp: Date.now()
+  }
+})

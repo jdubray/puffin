@@ -76,7 +76,8 @@ export const initialModel = {
       tmp: { id: 'tmp', name: 'Tmp', prompts: [] }
     },
     activeBranch: 'specifications',
-    activePromptId: null
+    activePromptId: null,
+    expandedThreads: {} // Track which threads are expanded: { promptId: true }
   },
 
   // GUI Designer state
@@ -517,6 +518,62 @@ export const deleteBranchAcceptor = model => proposal => {
 export const selectPromptAcceptor = model => proposal => {
   if (proposal?.type === 'SELECT_PROMPT') {
     model.history.activePromptId = proposal.payload.promptId
+    // Navigate to prompt view when selecting a prompt/thread
+    model.currentView = 'prompt'
+  }
+}
+
+/**
+ * Thread Expansion/Collapse Acceptors
+ */
+
+export const toggleThreadExpandedAcceptor = model => proposal => {
+  if (proposal?.type === 'TOGGLE_THREAD_EXPANDED') {
+    const { promptId } = proposal.payload
+    // Initialize expandedThreads if not present
+    if (!model.history.expandedThreads) {
+      model.history.expandedThreads = {}
+    }
+    // Toggle the expanded state
+    model.history.expandedThreads[promptId] = !model.history.expandedThreads[promptId]
+  }
+}
+
+export const markThreadCompleteAcceptor = model => proposal => {
+  if (proposal?.type === 'MARK_THREAD_COMPLETE') {
+    const { promptId } = proposal.payload
+    // Find the prompt in any branch and mark it complete
+    for (const branch of Object.values(model.history.branches)) {
+      const prompt = branch.prompts.find(p => p.id === promptId)
+      if (prompt) {
+        prompt.isComplete = true
+        prompt.completedAt = proposal.payload.timestamp
+        // If it's a story thread, also update its status
+        if (prompt.type === 'story-thread') {
+          prompt.status = 'completed'
+        }
+        break
+      }
+    }
+  }
+}
+
+export const unmarkThreadCompleteAcceptor = model => proposal => {
+  if (proposal?.type === 'UNMARK_THREAD_COMPLETE') {
+    const { promptId } = proposal.payload
+    // Find the prompt in any branch and unmark it
+    for (const branch of Object.values(model.history.branches)) {
+      const prompt = branch.prompts.find(p => p.id === promptId)
+      if (prompt) {
+        prompt.isComplete = false
+        prompt.completedAt = null
+        // If it's a story thread, set status back to implementing
+        if (prompt.type === 'story-thread') {
+          prompt.status = 'implementing'
+        }
+        break
+      }
+    }
   }
 }
 
@@ -1297,6 +1354,9 @@ export const acceptors = [
   createBranchAcceptor,
   deleteBranchAcceptor,
   selectPromptAcceptor,
+  toggleThreadExpandedAcceptor,
+  markThreadCompleteAcceptor,
+  unmarkThreadCompleteAcceptor,
 
   // GUI Designer
   addGuiElementAcceptor,

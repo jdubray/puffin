@@ -2334,3 +2334,114 @@
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
 }
+
+/* Thread Expand/Collapse Styles */
+.history-item .expand-indicator {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-radius: var(--radius-xs);
+}
+
+.history-item .expand-indicator:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.history-item.has-children .expand-indicator {
+  color: var(--accent-primary);
+}
+
+.history-item .expand-indicator-spacer {
+  width: 1rem;
+  flex-shrink: 0;
+}
+
+/* Expanded thread styling */
+.history-item.has-children.expanded {
+  background: var(--bg-secondary);
+  border-left: 2px solid var(--accent-primary);
+  margin-left: -2px;
+}
+
+.history-item.has-children.expanded .expand-indicator {
+  color: var(--accent-primary);
+}
+
+/* Complete indicator */
+.history-item .complete-indicator {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: var(--success-color);
+  background: rgba(16, 185, 129, 0.15);
+  border-radius: 50%;
+  margin-left: auto;
+}
+
+/* Completed thread styling */
+.history-item.complete {
+  opacity: 0.7;
+}
+
+.history-item.complete:hover {
+  opacity: 1;
+}
+
+.history-item.complete .preview {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
+}
+
+.history-item.complete.story-thread .story-title {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
+}
+
+/* History Context Menu */
+.history-context-menu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  min-width: 160px;
+  padding: 0.25rem 0;
+  animation: context-menu-in 0.1s ease;
+}
+
+@keyframes context-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.context-menu-item {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}

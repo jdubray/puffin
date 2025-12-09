@@ -150,6 +150,7 @@ class PuffinApp {
       'receiveResponseChunk', 'completeResponse', 'responseError', 'cancelPrompt',
       'rerunPrompt', 'clearRerunRequest',
       'selectBranch', 'createBranch', 'deleteBranch', 'selectPrompt',
+      'toggleThreadExpanded', 'markThreadComplete', 'unmarkThreadComplete',
       'addGuiElement', 'updateGuiElement', 'deleteGuiElement',
       'moveGuiElement', 'resizeGuiElement', 'selectGuiElement',
       'clearGuiCanvas', 'exportGuiDescription',
@@ -200,6 +201,11 @@ class PuffinApp {
           ['CREATE_BRANCH', actions.createBranch],
           ['DELETE_BRANCH', actions.deleteBranch],
           ['SELECT_PROMPT', actions.selectPrompt],
+
+          // Thread expansion/collapse actions
+          ['TOGGLE_THREAD_EXPANDED', actions.toggleThreadExpanded],
+          ['MARK_THREAD_COMPLETE', actions.markThreadComplete],
+          ['UNMARK_THREAD_COMPLETE', actions.unmarkThreadComplete],
 
           // GUI Designer actions
           ['ADD_GUI_ELEMENT', actions.addGuiElement],

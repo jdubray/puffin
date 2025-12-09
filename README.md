@@ -200,13 +200,15 @@ Visual GUI designer with:
 - Property inspector for selected elements
 - Export to Claude-readable description
 
-### User Stories View
-Comprehensive user story management interface with:
+### Backlog View
+Comprehensive user story management interface with Kanban-style workflow:
 - Full CRUD operations for user stories (create, edit, delete)
-- Status tracking from pending to completed
+- Status tracking: Pending → In Progress → Completed
 - Story derivation from specifications using Claude
 - Interactive review workflow for derived stories
-- Implementation prompt generation for approved stories
+- **Batch selection**: Select multiple pending stories with checkboxes
+- **Start Implementation**: Generate implementation prompts for selected stories with automatic planning
+- **Mark Complete**: One-click completion for in-progress stories
 
 ### Architecture View
 Markdown editor for documenting your system architecture, with "Review with Claude" for AI feedback.
@@ -219,18 +221,20 @@ Real-time streaming of Claude Code's output:
 
 ## Latest Features
 
-### User Stories Management
+### Backlog Management
 Comprehensive user story lifecycle management with intelligent Claude integration:
 - **CRUD Operations**: Create, read, update, and delete user stories with full persistence
-- **Status Tracking**: Monitor story progress from pending → ready → implementing → completed
+- **Status Tracking**: Monitor story progress from Pending → In Progress → Completed
 - **Source Linking**: Connect stories to their originating prompts for full traceability
+- **Batch Operations**: Select multiple stories for bulk implementation
 
 ### Story Derivation Workflow
 Advanced workflow for extracting and implementing user stories:
 1. **Derive**: Submit specifications to Claude for automatic user story extraction
 2. **Review**: Interactive review interface to refine, edit, or discard proposed stories
-3. **Implement**: Generate targeted implementation prompts for approved stories
-4. **Iterate**: Request changes and refinements from Claude based on feedback
+3. **Add to Backlog**: Approved stories are added to the backlog for tracking
+4. **Start Implementation**: Select stories and generate implementation prompts with planning instructions
+5. **Mark Complete**: Close stories when implementation is finished
 
 ### Real-time Activity Tracking
 Enhanced transparency during prompt execution:

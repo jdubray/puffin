@@ -101,41 +101,73 @@ export class HistoryTreeComponent {
     promptTree.forEach(prompt => {
       const item = document.createElement('div')
 
-      // Build class list based on prompt type
+      // Build class list based on prompt type and state
       let classes = ['history-item']
       if (prompt.isSelected) classes.push('selected')
       if (prompt.isStoryThread) classes.push('story-thread')
       if (prompt.isDerivation) classes.push('derivation')
+      if (prompt.hasChildren) classes.push('has-children')
+      if (prompt.isExpanded) classes.push('expanded')
+      if (prompt.isComplete) classes.push('complete')
 
       item.className = classes.join(' ')
       item.style.setProperty('--depth', prompt.depth)
       item.dataset.promptId = prompt.id
+
+      // Build the expand/collapse indicator for items with children
+      const expandIndicator = prompt.hasChildren
+        ? `<span class="expand-indicator">${prompt.isExpanded ? '▼' : '▶'}</span>`
+        : `<span class="expand-indicator-spacer"></span>`
+
+      // Complete indicator for completed threads
+      const completeIndicator = prompt.isComplete ? `<span class="complete-indicator" title="Completed">✓</span>` : ''
 
       // Different rendering for story threads vs regular prompts
       if (prompt.isStoryThread) {
         const statusClass = this.getStoryStatusClass(prompt.storyStatus)
         const statusIcon = this.getStoryStatusIcon(prompt.storyStatus)
         item.innerHTML = `
+          ${expandIndicator}
           <span class="status-dot ${statusClass}" title="${prompt.storyStatus}">${statusIcon}</span>
           <span class="preview story-title">${this.escapeHtml(prompt.storyTitle || prompt.preview)}</span>
+          ${completeIndicator}
         `
       } else if (prompt.isDerivation) {
         item.innerHTML = `
+          ${expandIndicator}
           <span class="status derivation-marker">📋</span>
           <span class="preview">${this.escapeHtml(prompt.preview)}</span>
+          ${completeIndicator}
         `
       } else {
         item.innerHTML = `
+          ${expandIndicator}
           <span class="status ${prompt.hasResponse ? 'has-response' : ''}"></span>
           <span class="preview">${this.escapeHtml(prompt.preview)}</span>
+          ${completeIndicator}
           <button class="history-rerun-btn" title="Rerun this prompt">↻</button>
         `
       }
 
-      // Click on item to select
+      // Click on expand indicator to toggle expansion
+      const expandBtn = item.querySelector('.expand-indicator')
+      if (expandBtn && prompt.hasChildren) {
+        expandBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          this.intents.toggleThreadExpanded(prompt.id)
+        })
+      }
+
+      // Click on item to select (and expand if collapsed with children)
       item.addEventListener('click', (e) => {
-        // Don't select if clicking the rerun button
+        // Don't select if clicking the rerun button or expand indicator
         if (e.target.classList.contains('history-rerun-btn')) return
+        if (e.target.classList.contains('expand-indicator')) return
+
+        // If has children and collapsed, expand it. Otherwise select.
+        if (prompt.hasChildren && !prompt.isExpanded) {
+          this.intents.toggleThreadExpanded(prompt.id)
+        }
         this.intents.selectPrompt(prompt.id)
       })
 
@@ -148,7 +180,7 @@ export class HistoryTreeComponent {
         })
       }
 
-      // Right-click to add child prompt
+      // Right-click to show context menu (including mark complete option)
       item.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         this.showPromptContextMenu(e, prompt)
@@ -279,11 +311,74 @@ export class HistoryTreeComponent {
    * Show prompt context menu
    */
   showPromptContextMenu(e, prompt) {
-    // For now, selecting a prompt to reply to it
-    this.intents.selectPrompt(prompt.id)
+    // Remove any existing context menu
+    const existingMenu = document.querySelector('.history-context-menu')
+    if (existingMenu) {
+      existingMenu.remove()
+    }
 
-    // Show a small menu or just set the prompt as parent for next submission
-    // This could be expanded to a proper context menu
+    // Create context menu
+    const menu = document.createElement('div')
+    menu.className = 'history-context-menu'
+    menu.style.left = `${e.clientX}px`
+    menu.style.top = `${e.clientY}px`
+
+    // Build menu items
+    const menuItems = []
+
+    // Reply option
+    menuItems.push({
+      label: 'Reply to this prompt',
+      action: () => this.intents.selectPrompt(prompt.id)
+    })
+
+    // Mark complete/uncomplete option
+    if (prompt.isComplete) {
+      menuItems.push({
+        label: 'Mark as in progress',
+        action: () => this.intents.unmarkThreadComplete(prompt.id)
+      })
+    } else {
+      menuItems.push({
+        label: 'Mark as complete',
+        action: () => this.intents.markThreadComplete(prompt.id)
+      })
+    }
+
+    // Toggle expansion for items with children
+    if (prompt.hasChildren) {
+      menuItems.push({
+        label: prompt.isExpanded ? 'Collapse thread' : 'Expand thread',
+        action: () => this.intents.toggleThreadExpanded(prompt.id)
+      })
+    }
+
+    // Render menu items
+    menu.innerHTML = menuItems.map(item =>
+      `<div class="context-menu-item">${item.label}</div>`
+    ).join('')
+
+    // Add click handlers
+    const menuItemEls = menu.querySelectorAll('.context-menu-item')
+    menuItemEls.forEach((el, i) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation()
+        menuItems[i].action()
+        menu.remove()
+      })
+    })
+
+    // Add to document
+    document.body.appendChild(menu)
+
+    // Close on click outside
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove()
+        document.removeEventListener('click', closeHandler)
+      }
+    }
+    setTimeout(() => document.addEventListener('click', closeHandler), 0)
   }
 
   /**

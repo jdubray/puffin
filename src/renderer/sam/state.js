@@ -112,7 +112,7 @@ function computePromptState(model) {
  * History state computation
  */
 function computeHistoryState(model) {
-  const { branches, activeBranch, activePromptId } = model.history
+  const { branches, activeBranch, activePromptId, expandedThreads } = model.history
 
   console.log('[SAM-DEBUG] computeHistoryState - activeBranch:', activeBranch, 'activePromptId:', activePromptId)
 
@@ -129,6 +129,16 @@ function computeHistoryState(model) {
   const activeBranchData = branches[activeBranch]
   const promptTree = activeBranchData ? flattenPromptTree(activeBranchData) : []
 
+  // Create a map of parent IDs to check which prompts have children
+  const parentIds = new Set()
+  if (activeBranchData) {
+    activeBranchData.prompts.forEach(p => {
+      if (p.parentId) {
+        parentIds.add(p.parentId)
+      }
+    })
+  }
+
   // Get selected prompt details
   let selectedPrompt = null
   if (activePromptId && activeBranchData) {
@@ -143,6 +153,48 @@ function computeHistoryState(model) {
     console.log('[SAM-DEBUG] computeHistoryState - no selectedPrompt (activePromptId:', activePromptId, ', activeBranchData:', !!activeBranchData, ')')
   }
 
+  // Build set of expanded parent IDs to determine which children to show
+  const expandedSet = new Set(
+    Object.entries(expandedThreads || {})
+      .filter(([_, isExpanded]) => isExpanded)
+      .map(([id, _]) => id)
+  )
+
+  // Map prompts with expansion info
+  const mappedPrompts = promptTree.map(p => ({
+    ...p,
+    preview: truncate(p.type === 'story-thread' ? `📖 ${p.title}` : p.content, 50),
+    hasResponse: !!p.response,
+    isSelected: p.id === activePromptId,
+    // Story thread specific fields
+    isStoryThread: p.type === 'story-thread',
+    isDerivation: p.type === 'derivation',
+    storyStatus: p.type === 'story-thread' ? p.status : null,
+    storyTitle: p.type === 'story-thread' ? p.title : null,
+    // Thread expansion state
+    hasChildren: parentIds.has(p.id),
+    isExpanded: expandedSet.has(p.id),
+    isComplete: p.isComplete || false,
+    completedAt: p.completedAt || null
+  }))
+
+  // Filter out children of collapsed threads
+  const visiblePrompts = mappedPrompts.filter(p => {
+    // Root level prompts (no parent) are always visible
+    if (!p.parentId) return true
+    // Check if all ancestors are expanded
+    let currentParentId = p.parentId
+    while (currentParentId) {
+      if (!expandedSet.has(currentParentId)) {
+        return false // Parent is collapsed, hide this prompt
+      }
+      // Find the parent prompt to check its parent
+      const parent = mappedPrompts.find(mp => mp.id === currentParentId)
+      currentParentId = parent?.parentId || null
+    }
+    return true
+  })
+
   const result = {
     branches: branchList,
     // Keep full raw history for persistence
@@ -153,17 +205,8 @@ function computeHistoryState(model) {
     },
     activeBranch,
     activePromptId,
-    promptTree: promptTree.map(p => ({
-      ...p,
-      preview: truncate(p.type === 'story-thread' ? `📖 ${p.title}` : p.content, 50),
-      hasResponse: !!p.response,
-      isSelected: p.id === activePromptId,
-      // Story thread specific fields
-      isStoryThread: p.type === 'story-thread',
-      isDerivation: p.type === 'derivation',
-      storyStatus: p.type === 'story-thread' ? p.status : null,
-      storyTitle: p.type === 'story-thread' ? p.title : null
-    })),
+    expandedThreads: expandedThreads || {},
+    promptTree: visiblePrompts,
     selectedPrompt: selectedPrompt ? {
       id: selectedPrompt.id,
       type: selectedPrompt.type || 'prompt',

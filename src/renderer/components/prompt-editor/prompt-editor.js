@@ -409,6 +409,12 @@ export class PromptEditorComponent {
     const state = window.puffinApp?.state
     if (!state) return
 
+    // Check if we should derive user stories first
+    if (this.deriveUserStories) {
+      this.deriveStories(content, state)
+      return
+    }
+
     // Build submission data with no parent (new thread)
     const data = {
       branchId: state.history.activeBranch,

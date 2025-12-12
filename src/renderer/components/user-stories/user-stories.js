@@ -121,10 +121,59 @@ export class UserStoriesComponent {
       return
     }
 
-    this.listContainer.innerHTML = filtered.map(story => this.renderStoryCard(story)).join('')
+    // Separate active and archived stories
+    const activeStories = filtered.filter(s => s.status !== 'archived')
+    const archivedStories = filtered.filter(s => s.status === 'archived')
+
+    let html = ''
+
+    // Render active stories
+    if (activeStories.length > 0) {
+      html += activeStories.map(story => this.renderStoryCard(story)).join('')
+    } else if (archivedStories.length > 0) {
+      html += '<p class="placeholder">No active stories. All stories are archived.</p>'
+    }
+
+    // Render archived stories in collapsible section
+    if (archivedStories.length > 0) {
+      html += `
+        <div class="archived-stories-section">
+          <button class="archived-stories-toggle" aria-expanded="false">
+            <span class="toggle-icon">▶</span>
+            Archived Stories (${archivedStories.length})
+          </button>
+          <div class="archived-stories-list collapsed">
+            ${archivedStories.map(story => this.renderStoryCard(story)).join('')}
+          </div>
+        </div>
+      `
+    }
+
+    this.listContainer.innerHTML = html
 
     // Bind card events
     this.bindCardEvents()
+
+    // Bind archived section toggle
+    this.bindArchivedToggle()
+  }
+
+  /**
+   * Bind toggle event for archived stories section
+   */
+  bindArchivedToggle() {
+    const toggle = this.listContainer.querySelector('.archived-stories-toggle')
+    if (!toggle) return
+
+    toggle.addEventListener('click', () => {
+      const list = this.listContainer.querySelector('.archived-stories-list')
+      const icon = toggle.querySelector('.toggle-icon')
+      const isExpanded = toggle.getAttribute('aria-expanded') === 'true'
+
+      toggle.setAttribute('aria-expanded', !isExpanded)
+      list.classList.toggle('collapsed', isExpanded)
+      icon.textContent = isExpanded ? '▶' : '▼'
+    })
   }
 
   /**
@@ -185,6 +234,9 @@ export class UserStoriesComponent {
     const isSelected = this.selectedStoryIds.has(story.id)
     const canImplement = story.status === 'pending' // Only pending stories can be started
     const canComplete = story.status === 'in-progress' // Only in-progress stories can be completed
+    const canReopen = story.status === 'completed' || story.status === 'archived' // Completed/archived stories can be reopened
+    const canArchive = story.status === 'completed' // Completed stories can be archived manually
+    const isArchived = story.status === 'archived'
 
     return `
       <div class="story-card ${statusClass}${isSelected ? ' selected' : ''}" data-story-id="${story.id}">
@@ -197,7 +249,9 @@ export class UserStoriesComponent {
           <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
           <div class="story-actions">
             ${canComplete ? `<button class="story-action-btn complete-btn" title="Mark as completed">✓</button>` : ''}
-            <button class="story-action-btn edit-btn" title="Edit story">✎</button>
+            ${canArchive ? `<button class="story-action-btn archive-btn" title="Archive story">⌫</button>` : ''}
+            ${canReopen ? `<button class="story-action-btn reopen-btn" title="Reopen story">↺</button>` : ''}
+            ${!isArchived ? `<button class="story-action-btn edit-btn" title="Edit story">✎</button>` : ''}
             <button class="story-action-btn delete-btn" title="Delete story">×</button>
           </div>
         </div>
@@ -267,6 +321,24 @@ export class UserStoriesComponent {
         const card = e.target.closest('.story-card')
         const storyId = card.dataset.storyId
         this.markStoryCompleted(storyId)
+      })
+    })
+
+    // Reopen button (mark completed/archived story as pending)
+    this.listContainer.querySelectorAll('.reopen-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const card = e.target.closest('.story-card')
+        const storyId = card.dataset.storyId
+        this.reopenStory(storyId)
+      })
+    })
+
+    // Archive button (mark completed story as archived)
+    this.listContainer.querySelectorAll('.archive-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const card = e.target.closest('.story-card')
+        const storyId = card.dataset.storyId
+        this.archiveStory(storyId)
       })
     })
 
@@ -369,7 +441,7 @@ export class UserStoriesComponent {
     const story = this.stories.find(s => s.id === storyId)
     if (!story) return
 
-    const statusOrder = ['pending', 'in-progress', 'completed']
+    const statusOrder = ['pending', 'in-progress', 'completed', 'archived']
     const currentIndex = statusOrder.indexOf(story.status)
     const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length]
 
@@ -415,6 +487,20 @@ export class UserStoriesComponent {
   }
 
   /**
+   * Reopen a completed/archived story (set back to pending)
+   */
+  reopenStory(storyId) {
+    this.intents.updateUserStory(storyId, { status: 'pending' })
+  }
+
+  /**
+   * Archive a completed story
+   */
+  archiveStory(storyId) {
+    this.intents.updateUserStory(storyId, { status: 'archived' })
+  }
+
+  /**
    * Delete a story
    */
   deleteStory(storyId) {
@@ -430,7 +516,8 @@ export class UserStoriesComponent {
     const statusMap = {
       'pending': 'Pending',
       'in-progress': 'In Progress',
-      'completed': 'Completed'
+      'completed': 'Completed',
+      'archived': 'Archived'
     }
     return statusMap[status] || status
   }

@@ -58,7 +58,36 @@ class PuffinState {
     this.userStories = await this.loadUserStories()
     this.uiGuidelines = await this.loadUiGuidelines()
 
+    // Auto-archive completed stories older than 2 weeks
+    await this.autoArchiveOldStories()
+
     return this.getState()
+  }
+
+  /**
+   * Auto-archive completed stories that are older than 2 weeks
+   * @private
+   */
+  async autoArchiveOldStories() {
+    const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000
+    const now = Date.now()
+    let archiveCount = 0
+
+    for (const story of this.userStories) {
+      if (story.status === 'completed' && story.updatedAt) {
+        const updatedAt = new Date(story.updatedAt).getTime()
+        if (now - updatedAt > TWO_WEEKS_MS) {
+          story.status = 'archived'
+          story.archivedAt = new Date().toISOString()
+          archiveCount++
+        }
+      }
+    }
+
+    if (archiveCount > 0) {
+      console.log(`[PUFFIN-STATE] Auto-archived ${archiveCount} completed stories older than 2 weeks`)
+      await this.saveUserStories()
+    }
   }
 
   /**
@@ -171,11 +200,12 @@ class PuffinState {
   async addUserStory(story) {
     const newStory = {
       id: story.id || this.generateId(),
-      branchId: story.branchId || null, // Branch context for the story
+      branchId: story.branchId || null, // Branch where story was derived from
       title: story.title,
       description: story.description || '',
       acceptanceCriteria: story.acceptanceCriteria || [],
       status: story.status || 'pending',
+      implementedOn: story.implementedOn || [], // Branches where this story has been implemented
       sourcePromptId: story.sourcePromptId || null,
       createdAt: story.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()

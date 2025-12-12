@@ -77,6 +77,13 @@ export class StatePersistence {
         await window.puffin.state.updateHistory(state.history.raw)
         console.log('[PERSIST-DEBUG] History persisted successfully')
 
+        // When switching branches, activate the branch-specific CLAUDE.md
+        if (normalizedType === 'SELECT_BRANCH') {
+          const activeBranch = state.history.activeBranch
+          console.log('[PERSIST-DEBUG] Activating CLAUDE.md for branch:', activeBranch)
+          await window.puffin.state.activateBranch(activeBranch)
+        }
+
         // NOTE: Auto-extraction of user stories is disabled.
         // Use the explicit "Derive User Stories" checkbox instead, which provides
         // better control and a review modal before adding stories.
@@ -138,11 +145,11 @@ export class StatePersistence {
         // Check if there's a pending implementation to submit
         const pendingImpl = state._pendingImplementation
         if (pendingImpl) {
-          console.log('[IMPLEMENT] Submitting implementation prompt to Claude')
+          console.log('[IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingImpl.branchId)
 
-          // Get session ID from last successful prompt in backend branch
-          const backendBranch = state.history.raw?.branches?.backend
-          const lastPromptWithResponse = backendBranch?.prompts
+          // Get session ID from last successful prompt in the target branch
+          const targetBranch = state.history.raw?.branches?.[pendingImpl.branchId]
+          const lastPromptWithResponse = targetBranch?.prompts
             ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
             ?.pop()
           const sessionId = lastPromptWithResponse?.response?.sessionId || null

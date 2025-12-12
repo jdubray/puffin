@@ -890,9 +890,22 @@ ${prompt}`
         '-'
       ]
 
+      console.log('[STORY-DERIVATION] Spawning claude with args:', args.join(' '))
+      console.log('[STORY-DERIVATION] Working directory:', cwd)
+      console.log('[STORY-DERIVATION] Prompt length being sent:', fullPrompt.length)
+
       const spawnOptions = this.getSpawnOptions(cwd)
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
+
+      console.log('[STORY-DERIVATION] Spawn options shell:', spawnOptions.shell)
+
       const proc = spawn('claude', args, spawnOptions)
+
+      if (!proc.pid) {
+        console.error('[STORY-DERIVATION] Failed to spawn process - no PID')
+      } else {
+        console.log('[STORY-DERIVATION] Process spawned with PID:', proc.pid)
+      }
 
       let buffer = ''
       let resultText = ''
@@ -900,6 +913,9 @@ ${prompt}`
 
       proc.stdin.write(fullPrompt)
       proc.stdin.end()
+      console.log('[STORY-DERIVATION] Prompt written to stdin')
+
+      let stderrBuffer = ''
 
       proc.stdout.on('data', (chunk) => {
         buffer += chunk.toString()
@@ -911,27 +927,67 @@ ${prompt}`
           try {
             const json = JSON.parse(line)
             allMessages.push(json)
+            console.log('[STORY-DERIVATION] Received JSON type:', json.type)
 
-            if (json.type === 'assistant' && json.message?.content) {
-              for (const block of json.message.content) {
-                if (block.type === 'text') {
-                  resultText += block.text
+            if (json.type === 'assistant') {
+              // Log the structure to understand what we're getting
+              console.log('[STORY-DERIVATION] Assistant message keys:', Object.keys(json).join(', '))
+              if (json.message) {
+                console.log('[STORY-DERIVATION] message keys:', Object.keys(json.message).join(', '))
+                if (json.message.content) {
+                  console.log('[STORY-DERIVATION] content length:', json.message.content.length)
+                  for (const block of json.message.content) {
+                    console.log('[STORY-DERIVATION] block type:', block.type)
+                    if (block.type === 'text') {
+                      console.log('[STORY-DERIVATION] Found text block, length:', block.text?.length)
+                      resultText += block.text
+                    }
+                  }
+                }
+              }
+              // Check alternate structure: json.content directly
+              if (json.content && Array.isArray(json.content)) {
+                for (const block of json.content) {
+                  if (block.type === 'text') {
+                    console.log('[STORY-DERIVATION] Found text in json.content, length:', block.text?.length)
+                    resultText += block.text
+                  }
                 }
               }
             }
 
+            // Also check for content_block_delta (streaming format)
+            if (json.type === 'content_block_delta' && json.delta?.text) {
+              resultText += json.delta.text
+            }
+
             if (json.type === 'result' && json.result) {
+              console.log('[STORY-DERIVATION] Found result, length:', json.result?.length)
               resultText = json.result
             }
           } catch (e) {
-            // Expected: Claude CLI outputs mixed JSON and non-JSON lines during streaming.
-            // Non-JSON lines (progress indicators, etc.) are safely skipped.
+            // Non-JSON line - could be plain text output
+            console.log('[STORY-DERIVATION] Non-JSON line:', line.substring(0, 100))
+            // If we're not getting JSON, maybe it's plain text output
+            if (!line.startsWith('{') && !line.startsWith('[')) {
+              resultText += line + '\n'
+            }
           }
         }
       })
 
+      proc.stderr.on('data', (chunk) => {
+        stderrBuffer += chunk.toString()
+        console.log('[STORY-DERIVATION] stderr:', chunk.toString())
+      })
+
       proc.on('close', (code) => {
         console.log('[STORY-DERIVATION] Process closed with code:', code)
+        console.log('[STORY-DERIVATION] Total JSON messages received:', allMessages.length)
+        console.log('[STORY-DERIVATION] Message types:', allMessages.map(m => m.type).join(', '))
+        if (stderrBuffer) {
+          console.log('[STORY-DERIVATION] Full stderr:', stderrBuffer)
+        }
 
         // Process remaining buffer
         if (buffer.trim()) {

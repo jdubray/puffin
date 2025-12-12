@@ -825,13 +825,16 @@ export const addStoriesToBacklogAcceptor = model => proposal => {
     )
 
     // Add each story to the backlog (userStories)
+    const sourceBranchId = model.storyDerivation.branchId || null
     selectedStories.forEach(story => {
       model.userStories.push({
         id: story.id,
+        branchId: sourceBranchId,
         title: story.title,
         description: story.description,
         acceptanceCriteria: story.acceptanceCriteria,
         status: 'pending',
+        implementedOn: [],
         createdAt: Date.now(),
         updatedAt: Date.now()
       })
@@ -902,6 +905,14 @@ export const cancelStoryReviewAcceptor = model => proposal => {
 
 export const storyDerivationErrorAcceptor = model => proposal => {
   if (proposal?.type === 'STORY_DERIVATION_ERROR') {
+    // Restore the original prompt so user doesn't lose their work
+    if (model.storyDerivation.originalPrompt) {
+      model.currentPrompt = {
+        content: model.storyDerivation.originalPrompt,
+        branchId: model.storyDerivation.branchId
+      }
+    }
+
     model.storyDerivation.status = 'idle'
     model.storyDerivation.error = proposal.payload.error
     model.appError = {
@@ -914,8 +925,9 @@ export const storyDerivationErrorAcceptor = model => proposal => {
 /**
  * Start implementation for selected stories
  * - Updates story status to 'in-progress'
- * - Creates a prompt in the backend branch for implementation
- * - Triggers Claude to plan and implement
+ * - Uses the currently active branch for implementation
+ * - Adds branch-specific context (UI guidelines for ui branch, architecture for others)
+ * - Tracks which branches have implemented each story
  */
 export const startStoryImplementationAcceptor = model => proposal => {
   if (proposal?.type === 'START_STORY_IMPLEMENTATION') {
@@ -923,12 +935,22 @@ export const startStoryImplementationAcceptor = model => proposal => {
 
     if (!stories || stories.length === 0) return
 
-    // Update story statuses to in-progress
+    // Use the currently active branch for implementation
+    const branchId = model.history.activeBranch || 'backend'
+
+    // Update story statuses to in-progress and track implementation branch
     stories.forEach(story => {
       const existingStory = model.userStories.find(s => s.id === story.id)
       if (existingStory) {
         existingStory.status = 'in-progress'
         existingStory.updatedAt = Date.now()
+        // Track which branches have implemented this story
+        if (!existingStory.implementedOn) {
+          existingStory.implementedOn = []
+        }
+        if (!existingStory.implementedOn.includes(branchId)) {
+          existingStory.implementedOn.push(branchId)
+        }
       }
     })
 
@@ -945,10 +967,20 @@ export const startStoryImplementationAcceptor = model => proposal => {
       return desc
     }).join('\n\n')
 
+    // Build branch-specific context
+    let branchContext = ''
+    if (branchId === 'ui') {
+      branchContext = buildUiBranchContext(model)
+    } else if (branchId === 'architecture') {
+      branchContext = buildArchitectureBranchContext(model)
+    } else if (branchId === 'backend') {
+      branchContext = buildBackendBranchContext(model)
+    }
+
     const promptContent = `Please implement the following user ${stories.length === 1 ? 'story' : 'stories'}:
 
 ${storyDescriptions}
-
+${branchContext}
 **Instructions:**
 1. First, think hard about the implementation approach and create a detailed plan
 2. Consider the existing codebase structure and patterns
@@ -958,14 +990,11 @@ ${storyDescriptions}
 
 Please start by outlining your implementation plan, then proceed with the implementation.`
 
-    // Use backend branch for implementation
-    const branchId = 'backend'
-
     // Ensure branch exists
     if (!model.history.branches[branchId]) {
       model.history.branches[branchId] = {
         id: branchId,
-        name: 'Backend',
+        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
         prompts: []
       }
     }
@@ -984,8 +1013,7 @@ Please start by outlining your implementation plan, then proceed with the implem
     // Add to branch
     model.history.branches[branchId].prompts.push(prompt)
 
-    // Switch to backend branch and select the new prompt
-    model.history.activeBranch = branchId
+    // Keep the active branch (don't switch)
     model.history.activePromptId = promptId
 
     // Set pending prompt for streaming
@@ -1003,6 +1031,98 @@ Please start by outlining your implementation plan, then proceed with the implem
       storyIds: stories.map(s => s.id)
     }
   }
+}
+
+/**
+ * Build UI branch context with design tokens and guidelines
+ */
+function buildUiBranchContext(model) {
+  const guidelines = model.uiGuidelines
+  if (!guidelines) return ''
+
+  let context = '\n**UI Implementation Context:**\n'
+  context += 'This is a UI-focused implementation. Please follow these guidelines:\n\n'
+
+  // Add design tokens if available
+  if (guidelines.designTokens) {
+    const tokens = guidelines.designTokens
+    if (tokens.colors && Object.keys(tokens.colors).length > 0) {
+      context += '**Color Tokens:**\n'
+      for (const [name, token] of Object.entries(tokens.colors)) {
+        context += `- ${name}: ${token.value}\n`
+      }
+      context += '\n'
+    }
+    if (tokens.fontFamilies && tokens.fontFamilies.length > 0) {
+      context += '**Font Families:**\n'
+      tokens.fontFamilies.forEach(f => {
+        context += `- ${f.name}: ${f.value}\n`
+      })
+      context += '\n'
+    }
+    if (tokens.spacing && tokens.spacing.length > 0) {
+      context += '**Spacing Scale:**\n'
+      tokens.spacing.forEach(s => {
+        context += `- ${s.name}: ${s.value}\n`
+      })
+      context += '\n'
+    }
+  }
+
+  // Add component patterns if available
+  if (guidelines.componentPatterns && guidelines.componentPatterns.length > 0) {
+    context += '**Existing Component Patterns:**\n'
+    guidelines.componentPatterns.forEach(p => {
+      context += `- ${p.name}: ${p.description || ''}\n`
+    })
+    context += '\n'
+  }
+
+  // Add general guidelines
+  if (guidelines.guidelines) {
+    const g = guidelines.guidelines
+    if (g.components) {
+      context += '**Component Guidelines:**\n' + g.components + '\n\n'
+    }
+    if (g.interactions) {
+      context += '**Interaction Guidelines:**\n' + g.interactions + '\n\n'
+    }
+  }
+
+  return context
+}
+
+/**
+ * Build architecture branch context
+ */
+function buildArchitectureBranchContext(model) {
+  let context = '\n**Architecture Implementation Context:**\n'
+  context += 'This is an architecture-focused implementation. Consider:\n'
+  context += '- System design and component boundaries\n'
+  context += '- Data flow and state management patterns\n'
+  context += '- API contracts and interfaces\n'
+  context += '- Scalability and maintainability\n\n'
+
+  if (model.architecture?.content) {
+    context += '**Current Architecture:**\n'
+    context += model.architecture.content.substring(0, 2000) + '\n\n'
+  }
+
+  return context
+}
+
+/**
+ * Build backend branch context
+ */
+function buildBackendBranchContext(model) {
+  let context = '\n**Backend Implementation Context:**\n'
+  context += 'This is a backend-focused implementation. Consider:\n'
+  context += '- API design and REST/GraphQL conventions\n'
+  context += '- Data persistence and database patterns\n'
+  context += '- Error handling and validation\n'
+  context += '- Security and authentication\n\n'
+
+  return context
 }
 
 /**

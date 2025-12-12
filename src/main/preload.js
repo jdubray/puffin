@@ -82,8 +82,11 @@ contextBridge.exposeInMainWorld('puffin', {
     // Export UI guidelines
     exportUiGuidelines: (options) => ipcRenderer.invoke('state:exportUiGuidelines', options),
 
-    // Generate Claude.md file
-    generateClaudeMd: (options) => ipcRenderer.invoke('state:generateClaudeMd', options)
+    // Generate Claude.md file (legacy)
+    generateClaudeMd: (options) => ipcRenderer.invoke('state:generateClaudeMd', options),
+
+    // Activate branch - swaps CLAUDE.md to branch-specific content
+    activateBranch: (branchId) => ipcRenderer.invoke('state:activateBranch', branchId)
   },
 
   /**

@@ -1663,6 +1663,60 @@
   color: var(--success-color);
 }
 
+.story-status.archived {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--text-muted);
+}
+
+.story-card.archived {
+  opacity: 0.7;
+}
+
+.story-card.archived .story-title {
+  color: var(--text-muted);
+}
+
+/* Archived stories section */
+.archived-stories-section {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  padding-top: 1rem;
+}
+
+.archived-stories-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  width: 100%;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.archived-stories-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.archived-stories-toggle .toggle-icon {
+  font-size: 0.75rem;
+  transition: transform 0.15s ease;
+}
+
+.archived-stories-list {
+  margin-top: 0.5rem;
+}
+
+.archived-stories-list.collapsed {
+  display: none;
+}
+
 .story-actions {
   display: flex;
   gap: 0.25rem;

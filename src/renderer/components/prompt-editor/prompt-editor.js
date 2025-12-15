@@ -18,6 +18,8 @@ export class PromptEditorComponent {
     this.selectedGuiDefinition = null
     this.deriveStoriesCheckbox = null
     this.deriveUserStories = false
+    this.modelSelect = null
+    this.defaultModel = 'sonnet' // Will be updated from project config
   }
 
   /**
@@ -32,6 +34,7 @@ export class PromptEditorComponent {
     this.includeGuiDropdown = document.getElementById('include-gui-dropdown')
     this.includeGuiMenu = document.getElementById('include-gui-menu')
     this.deriveStoriesCheckbox = document.getElementById('derive-stories-checkbox')
+    this.modelSelect = document.getElementById('thread-model')
 
     this.bindEvents()
     this.subscribeToState()
@@ -72,6 +75,13 @@ export class PromptEditorComponent {
       this.deriveUserStories = this.deriveStoriesCheckbox.checked
     })
 
+    // Model selector - track when user manually changes it
+    if (this.modelSelect) {
+      this.modelSelect.addEventListener('change', () => {
+        this.modelSelect.dataset.userChanged = 'true'
+      })
+    }
+
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
       if (!this.includeGuiDropdown.contains(e.target)) {
@@ -105,6 +115,14 @@ export class PromptEditorComponent {
   subscribeToState() {
     document.addEventListener('puffin-state-change', (e) => {
       const { state } = e.detail
+      // Update default model from config if changed
+      if (state.config?.defaultModel && state.config.defaultModel !== this.defaultModel) {
+        this.defaultModel = state.config.defaultModel
+        // Update the select if user hasn't manually changed it
+        if (this.modelSelect && !this.modelSelect.dataset.userChanged) {
+          this.modelSelect.value = this.defaultModel
+        }
+      }
       this.render(state.prompt, state.history)
     })
   }
@@ -326,15 +344,20 @@ export class PromptEditorComponent {
       return
     }
 
-    // Get parentId only if the active prompt is in the current branch
+    // Get parentId: find the last prompt in the thread containing the active prompt.
+    // This ensures "Send" continues from the end of the thread, not from the selected turn.
     let parentId = null
     if (state.history.activePromptId) {
-      // Check if activePromptId belongs to the current branch's prompt tree
-      const isInCurrentBranch = state.history.promptTree?.some(
-        p => p.id === state.history.activePromptId
-      )
-      if (isInCurrentBranch) {
-        parentId = state.history.activePromptId
+      // Check if activePromptId belongs to the current branch
+      const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
+      if (rawBranch?.prompts) {
+        const isInCurrentBranch = rawBranch.prompts.some(
+          p => p.id === state.history.activePromptId
+        )
+        if (isInCurrentBranch) {
+          // Find the last prompt in this thread lineage
+          parentId = this.findLastPromptInThread(state.history.activePromptId, rawBranch.prompts)
+        }
       }
     }
 
@@ -393,7 +416,7 @@ export class PromptEditorComponent {
         // User stories are always relevant - they may have been updated
         userStories: userStories,
         guiDescription: guiDescription,
-        model: 'claude-sonnet-4-20250514'
+        model: this.modelSelect?.value || this.defaultModel || 'sonnet'
       })
     }
   }
@@ -458,8 +481,13 @@ export class PromptEditorComponent {
         } : null,
         userStories: userStories,
         guiDescription: guiDescription,
-        model: 'claude-sonnet-4-20250514'
+        model: this.modelSelect?.value || this.defaultModel || 'sonnet'
       })
+
+      // Reset userChanged flag after submitting a new thread
+      if (this.modelSelect) {
+        delete this.modelSelect.dataset.userChanged
+      }
     }
   }
 
@@ -682,8 +710,42 @@ export class PromptEditorComponent {
   }
 
   /**
+   * Find the last prompt in the thread lineage starting from the given promptId.
+   * Traverses down through children until reaching a leaf (prompt with no children).
+   * This is used when pressing "Send" to continue from the end of the thread,
+   * regardless of which turn the user has selected.
+   */
+  findLastPromptInThread(promptId, prompts) {
+    if (!promptId || !prompts || prompts.length === 0) return promptId
+
+    // Build a map of children for each prompt
+    const childrenMap = new Map()
+    prompts.forEach(p => {
+      if (p.parentId) {
+        if (!childrenMap.has(p.parentId)) {
+          childrenMap.set(p.parentId, [])
+        }
+        childrenMap.get(p.parentId).push(p)
+      }
+    })
+
+    // Traverse down from the given prompt to find the last descendant
+    let lastPromptId = promptId
+    while (childrenMap.has(lastPromptId)) {
+      const children = childrenMap.get(lastPromptId)
+      // If multiple branches, take the most recent one by timestamp
+      children.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      lastPromptId = children[0].id
+    }
+
+    console.log('[THREAD-DEBUG] findLastPromptInThread:', { from: promptId, to: lastPromptId })
+    return lastPromptId
+  }
+
+  /**
    * Get the session ID from the active prompt to resume conversation.
    * This ensures we resume from the correct point in the thread.
+   * Now uses findLastPromptInThread to get the session from the thread's last prompt.
    */
   getLastSessionId(state) {
     const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
@@ -701,17 +763,18 @@ export class PromptEditorComponent {
       console.log('[CONTEXT-DEBUG] Found dead sessions (hit context limit):', deadSessions.size)
     }
 
-    // If there's an active prompt, try its session ID
+    // If there's an active prompt, find the last prompt in that thread
     const activePromptId = state.history.activePromptId
     if (activePromptId) {
-      const activePrompt = rawBranch.prompts.find(p => p.id === activePromptId)
-      if (activePrompt?.response?.sessionId) {
+      const lastPromptId = this.findLastPromptInThread(activePromptId, rawBranch.prompts)
+      const lastPrompt = rawBranch.prompts.find(p => p.id === lastPromptId)
+      if (lastPrompt?.response?.sessionId) {
         // Skip if this session is dead
-        if (deadSessions.has(activePrompt.response.sessionId)) {
-          console.log('[CONTEXT-DEBUG] Active prompt session is dead - looking for alternative')
+        if (deadSessions.has(lastPrompt.response.sessionId)) {
+          console.log('[CONTEXT-DEBUG] Thread last prompt session is dead - looking for alternative')
         } else {
-          console.log('[CONTEXT-DEBUG] Using session from active prompt:', activePromptId)
-          return activePrompt.response.sessionId
+          console.log('[CONTEXT-DEBUG] Using session from thread last prompt:', lastPromptId)
+          return lastPrompt.response.sessionId
         }
       }
     }

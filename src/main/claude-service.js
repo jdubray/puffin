@@ -852,8 +852,15 @@ When asked to create documents, lists, or summaries, include the full content in
    * @param {Object} project - Project context
    * @returns {Promise<{success: boolean, stories?: Array, error?: string, rawResponse?: string}>}
    */
-  async deriveStories(prompt, projectPath, project = null) {
+  async deriveStories(prompt, projectPath, project = null, progressCallback = null) {
     console.log('[STORY-DERIVATION] Starting story derivation for prompt:', prompt.substring(0, 100) + '...')
+
+    const progress = (msg) => {
+      console.log('[STORY-DERIVATION]', msg)
+      if (progressCallback) progressCallback(msg)
+    }
+
+    progress('Initializing...')
 
     const systemPrompt = `You are a requirements analyst. Your task is to derive user stories from the following request.
 
@@ -890,34 +897,42 @@ ${prompt}`
         '-'
       ]
 
-      console.log('[STORY-DERIVATION] Spawning claude with args:', args.join(' '))
-      console.log('[STORY-DERIVATION] Working directory:', cwd)
-      console.log('[STORY-DERIVATION] Prompt length being sent:', fullPrompt.length)
+      progress(`Spawning claude with args: ${args.join(' ')}`)
+      progress(`Working directory: ${cwd}`)
+      progress(`Prompt length: ${fullPrompt.length} chars`)
 
       const spawnOptions = this.getSpawnOptions(cwd)
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
 
-      console.log('[STORY-DERIVATION] Spawn options shell:', spawnOptions.shell)
+      progress(`Spawn options - shell: ${spawnOptions.shell}, platform: ${process.platform}`)
 
       const proc = spawn('claude', args, spawnOptions)
 
       if (!proc.pid) {
-        console.error('[STORY-DERIVATION] Failed to spawn process - no PID')
+        progress('ERROR: Failed to spawn process - no PID')
+        resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
+        return
       } else {
-        console.log('[STORY-DERIVATION] Process spawned with PID:', proc.pid)
+        progress(`Process spawned with PID: ${proc.pid}`)
       }
 
       let buffer = ''
       let resultText = ''
       let allMessages = []
+      let dataReceived = false
+      let resolved = false  // Prevent double resolution
 
       proc.stdin.write(fullPrompt)
       proc.stdin.end()
-      console.log('[STORY-DERIVATION] Prompt written to stdin')
+      progress('Prompt written to stdin, waiting for response...')
 
       let stderrBuffer = ''
 
       proc.stdout.on('data', (chunk) => {
+        if (!dataReceived) {
+          dataReceived = true
+          progress('First data chunk received from Claude')
+        }
         buffer += chunk.toString()
         const lines = buffer.split('\n')
         buffer = lines.pop()
@@ -927,7 +942,7 @@ ${prompt}`
           try {
             const json = JSON.parse(line)
             allMessages.push(json)
-            console.log('[STORY-DERIVATION] Received JSON type:', json.type)
+            progress(`Received JSON type: ${json.type}`)
 
             if (json.type === 'assistant') {
               // Log the structure to understand what we're getting
@@ -978,15 +993,18 @@ ${prompt}`
 
       proc.stderr.on('data', (chunk) => {
         stderrBuffer += chunk.toString()
-        console.log('[STORY-DERIVATION] stderr:', chunk.toString())
+        progress(`stderr: ${chunk.toString().trim()}`)
       })
 
       proc.on('close', (code) => {
-        console.log('[STORY-DERIVATION] Process closed with code:', code)
-        console.log('[STORY-DERIVATION] Total JSON messages received:', allMessages.length)
-        console.log('[STORY-DERIVATION] Message types:', allMessages.map(m => m.type).join(', '))
+        progress(`Process closed with exit code: ${code}`)
+        progress(`Total JSON messages received: ${allMessages.length}`)
+        progress(`Message types: ${allMessages.map(m => m.type).join(', ') || '(none)'}`)
         if (stderrBuffer) {
-          console.log('[STORY-DERIVATION] Full stderr:', stderrBuffer)
+          progress(`Full stderr: ${stderrBuffer}`)
+        }
+        if (!dataReceived) {
+          progress('WARNING: No data was received from Claude before process closed')
         }
 
         // Process remaining buffer
@@ -1007,28 +1025,52 @@ ${prompt}`
         // Try to extract and parse JSON array from the response
         const parseResult = this.extractStoriesFromResponse(resultText)
 
+        if (resolved) {
+          progress('WARNING: Already resolved, skipping close handler')
+          return
+        }
+        resolved = true
+
         if (parseResult.success) {
-          console.log('[STORY-DERIVATION] Successfully parsed', parseResult.stories.length, 'stories')
+          progress(`Successfully parsed ${parseResult.stories.length} stories, resolving promise...`)
           resolve(parseResult)
+          progress('Promise resolved with success')
         } else {
-          console.error('[STORY-DERIVATION] Parse failed:', parseResult.error)
+          progress(`Parse failed: ${parseResult.error}`)
           resolve({
             success: false,
             error: parseResult.error,
             rawResponse: resultText.substring(0, 1000) // Include raw response for debugging
           })
+          progress('Promise resolved with failure')
         }
       })
 
       proc.on('error', (error) => {
+        if (resolved) return
+        resolved = true
+        progress(`Process error: ${error.message}`)
         resolve({ success: false, error: error.message })
       })
 
-      // Timeout after 60 seconds
-      setTimeout(() => {
+      // Timeout after 90 seconds (increased from 60)
+      const timeoutId = setTimeout(() => {
+        if (resolved) {
+          progress('Timeout fired but already resolved, ignoring')
+          return
+        }
+        resolved = true
+        progress('TIMEOUT: 90 seconds elapsed, killing process')
+        progress(`Data received before timeout: ${dataReceived}`)
+        progress(`Messages received before timeout: ${allMessages.length}`)
+        progress(`Result text length before timeout: ${resultText.length}`)
         proc.kill()
-        resolve({ success: false, error: 'Story derivation timed out' })
-      }, 60000)
+        resolve({
+          success: false,
+          error: 'Story derivation timed out',
+          rawResponse: resultText.length > 0 ? resultText.substring(0, 500) : 'No response received'
+        })
+      }, 90000)
     })
   }
 

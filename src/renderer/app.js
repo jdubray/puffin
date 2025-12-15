@@ -631,6 +631,12 @@ class PuffinApp {
       }
     })
     this.claudeListeners.push(unsubStoryError)
+
+    // Story derivation - progress (for debugging)
+    const unsubProgress = window.puffin.claude.onDerivationProgress((data) => {
+      console.log('[DERIVATION-PROGRESS]', data.message)
+    })
+    this.claudeListeners.push(unsubProgress)
   }
 
   /**

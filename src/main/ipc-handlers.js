@@ -447,11 +447,22 @@ function setupClaudeHandlers(ipcMain) {
     console.log('[IPC] claude:deriveStories received')
     console.log('[IPC] prompt length:', data?.prompt?.length || 0)
     console.log('[IPC] projectPath:', projectPath)
+
+    // Send progress updates to renderer for debugging
+    const sendProgress = (message) => {
+      console.log('[IPC-PROGRESS]', message)
+      event.sender.send('claude:derivationProgress', { message, timestamp: Date.now() })
+    }
+
+    sendProgress('Starting story derivation...')
+
     try {
+      sendProgress('Calling claudeService.deriveStories...')
       const result = await claudeService.deriveStories(
         data.prompt,
         projectPath,
-        data.project
+        data.project,
+        sendProgress  // Pass progress callback
       )
 
       console.log('[IPC] deriveStories result:', result?.success, 'stories:', result?.stories?.length || 0)
@@ -472,6 +483,7 @@ function setupClaudeHandlers(ipcMain) {
         })
       }
     } catch (error) {
+      console.error('[IPC] deriveStories error:', error)
       event.sender.send('claude:storyDerivationError', {
         error: error.message,
         canRetry: true

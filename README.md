@@ -218,12 +218,14 @@ Visual GUI designer with:
 ### Backlog View
 Comprehensive user story management interface with Kanban-style workflow:
 - Full CRUD operations for user stories (create, edit, delete)
-- Status tracking: Pending → In Progress → Completed
+- Status tracking: Pending → In Progress → Completed → Archived
 - Story derivation from specifications using Claude
 - Interactive review workflow for derived stories
 - **Batch selection**: Select multiple pending stories with checkboxes
 - **Start Implementation**: Generate implementation prompts for selected stories with automatic planning
+- **Acceptance Criteria Verification**: Claude must explicitly verify each numbered criterion (✅ done, ⚠️ partial, ❌ blocked)
 - **Mark Complete**: One-click completion for in-progress stories
+- **Auto-Archive**: Completed stories older than 2 weeks are automatically archived
 
 ### Architecture View
 Markdown editor for documenting your system architecture, with "Review with Claude" for AI feedback.

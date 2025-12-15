@@ -589,6 +589,38 @@
   color: var(--accent-primary);
 }
 
+/* Model selector in prompt area */
+.prompt-option-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.prompt-select-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.prompt-model-select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.prompt-model-select:hover {
+  border-color: var(--accent-primary);
+}
+
+.prompt-model-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.2);
+}
+
 .prompt-actions {
   display: flex;
   gap: 0.5rem;

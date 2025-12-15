@@ -5,6 +5,49 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-12-15
+
+### Added
+
+- **Model Selection**: Choose which Claude model to use for conversations
+  - **Project Default**: Set default model in Config view (persisted to `.puffin/config.json`)
+  - **Per-Thread Override**: Select a different model in the prompt area before submitting
+  - Available models:
+    - `opus` - Claude Opus 4.5, most capable, best for complex architectural tasks
+    - `sonnet` - Claude Sonnet, balanced performance and speed (default)
+    - `haiku` - Claude Haiku, fast and lightweight for quick questions
+  - Previously hardcoded to `claude-sonnet-4-20250514`, now uses model aliases for latest versions
+
+### Changed
+
+- Model selector syncs with project default but remembers manual overrides within a session
+- New threads reset to project default model
+
+### Fixed
+
+- **Thread Continuation**: "Send" button now correctly continues from the last turn of the thread
+  - Previously, selecting an earlier turn and pressing "Send" would create a branch from that turn
+  - Now "Send" always continues from the end of the thread, regardless of which turn is selected
+  - Use "Send as New Thread" to intentionally start a fresh conversation
+
+## [1.0.1] - 2025-12-12
+
+### Added
+
+- **Acceptance Criteria Verification**: Implementation prompts now require explicit verification of each acceptance criterion
+  - Criteria displayed as numbered list for clear reference
+  - Claude must report status for each criterion: ✅ (done), ⚠️ (partial), ❌ (blocked)
+  - Ensures nothing is overlooked during implementation
+
+### Documentation
+
+- **PROMPT_TEMPLATES.md**: New documentation cataloging all prompt templates used by Puffin
+  - Story derivation and modification prompts
+  - Architecture review prompt
+  - Story implementation prompt with verification requirements
+  - Branch context prompts (Specifications, Architecture, UI, Backend, Deployment, Tmp)
+  - Dynamic implementation contexts (UI tokens, architecture docs, backend guidance)
+
 ## [1.0.0] - 2025-12-11
 
 ### Added

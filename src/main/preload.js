@@ -151,6 +151,13 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('claude:storyDerivationError', handler)
     },
 
+    // Subscribe to story derivation progress (for debugging)
+    onDerivationProgress: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('claude:derivationProgress', handler)
+      return () => ipcRenderer.removeListener('claude:derivationProgress', handler)
+    },
+
     // Generate a title for a prompt (used for new threads)
     generateTitle: (content) => ipcRenderer.invoke('claude:generateTitle', content)
   },

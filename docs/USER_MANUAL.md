@@ -303,10 +303,11 @@ Create, organize, and track user stories with AI-powered derivation from specifi
 *Screenshot placeholder: Backlog list with filters and story cards*
 
 #### Story Lifecycle
-Stories progress through a simplified three-state workflow:
+Stories progress through a four-state workflow:
 - **Pending** 🟡: In the backlog, ready to be implemented
 - **In Progress** 🟠: Currently being worked on by Claude
 - **Completed** 🟢: Implementation finished
+- **Archived** 📦: Completed stories older than 2 weeks (auto-archived on project open)
 
 #### Story Properties
 Each story contains:
@@ -333,14 +334,32 @@ Each story contains:
 - Click "Start Implementation" button in the action bar
 - Puffin generates a detailed implementation prompt with planning instructions
 - Stories are automatically marked as "In Progress"
-- Prompt is submitted to Claude in the Backend branch
+- Prompt is submitted to Claude in the **current active branch** (not hardcoded to backend)
+- Branch-specific context (UI guidelines, architecture docs, etc.) is injected into the prompt
+
+**Acceptance Criteria Verification:**
+When Claude implements stories, acceptance criteria are presented as a numbered list. Claude is required to verify each criterion at the end of implementation using status indicators:
+- ✅ **Criterion N**: Explanation of how it was satisfied
+- ⚠️ **Criterion N**: Partially implemented - what's done and what's missing
+- ❌ **Criterion N**: Not implemented - explanation of blockers
+
+This ensures nothing is overlooked and provides clear tracking of what was accomplished.
 
 **Mark Complete:**
 - Click the ✓ button on in-progress stories to mark them as completed
 - Completed stories are moved out of the active workflow
 
+**Reopen Stories:**
+- Click the ↺ button on completed or archived stories to reopen them
+- Reopened stories return to "Pending" status
+
+**Archive Stories:**
+- Click the ⌫ button on completed stories to manually archive them
+- Archived stories are displayed in a collapsible section at the bottom
+- Stories completed more than 2 weeks ago are auto-archived when the project opens
+
 **Filter & Search:**
-- Filter by status (All, Pending, In Progress, Completed)
+- Filter by status (All, Pending, In Progress, Completed, Archived)
 - Filter by source branch
 - Search by title or content
 
@@ -586,14 +605,22 @@ For projects using user story methodology:
 2. **Story Implementation**
    - Go to Backlog view
    - Select pending stories using checkboxes
+   - Switch to the appropriate branch (UI, Backend, etc.) for the work
    - Click "Start Implementation" to generate implementation prompt
-   - Claude receives a detailed prompt with planning instructions
+   - Claude receives a detailed prompt with planning instructions and branch-specific context
    - Stories automatically move to "In Progress" status
 
-3. **Story Completion**
+3. **Criteria Verification**
+   - Claude implements the story and verifies each acceptance criterion
+   - Each criterion is marked with a status: ✅ done, ⚠️ partial, or ❌ blocked
+   - Review the verification summary to ensure all criteria are satisfied
+   - Follow up on any partial or blocked criteria
+
+4. **Story Completion**
    - Click the ✓ button on in-progress stories when done
    - Stories move to "Completed" status
    - Filter by status to review completed work
+   - After 2 weeks, completed stories are automatically archived
 
 ### GUI-First Design Workflow
 
@@ -863,8 +890,11 @@ Puffin uses Electron with modern web technologies:
 ## Glossary
 
 **3CLI**: Claude Code CLI, the command-line interface for Claude
+**Acceptance Criteria Verification**: Process where Claude explicitly confirms each numbered criterion is met, partial, or blocked
+**Archived**: Status for completed stories older than 2 weeks, stored in a collapsible section
 **Backlog**: Collection of user stories waiting to be implemented
 **Branch**: Organized conversation topic in Puffin
+**Branch-Specific Context**: Dynamic context injected into prompts based on active branch (UI guidelines, architecture docs, etc.)
 **GUI Definition**: Saved visual design that can be reused
 **SAM Pattern**: State-Action-Model architecture pattern used by Puffin
 **Session ID**: Unique identifier for conversation continuity with Claude
@@ -874,4 +904,4 @@ Puffin uses Electron with modern web technologies:
 
 ---
 
-*This manual covers Puffin version 1.0. For the latest updates and features, check the GitHub repository and release notes.*
+*This manual covers Puffin version 1.0.1. For the latest updates and features, check the GitHub repository and release notes.*

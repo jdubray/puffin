@@ -139,6 +139,10 @@ export class ProjectFormComponent {
     if (techArchInput) techArchInput.value = config.technicalArchitecture || ''
     if (dataModelInput) dataModelInput.value = config.dataModel || ''
 
+    // Default model
+    const defaultModel = document.getElementById('default-model')
+    if (defaultModel) defaultModel.value = config.defaultModel || 'sonnet'
+
     // Options
     const options = config.options || {}
     const progStyle = document.getElementById('programming-style')
@@ -216,6 +220,7 @@ export class ProjectFormComponent {
       assumptions: this.assumptions.filter(a => a.trim()),
       technicalArchitecture: document.getElementById('technical-architecture').value.trim(),
       dataModel: document.getElementById('data-model').value.trim(),
+      defaultModel: document.getElementById('default-model').value,
       options: {
         programmingStyle: document.getElementById('programming-style').value,
         testingApproach: document.getElementById('testing-approach').value,

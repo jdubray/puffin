@@ -31,6 +31,8 @@ export const initialModel = {
     assumptions: [],
     technicalArchitecture: '',
     dataModel: '',
+    // Default Claude model for this project
+    defaultModel: 'sonnet',
     options: {
       programmingStyle: 'HYBRID',
       testingApproach: 'TDD',
@@ -954,7 +956,7 @@ export const startStoryImplementationAcceptor = model => proposal => {
       }
     })
 
-    // Build implementation prompt
+    // Build implementation prompt with numbered acceptance criteria
     const storyDescriptions = stories.map((story, i) => {
       let desc = `### Story ${i + 1}: ${story.title}\n`
       if (story.description) {
@@ -962,7 +964,7 @@ export const startStoryImplementationAcceptor = model => proposal => {
       }
       if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
         desc += `\n**Acceptance Criteria:**\n`
-        desc += story.acceptanceCriteria.map(c => `- ${c}`).join('\n')
+        desc += story.acceptanceCriteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n')
       }
       return desc
     }).join('\n\n')
@@ -986,9 +988,17 @@ ${branchContext}
 2. Consider the existing codebase structure and patterns
 3. Identify all files that need to be created or modified
 4. Then implement the changes step by step
-5. Ensure all acceptance criteria are met
 
-Please start by outlining your implementation plan, then proceed with the implementation.`
+**Criteria Verification Requirements:**
+After completing the implementation, you MUST verify each numbered acceptance criterion and report its status using this format:
+
+- ✅ Criterion N: [Brief explanation of how the implementation satisfies this criterion]
+- ⚠️ Criterion N: [Partially implemented - describe what's done and what's missing]
+- ❌ Criterion N: [Not implemented - explain why or what's blocking]
+
+**Important:** Do not skip any criteria. Every numbered criterion must have a verification status in your final response.
+
+Please start by outlining your implementation plan, then proceed with the implementation, and conclude with the criteria verification.`
 
     // Ensure branch exists
     if (!model.history.branches[branchId]) {

@@ -103,6 +103,16 @@
               <fieldset class="options-fieldset">
                 <legend>Claude Guidance Options</legend>
 
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                  <label for="default-model">Default Model</label>
+                  <select id="default-model">
+                    <option value="opus">Claude Opus - Most capable, best for complex tasks</option>
+                    <option value="sonnet" selected>Claude Sonnet - Balanced performance and speed</option>
+                    <option value="haiku">Claude Haiku - Fast and lightweight</option>
+                  </select>
+                  <small class="form-hint">This model will be used by default. You can override per-thread when submitting.</small>
+                </div>
+
                 <div class="options-grid">
                   <div class="form-group">
                     <label for="programming-style">Programming Style</label>
@@ -287,6 +297,14 @@
             <div class="prompt-area">
               <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
               <div class="prompt-options">
+                <div class="prompt-option-group">
+                  <label for="thread-model" class="prompt-select-label">Model:</label>
+                  <select id="thread-model" class="prompt-model-select" title="Select model for this thread">
+                    <option value="opus">Opus</option>
+                    <option value="sonnet" selected>Sonnet</option>
+                    <option value="haiku">Haiku</option>
+                  </select>
+                </div>
                 <label class="prompt-checkbox" title="Derive user stories from this prompt before implementation">
                   <input type="checkbox" id="derive-stories-checkbox">
                   <span>Derive User Stories</span>

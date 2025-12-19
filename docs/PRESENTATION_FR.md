@@ -14,10 +14,12 @@
 ## Puffin
 
 ### Le Problème - Gestion du Contexte dans le Développement IA
+### Claude Code CLI - Gestion des Sessions
 ### Le Problème - L'Historique Éphémère
 ### Qu'est-ce que Puffin ?
 ### Vue d'Ensemble de l'Architecture
 ### Conversations par Branches
+### Sélection du Modèle
 ### Contexte Dynamique (CLAUDE.md)
 ### Le Défi du Design UI & GUI Designer
 ### User Stories & Workflow du Backlog
@@ -59,9 +61,12 @@ Intention Utilisateur → Action → Model → State → Vue → Intention Utili
 - **Flux de Données Unidirectionnel** - Mutations prévisibles
 - **Accepteurs** - Le Model décide ce qui est appliqué
 - **États de Contrôle** - L'état détermine les actions permises
+- **Variables Prime** - x' désigne la valeur de x dans l'état suivant ; les actions définissent les transitions (x' = x + 1)
+- **Logique Temporelle** - Raisonner sur l'état dans le temps : invariants (toujours vrai), vivacité (finit par arriver)
 
 **Créateur :** Jean-Jacques Dubray (2015)
 **Site Web :** https://sam.js.org
+**Article  :** [Three Approximations You Should Never Use When Coding](https://dzone.com/articles/the-three-approximations-you-should-never-use-when)
 
 ---
 
@@ -82,7 +87,7 @@ Intention Utilisateur → Action → Model → State → Vue → Intention Utili
    - Les FSM rendent les transitions d'état valides explicites
 
 2. **Pattern Accepteur**
-   - Le Model peut rejeter des propositions
+   - Le Model peut accepter, accepter partiellement ou rejeter des propositions
    - Validation à la frontière, pas dispersée
 
 3. **Logique Temporelle**
@@ -132,7 +137,7 @@ render(state) // Bouton désactivé si !canSubmit
 
 **Bénéfices Réalisés :**
 - **Débogage** : Savoir exactement quelle action a causé quel changement
-- **Tests** : Tester les accepteurs isolément
+- **Tests** : Tester les actions et les accepteurs isolément
 - **Raisonnement** : Les états de contrôle rendent la logique UI explicite
 
 ---
@@ -170,25 +175,82 @@ Une conversation = Tout visible = L'IA adresse tout
 
 ---
 
-### Slide 5 : Le Problème - L'Historique Éphémère
+### Slide 5 : Claude Code CLI - Gestion des Sessions
+
+**Comment Fonctionnent les Sessions :**
+
+Claude Code stocke les conversations localement et attribue à chacune un ID de session unique.
+
+```bash
+# Reprendre avec sélecteur interactif
+claude --resume
+
+# Reprendre la conversation la plus récente
+claude --continue
+
+# Reprendre une session spécifique
+claude --resume abc123 "Continuer ma tâche"
+
+# Utiliser un ID de session spécifique (doit être UUID)
+claude --session-id "550e8400-e29b-41d4-a716-446655440000"
+
+# Forker une session (brancher la conversation)
+claude --resume abc123 --fork-session
+```
+
+**Persistance des Sessions :**
+
+| Aspect | Comportement |
+|--------|--------------|
+| **Stockage** | Local sur votre machine |
+| **Durée de vie** | Persistant après fermeture du terminal |
+| **Expiration** | Pas d'expiration documentée |
+| **Sauvegarde auto** | Toutes les conversations sauvegardées automatiquement |
+
+**Ce Qui Est Restauré à la Reprise :**
+
+- Historique complet des messages
+- Utilisation des outils et résultats
+- Modèle et configuration
+- Contexte du répertoire de travail
+
+**Le Sélecteur Interactif (`--resume`) :**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Sélectionner une conversation à reprendre :                │
+│                                                             │
+│  > "Build authentication system"  (il y a 2h, 15 msgs, main)│
+│    "Fix login bug"                (il y a 1j, 8 msgs, dev)  │
+│    "Add user dashboard"           (il y a 3j, 22 msgs, main)│
+│                                                             │
+│  ↑/↓ Naviguer  Enter Sélectionner  Esc Annuler              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Insight Clé :** Les sessions permettent des conversations multi-tours avec contexte complet - mais il faut les connaître et les utiliser.
+
+---
+
+### Slide 6 : Le Problème - L'Historique Éphémère
 
 **Vous Pouvez Tout Perdre**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Fenêtre Terminal                                            │
+│  Fenêtre Terminal                                           │
 │  ─────────────────                                          │
-│  $ claude                                                    │
+│  $ claude                                                   │
 │  > Construis-moi un système d'authentification utilisateur  │
 │  [Claude construit 15 fichiers en 2 heures]                 │
-│  > Ajoute le support OAuth                                   │
+│  > Ajoute le support OAuth                                  │
 │  [Claude ajoute Google/GitHub OAuth]                        │
-│  > Maintenant ajoute le rate limiting                        │
+│  > Maintenant ajoute le rate limiting                       │
 │  [Claude implémente le rate limiting]                       │
-│                                                              │
+│                                                             │
 │  [Vous fermez le terminal]                                  │
-│                                                              │
-│  💀 TOUT L'HISTORIQUE DE CONVERSATION EST PERDU 💀           │
+│                                                             │
+│  💀 TOUT L'HISTORIQUE DE CONVERSATION EST PERDU 💀         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -234,22 +296,22 @@ Fermer Puffin → Rouvrir demain → Tout est encore là
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                    PUFFIN                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Branches │  │ Backlog  │  │   CLAUDE.md  │  │
-│  │& Historique│ │& Stories │  │  Dynamique   │  │
-│  └──────────┘  └──────────┘  └──────────────┘  │
+│                    PUFFIN                       │
+│  ┌────────────┐  ┌──────────┐  ┌──────────────┐ │
+│  │ Branches   │  │ Backlog  │  │   CLAUDE.md  │ │
+│  │& Historique│  │& Stories │  │  Dynamique   │ │
+│  └────────────┘  └──────────┘  └──────────────┘ │
 └─────────────────────────────────────────────────┘
                        │
                        ▼ lance & gère
 ┌─────────────────────────────────────────────────┐
-│              Claude Code CLI                     │
+│              Claude Code CLI                    │
 │   (Capacités agentiques complètes - LE BUILDER) │
 └─────────────────────────────────────────────────┘
                        │
                        ▼ construit
 ┌─────────────────────────────────────────────────┐
-│              Votre Projet                        │
+│              Votre Projet                       │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -258,11 +320,6 @@ Fermer Puffin → Rouvrir demain → Tout est encore là
 - **Suit** les prompts, réponses et modifications de fichiers
 - **Injecte** du contexte dynamiquement selon la branche active
 - **Gère** les user stories de la spécification à la complétion
-
-**Ce que Puffin Ne Fait Pas :**
-- Une interface de gestion au-dessus de Claude Code CLI
-- Génère du code à partir du contexte choisi
-- Capture les décisions architecturales
 
 ---
 
@@ -282,23 +339,23 @@ Fermer Puffin → Rouvrir demain → Tout est encore là
 
 ```
 ┌─────────────────────────────────────────────────┐
-│           Processus Principal Electron           │
+│           Processus Principal Electron          │
 │  ┌──────────────┐  ┌──────────────────────────┐ │
 │  │ Handlers IPC │  │    Service Claude        │ │
 │  │              │  │  (lance subprocess CLI)  │ │
 │  └──────────────┘  └──────────────────────────┘ │
 │  ┌──────────────┐  ┌──────────────────────────┐ │
-│  │ État Puffin  │  │  Générateur CLAUDE.md   │ │
+│  │ État Puffin  │  │  Générateur CLAUDE.md    │ │
 │  │ (.puffin/)   │  │  (contexte dynamique)    │ │
 │  └──────────────┘  └──────────────────────────┘ │
 └─────────────────────────────────────────────────┘
               ↕ IPC (contextBridge)
 ┌─────────────────────────────────────────────────┐
-│           Processus Renderer Electron            │
-│  ┌──────────────┐  ┌──────────────────────────┐ │
-│  │  Model SAM   │  │      Composants          │ │
-│  │ (44 accepteurs)│ │  (Prompt, Historique, etc.)│ │
-│  └──────────────┘  └──────────────────────────┘ │
+│           Processus Renderer Electron           │
+│ ┌───────────────┐  ┌──────────────────────────┐ │
+│ │  Model SAM    │  │      Composants          │ │
+│ │(44 accepteurs)│  │(Prompt, Historique, etc.)│ │
+│ └───────────────┘  └──────────────────────────┘ │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -352,7 +409,47 @@ Branche UI (Session: def-456)  ← Session différente !
 
 ---
 
-### Slide 9 : Contexte Dynamique (CLAUDE.md)
+### Slide 9 : Sélection du Modèle
+
+**Choisir le Bon Outil pour la Tâche**
+
+Puffin permet de sélectionner quel modèle Claude utiliser :
+
+| Modèle | Forces | Idéal Pour |
+|--------|--------|------------|
+| **Opus** | Le plus capable, meilleur raisonnement | Décisions architecturales complexes, gros refactorings, design nuancé |
+| **Sonnet** | Performance & vitesse équilibrées | Développement quotidien, implémentation de fonctionnalités (défaut) |
+| **Haiku** | Rapide et léger | Questions rapides, corrections simples, explications de code |
+
+**Deux Niveaux de Configuration :**
+
+1. **Défaut du Projet** (vue Config)
+   - Persisté dans `.puffin/config.json`
+   - Appliqué à tous les nouveaux threads
+
+2. **Override par Thread** (zone de prompt)
+   - Sélectionner un modèle différent avant de soumettre
+   - Utile pour adapter selon la complexité de la tâche
+
+**Quand Choisir Chaque Modèle :**
+
+```
+Revue d'architecture complexe ?      → Opus (réfléchir en profondeur, prendre son temps)
+Implémenter une user story ?         → Sonnet (bon équilibre)
+"Que fait cette fonction ?"          → Haiku (réponse rapide, coût bas)
+```
+
+**Compromis Coût-Performance :**
+
+- Opus : Qualité maximale, coût le plus élevé, plus lent
+- Sonnet : Bonne qualité, coût modéré, vitesse raisonnable
+- Haiku : Qualité adéquate, coût le plus bas, le plus rapide
+
+**Astuce :** Commencer avec Haiku pour l'exploration, escalader vers Sonnet/Opus si nécessaire.
+
+---
+
+### Slide 10 : Contexte Dynamique (CLAUDE.md)
 
 **Le Mécanisme :**
 
@@ -450,21 +547,21 @@ Un canvas visuel drag-and-drop pour les maquettes UI :
 ```
 ┌─────────────────────────────────────────────────┐
 │  Palette Éléments         Canvas                │
-│  ┌───────────┐    ┌─────────────────────────┐  │
-│  │ Container │    │  ┌─────────────────┐    │  │
-│  │ Texte     │    │  │   Login Form    │    │  │
-│  │ Input     │    │  │ ┌─────────────┐ │    │  │
-│  │ Bouton    │    │  │ │ Email       │ │    │  │
-│  │ Image     │    │  │ └─────────────┘ │    │  │
-│  │ Liste     │    │  │ ┌─────────────┐ │    │  │
-│  │ Form      │    │  │ │ Mot de passe│ │    │  │
-│  │ Card      │    │  │ └─────────────┘ │    │  │
-│  │ Modal     │    │  │ [✓] Se souvenir │    │  │
-│  └───────────┘    │  │ ┌─────────────┐ │    │  │
-│                   │  │ │  Connexion  │ │    │  │
-│  Propriétés:      │  │ └─────────────┘ │    │  │
-│  x: 100, y: 50    │  └─────────────────┘    │  │
-│  largeur: 300     └─────────────────────────┘  │
+│  ┌───────────┐     ┌─────────────────────────┐  │
+│  │ Container │     │  ┌─────────────────┐    │  │
+│  │ Texte     │     │  │   Login Form    │    │  │
+│  │ Input     │     │  │ ┌─────────────┐ │    │  │
+│  │ Bouton    │     │  │ │ Email       │ │    │  │
+│  │ Image     │     │  │ └─────────────┘ │    │  │
+│  │ Liste     │     │  │ ┌─────────────┐ │    │  │
+│  │ Form      │     │  │ │ Mot de passe│ │    │  │
+│  │ Card      │     │  │ └─────────────┘ │    │  │
+│  │ Modal     │     │  │ [x] Se souvenir │    │  │
+│  └───────────┘     │  │ ┌─────────────┐ │    │  │
+│                    │  │ │  Connexion  │ │    │  │
+│  Propriétés:       │  │ └─────────────┘ │    │  │
+│  x: 100, y: 50     │  └─────────────────┘    │  │
+│  largeur: 300      └─────────────────────────┘  │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -832,7 +929,7 @@ if (state.canDeriveStories) {
 
 ---
 
-## Q&R (20 minutes)
+## Q&R
 
 **Questions Anticipées :**
 
@@ -918,4 +1015,4 @@ if (state.canDeriveStories) {
 
 ---
 
-*Présentation créée pour Puffin v1.0.1*
+*Présentation créée pour Puffin v1.1.0*

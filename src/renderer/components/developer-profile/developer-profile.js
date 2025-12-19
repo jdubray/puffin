@@ -23,7 +23,9 @@ export class DeveloperProfileComponent {
     this.container = document.getElementById('profile-view')
 
     if (!this.container) {
-      console.error('Profile view container not found')
+      // Profile is now modal-only, no view container needed
+      // Just subscribe to state changes for any modal updates
+      this.subscribeToState()
       return
     }
 
@@ -711,8 +713,6 @@ export class DeveloperProfileComponent {
    */
   async handleConnectGithub() {
     try {
-      this.intents.present({ type: 'START_GITHUB_AUTH', payload: {} })
-
       // Start device flow
       const startResult = await window.puffin.github.startAuth()
       if (!startResult.success) {
@@ -733,10 +733,7 @@ export class DeveloperProfileComponent {
       )
 
       if (pollResult.success) {
-        this.intents.present({
-          type: 'GITHUB_AUTH_SUCCESS',
-          payload: { profile: pollResult.profile.github }
-        })
+        this.intents.loadDeveloperProfile(pollResult.profile)
         // Refresh GitHub data
         await this.refreshGithubData()
       } else {
@@ -744,10 +741,7 @@ export class DeveloperProfileComponent {
       }
     } catch (error) {
       console.error('GitHub auth error:', error)
-      this.intents.present({
-        type: 'GITHUB_AUTH_ERROR',
-        payload: { error: error.message }
-      })
+      alert('GitHub authentication failed: ' + error.message)
     }
   }
 
@@ -755,10 +749,8 @@ export class DeveloperProfileComponent {
    * Cancel GitHub authentication
    */
   cancelGithubAuth() {
-    this.intents.present({
-      type: 'GITHUB_AUTH_ERROR',
-      payload: { error: 'Authentication cancelled' }
-    })
+    // Just refresh to show current state
+    this.loadProfile()
   }
 
   /**
@@ -772,7 +764,8 @@ export class DeveloperProfileComponent {
     try {
       const result = await window.puffin.github.disconnect()
       if (result.success) {
-        this.intents.present({ type: 'GITHUB_LOGOUT', payload: {} })
+        this.intents.githubLogout()
+        this.loadProfile()
       } else {
         alert('Failed to disconnect GitHub: ' + result.error)
       }

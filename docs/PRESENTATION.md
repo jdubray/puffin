@@ -14,10 +14,12 @@
 ## Part 2: Puffin
 
 ### The Problem - Context Management in AI Development
+### Claude Code CLI - Session Management
 ### The Problem - Ephemeral History
 ### What is Puffin?
 ### Architecture Overview
 ### Branched Conversations
+### Model Selection
 ### Dynamic Context (CLAUDE.md)
 ### The UI Design Challenge & GUI Designer
 ### User Stories & Backlog Workflow
@@ -59,9 +61,12 @@ User Intent → Action → Model → State → View → User Intent...
 - **Unidirectional Data Flow** - Predictable mutations
 - **Acceptors** - Model decides what gets applied
 - **Control States** - State determines allowed actions
+- **Prime Variables** - x' denotes the next-state value of x; actions define transitions (x' = x + 1)
+- **Temporal Logic** - Reason about state over time: invariants (always true), liveness (eventually happens)
 
 **Creator:** Jean-Jacques Dubray (2015)
 **Website:** https://sam.js.org
+**Article  :** [Three Approximations You Should Never Use When Coding](https://dzone.com/articles/the-three-approximations-you-should-never-use-when)
 
 ---
 
@@ -82,7 +87,7 @@ User Intent → Action → Model → State → View → User Intent...
    - FSMs make valid state transitions explicit
 
 2. **Acceptor Pattern**
-   - Model can reject proposals
+   - Model can accept, partially accept, or reject proposals
    - Validation at the boundary, not scattered
 
 3. **Temporal Logic**
@@ -132,7 +137,7 @@ render(state) // Button disabled if !canSubmit
 
 **Benefits Realized:**
 - **Debugging**: Know exactly what action caused what change
-- **Testing**: Test acceptors in isolation
+- **Testing**: Test actions and acceptors in isolation
 - **Reasoning**: Control states make UI logic explicit
 
 ---
@@ -170,25 +175,82 @@ One conversation = Everything visible = AI addresses everything
 
 ---
 
-### Slide 5: The Problem - Ephemeral History
+### Slide 5: Claude Code CLI - Session Management
+
+**How Sessions Work:**
+
+Claude Code stores conversations locally and assigns each a unique session ID.
+
+```bash
+# Resume with interactive picker
+claude --resume
+
+# Resume most recent conversation
+claude --continue
+
+# Resume a specific session
+claude --resume abc123 "Continue my task"
+
+# Use a specific session ID (must be UUID)
+claude --session-id "550e8400-e29b-41d4-a716-446655440000"
+
+# Fork a session (branch the conversation)
+claude --resume abc123 --fork-session
+```
+
+**Session Persistence:**
+
+| Aspect | Behavior |
+|--------|----------|
+| **Storage** | Local on your machine |
+| **Lifetime** | Persistent across terminal closes |
+| **Expiration** | No documented expiration |
+| **Auto-save** | All conversations saved automatically |
+
+**What Gets Restored on Resume:**
+
+- Full message history
+- Tool usage and results
+- Model and configuration
+- Working directory context
+
+**The Interactive Picker (`--resume`):**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Select a conversation to resume:                        │
+│                                                          │
+│  > "Build authentication system"  (2h ago, 15 msgs, main)│
+│    "Fix login bug"                (1d ago, 8 msgs, dev)  │
+│    "Add user dashboard"           (3d ago, 22 msgs, main)│
+│                                                          │
+│  ↑/↓ Navigate  Enter Select  Esc Cancel                  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Key Insight:** Sessions enable multi-turn conversations with full context - but you need to know about them and use them.
+
+---
+
+### Slide 6: The Problem - Ephemeral History
 
 **You Can Lose Everything**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Terminal Window                                             │
+│  Terminal Window                                            │
 │  ─────────────────                                          │
-│  $ claude                                                    │
+│  $ claude                                                   │
 │  > Build me a user authentication system                    │
 │  [Claude builds 15 files over 2 hours]                      │
-│  > Add OAuth support                                         │
+│  > Add OAuth support                                        │
 │  [Claude adds Google/GitHub OAuth]                          │
-│  > Now add rate limiting                                     │
+│  > Now add rate limiting                                    │
 │  [Claude implements rate limiting]                          │
-│                                                              │
+│                                                             │
 │  [You close the terminal]                                   │
-│                                                              │
-│  💀 ALL CONVERSATION HISTORY IS GONE 💀                      │
+│                                                             │
+│  💀 ALL CONVERSATION HISTORY IS GONE 💀                    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -234,16 +296,16 @@ Close Puffin → Reopen tomorrow → Everything is still there
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                    PUFFIN                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Branches │  │ Backlog  │  │   Dynamic    │  │
-│  │  & History│  │& Stories │  │  CLAUDE.md   │  │
-│  └──────────┘  └──────────┘  └──────────────┘  │
+│                    PUFFIN                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
+│  │ Branches │  │ Backlog  │  │   Dynamic    │   │
+│  │ & History│  │& Stories │  │  CLAUDE.md   │   │
+│  └──────────┘  └──────────┘  └──────────────┘   │
 └─────────────────────────────────────────────────┘
                        │
                        ▼ spawns & manages
 ┌─────────────────────────────────────────────────┐
-│              Claude Code CLI                     │
+│              Claude Code CLI                    │
 │   (Full agentic capabilities - THE BUILDER)     │
 └─────────────────────────────────────────────────┘
                        │
@@ -258,11 +320,6 @@ Close Puffin → Reopen tomorrow → Everything is still there
 - **Tracks** prompts, responses, and file modifications
 - **Injects** context dynamically based on active branch
 - **Manages** user stories from specification to completion
-
-**What Puffin Doesn't Do:**
-- A management UI on top of Claude Code CLI
-- Generate code from chosen context
-- Captures architectural decisions
 
 ---
 
@@ -352,7 +409,47 @@ UI Branch (Session: def-456)  ← Different session!
 
 ---
 
-### Slide 8: Dynamic Context (CLAUDE.md)
+### Slide 8: Model Selection
+
+**Choosing the Right Tool for the Job**
+
+Puffin lets you select which Claude model to use:
+
+| Model | Strengths | Best For |
+|-------|-----------|----------|
+| **Opus** | Most capable, best reasoning | Complex architectural decisions, large refactors, nuanced design |
+| **Sonnet** | Balanced performance & speed | Day-to-day development, feature implementation (default) |
+| **Haiku** | Fast and lightweight | Quick questions, simple fixes, code explanations |
+
+**Two Levels of Configuration:**
+
+1. **Project Default** (Config view)
+   - Persisted to `.puffin/config.json`
+   - Applied to all new threads
+
+2. **Per-Thread Override** (Prompt area)
+   - Select a different model before submitting
+   - Useful for switching based on task complexity
+
+**When to Choose Each Model:**
+
+```
+Complex architecture review?     → Opus (think deeply, take your time)
+Implement a user story?          → Sonnet (good balance)
+"What does this function do?"    → Haiku (fast answer, low cost)
+```
+
+**Cost-Performance Trade-off:**
+
+- Opus: Highest quality, highest cost, slower
+- Sonnet: Good quality, moderate cost, reasonable speed
+- Haiku: Adequate quality, lowest cost, fastest
+
+**Tip:** Start with Haiku for exploration, escalate to Sonnet/Opus when needed.
+
+---
+
+### Slide 9: Dynamic Context (CLAUDE.md)
 
 **The Mechanism:**
 
@@ -832,7 +929,7 @@ if (state.canDeriveStories) {
 
 ---
 
-## Q&A (20 minutes)
+## Q&A 
 
 **Anticipated Questions:**
 
@@ -918,4 +1015,4 @@ if (state.canDeriveStories) {
 
 ---
 
-*Presentation created for Puffin v1.0.1*
+*Presentation created for Puffin v1.1.0*

@@ -27,7 +27,7 @@ export const CLAUDE_MODELS = [
 ]
 
 // Default model for new projects
-export const DEFAULT_MODEL = 'sonnet'
+export const DEFAULT_MODEL = 'opus'
 
 // Model for quick operations (title generation, etc.)
 export const FAST_MODEL = 'haiku'

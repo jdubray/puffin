@@ -253,6 +253,8 @@ export class ModalManager {
       }
 
       const profile = result.profile
+      const isGitHubConnected = profile.github?.login
+
       content.innerHTML = `
         <div class="profile-view">
           <div class="profile-field">
@@ -265,7 +267,9 @@ export class ModalManager {
           </div>
           <div class="profile-field">
             <label>GitHub</label>
-            <div class="profile-value">${profile.github?.login ? `@${this.escapeHtml(profile.github.login)}` : 'Not connected'}</div>
+            <div class="profile-value">
+              ${isGitHubConnected ? `@${this.escapeHtml(profile.github.login)}` : 'Not connected'}
+            </div>
           </div>
           ${profile.preferences ? `
             <div class="profile-field">
@@ -281,12 +285,34 @@ export class ModalManager {
       `
       actions.innerHTML = `
         <button class="btn secondary" id="modal-cancel-btn">Close</button>
+        ${isGitHubConnected
+          ? `<button class="btn secondary" id="configure-git-btn" title="Configure Git with GitHub identity">Configure Git</button>
+             <button class="btn secondary" id="github-disconnect-btn">Disconnect GitHub</button>`
+          : '<button class="btn secondary github-btn" id="github-connect-btn">Connect GitHub</button>'
+        }
         <button class="btn primary" id="profile-edit-btn">Edit Profile</button>
       `
       document.getElementById('modal-cancel-btn').addEventListener('click', () => this.intents.hideModal())
       document.getElementById('profile-edit-btn').addEventListener('click', () => {
         this.intents.showModal('profile-edit', {})
       })
+
+      // GitHub connection/disconnection handlers
+      const githubConnectBtn = document.getElementById('github-connect-btn')
+      if (githubConnectBtn) {
+        githubConnectBtn.addEventListener('click', () => this.handleGitHubConnect())
+      }
+
+      const githubDisconnectBtn = document.getElementById('github-disconnect-btn')
+      if (githubDisconnectBtn) {
+        githubDisconnectBtn.addEventListener('click', () => this.handleGitHubDisconnect())
+      }
+
+      // Configure Git identity button
+      const configureGitBtn = document.getElementById('configure-git-btn')
+      if (configureGitBtn) {
+        configureGitBtn.addEventListener('click', () => this.autoConfigureGitIdentity(profile))
+      }
     } catch (error) {
       content.innerHTML = `<p class="error">Failed to load profile: ${this.escapeHtml(error.message)}</p>`
       actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Close</button>'
@@ -437,6 +463,8 @@ export class ModalManager {
       return
     }
 
+    const isGitHubConnected = profile.github?.login
+
     content.innerHTML = `
       <div class="profile-form">
         <div class="form-group">
@@ -465,15 +493,40 @@ export class ModalManager {
             ).join('')}
           </select>
         </div>
+        <div class="form-group">
+          <label>GitHub Connection</label>
+          <div class="profile-value">
+            ${isGitHubConnected
+              ? `Connected as @${this.escapeHtml(profile.github.login)}`
+              : 'Not connected'
+            }
+          </div>
+        </div>
       </div>
     `
 
     actions.innerHTML = `
       <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
+      ${isGitHubConnected
+        ? '<button class="btn secondary" id="github-disconnect-btn">Disconnect GitHub</button>'
+        : '<button class="btn secondary github-btn" id="github-connect-btn">Connect GitHub</button>'
+      }
       <button class="btn primary" id="modal-profile-save-btn">Save Changes</button>
     `
 
     document.getElementById('modal-cancel-btn').addEventListener('click', () => this.intents.hideModal())
+
+    // GitHub connection/disconnection handlers
+    const githubConnectBtn = document.getElementById('github-connect-btn')
+    if (githubConnectBtn) {
+      githubConnectBtn.addEventListener('click', () => this.handleGitHubConnect())
+    }
+
+    const githubDisconnectBtn = document.getElementById('github-disconnect-btn')
+    if (githubDisconnectBtn) {
+      githubDisconnectBtn.addEventListener('click', () => this.handleGitHubDisconnect())
+    }
+
     document.getElementById('modal-profile-save-btn').addEventListener('click', async () => {
       const name = document.getElementById('modal-profile-name').value.trim()
       const email = document.getElementById('modal-profile-email').value.trim()
@@ -504,6 +557,193 @@ export class ModalManager {
         alert('Failed to update profile: ' + error.message)
       }
     })
+  }
+
+  /**
+   * Handle GitHub OAuth connection
+   */
+  async handleGitHubConnect() {
+    // Show authentication method selection modal
+    this.showGitHubAuthModal()
+  }
+
+  /**
+   * Show GitHub authentication method selection
+   */
+  showGitHubAuthModal() {
+    const modalTitle = document.getElementById('modal-title')
+    const modalContent = document.getElementById('modal-content')
+    const modalActions = document.getElementById('modal-actions')
+
+    modalTitle.textContent = 'Connect to GitHub'
+
+    modalContent.innerHTML = `
+      <div class="github-auth-options">
+        <div class="auth-method">
+          <h4>Personal Access Token (Recommended)</h4>
+          <p>Simple and secure. Generate a token from GitHub and paste it here.</p>
+          <div class="form-group">
+            <label for="github-pat-input">Personal Access Token</label>
+            <input type="password" id="github-pat-input" placeholder="ghp_xxxxxxxxxxxx" class="github-pat-input">
+            <small class="form-hint">
+              Generate at: <a href="#" id="github-token-link">GitHub Settings → Developer settings → Personal access tokens</a>
+              <br>Required scopes: <code>read:user</code>, <code>user:email</code>, <code>repo</code>
+            </small>
+          </div>
+        </div>
+        <div class="auth-divider">
+          <span>OR</span>
+        </div>
+        <div class="auth-method">
+          <h4>OAuth Device Flow</h4>
+          <p>Opens a browser window for authorization (no token needed).</p>
+          <button id="oauth-flow-btn" class="btn secondary">Start OAuth Flow</button>
+        </div>
+      </div>
+    `
+
+    modalActions.innerHTML = `
+      <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
+      <button class="btn primary" id="connect-pat-btn">Connect with Token</button>
+    `
+
+    // Event listeners
+    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+      this.intents.showModal('profile-view', {})
+    })
+
+    document.getElementById('github-token-link').addEventListener('click', (e) => {
+      e.preventDefault()
+      window.puffin.github.openExternal('https://github.com/settings/tokens/new?scopes=read:user,user:email,repo&description=Puffin')
+    })
+
+    document.getElementById('connect-pat-btn').addEventListener('click', () => {
+      this.handlePATConnect()
+    })
+
+    document.getElementById('oauth-flow-btn').addEventListener('click', () => {
+      this.handleOAuthFlow()
+    })
+  }
+
+  /**
+   * Handle PAT (Personal Access Token) connection
+   */
+  async handlePATConnect() {
+    const tokenInput = document.getElementById('github-pat-input')
+    const token = tokenInput?.value?.trim()
+
+    if (!token) {
+      this.showToast('Please enter a Personal Access Token', 'error')
+      return
+    }
+
+    if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+      this.showToast('Invalid token format. Token should start with ghp_ or github_pat_', 'error')
+      return
+    }
+
+    try {
+      const result = await window.puffin.github.connectWithPAT(token)
+
+      if (result.success) {
+        this.showToast('GitHub connected successfully!', 'success')
+        // Auto-configure Git identity with GitHub profile info
+        await this.autoConfigureGitIdentity(result.profile)
+        this.intents.showModal('profile-view', {})
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('GitHub PAT connection error:', error)
+      this.showToast('GitHub authentication failed: ' + error.message, 'error')
+    }
+  }
+
+  /**
+   * Auto-configure Git identity using GitHub profile
+   */
+  async autoConfigureGitIdentity(profile) {
+    try {
+      const github = profile?.github
+      if (!github) return
+
+      // Use GitHub profile name and email
+      const name = github.name || github.login
+      const email = github.email || `${github.login}@users.noreply.github.com`
+
+      if (name && email) {
+        // Configure globally so it works across all repos
+        const result = await window.puffin.git.configureUserIdentity(name, email, true)
+        if (result.success) {
+          this.showToast(`Git configured: ${name} <${email}>`, 'success')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to auto-configure Git identity:', error)
+      // Don't show error toast - this is a convenience feature
+    }
+  }
+
+  /**
+   * Handle OAuth Device Flow connection
+   */
+  async handleOAuthFlow() {
+    try {
+      // Start device flow
+      const startResult = await window.puffin.github.startAuth()
+      if (!startResult.success) {
+        throw new Error(startResult.error)
+      }
+
+      // Open browser for user to authorize
+      await window.puffin.github.openAuth(startResult.verificationUri)
+
+      // Show user code for manual entry
+      this.showToast(`Opening GitHub authorization. Enter code: ${startResult.userCode}`, 'info')
+
+      // Poll for token
+      const pollResult = await window.puffin.github.pollToken(
+        startResult.deviceCode,
+        startResult.interval,
+        startResult.expiresIn
+      )
+
+      if (pollResult.success) {
+        this.showToast('GitHub connected successfully!', 'success')
+        // Auto-configure Git identity with GitHub profile info
+        await this.autoConfigureGitIdentity(pollResult.profile)
+        this.intents.showModal('profile-view', {})
+      } else {
+        throw new Error(pollResult.error)
+      }
+    } catch (error) {
+      console.error('GitHub auth error:', error)
+      this.showToast('GitHub authentication failed: ' + error.message, 'error')
+    }
+  }
+
+  /**
+   * Handle GitHub disconnection
+   */
+  async handleGitHubDisconnect() {
+    if (!confirm('Are you sure you want to disconnect your GitHub account?')) {
+      return
+    }
+
+    try {
+      const result = await window.puffin.github.disconnect()
+      if (result.success) {
+        this.showToast('GitHub disconnected successfully', 'success')
+        // Refresh the current modal to show updated state
+        this.intents.showModal('profile-view', {})
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('GitHub disconnect error:', error)
+      this.showToast('Failed to disconnect GitHub: ' + error.message, 'error')
+    }
   }
 
   /**

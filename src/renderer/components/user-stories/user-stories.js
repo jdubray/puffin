@@ -37,6 +37,13 @@ export class UserStoriesComponent {
    * Bind DOM events
    */
   bindEvents() {
+    // Backlog/Insights tab switching
+    this.container.querySelectorAll('.backlog-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        this.switchTab(tab.dataset.tab)
+      })
+    })
+
     // Filter buttons
     this.filterBtns.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -47,6 +54,22 @@ export class UserStoriesComponent {
     // Add story button
     this.addBtn.addEventListener('click', () => {
       this.showAddStoryModal()
+    })
+  }
+
+  /**
+   * Switch between Backlog and Insights tabs
+   */
+  switchTab(tabName) {
+    // Update tab buttons
+    this.container.querySelectorAll('.backlog-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.tab === tabName)
+    })
+
+    // Update tab content
+    this.container.querySelectorAll('.backlog-tab-content').forEach(content => {
+      const isActive = content.id === `backlog-${tabName}-tab`
+      content.classList.toggle('active', isActive)
     })
   }
 

@@ -20,6 +20,10 @@ export class PromptEditorComponent {
     this.deriveUserStories = false
     this.modelSelect = null
     this.defaultModel = 'sonnet' // Will be updated from project config
+    // Input type tracking (US-3)
+    this.inputTypeGroup = null
+    this.inputTypeSelect = null
+    this.currentImplementationJourneyIds = [] // Active journey IDs for current thread
   }
 
   /**
@@ -35,6 +39,9 @@ export class PromptEditorComponent {
     this.includeGuiMenu = document.getElementById('include-gui-menu')
     this.deriveStoriesCheckbox = document.getElementById('derive-stories-checkbox')
     this.modelSelect = document.getElementById('thread-model')
+    // Input type tracking (US-3)
+    this.inputTypeGroup = document.getElementById('input-type-group')
+    this.inputTypeSelect = document.getElementById('input-type')
 
     this.bindEvents()
     this.subscribeToState()
@@ -44,9 +51,14 @@ export class PromptEditorComponent {
    * Bind DOM events
    */
   bindEvents() {
-    // Prompt input changes
+    // Note: We intentionally don't track every keystroke through SAM.
+    // The textarea value is read directly when submitting to avoid
+    // performance issues from dispatching actions on every input event.
+
+    // Update submit button state locally when user types
     this.textarea.addEventListener('input', () => {
-      this.intents.updatePromptContent(this.textarea.value)
+      const hasContent = this.textarea.value.trim().length > 0
+      this.submitBtn.disabled = !hasContent
     })
 
     // Submit button
@@ -113,6 +125,8 @@ export class PromptEditorComponent {
    * Subscribe to state changes
    */
   subscribeToState() {
+    this.wasProcessing = false
+
     document.addEventListener('puffin-state-change', (e) => {
       const { state } = e.detail
       // Update default model from config if changed
@@ -123,21 +137,29 @@ export class PromptEditorComponent {
           this.modelSelect.value = this.defaultModel
         }
       }
-      this.render(state.prompt, state.history)
+
+      // Clear textarea when processing completes (response received)
+      if (this.wasProcessing && !state.prompt.isProcessing) {
+        this.textarea.value = ''
+        this.submitBtn.disabled = true
+      }
+      this.wasProcessing = state.prompt.isProcessing
+
+      this.render(state.prompt, state.history, state.storyGenerations)
     })
   }
 
   /**
    * Render component based on state
    */
-  render(promptState, historyState) {
-    // Update textarea
-    if (this.textarea.value !== promptState.content) {
-      this.textarea.value = promptState.content
-    }
+  render(promptState, historyState, storyGenerations) {
+    // Note: We don't sync textarea value from SAM state.
+    // The textarea is the source of truth for its own content.
+    // This avoids performance issues from tracking every keystroke.
 
-    // Update button states
-    this.submitBtn.disabled = !promptState.canSubmit
+    // Update button states - canSubmit is based on local textarea content
+    const hasContent = this.textarea.value.trim().length > 0
+    this.submitBtn.disabled = promptState.isProcessing || !hasContent
     this.cancelBtn.classList.toggle('hidden', !promptState.canCancel)
 
     // Show loading state
@@ -162,6 +184,60 @@ export class PromptEditorComponent {
 
     // Update response area with conversation history
     this.updateResponseArea(historyState, promptState)
+
+    // Show/hide input type dropdown based on implementation thread context (US-3)
+    this.updateInputTypeVisibility(historyState, storyGenerations)
+  }
+
+  /**
+   * Show input type dropdown only when in an implementation thread
+   */
+  updateInputTypeVisibility(historyState, storyGenerations) {
+    if (!this.inputTypeGroup) return
+
+    // Check if current active prompt is part of an implementation thread
+    const activePromptId = historyState.activePromptId
+    const activeBranch = historyState.activeBranch
+    const rawBranch = historyState.raw?.branches?.[activeBranch]
+
+    let isImplementationThread = false
+    this.currentImplementationJourneyIds = []
+
+    if (activePromptId && rawBranch?.prompts) {
+      // Find the active prompt and check if it or any parent has storyIds
+      const storyIds = this.findStoryIdsForPromptId(activePromptId, rawBranch.prompts)
+      if (storyIds && storyIds.length > 0) {
+        isImplementationThread = true
+
+        // Find active journeys for these stories
+        if (storyGenerations?.implementation_journeys) {
+          this.currentImplementationJourneyIds = storyGenerations.implementation_journeys
+            .filter(j => storyIds.includes(j.story_id) && j.status === 'pending')
+            .map(j => j.id)
+        }
+      }
+    }
+
+    // Toggle visibility
+    this.inputTypeGroup.classList.toggle('hidden', !isImplementationThread)
+  }
+
+  /**
+   * Find storyIds for a prompt by traversing parent chain (client-side version)
+   */
+  findStoryIdsForPromptId(promptId, prompts) {
+    const prompt = prompts.find(p => p.id === promptId)
+    if (!prompt) return null
+
+    // Check if this prompt has storyIds directly
+    if (prompt.storyIds && prompt.storyIds.length > 0) {
+      return prompt.storyIds
+    }
+    // If it has a parent, traverse up the chain
+    if (prompt.parentId) {
+      return this.findStoryIdsForPromptId(prompt.parentId, prompts)
+    }
+    return null
   }
 
   /**
@@ -370,6 +446,29 @@ export class PromptEditorComponent {
 
     // Submit to SAM
     this.intents.submitPrompt(data)
+
+    // Record input type for implementation tracking (US-3)
+    if (this.currentImplementationJourneyIds.length > 0 && this.inputTypeSelect) {
+      const inputType = this.inputTypeSelect.value || 'technical'
+      const contentSummary = content.substring(0, 200) + (content.length > 200 ? '...' : '')
+
+      // Get current turn count (will be incremented when response arrives)
+      const journeys = state.storyGenerations?.implementation_journeys || []
+
+      this.currentImplementationJourneyIds.forEach(journeyId => {
+        const journey = journeys.find(j => j.id === journeyId)
+        const turnNumber = (journey?.turn_count || 0) + 1 // Next turn number
+
+        this.intents.addImplementationInput(journeyId, {
+          turn_number: turnNumber,
+          type: inputType,
+          content_summary: contentSummary
+        })
+      })
+
+      // Reset to default
+      this.inputTypeSelect.value = 'technical'
+    }
 
     // Submit to Claude via IPC
     if (window.puffin) {

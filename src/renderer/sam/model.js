@@ -95,6 +95,13 @@ export const initialModel = {
   // User stories state (from .puffin/user-stories.json)
   userStories: [],
 
+  // Story generation tracking state (from .puffin/story-generations.json)
+  storyGenerations: {
+    generations: [],
+    implementation_journeys: [],
+    currentGenerationId: null // ID of generation currently being reviewed
+  },
+
   // UI Guidelines state (from .puffin/ui-guidelines.json)
   uiGuidelines: {
     guidelines: {
@@ -196,6 +203,25 @@ export const initialModel = {
 }
 
 /**
+ * Helper: Find storyIds for a prompt by traversing parent chain
+ * Implementation prompts have storyIds directly; child prompts inherit from parent
+ */
+function findStoryIdsForPrompt(prompt, branchPrompts) {
+  // Check if this prompt has storyIds directly
+  if (prompt.storyIds && prompt.storyIds.length > 0) {
+    return prompt.storyIds
+  }
+  // If it has a parent, traverse up the chain
+  if (prompt.parentId) {
+    const parent = branchPrompts.find(p => p.id === prompt.parentId)
+    if (parent) {
+      return findStoryIdsForPrompt(parent, branchPrompts)
+    }
+  }
+  return null
+}
+
+/**
  * Application Acceptors
  * Note: SAM pattern expects curried functions: model => proposal => { ... }
  */
@@ -223,6 +249,7 @@ export const loadStateAcceptor = model => proposal => {
     model.history = state.history
     model.architecture = state.architecture
     model.userStories = state.userStories || []
+    model.storyGenerations = state.storyGenerations || model.storyGenerations
     model.uiGuidelines = state.uiGuidelines || model.uiGuidelines
 
     // Switch to prompt view once loaded
@@ -385,6 +412,22 @@ export const completeResponseAcceptor = model => proposal => {
         foundPrompt = true
 
         console.log('[ACCEPTOR-DEBUG] SUCCESS: Response saved. Content length:', prompt.response.content?.length || 0)
+
+        // Update implementation journey turn count if this is an implementation thread (US-3)
+        const storyIds = findStoryIdsForPrompt(prompt, branch.prompts)
+        if (storyIds && storyIds.length > 0) {
+          console.log('[ACCEPTOR-DEBUG] Implementation thread detected, updating journey turn count for stories:', storyIds)
+          // Find and update journeys for these stories
+          storyIds.forEach(storyId => {
+            const journey = model.storyGenerations.implementation_journeys.find(
+              j => j.story_id === storyId && j.status === 'pending'
+            )
+            if (journey) {
+              journey.turn_count = (journey.turn_count || 0) + 1
+              console.log('[ACCEPTOR-DEBUG] Updated journey turn count:', journey.id, 'to', journey.turn_count)
+            }
+          })
+        }
         break
       }
     }
@@ -543,7 +586,7 @@ export const toggleThreadExpandedAcceptor = model => proposal => {
 
 export const markThreadCompleteAcceptor = model => proposal => {
   if (proposal?.type === 'MARK_THREAD_COMPLETE') {
-    const { promptId } = proposal.payload
+    const { promptId, journeyOutcome, outcomeNotes } = proposal.payload
     // Find the prompt in any branch and mark it complete
     for (const branch of Object.values(model.history.branches)) {
       const prompt = branch.prompts.find(p => p.id === promptId)
@@ -553,6 +596,22 @@ export const markThreadCompleteAcceptor = model => proposal => {
         // If it's a story thread, also update its status
         if (prompt.type === 'story-thread') {
           prompt.status = 'completed'
+        }
+
+        // Complete implementation journeys for stories in this thread (US-3)
+        const storyIds = findStoryIdsForPrompt(prompt, branch.prompts)
+        if (storyIds && storyIds.length > 0) {
+          storyIds.forEach(storyId => {
+            const journey = model.storyGenerations.implementation_journeys.find(
+              j => j.story_id === storyId && j.status === 'pending'
+            )
+            if (journey) {
+              journey.status = journeyOutcome || 'success'
+              journey.outcome_notes = outcomeNotes || null
+              journey.completed_at = new Date().toISOString()
+              console.log('[MARK_COMPLETE] Completed journey:', journey.id, 'with status:', journey.status)
+            }
+          })
         }
         break
       }
@@ -572,6 +631,25 @@ export const unmarkThreadCompleteAcceptor = model => proposal => {
         // If it's a story thread, set status back to implementing
         if (prompt.type === 'story-thread') {
           prompt.status = 'implementing'
+        }
+
+        // Reopen implementation journeys for stories in this thread (US-3)
+        const storyIds = findStoryIdsForPrompt(prompt, branch.prompts)
+        if (storyIds && storyIds.length > 0) {
+          storyIds.forEach(storyId => {
+            // Find the most recent journey for this story (might be completed)
+            const journey = model.storyGenerations.implementation_journeys.find(
+              j => j.story_id === storyId && j.prompt_id === promptId
+            ) || model.storyGenerations.implementation_journeys.find(
+              j => j.story_id === storyId && j.status !== 'pending'
+            )
+            if (journey && journey.status !== 'pending') {
+              journey.status = 'pending'
+              journey.outcome_notes = null
+              journey.completed_at = null
+              console.log('[UNMARK_COMPLETE] Reopened journey:', journey.id)
+            }
+          })
         }
         break
       }
@@ -761,6 +839,29 @@ export const receiveDerivedStoriesAcceptor = model => proposal => {
     model.storyDerivation.status = 'reviewing'
     model.storyDerivation.pendingStories = proposal.payload.stories
     model.storyDerivation.originalPrompt = proposal.payload.originalPrompt
+
+    // Create a story generation record for tracking (US-1)
+    const generationId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+    const generation = {
+      id: generationId,
+      user_prompt: proposal.payload.originalPrompt,
+      project_context: model.config?.description || null,
+      generated_stories: proposal.payload.stories.map(story => ({
+        id: story.id,
+        title: story.title,
+        description: story.description || '',
+        acceptance_criteria: story.acceptanceCriteria || [],
+        user_action: 'pending',
+        modification_diff: null,
+        rejection_reason: null,
+        backlog_story_id: null
+      })),
+      timestamp: new Date().toISOString(),
+      model_used: model.config?.defaultModel || 'sonnet'
+    }
+    model.storyGenerations.generations.push(generation)
+    model.storyGenerations.currentGenerationId = generationId
+
     // Show the review modal
     model.modal = {
       type: 'user-story-review',
@@ -771,41 +872,112 @@ export const receiveDerivedStoriesAcceptor = model => proposal => {
 
 export const markStoryReadyAcceptor = model => proposal => {
   if (proposal?.type === 'MARK_STORY_READY') {
-    const story = model.storyDerivation.pendingStories.find(
-      s => s.id === proposal.payload.storyId
-    )
+    const storyId = proposal.payload.storyId
+    const story = model.storyDerivation.pendingStories.find(s => s.id === storyId)
     if (story) {
       story.status = 'ready'
+
+      // Track acceptance in story generations (US-2)
+      const currentGenId = model.storyGenerations.currentGenerationId
+      if (currentGenId) {
+        const generation = model.storyGenerations.generations.find(g => g.id === currentGenId)
+        if (generation) {
+          const genStory = generation.generated_stories.find(s => s.id === storyId)
+          if (genStory) {
+            genStory.user_action = 'accepted'
+          }
+        }
+      }
     }
   }
 }
 
 export const unmarkStoryReadyAcceptor = model => proposal => {
   if (proposal?.type === 'UNMARK_STORY_READY') {
-    const story = model.storyDerivation.pendingStories.find(
-      s => s.id === proposal.payload.storyId
-    )
+    const storyId = proposal.payload.storyId
+    const story = model.storyDerivation.pendingStories.find(s => s.id === storyId)
     if (story) {
       story.status = 'pending'
+
+      // Reset to pending in story generations (US-2)
+      const currentGenId = model.storyGenerations.currentGenerationId
+      if (currentGenId) {
+        const generation = model.storyGenerations.generations.find(g => g.id === currentGenId)
+        if (generation) {
+          const genStory = generation.generated_stories.find(s => s.id === storyId)
+          if (genStory) {
+            genStory.user_action = 'pending'
+          }
+        }
+      }
     }
   }
 }
 
 export const updateDerivedStoryAcceptor = model => proposal => {
   if (proposal?.type === 'UPDATE_DERIVED_STORY') {
-    const story = model.storyDerivation.pendingStories.find(
-      s => s.id === proposal.payload.storyId
-    )
+    const storyId = proposal.payload.storyId
+    const story = model.storyDerivation.pendingStories.find(s => s.id === storyId)
     if (story) {
+      // Capture original values before update for diff (US-2)
+      const originalTitle = story.title
+      const originalDescription = story.description
+      const originalCriteria = [...(story.acceptanceCriteria || [])]
+
+      // Apply updates
       Object.assign(story, proposal.payload.updates)
+
+      // Track modification in story generations (US-2)
+      const currentGenId = model.storyGenerations.currentGenerationId
+      if (currentGenId) {
+        const generation = model.storyGenerations.generations.find(g => g.id === currentGenId)
+        if (generation) {
+          const genStory = generation.generated_stories.find(s => s.id === storyId)
+          if (genStory) {
+            genStory.user_action = 'modified'
+            // Create a simple diff showing what changed
+            const changes = []
+            if (proposal.payload.updates.title && proposal.payload.updates.title !== originalTitle) {
+              changes.push(`title: "${originalTitle}" -> "${proposal.payload.updates.title}"`)
+            }
+            if (proposal.payload.updates.description && proposal.payload.updates.description !== originalDescription) {
+              changes.push('description changed')
+            }
+            if (proposal.payload.updates.acceptanceCriteria) {
+              const newCriteria = proposal.payload.updates.acceptanceCriteria
+              if (JSON.stringify(newCriteria) !== JSON.stringify(originalCriteria)) {
+                changes.push(`criteria: ${originalCriteria.length} -> ${newCriteria.length} items`)
+              }
+            }
+            genStory.modification_diff = changes.join('; ') || 'modified'
+          }
+        }
+      }
     }
   }
 }
 
 export const deleteDerivedStoryAcceptor = model => proposal => {
   if (proposal?.type === 'DELETE_DERIVED_STORY') {
+    const storyId = proposal.payload.storyId
+    const rejectionReason = proposal.payload.reason || null
+
+    // Track rejection in story generations before removing (US-2)
+    const currentGenId = model.storyGenerations.currentGenerationId
+    if (currentGenId) {
+      const generation = model.storyGenerations.generations.find(g => g.id === currentGenId)
+      if (generation) {
+        const genStory = generation.generated_stories.find(s => s.id === storyId)
+        if (genStory) {
+          genStory.user_action = 'rejected'
+          genStory.rejection_reason = rejectionReason
+        }
+      }
+    }
+
+    // Remove from pending stories
     model.storyDerivation.pendingStories = model.storyDerivation.pendingStories.filter(
-      s => s.id !== proposal.payload.storyId
+      s => s.id !== storyId
     )
   }
 }
@@ -877,6 +1049,27 @@ export const addStoriesToBacklogAcceptor = model => proposal => {
       model.history.branches[branchId].prompts.push(prompt)
       model.history.activeBranch = branchId
       model.history.activePromptId = promptId
+    }
+
+    // Finalize story generation tracking - link backlog IDs (US-2)
+    const currentGenId = model.storyGenerations.currentGenerationId
+    if (currentGenId) {
+      const generation = model.storyGenerations.generations.find(g => g.id === currentGenId)
+      if (generation) {
+        // Update each added story with its backlog ID
+        selectedStories.forEach(story => {
+          const genStory = generation.generated_stories.find(s => s.id === story.id)
+          if (genStory) {
+            genStory.backlog_story_id = story.id // Same ID used in backlog
+            // Ensure user_action is 'accepted' for added stories
+            if (genStory.user_action === 'pending') {
+              genStory.user_action = 'accepted'
+            }
+          }
+        })
+      }
+      // Clear current generation ID (finalized)
+      model.storyGenerations.currentGenerationId = null
     }
 
     // Reset derivation state
@@ -1040,6 +1233,24 @@ Please start by outlining your implementation plan, then proceed with the implem
       branchId,
       storyIds: stories.map(s => s.id)
     }
+
+    // Create implementation journeys for each story (US-3)
+    stories.forEach(story => {
+      const journeyId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+      const journey = {
+        id: journeyId,
+        story_id: story.id,
+        prompt_id: promptId,
+        branch_id: branchId,
+        turn_count: 0, // Will be incremented when first response completes
+        inputs: [],
+        status: 'pending',
+        outcome_notes: null,
+        started_at: new Date().toISOString(),
+        completed_at: null
+      }
+      model.storyGenerations.implementation_journeys.push(journey)
+    })
   }
 }
 
@@ -1426,7 +1637,7 @@ export const loadDeveloperProfileAcceptor = model => proposal => {
 
 export const switchViewAcceptor = model => proposal => {
   if (proposal?.type === 'SWITCH_VIEW') {
-    const validViews = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'profile']
+    const validViews = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'profile', 'git']
     if (validViews.includes(proposal.payload.view)) {
       model.currentView = proposal.payload.view
     }
@@ -1453,6 +1664,124 @@ export const hideModalAcceptor = model => proposal => {
     console.log('[HIDE_MODAL] Acceptor called - hiding modal')
     console.log('[HIDE_MODAL] Stack trace:', new Error().stack)
     model.modal = null
+  }
+}
+
+/**
+ * Story Generation Tracking Acceptors
+ */
+
+export const loadStoryGenerationsAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_STORY_GENERATIONS') {
+    model.storyGenerations = proposal.payload.generations || model.storyGenerations
+  }
+}
+
+export const createStoryGenerationAcceptor = model => proposal => {
+  if (proposal?.type === 'CREATE_STORY_GENERATION') {
+    const generation = {
+      id: proposal.payload.id || (Date.now().toString(36) + Math.random().toString(36).substr(2, 9)),
+      user_prompt: proposal.payload.user_prompt,
+      project_context: proposal.payload.project_context || null,
+      generated_stories: (proposal.payload.generated_stories || []).map(story => ({
+        id: story.id || (Date.now().toString(36) + Math.random().toString(36).substr(2, 9)),
+        title: story.title,
+        description: story.description || '',
+        acceptance_criteria: story.acceptance_criteria || [],
+        user_action: 'pending',
+        modification_diff: null,
+        rejection_reason: null,
+        backlog_story_id: null
+      })),
+      timestamp: proposal.payload.timestamp || new Date().toISOString(),
+      model_used: proposal.payload.model_used || 'sonnet'
+    }
+    model.storyGenerations.generations.push(generation)
+    model.storyGenerations.currentGenerationId = generation.id
+  }
+}
+
+export const updateGeneratedStoryFeedbackAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_GENERATED_STORY_FEEDBACK') {
+    const { generationId, storyId, feedback } = proposal.payload
+    const generation = model.storyGenerations.generations.find(g => g.id === generationId)
+    if (generation) {
+      const story = generation.generated_stories.find(s => s.id === storyId)
+      if (story) {
+        Object.assign(story, feedback)
+      }
+    }
+  }
+}
+
+export const finalizeStoryGenerationAcceptor = model => proposal => {
+  if (proposal?.type === 'FINALIZE_STORY_GENERATION') {
+    // Called when adding stories to backlog - link backlog IDs
+    const { generationId, storyMappings } = proposal.payload
+    const generation = model.storyGenerations.generations.find(g => g.id === generationId)
+    if (generation) {
+      storyMappings.forEach(({ generatedStoryId, backlogStoryId }) => {
+        const story = generation.generated_stories.find(s => s.id === generatedStoryId)
+        if (story) {
+          story.backlog_story_id = backlogStoryId
+        }
+      })
+    }
+    model.storyGenerations.currentGenerationId = null
+  }
+}
+
+export const createImplementationJourneyAcceptor = model => proposal => {
+  if (proposal?.type === 'CREATE_IMPLEMENTATION_JOURNEY') {
+    const journey = {
+      id: proposal.payload.id || (Date.now().toString(36) + Math.random().toString(36).substr(2, 9)),
+      story_id: proposal.payload.story_id,
+      prompt_id: proposal.payload.prompt_id,
+      turn_count: proposal.payload.turn_count || 0,
+      inputs: proposal.payload.inputs || [],
+      status: 'pending',
+      outcome_notes: null,
+      started_at: new Date().toISOString(),
+      completed_at: null
+    }
+    model.storyGenerations.implementation_journeys.push(journey)
+  }
+}
+
+export const addImplementationInputAcceptor = model => proposal => {
+  if (proposal?.type === 'ADD_IMPLEMENTATION_INPUT') {
+    const { journeyId, input } = proposal.payload
+    const journey = model.storyGenerations.implementation_journeys.find(j => j.id === journeyId)
+    if (journey) {
+      journey.inputs.push({
+        turn_number: input.turn_number,
+        type: input.type || 'technical',
+        content_summary: input.content_summary || '',
+        timestamp: new Date().toISOString()
+      })
+    }
+  }
+}
+
+export const updateImplementationJourneyAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_IMPLEMENTATION_JOURNEY') {
+    const { journeyId, updates } = proposal.payload
+    const journey = model.storyGenerations.implementation_journeys.find(j => j.id === journeyId)
+    if (journey) {
+      Object.assign(journey, updates)
+    }
+  }
+}
+
+export const completeImplementationJourneyAcceptor = model => proposal => {
+  if (proposal?.type === 'COMPLETE_IMPLEMENTATION_JOURNEY') {
+    const { journeyId, status, outcome_notes } = proposal.payload
+    const journey = model.storyGenerations.implementation_journeys.find(j => j.id === journeyId)
+    if (journey) {
+      journey.status = status
+      journey.outcome_notes = outcome_notes || null
+      journey.completed_at = new Date().toISOString()
+    }
   }
 }
 
@@ -1523,6 +1852,16 @@ export const acceptors = [
   cancelStoryReviewAcceptor,
   storyDerivationErrorAcceptor,
   startStoryImplementationAcceptor,
+
+  // Story Generation Tracking
+  loadStoryGenerationsAcceptor,
+  createStoryGenerationAcceptor,
+  updateGeneratedStoryFeedbackAcceptor,
+  finalizeStoryGenerationAcceptor,
+  createImplementationJourneyAcceptor,
+  addImplementationInputAcceptor,
+  updateImplementationJourneyAcceptor,
+  completeImplementationJourneyAcceptor,
 
   // UI Navigation
   switchViewAcceptor,

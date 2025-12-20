@@ -24,6 +24,10 @@ export class PromptEditorComponent {
     this.inputTypeGroup = null
     this.inputTypeSelect = null
     this.currentImplementationJourneyIds = [] // Active journey IDs for current thread
+    // Handoff button
+    this.handoffReadyBtn = null
+    // Current handoff context (to be injected in next prompt)
+    this.pendingHandoff = null
   }
 
   /**
@@ -42,6 +46,8 @@ export class PromptEditorComponent {
     // Input type tracking (US-3)
     this.inputTypeGroup = document.getElementById('input-type-group')
     this.inputTypeSelect = document.getElementById('input-type')
+    // Handoff button
+    this.handoffReadyBtn = document.getElementById('handoff-ready-btn')
 
     this.bindEvents()
     this.subscribeToState()
@@ -93,6 +99,20 @@ export class PromptEditorComponent {
         this.modelSelect.dataset.userChanged = 'true'
       })
     }
+
+    // Handoff Ready button
+    if (this.handoffReadyBtn) {
+      this.handoffReadyBtn.addEventListener('click', () => {
+        console.log('[HANDOFF] Handoff Ready button clicked')
+        this.openHandoffReview()
+      })
+    }
+
+    // Listen for handoff received event
+    document.addEventListener('handoff-received', (e) => {
+      console.log('[HANDOFF] Handoff received:', e.detail)
+      this.handleHandoffReceived(e.detail)
+    })
 
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
@@ -998,6 +1018,129 @@ export class PromptEditorComponent {
       console.log('[DERIVE-STORIES] IPC call sent')
     } else {
       console.error('[DERIVE-STORIES] IPC not available!')
+    }
+  }
+
+  /**
+   * Handle received handoff context
+   */
+  handleHandoffReceived(handoffData) {
+    console.log('[HANDOFF] handleHandoffReceived called:', handoffData)
+
+    // Store the pending handoff
+    this.pendingHandoff = handoffData
+
+    // Clear any selected prompt (to show empty prompt view)
+    console.log('[HANDOFF] Calling selectPrompt(null)')
+    this.intents.selectPrompt(null)
+
+    // Clear the textarea
+    this.textarea.value = ''
+    this.submitBtn.disabled = true
+
+    // Show the handoff banner above the prompt
+    console.log('[HANDOFF] Calling showHandoffBanner')
+    this.showHandoffBanner(handoffData)
+  }
+
+  /**
+   * Show handoff context banner above the prompt input
+   */
+  showHandoffBanner(handoffData) {
+    console.log('[HANDOFF] showHandoffBanner called with data:', handoffData)
+
+    // Remove existing banner if any
+    this.hideHandoffBanner()
+
+    // Create the banner element
+    const banner = document.createElement('div')
+    banner.id = 'handoff-context-banner'
+    banner.className = 'handoff-context-banner'
+    banner.innerHTML = `
+      <div class="handoff-banner-header">
+        <span class="handoff-banner-icon">🤝</span>
+        <span class="handoff-banner-title">Handoff Context Ready</span>
+        <button class="handoff-banner-dismiss" title="Dismiss handoff context">&times;</button>
+      </div>
+      <div class="handoff-banner-info">
+        <span>From: <strong>${this.escapeHtml(handoffData.sourceThreadName)}</strong></span>
+        <span class="handoff-banner-separator">•</span>
+        <span>Branch: <strong>${this.escapeHtml(handoffData.sourceBranch)}</strong></span>
+      </div>
+      <div class="handoff-banner-summary">
+        <pre>${this.escapeHtml(handoffData.summary)}</pre>
+      </div>
+      <div class="handoff-banner-hint">
+        This context will be automatically included in your next prompt.
+      </div>
+    `
+
+    // Find the prompt area and insert banner before it
+    const promptArea = document.querySelector('.prompt-area')
+    if (promptArea) {
+      console.log('[HANDOFF] Found prompt area, inserting banner before it')
+      promptArea.parentNode.insertBefore(banner, promptArea)
+    } else {
+      console.warn('[HANDOFF] Could not find .prompt-area container')
+    }
+
+    // Add dismiss button handler
+    const dismissBtn = banner.querySelector('.handoff-banner-dismiss')
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => {
+        this.clearPendingHandoff()
+      })
+    }
+  }
+
+  /**
+   * Hide the handoff banner
+   */
+  hideHandoffBanner() {
+    const existingBanner = document.getElementById('handoff-context-banner')
+    if (existingBanner) {
+      existingBanner.remove()
+    }
+  }
+
+  /**
+   * Clear the pending handoff
+   */
+  clearPendingHandoff() {
+    this.pendingHandoff = null
+    this.hideHandoffBanner()
+  }
+
+  /**
+   * Escape HTML for safe rendering
+   */
+  escapeHtml(str) {
+    if (!str) return ''
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  /**
+   * Open the handoff review modal
+   */
+  openHandoffReview() {
+    console.log('[HANDOFF] Opening handoff review modal')
+
+    // Get current state
+    const state = window.puffinApp?.state
+    if (!state) {
+      console.warn('[HANDOFF] No state available')
+      return
+    }
+
+    // Dispatch the action to show the handoff review modal
+    if (this.intents.showHandoffReview) {
+      this.intents.showHandoffReview()
+    } else {
+      console.error('[HANDOFF] showHandoffReview intent not found')
     }
   }
 

@@ -800,6 +800,8 @@ export const updateUserStoryAcceptor = model => proposal => {
         ...model.userStories[index],
         ...proposal.payload
       }
+      // Track which story was updated for persistence
+      model._lastUpdatedStoryId = proposal.payload.id
     }
   }
 }
@@ -1632,6 +1634,169 @@ export const loadDeveloperProfileAcceptor = model => proposal => {
 }
 
 /**
+ * Handoff Acceptors
+ * For context handoff between threads
+ */
+
+export const showHandoffReviewAcceptor = model => proposal => {
+  if (proposal?.type === 'SHOW_HANDOFF_REVIEW') {
+    // Generate handoff summary from current thread context
+    const activePromptId = model.history.activePromptId
+    const activeBranch = model.history.activeBranch
+    const branch = model.history.branches[activeBranch]
+
+    let sourceThread = null
+    let summary = ''
+
+    if (activePromptId && branch) {
+      sourceThread = branch.prompts.find(p => p.id === activePromptId)
+      if (sourceThread) {
+        // Build summary from thread content and response
+        summary = buildHandoffSummary(sourceThread, branch, model)
+      }
+    }
+
+    model.modal = {
+      type: 'handoff-review',
+      data: {
+        sourceThreadId: activePromptId,
+        sourceThreadName: sourceThread?.title || truncateText(sourceThread?.content, 50) || 'Current Thread',
+        sourceBranch: activeBranch,
+        summary: summary,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      }
+    }
+  }
+}
+
+export const updateHandoffSummaryAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_HANDOFF_SUMMARY') {
+    if (model.modal?.type === 'handoff-review') {
+      model.modal.data.summary = proposal.payload.summary
+      model.modal.data.updatedAt = proposal.payload.timestamp
+    }
+  }
+}
+
+export const completeHandoffAcceptor = model => proposal => {
+  if (proposal?.type === 'COMPLETE_HANDOFF') {
+    const handoffData = model.modal?.data
+    if (!handoffData) return
+
+    // Store the handoff for the new thread to receive
+    if (!model.handoffs) {
+      model.handoffs = []
+    }
+
+    const handoff = {
+      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
+      sourceThreadId: handoffData.sourceThreadId,
+      sourceThreadName: handoffData.sourceThreadName,
+      sourceBranch: handoffData.sourceBranch,
+      summary: handoffData.summary,
+      createdAt: handoffData.createdAt,
+      updatedAt: handoffData.updatedAt,
+      status: 'pending',
+      receivingThreadId: null
+    }
+
+    model.handoffs.push(handoff)
+
+    // Close the modal
+    model.modal = null
+  }
+}
+
+export const cancelHandoffAcceptor = model => proposal => {
+  if (proposal?.type === 'CANCEL_HANDOFF') {
+    model.modal = null
+  }
+}
+
+export const deleteHandoffAcceptor = model => proposal => {
+  if (proposal?.type === 'DELETE_HANDOFF') {
+    if (model.handoffs) {
+      model.handoffs = model.handoffs.filter(h => h.id !== proposal.payload.handoffId)
+    }
+  }
+}
+
+/**
+ * Helper: Build handoff summary from thread context
+ */
+function buildHandoffSummary(thread, branch, model) {
+  let summary = ''
+
+  // What was worked on
+  summary += '🎯 What Was Implemented\n'
+  summary += '─'.repeat(30) + '\n\n'
+  if (thread.content) {
+    summary += `📝 Original Request:\n${thread.content}\n\n`
+  }
+
+  // Get response content if available
+  if (thread.response?.content) {
+    const responsePreview = thread.response.content.substring(0, 500)
+    summary += `💬 Work Summary:\n${responsePreview}${thread.response.content.length > 500 ? '...' : ''}\n\n`
+  }
+
+  // Files modified
+  if (thread.response?.filesModified?.length > 0) {
+    summary += '📁 Files Modified\n'
+    summary += '─'.repeat(30) + '\n\n'
+    thread.response.filesModified.forEach(file => {
+      // Handle both string and object formats
+      const filePath = typeof file === 'string' ? file : (file?.path || file?.file || String(file))
+
+      // Use different emoji based on file type
+      const ext = filePath.split('.').pop()?.toLowerCase()
+      let icon = '📄'
+      if (['js', 'ts', 'jsx', 'tsx'].includes(ext)) icon = '⚡'
+      else if (['css', 'scss', 'less'].includes(ext)) icon = '🎨'
+      else if (['html', 'htm'].includes(ext)) icon = '🌐'
+      else if (['json', 'yaml', 'yml'].includes(ext)) icon = '⚙️'
+      else if (['md', 'txt'].includes(ext)) icon = '📝'
+      else if (['test', 'spec'].some(t => filePath.includes(t))) icon = '🧪'
+
+      summary += `  ${icon} ${filePath}\n`
+    })
+    summary += '\n'
+  }
+
+  // Story context if available
+  if (thread.storyIds?.length > 0) {
+    const stories = model.userStories.filter(s => thread.storyIds.includes(s.id))
+    if (stories.length > 0) {
+      summary += '📖 Related User Stories\n'
+      summary += '─'.repeat(30) + '\n\n'
+      stories.forEach(story => {
+        const statusIcon = story.status === 'done' ? '✅' :
+                          story.status === 'in-progress' ? '🔄' : '📋'
+        summary += `  ${statusIcon} ${story.title}\n`
+      })
+      summary += '\n'
+    }
+  }
+
+  // Add notes section
+  summary += '📌 Notes for Next Thread\n'
+  summary += '─'.repeat(30) + '\n\n'
+  summary += '  ℹ️ Add any additional context or notes here before handing off.\n'
+
+  return summary
+}
+
+/**
+ * Helper: Truncate text
+ */
+function truncateText(text, maxLength) {
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength) + '...'
+}
+
+/**
  * UI Navigation Acceptors
  */
 
@@ -1868,6 +2033,13 @@ export const acceptors = [
   toggleSidebarAcceptor,
   showModalAcceptor,
   hideModalAcceptor,
+
+  // Handoff
+  showHandoffReviewAcceptor,
+  updateHandoffSummaryAcceptor,
+  completeHandoffAcceptor,
+  cancelHandoffAcceptor,
+  deleteHandoffAcceptor,
 
   // Activity Tracking
   setCurrentToolAcceptor,

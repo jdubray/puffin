@@ -65,6 +65,9 @@ export class ModalManager {
       case 'gui-export':
         // Handled by gui-designer component
         break
+      case 'handoff-review':
+        this.renderHandoffReview(modalTitle, modalContent, modalActions, modal.data, state)
+        break
       case 'profile-view':
         await this.renderProfileView(modalTitle, modalContent, modalActions, isStale)
         break
@@ -219,6 +222,124 @@ export class ModalManager {
     setTimeout(() => {
       document.getElementById('definition-name')?.focus()
     }, 100)
+  }
+
+  /**
+   * Render handoff review modal - Step 1: Review summary
+   */
+  renderHandoffReview(title, content, actions, data, state) {
+    title.textContent = 'Handoff Ready - Review Context'
+
+    // Step 1: Show the summary for review
+    content.innerHTML = `
+      <div class="handoff-review-content">
+        <div class="handoff-thread-info">
+          <div class="handoff-field">
+            <label>Source Thread:</label>
+            <span>${this.escapeHtml(data.sourceThreadName)}</span>
+          </div>
+          <div class="handoff-field">
+            <label>Branch:</label>
+            <span>${this.escapeHtml(data.sourceBranch)}</span>
+          </div>
+        </div>
+
+        <div class="handoff-summary-section">
+          <label>Context Summary:</label>
+          <div class="handoff-summary-preview">
+            <pre>${this.escapeHtml(data.summary)}</pre>
+          </div>
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="handoff-cancel-btn">Cancel</button>
+      <button class="btn primary" id="handoff-continue-btn">
+        <span class="handoff-icon">🤝</span>
+        Hand Off to New Thread
+      </button>
+    `
+
+    // Event listeners
+    document.getElementById('handoff-cancel-btn').addEventListener('click', () => {
+      this.intents.cancelHandoff()
+    })
+
+    document.getElementById('handoff-continue-btn').addEventListener('click', () => {
+      this.renderBranchSelection(title, content, actions, data, state)
+    })
+  }
+
+  /**
+   * Render branch selection - Step 2: Select target branch
+   */
+  renderBranchSelection(title, content, actions, data, state) {
+    title.textContent = 'Select Target Branch'
+
+    // Get available branches from state
+    const branches = state.history?.branches || []
+
+    content.innerHTML = `
+      <div class="handoff-branch-selection">
+        <p class="handoff-hint">Choose the branch where you want to start a new thread with this context:</p>
+        <div class="branch-list">
+          ${branches.length === 0 ? `
+            <p class="no-branches">No branches available. Create a branch first.</p>
+          ` : branches.map(branch => `
+            <button class="branch-select-item" data-branch-id="${this.escapeHtml(branch.id)}">
+              <span class="branch-name">${this.escapeHtml(branch.name)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="handoff-back-btn">Back</button>
+    `
+
+    // Event listeners
+    document.getElementById('handoff-back-btn').addEventListener('click', () => {
+      this.renderHandoffReview(title, content, actions, data, state)
+    })
+
+    // Handle branch selection
+    content.querySelectorAll('.branch-select-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const branchId = btn.dataset.branchId
+        const branchName = btn.querySelector('.branch-name')?.textContent || branchId
+        this.handleBranchSelection(branchId, branchName, data)
+      })
+    })
+  }
+
+  /**
+   * Handle branch selection for handoff
+   */
+  handleBranchSelection(branchId, branchName, handoffData) {
+    console.log('[HANDOFF] Branch selected:', branchId, branchName)
+
+    // 1. Close the modal first
+    this.intents.cancelHandoff()
+
+    // 2. Switch to the selected branch
+    this.intents.selectBranch(branchId)
+
+    // 3. Dispatch event to show handoff context in prompt area
+    // The prompt editor will handle displaying the summary and clearing the view
+    const event = new CustomEvent('handoff-received', {
+      detail: {
+        branchId,
+        branchName,
+        summary: handoffData.summary,
+        sourceThreadName: handoffData.sourceThreadName,
+        sourceBranch: handoffData.sourceBranch
+      }
+    })
+    document.dispatchEvent(event)
+
+    this.showToast(`Handoff received! Context ready for new thread in "${branchName}".`, 'success')
   }
 
   /**

@@ -119,20 +119,39 @@ export class StatePersistence {
 
       // Persist individual user story updates (status changes, edits)
       if (['ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY'].includes(normalizedType)) {
-        // Persist all user stories
-        for (const story of state.userStories) {
-          try {
-            await window.puffin.state.updateUserStory(story.id, story)
-          } catch (e) {
-            // Story might not exist yet, try adding it
-            try {
-              await window.puffin.state.addUserStory(story)
-            } catch (e2) {
-              console.error('Failed to persist story:', story.id, e2)
+        // Safety check: don't persist if stories array is empty (prevents accidental wipe)
+        if (!state.userStories || state.userStories.length === 0) {
+          console.warn('[PERSIST-DEBUG] Skipping user story persist: stories array is empty')
+        } else {
+          // Only persist the specific story that changed, not all stories
+          const storyId = state._lastUpdatedStoryId
+          if (storyId && normalizedType === 'UPDATE_USER_STORY') {
+            const story = state.userStories.find(s => s.id === storyId)
+            if (story) {
+              try {
+                await window.puffin.state.updateUserStory(story.id, story)
+                console.log('[PERSIST-DEBUG] User story updated:', story.id)
+              } catch (e) {
+                console.error('Failed to persist story:', story.id, e)
+              }
             }
+          } else if (normalizedType === 'ADD_USER_STORY') {
+            // For new stories, find and add the most recently created one
+            const newestStory = state.userStories[state.userStories.length - 1]
+            if (newestStory) {
+              try {
+                await window.puffin.state.addUserStory(newestStory)
+                console.log('[PERSIST-DEBUG] User story added:', newestStory.id)
+              } catch (e) {
+                // Story might already exist, try updating
+                await window.puffin.state.updateUserStory(newestStory.id, newestStory)
+              }
+            }
+          } else if (normalizedType === 'DELETE_USER_STORY') {
+            // Delete is handled by the IPC call directly, just log
+            console.log('[PERSIST-DEBUG] User story deleted')
           }
         }
-        console.log('[PERSIST-DEBUG] User stories persisted')
       }
 
       // Persist user stories and history when adding to backlog from derivation

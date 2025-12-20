@@ -2742,3 +2742,519 @@
   font-size: 0.875rem;
   color: var(--text-primary, #1a1a2e);
 }
+
+/* ============================================
+   Handoff UI Styles
+   ============================================ */
+
+/* Handoff Actions Container */
+.handoff-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 0;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Handoff Ready Button */
+.btn.handoff-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #8b5cf6 100%);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(108, 99, 255, 0.3);
+}
+
+.btn.handoff-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.4);
+}
+
+.btn.handoff-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(108, 99, 255, 0.3);
+}
+
+.btn.handoff-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.handoff-icon {
+  font-size: 1rem;
+}
+
+.handoff-text {
+  white-space: nowrap;
+}
+
+/* Handoff Review Modal */
+.modal.handoff-modal {
+  min-width: 550px;
+  max-width: 700px;
+}
+
+.handoff-modal .modal-header {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #8b5cf6 100%);
+  color: white;
+  border-bottom: none;
+}
+
+.handoff-modal .modal-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.handoff-modal .modal-close {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.handoff-modal .modal-close:hover {
+  color: white;
+}
+
+.handoff-modal .modal-content {
+  max-height: 50vh;
+  padding: 1.5rem;
+}
+
+/* Handoff Summary Display */
+.handoff-summary {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.handoff-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.handoff-summary-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.handoff-summary-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.handoff-summary-content {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.handoff-summary-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.handoff-summary-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+/* Handoff Thread Info */
+.handoff-thread-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+}
+
+.handoff-thread-label {
+  color: var(--text-muted);
+}
+
+.handoff-thread-name {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.handoff-thread-branch {
+  padding: 0.125rem 0.5rem;
+  background: rgba(139, 92, 246, 0.15);
+  border-radius: var(--radius-xs);
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+}
+
+/* Handoff Actions Footer */
+.handoff-modal .modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  gap: 1rem;
+}
+
+.handoff-action-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn.handoff-complete {
+  background: var(--success-color);
+  border-color: var(--success-color);
+  color: white;
+}
+
+.btn.handoff-complete:hover {
+  background: #0d9668;
+  border-color: #0d9668;
+}
+
+.btn.handoff-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.btn.handoff-refresh .refresh-icon {
+  transition: transform 0.3s ease;
+}
+
+.btn.handoff-refresh:hover .refresh-icon {
+  transform: rotate(180deg);
+}
+
+/* Handoff Empty State */
+.handoff-empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.handoff-empty-state .empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.handoff-empty-state p {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Handoff List (for managing saved handoffs) */
+.handoff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.handoff-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.handoff-list-item:hover {
+  border-color: var(--accent-primary);
+}
+
+.handoff-list-item .handoff-item-icon {
+  font-size: 1.25rem;
+}
+
+.handoff-list-item .handoff-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.handoff-list-item .handoff-item-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.handoff-list-item .handoff-item-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.handoff-list-item .handoff-item-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.handoff-delete-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.handoff-delete-btn:hover {
+  background: var(--error-color);
+  border-color: var(--error-color);
+  color: white;
+}
+
+/* Handoff Confirmation Dialog */
+.handoff-confirm-dialog {
+  text-align: center;
+  padding: 1rem;
+}
+
+.handoff-confirm-dialog .confirm-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.handoff-confirm-dialog .confirm-message {
+  font-size: 1rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.handoff-confirm-dialog .confirm-warning {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+/* Loading Spinner for Handoff */
+.handoff-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.handoff-loading .loading-spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Handoff Chain Visualization */
+.handoff-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 1rem 0;
+}
+
+.handoff-chain-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+}
+
+.handoff-chain-item .chain-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 1.5rem;
+}
+
+.handoff-chain-item .chain-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--accent-primary);
+  border-radius: 50%;
+}
+
+.handoff-chain-item .chain-line {
+  width: 2px;
+  height: 1rem;
+  background: var(--border-color);
+}
+
+.handoff-chain-item:last-child .chain-line {
+  display: none;
+}
+
+.handoff-chain-item .chain-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.handoff-chain-item .chain-source {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.handoff-chain-item .chain-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Handoff Branch Selection */
+.handoff-branch-selection {
+  padding: 0.5rem 0;
+}
+
+.handoff-hint {
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+}
+
+.branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.branch-select-item {
+  display: flex;
+  align-items: center;
+  padding: 0.875rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.branch-select-item:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+  transform: translateX(4px);
+}
+
+.branch-select-item .branch-name {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Handoff Context Banner - styled like response-files-modified */
+.handoff-context-banner {
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-primary);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+}
+
+.handoff-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.handoff-banner-icon {
+  font-size: 1rem;
+}
+
+.handoff-banner-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  font-size: 0.875rem;
+}
+
+.handoff-banner-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.handoff-banner-dismiss:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+.handoff-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+}
+
+.handoff-banner-separator {
+  color: var(--text-muted);
+}
+
+.handoff-banner-summary {
+  margin-bottom: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.handoff-banner-summary pre {
+  margin: 0;
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text-muted);
+}
+
+.handoff-banner-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+}

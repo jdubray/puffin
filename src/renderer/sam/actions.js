@@ -821,3 +821,52 @@ export const unmarkThreadComplete = (promptId) => ({
     timestamp: Date.now()
   }
 })
+
+/**
+ * Handoff Actions
+ * For context handoff between threads
+ */
+
+// Show the handoff review modal
+export const showHandoffReview = (handoffData = {}) => ({
+  type: 'SHOW_HANDOFF_REVIEW',
+  payload: {
+    ...handoffData,
+    timestamp: Date.now()
+  }
+})
+
+// Update the handoff summary
+export const updateHandoffSummary = (summary) => ({
+  type: 'UPDATE_HANDOFF_SUMMARY',
+  payload: {
+    summary,
+    timestamp: Date.now()
+  }
+})
+
+// Complete the handoff (create new thread with context)
+export const completeHandoff = (handoffData) => ({
+  type: 'COMPLETE_HANDOFF',
+  payload: {
+    ...handoffData,
+    timestamp: Date.now()
+  }
+})
+
+// Cancel handoff review
+export const cancelHandoff = () => ({
+  type: 'CANCEL_HANDOFF',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Delete a saved handoff
+export const deleteHandoff = (handoffId) => ({
+  type: 'DELETE_HANDOFF',
+  payload: {
+    handoffId,
+    timestamp: Date.now()
+  }
+})

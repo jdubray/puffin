@@ -26,50 +26,27 @@ Puffin is an Electron-based GUI application that serves as a **management layer*
 
 ## Active User Stories
 
-### 🔄 Git Repository Detection
+### 🔄 Merge Feature Branch to Main
 
-As a user, I want Puffin to detect when my project is in a Git repository so that Git integration features are available when applicable
-
-**Acceptance Criteria:**
-- Puffin detects the presence of a .git directory in the project root
-- Git integration features are only displayed when a Git repository is detected
-- A visual indicator shows the Git status (initialized/not initialized) in the UI
-- Puffin displays a helpful message when Git is not initialized, suggesting the user run git init outside Puffin
-
-### 📋 View Current Branch Status
-
-As a user, I want to see the current Git branch and its status so that I know which branch I'm working on and if there are uncommitted changes
+As a user, I want to merge my feature branch into the main branch so that my completed work is integrated into the primary codebase
 
 **Acceptance Criteria:**
-- The current branch name is displayed prominently in the UI
-- The UI indicates if there are uncommitted changes
-- The UI shows the number of commits ahead/behind the remote (if configured)
-- The branch status updates automatically when changes occur
+- User can select the target branch to merge into (defaults to main/master)
+- Puffin performs a merge operation from the current branch to the target branch
+- User is warned if there are uncommitted changes before merging
+- Successful merge displays a confirmation message
+- Merge conflicts are detected and reported to the user with affected files listed
+- User is given guidance on resolving merge conflicts outside Puffin
 
-### 🔄 Create New Feature Branch
+### 🔄 Post-Merge Branch Workflow
 
-As a user, I want to create a new feature branch from the current branch so that I can isolate my work for a new feature implementation
-
-**Acceptance Criteria:**
-- User can enter a branch name through a dialog or input field
-- Branch name is validated for Git naming conventions
-- The new branch is created from the current HEAD
-- Puffin automatically switches to the new branch after creation
-- An error message is displayed if branch creation fails (e.g., branch already exists)
-- The branch name can optionally be prefixed with a configurable pattern (e.g., feature/, bugfix/)
-
-### 🔄 Stage and Commit Changes
-
-As a user, I want to stage and commit my implemented code changes so that I can save my work with a meaningful commit message
+As a user, I want Puffin to help me prepare for the next feature after a successful merge so that I can maintain a clean workflow
 
 **Acceptance Criteria:**
-- User can view a list of changed files (staged, unstaged, untracked)
-- User can stage individual files or all changes
-- User can unstage files
-- User can enter a commit message
-- Commit message field validates that it is not empty
-- Successful commit displays a confirmation with the commit hash
-- Failed commits display an appropriate error message
+- After a successful merge, user is prompted to create a new feature branch
+- User can optionally delete the merged feature branch
+- User can choose to stay on the main branch or switch to a new branch
+- The workflow is optional and can be skipped
 
 ### 🔄 Merge Feature Branch to Main
 
@@ -93,44 +70,69 @@ As a user, I want Puffin to help me prepare for the next feature after a success
 - User can choose to stay on the main branch or switch to a new branch
 - The workflow is optional and can be skipped
 
-### 🔄 Git Operation History Log
+### 🔄 Handoff Persistence Without Expiration
 
-As a user, I want to see a log of Git operations performed through Puffin so that I can track what actions have been taken
-
-**Acceptance Criteria:**
-- A log displays recent Git operations (branch creation, commits, merges)
-- Each log entry shows timestamp, operation type, and relevant details
-- Log entries link to the associated implementation session if applicable
-- User can view the full Git commit history for the current branch
-
-### 📋 Integration with Implementation Sessions
-
-As a user, I want Git operations to be associated with my implementation sessions so that I can track which code changes correspond to which 3CLI conversations
+As a user, I want handoffs to persist indefinitely until I explicitly delete them so that I don't lose context due to automatic expiration
 
 **Acceptance Criteria:**
-- Commits made through Puffin are linked to the active implementation session
-- The session view shows associated commits
-- Commit messages can optionally auto-include session or feature reference
-- User can navigate from a commit to its related session and vice versa
+- Handoffs remain available until manually deleted by the user
+- User can delete a handoff through a clear UI action
+- Deleted handoffs are permanently removed from storage
+- Confirmation dialog appears before deleting a handoff
 
-### 📋 Git Configuration Settings
+### 🔄 Handoff Summary Updates
 
-As a user, I want to configure Git integration settings so that the workflow matches my preferences
+As a user, I want handoff summaries to be updated as I refine my work so that code changes and bug fixes are reflected in the handoff context
 
 **Acceptance Criteria:**
-- User can set the default main branch name (main, master, or custom)
-- User can configure branch naming prefixes (feature/, bugfix/, etc.)
-- User can enable/disable automatic prompts for post-merge workflows
-- Settings are persisted per project
-- User can toggle Git integration on/off
+- Handoff summaries are automatically updated when relevant code changes occur
+- User can manually trigger a handoff summary refresh
+- The current summary always reflects the latest state of the work
+
+### 📋 Multi-Hop Handoff Chaining
+
+As a user, I want to chain multiple handoff summaries together so that context is preserved across multiple handoff sequences
+
+**Acceptance Criteria:**
+- When creating a new handoff from a thread that received a handoff, both summaries are linked
+- Chained handoff summaries are presented in chronological order
+- The receiving thread can access the full chain of handoff context
+- User can view the complete handoff chain history
+- Each hop in the chain is clearly identified with its source thread
+
+### 🔄 Handoff Ready Button in Prompt Area
+
+As a user, I want a 'Handoff Ready' button to appear below the prompt input so that I can initiate a handoff when I decide the work is ready
+
+**Acceptance Criteria:**
+- A 'Handoff Ready' button appears below the prompt input area
+- The button is always accessible regardless of Claude's assessment of completion
+- The button is visually distinct and easy to identify
+- Clicking the button opens the handoff review modal
+
+### 🔄 Handoff Review Modal
+
+As a user, I want to review the handoff summary in a modal before completing the handoff so that I can verify the context being passed to the new thread
+
+**Acceptance Criteria:**
+- Modal displays the current handoff summary content
+- User can read and review all context that will be handed off
+- Modal includes a 'Hand Off to New Thread' action button
+- Modal includes a 'Cancel' option to return without handing off
+- User can continue working and refining before completing the handoff
+
+### 🔄 User-Controlled Handoff Timing
+
+As a user, I want to control when a handoff occurs regardless of Claude's completion assessment so that I can fix bugs and refine features before handing off
+
+**Acceptance Criteria:**
+- Handoff initiation is entirely user-driven
+- User can continue making changes after a handoff summary is generated
+- Changes made after summary generation trigger summary updates
+- User decides when the work is ready to hand off, not the system
 
 ---
 
-## Branch Focus: Backend
+## Branch Focus: Tmp
 
-You are working on the **backend thread**. Focus on:
-- API design and implementation
-- Data persistence and database operations
-- Business logic and validation
-- Error handling and logging
-- Security and authentication
+You are working on the **tmp** thread.

@@ -165,7 +165,9 @@ class PuffinApp {
       'addStoriesToBacklog', 'cancelStoryReview', 'storyDerivationError', 'startStoryImplementation',
       'switchView', 'toggleSidebar', 'showModal', 'hideModal',
       'toolStart', 'toolEnd', 'clearActivity',
-      'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity'
+      'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity',
+      // Handoff actions
+      'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff'
     ]
 
     const samResult = SAM({
@@ -263,7 +265,14 @@ class PuffinApp {
           // Developer profile actions
           ['LOAD_DEVELOPER_PROFILE', actions.loadDeveloperProfile],
           ['LOAD_GITHUB_REPOSITORIES', actions.loadGithubRepositories],
-          ['LOAD_GITHUB_ACTIVITY', actions.loadGithubActivity]
+          ['LOAD_GITHUB_ACTIVITY', actions.loadGithubActivity],
+
+          // Handoff actions
+          ['SHOW_HANDOFF_REVIEW', actions.showHandoffReview],
+          ['UPDATE_HANDOFF_SUMMARY', actions.updateHandoffSummary],
+          ['COMPLETE_HANDOFF', actions.completeHandoff],
+          ['CANCEL_HANDOFF', actions.cancelHandoff],
+          ['DELETE_HANDOFF', actions.deleteHandoff]
         ],
         acceptors: [
           ...appFsm.acceptors,

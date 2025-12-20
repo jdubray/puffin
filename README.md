@@ -272,6 +272,16 @@ Keep Claude focused on what matters:
 - **Session Resumption**: Automatically resumes Claude sessions to maintain context
 - **Smart History**: Only sends relevant context when resuming, not redundant history
 
+### Git Integration
+Puffin includes a comprehensive Git panel for repository management directly within the application:
+- **Branch Management**: Create, switch, and delete branches with configurable prefixes (feature/, bugfix/, etc.)
+- **Change Staging**: View modified files, stage/unstage individual files or all changes
+- **Commit Workflow**: Write commit messages manually or generate them with Claude based on staged changes
+- **Merge Operations**: Merge branches with conflict detection and resolution guidance
+- **Operation History**: Track all Git operations performed through Puffin
+
+**Cross-Platform Line Endings**: Puffin includes a `.gitattributes` file that automatically normalizes line endings (CRLF/LF) across different operating systems. This prevents phantom "modified" files when working in mixed environments like Windows with WSL. No additional configuration is required—Git will automatically handle line ending conversions on commit.
+
 ## License
 
 MIT

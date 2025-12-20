@@ -915,6 +915,22 @@ export const clearPendingSprintPlanning = () => ({
   payload: {}
 })
 
+// Start implementation for a specific story and branch (sprint workflow)
+export const startSprintStoryImplementation = (storyId, branchType) => ({
+  type: 'START_SPRINT_STORY_IMPLEMENTATION',
+  payload: {
+    storyId,
+    branchType,
+    timestamp: Date.now()
+  }
+})
+
+// Clear pending story implementation flag (after IPC submission)
+export const clearPendingStoryImplementation = () => ({
+  type: 'CLEAR_PENDING_STORY_IMPLEMENTATION',
+  payload: {}
+})
+
 /**
  * Git Integration Actions
  */

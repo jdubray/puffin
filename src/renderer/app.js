@@ -171,7 +171,8 @@ class PuffinApp {
       // Handoff actions
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearPendingSprintPlanning'
+      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearPendingSprintPlanning',
+      'startSprintStoryImplementation', 'clearPendingStoryImplementation'
     ]
 
     const samResult = SAM({
@@ -289,7 +290,9 @@ class PuffinApp {
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['APPROVE_PLAN', actions.approvePlan],
           ['CLEAR_SPRINT', actions.clearSprint],
-          ['CLEAR_PENDING_SPRINT_PLANNING', actions.clearPendingSprintPlanning]
+          ['CLEAR_PENDING_SPRINT_PLANNING', actions.clearPendingSprintPlanning],
+          ['START_SPRINT_STORY_IMPLEMENTATION', actions.startSprintStoryImplementation],
+          ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation]
         ],
         acceptors: [
           ...appFsm.acceptors,

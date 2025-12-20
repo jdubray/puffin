@@ -1924,6 +1924,103 @@ export const clearPendingSprintPlanningAcceptor = model => proposal => {
   }
 }
 
+// Start implementation for a specific story and branch (sprint workflow)
+export const startSprintStoryImplementationAcceptor = model => proposal => {
+  if (proposal?.type === 'START_SPRINT_STORY_IMPLEMENTATION') {
+    const { storyId, branchType } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint || sprint.status !== 'planned') {
+      console.warn('[SPRINT] Cannot start implementation - sprint not in planned state')
+      return
+    }
+
+    const story = sprint.stories.find(s => s.id === storyId)
+    if (!story) {
+      console.warn('[SPRINT] Story not found:', storyId)
+      return
+    }
+
+    // Map branch type to actual branch
+    const branchMap = {
+      'ui': 'ui',
+      'backend': 'backend',
+      'fullstack': model.history.activeBranch || 'backend'
+    }
+    const targetBranch = branchMap[branchType] || branchType
+
+    // Update sprint status
+    model.activeSprint = {
+      ...model.activeSprint,
+      status: 'implementing'
+    }
+
+    // Build implementation prompt context
+    const implementationPrompt = buildStoryImplementationPrompt(story, branchType, sprint)
+
+    // Store pending implementation for IPC
+    model._pendingStoryImplementation = {
+      storyId,
+      branchType,
+      branchId: targetBranch,
+      promptContent: implementationPrompt,
+      story
+    }
+  }
+}
+
+// Clear pending story implementation flag (after IPC submission)
+export const clearPendingStoryImplementationAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PENDING_STORY_IMPLEMENTATION') {
+    model._pendingStoryImplementation = null
+  }
+}
+
+/**
+ * Helper: Build implementation prompt for a story
+ */
+function buildStoryImplementationPrompt(story, branchType, sprint) {
+  const branchDescriptions = {
+    'ui': 'UI/UX thread',
+    'backend': 'Backend thread',
+    'fullstack': 'Full Stack implementation'
+  }
+
+  const branchFocus = {
+    'ui': 'Focus on: User interface design, user experience, component layout, styling, accessibility, and frontend implementation.\nConsider usability, responsiveness, and visual consistency.',
+    'backend': 'Focus on: API design, data models, business logic, database operations, and server-side implementation.\nConsider performance, security, and maintainability.',
+    'fullstack': 'Focus on: End-to-end implementation including both frontend and backend components.\nConsider integration points and data flow between layers.'
+  }
+
+  let prompt = `## Implementation Request
+
+[${branchDescriptions[branchType] || branchType}]
+${branchFocus[branchType] || ''}
+
+### User Story
+**${story.title}**
+
+${story.description || ''}
+`
+
+  if (story.acceptanceCriteria?.length > 0) {
+    prompt += `
+### Acceptance Criteria
+${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+`
+  }
+
+  prompt += `
+### Sprint Context
+This is part of an approved sprint plan. Please implement this story following the established patterns in the codebase.
+
+---
+
+Please proceed with the implementation.`
+
+  return prompt
+}
+
 /**
  * Helper: Build handoff summary from thread context
  */
@@ -2249,6 +2346,8 @@ export const acceptors = [
   clearSprintAcceptor,
   approvePlanAcceptor,
   clearPendingSprintPlanningAcceptor,
+  startSprintStoryImplementationAcceptor,
+  clearPendingStoryImplementationAcceptor,
 
   // Activity Tracking
   setCurrentToolAcceptor,

@@ -669,6 +669,31 @@ function setupFileHandlers(ipcMain) {
       return { success: false, error: error.message }
     }
   })
+
+  // Save markdown content to file
+  ipcMain.handle('file:saveMarkdown', async (event, content) => {
+    try {
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        title: 'Save Markdown',
+        defaultPath: 'response.md',
+        filters: [
+          { name: 'Markdown', extensions: ['md'] },
+          { name: 'Text', extensions: ['txt'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      })
+
+      if (canceled || !filePath) {
+        return { success: false, canceled: true }
+      }
+
+      const fs = require('fs').promises
+      await fs.writeFile(filePath, content, 'utf-8')
+      return { success: true, filePath }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
 }
 
 /**

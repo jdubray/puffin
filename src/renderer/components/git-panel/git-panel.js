@@ -153,6 +153,10 @@ export class GitPanelComponent {
         await this.handleCommit()
         break
 
+      case 'generate-commit-message':
+        await this.handleGenerateCommitMessage()
+        break
+
       case 'merge-branch':
         await this.handleMerge(value)
         break
@@ -176,8 +180,18 @@ export class GitPanelComponent {
 
     if (target.id === 'git-branch-name') {
       this.newBranchName = target.value
+      // Update create branch button state
+      const createBtn = this.container.querySelector('[data-action="create-branch"]')
+      if (createBtn) {
+        createBtn.disabled = !this.newBranchName.trim()
+      }
     } else if (target.id === 'git-commit-message') {
       this.commitMessage = target.value
+      // Update commit button state immediately
+      const commitBtn = this.container.querySelector('[data-action="commit"]')
+      if (commitBtn) {
+        commitBtn.disabled = !this.commitMessage.trim()
+      }
     }
   }
 
@@ -456,6 +470,95 @@ export class GitPanelComponent {
       }
     } catch (err) {
       this.showToast(err.message, 'error')
+    }
+  }
+
+  /**
+   * Handle generating a commit message with Claude
+   */
+  async handleGenerateCommitMessage() {
+    if (!this.status?.files?.staged?.length) {
+      this.showToast('No changes staged - stage files first', 'error')
+      return
+    }
+
+    // Show loading state on button
+    const generateBtn = this.container.querySelector('[data-action="generate-commit-message"]')
+    const originalText = generateBtn?.textContent
+    if (generateBtn) {
+      generateBtn.textContent = 'Generating...'
+      generateBtn.disabled = true
+    }
+
+    try {
+      // Get the diff of staged changes
+      const diffResult = await window.puffin.git.getDiff({ staged: true })
+
+      if (!diffResult.success) {
+        this.showToast('Could not get staged changes diff: ' + (diffResult.error || 'Unknown error'), 'error')
+        return
+      }
+
+      // Get list of staged files for context
+      const stagedFiles = this.status.files.staged.map(f => `${f.status}: ${f.path}`).join('\n')
+
+      // If diff is empty (e.g., only new files added), use file list as context
+      const diffContent = diffResult.diff || '(New files staged - no diff available)'
+
+      // Create prompt for Claude
+      const prompt = `Generate a concise, professional git commit message for these changes.
+
+STAGED FILES:
+${stagedFiles}
+
+DIFF:
+${diffContent.substring(0, 8000)}
+
+Rules:
+- Use conventional commit format: type(scope): description
+- Types: feat, fix, refactor, docs, style, test, chore
+- Keep the first line under 72 characters
+- Be specific about what changed
+- Do not include any explanation, just return the commit message itself
+- If there are multiple changes, summarize the main purpose`
+
+      // Call Claude to generate the message
+      const response = await window.puffin.claude.sendPrompt(prompt, {
+        model: 'haiku',
+        maxTokens: 200
+      })
+
+      if (response.success && response.content) {
+        // Clean up the response - remove any markdown code blocks
+        let message = response.content.trim()
+        message = message.replace(/^```[a-z]*\n?/gm, '').replace(/```$/gm, '').trim()
+
+        // Update the commit message textarea
+        this.commitMessage = message
+        const textarea = this.container.querySelector('#git-commit-message')
+        if (textarea) {
+          textarea.value = message
+        }
+
+        // Enable commit button
+        const commitBtn = this.container.querySelector('[data-action="commit"]')
+        if (commitBtn) {
+          commitBtn.disabled = false
+        }
+
+        this.showToast('Commit message generated', 'success')
+      } else {
+        this.showToast('Failed to generate commit message', 'error')
+      }
+    } catch (err) {
+      console.error('Error generating commit message:', err)
+      this.showToast('Error generating commit message: ' + err.message, 'error')
+    } finally {
+      // Restore button state
+      if (generateBtn) {
+        generateBtn.textContent = originalText || 'Generate'
+        generateBtn.disabled = false
+      }
     }
   }
 
@@ -1027,10 +1130,17 @@ export class GitPanelComponent {
         <!-- Commit Section -->
         ${hasStaged ? `
           <div class="git-commit-section">
-            <h4>Commit</h4>
+            <div class="commit-header">
+              <h4>Commit</h4>
+              <button
+                class="btn small secondary"
+                data-action="generate-commit-message"
+                title="Generate commit message with Claude"
+              >✨ Generate</button>
+            </div>
             <textarea
               id="git-commit-message"
-              placeholder="Enter commit message..."
+              placeholder="Enter commit message or click Generate..."
               rows="3"
             >${this.escapeHtml(this.commitMessage)}</textarea>
             <button

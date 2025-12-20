@@ -452,6 +452,50 @@
   font-size: 0.875em;
 }
 
+/* Response Action Buttons */
+.response-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.response-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.response-action-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.response-action-btn:active {
+  transform: translateY(0);
+}
+
+.response-action-btn .btn-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.response-action-btn .btn-text {
+  line-height: 1;
+}
+
 .conversation-turn.streaming .response-text {
   border-left-color: var(--accent-primary);
 }
@@ -545,6 +589,54 @@
   background: var(--bg-secondary);
   padding: 0.125rem 0.375rem;
   border-radius: var(--radius-xs);
+}
+
+/* Markdown Tables */
+.response-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.response-content table th,
+.response-content table td {
+  padding: 0.625rem 0.875rem;
+  text-align: left;
+  border: 1px solid var(--border-color);
+}
+
+.response-content table th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.response-content table td {
+  color: var(--text-secondary);
+}
+
+.response-content table tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.response-content table tr:hover td {
+  background: var(--bg-hover);
+}
+
+/* Responsive table wrapper */
+.response-content .table-wrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border-radius: var(--radius-sm);
+}
+
+.response-content .table-wrapper table {
+  margin: 0;
 }
 
 .prompt-area {

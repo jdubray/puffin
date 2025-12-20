@@ -1854,6 +1854,26 @@ export const clearSprintAcceptor = model => proposal => {
   }
 }
 
+// Approve the sprint plan - transitions sprint to 'planned' status
+export const approvePlanAcceptor = model => proposal => {
+  if (proposal?.type === 'APPROVE_PLAN') {
+    if (model.activeSprint) {
+      model.activeSprint = {
+        ...model.activeSprint,
+        status: 'planned',
+        planApprovedAt: proposal.payload.timestamp
+      }
+    }
+  }
+}
+
+// Clear pending sprint planning flag (after IPC submission)
+export const clearPendingSprintPlanningAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PENDING_SPRINT_PLANNING') {
+    model._pendingSprintPlanning = null
+  }
+}
+
 /**
  * Helper: Build handoff summary from thread context
  */
@@ -2177,6 +2197,8 @@ export const acceptors = [
   createSprintAcceptor,
   startSprintPlanningAcceptor,
   clearSprintAcceptor,
+  approvePlanAcceptor,
+  clearPendingSprintPlanningAcceptor,
 
   // Activity Tracking
   setCurrentToolAcceptor,

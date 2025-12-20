@@ -909,6 +909,12 @@ export const clearSprint = () => ({
   }
 })
 
+// Clear pending sprint planning flag (after IPC submission)
+export const clearPendingSprintPlanning = () => ({
+  type: 'CLEAR_PENDING_SPRINT_PLANNING',
+  payload: {}
+})
+
 /**
  * Git Integration Actions
  */

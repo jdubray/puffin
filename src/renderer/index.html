@@ -273,6 +273,24 @@
                 </div>
               </fieldset>
 
+              <fieldset class="options-fieldset">
+                <legend>Sprint Execution Settings</legend>
+
+                <div class="options-grid">
+                  <div class="form-group">
+                    <label for="sprint-max-iterations">Maximum Iterations</label>
+                    <input type="number" id="sprint-max-iterations" min="1" max="50" value="10">
+                    <small class="form-hint">Max number of Claude continuations per sprint (default: 10)</small>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="sprint-auto-continue-delay">Auto-Continue Delay (seconds)</label>
+                    <input type="number" id="sprint-auto-continue-delay" min="5" max="120" value="20">
+                    <small class="form-hint">Seconds to wait before auto-continuing (default: 20)</small>
+                  </div>
+                </div>
+              </fieldset>
+
               <div class="form-actions">
                 <button type="button" id="generate-claude-md-btn" class="btn secondary">Generate Claude.md</button>
                 <button type="submit" class="btn primary">Save Configuration</button>
@@ -293,6 +311,24 @@
               <button class="branch-tab" data-branch="deployment">Deployment</button>
               <button class="branch-tab" data-branch="tmp">Tmp</button>
             </div>
+            <!-- Sprint Header (visible when sprint is active) -->
+            <div id="sprint-header" class="sprint-header hidden">
+              <div class="sprint-header-content">
+                <div class="sprint-title-row">
+                  <h3 class="sprint-title">Sprint</h3>
+                  <span class="sprint-status-badge">Created</span>
+                  <button id="sprint-close-btn" class="sprint-close-btn" title="Close Sprint">×</button>
+                </div>
+                <div class="sprint-stories" id="sprint-stories">
+                  <!-- Story cards will be rendered here -->
+                </div>
+                <div class="sprint-actions" id="sprint-actions">
+                  <button id="sprint-plan-btn" class="btn primary">Plan</button>
+                  <button id="sprint-approve-btn" class="btn success hidden">Approve Plan</button>
+                </div>
+              </div>
+            </div>
+
             <div class="response-area">
               <div id="response-content" class="response-content">
                 <p class="placeholder">Select a thread and start a conversation with Claude...</p>
@@ -348,6 +384,26 @@
                   <span class="handoff-icon">🤝</span>
                   <span class="handoff-text">Handoff Ready</span>
                 </button>
+              </div>
+              <!-- Iteration Counter (visible during sprint execution) -->
+              <div id="iteration-counter" class="iteration-counter hidden">
+                <div class="iteration-stats">
+                  <span class="iteration-label">Iterations:</span>
+                  <span id="iteration-current" class="iteration-value">0</span>
+                  <span class="iteration-separator">/</span>
+                  <span id="iteration-max" class="iteration-value">10</span>
+                </div>
+                <div class="continuation-stats">
+                  <span class="continuation-label">Continuations:</span>
+                  <span id="continuation-count" class="continuation-value">0</span>
+                </div>
+                <div id="auto-continue-timer" class="auto-continue-timer hidden">
+                  <span class="timer-label">Auto-continue in:</span>
+                  <span id="timer-countdown" class="timer-value">20</span>
+                  <span class="timer-unit">s</span>
+                  <button id="timer-skip-btn" class="btn small outline" title="Continue now">Skip</button>
+                  <button id="timer-cancel-btn" class="btn small secondary" title="Cancel auto-continue">Cancel</button>
+                </div>
               </div>
             </div>
           </div>

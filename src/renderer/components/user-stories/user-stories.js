@@ -417,7 +417,7 @@ export class UserStoriesComponent {
       <span class="selection-count">${this.selectedStoryIds.size} ${this.selectedStoryIds.size === 1 ? 'story' : 'stories'} selected</span>
       <div class="action-buttons">
         <button class="btn secondary clear-selection-btn">Clear Selection</button>
-        <button class="btn primary start-implementation-btn">Start Implementation</button>
+        <button class="btn primary create-sprint-btn">Create Sprint</button>
       </div>
     `
 
@@ -426,8 +426,8 @@ export class UserStoriesComponent {
       this.clearSelection()
     })
 
-    actionBar.querySelector('.start-implementation-btn').addEventListener('click', () => {
-      this.startImplementation()
+    actionBar.querySelector('.create-sprint-btn').addEventListener('click', () => {
+      this.createSprint()
     })
   }
 
@@ -440,21 +440,29 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Start implementation for selected stories
+   * Create a sprint from selected stories
    */
-  startImplementation() {
+  createSprint() {
     const selectedStories = this.stories.filter(s => this.selectedStoryIds.has(s.id))
 
     if (selectedStories.length === 0) {
       return
     }
 
-    // Call intent to start implementation
-    this.intents.startStoryImplementation(selectedStories)
+    // Call intent to create sprint - this will switch to prompt view with sprint header
+    this.intents.createSprint(selectedStories)
 
-    // Clear selection after starting
+    // Clear selection after creating sprint
     this.selectedStoryIds.clear()
     this.updateActionBar()
+  }
+
+  /**
+   * Start implementation for selected stories (legacy - now uses createSprint)
+   */
+  startImplementation() {
+    // Redirect to createSprint for backward compatibility
+    this.createSprint()
   }
 
   /**

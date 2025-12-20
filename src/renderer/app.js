@@ -171,7 +171,7 @@ class PuffinApp {
       // Handoff actions
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint'
+      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearPendingSprintPlanning'
     ]
 
     const samResult = SAM({
@@ -288,7 +288,8 @@ class PuffinApp {
           ['CREATE_SPRINT', actions.createSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['APPROVE_PLAN', actions.approvePlan],
-          ['CLEAR_SPRINT', actions.clearSprint]
+          ['CLEAR_SPRINT', actions.clearSprint],
+          ['CLEAR_PENDING_SPRINT_PLANNING', actions.clearPendingSprintPlanning]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -677,9 +678,15 @@ class PuffinApp {
     this.updateViews(state)
     this.modalManager.update(state)
     this.updateHeader(state)
+    this.updateSprintHeader(state)
 
     if (state.rerunRequest) {
       this.handleRerunRequest(state.rerunRequest, state)
+    }
+
+    // Handle pending sprint planning - submit to Claude
+    if (state._pendingSprintPlanning) {
+      this.handleSprintPlanning(state._pendingSprintPlanning, state)
     }
   }
 
@@ -724,6 +731,121 @@ class PuffinApp {
     if (projectName) {
       projectName.textContent = state.projectName || ''
       projectName.title = state.projectPath || ''
+    }
+  }
+
+  /**
+   * Update sprint header visibility and content
+   */
+  updateSprintHeader(state) {
+    const sprintHeader = document.getElementById('sprint-header')
+    if (!sprintHeader) return
+
+    const sprint = state.activeSprint
+
+    if (!sprint) {
+      sprintHeader.classList.add('hidden')
+      return
+    }
+
+    // Show sprint header
+    sprintHeader.classList.remove('hidden')
+
+    // Update status badge
+    const statusBadge = sprintHeader.querySelector('.sprint-status-badge')
+    if (statusBadge) {
+      statusBadge.textContent = this.formatSprintStatus(sprint.status)
+      statusBadge.className = 'sprint-status-badge ' + sprint.status
+    }
+
+    // Render story cards
+    const storiesContainer = document.getElementById('sprint-stories')
+    if (storiesContainer && sprint.stories) {
+      storiesContainer.innerHTML = sprint.stories.map(story => `
+        <div class="sprint-story-card">
+          <h4>${this.escapeHtml(story.title)}</h4>
+          <p>${this.escapeHtml(story.description || '')}</p>
+        </div>
+      `).join('')
+    }
+
+    // Update action buttons based on status
+    const planBtn = document.getElementById('sprint-plan-btn')
+    const approveBtn = document.getElementById('sprint-approve-btn')
+
+    if (planBtn && approveBtn) {
+      // Show Plan button only when sprint is created
+      planBtn.classList.toggle('hidden', sprint.status !== 'created')
+      // Show Approve button only when sprint is planning (after plan generated)
+      approveBtn.classList.toggle('hidden', sprint.status !== 'planning')
+    }
+
+    // Bind event handlers (only once)
+    if (!sprintHeader.dataset.bound) {
+      sprintHeader.dataset.bound = 'true'
+
+      // Close button
+      const closeBtn = document.getElementById('sprint-close-btn')
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          if (confirm('Close this sprint? You can create a new one from the Backlog.')) {
+            this.intents.clearSprint()
+          }
+        })
+      }
+
+      // Plan button
+      if (planBtn) {
+        planBtn.addEventListener('click', () => {
+          this.intents.startSprintPlanning()
+        })
+      }
+
+      // Approve button
+      if (approveBtn) {
+        approveBtn.addEventListener('click', () => {
+          this.intents.approvePlan()
+          this.showToast('Plan approved! Ready for implementation.', 'success')
+        })
+      }
+    }
+  }
+
+  /**
+   * Format sprint status for display
+   */
+  formatSprintStatus(status) {
+    const statusMap = {
+      'created': 'Created',
+      'planning': 'Planning',
+      'planned': 'Ready for Implementation',
+      'implementing': 'Implementing'
+    }
+    return statusMap[status] || status
+  }
+
+  /**
+   * Handle sprint planning - submit planning prompt to Claude
+   */
+  handleSprintPlanning(planningData, state) {
+    console.log('[SPRINT] Starting sprint planning:', planningData)
+
+    // Clear the pending flag immediately to prevent re-submission
+    this.intents.clearPendingSprintPlanning()
+
+    const { promptContent, branchId } = planningData
+
+    // Submit the planning prompt to Claude
+    if (window.puffin?.claude) {
+      window.puffin.claude.submit({
+        prompt: promptContent,
+        branchId,
+        sessionId: null, // New session for sprint planning
+        project: state.config ? {
+          name: state.config.name,
+          description: state.config.description
+        } : null
+      })
     }
   }
 

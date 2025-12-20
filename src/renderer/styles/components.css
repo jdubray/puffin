@@ -367,6 +367,124 @@
   padding: 0 !important;
 }
 
+/* Sprint Header */
+.sprint-header {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+  border-bottom: 2px solid var(--color-primary);
+  padding: 1rem 1.5rem;
+}
+
+.sprint-header.hidden {
+  display: none;
+}
+
+.sprint-header-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.sprint-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.sprint-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sprint-status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--color-primary);
+  color: white;
+}
+
+.sprint-status-badge.planning {
+  background: var(--color-warning);
+  color: var(--bg-primary);
+}
+
+.sprint-status-badge.planned {
+  background: var(--color-success);
+  color: white;
+}
+
+.sprint-close-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.sprint-close-btn:hover {
+  background: var(--bg-primary);
+  color: var(--color-error);
+}
+
+.sprint-stories {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.sprint-story-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  border-left: 3px solid var(--color-primary);
+}
+
+.sprint-story-card h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sprint-story-card p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.sprint-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sprint-actions .btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+}
+
+.sprint-actions .btn.success {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.sprint-actions .btn.success:hover {
+  background: #3a9d68;
+}
+
 .response-area {
   flex: 1;
   overflow-y: auto;

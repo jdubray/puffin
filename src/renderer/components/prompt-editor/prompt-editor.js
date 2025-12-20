@@ -330,7 +330,7 @@ export class PromptEditorComponent {
       html += `<div class="conversation-turn${isInContext ? ' in-context' : ' out-of-context'}${isActive ? ' active-prompt' : ''}" data-prompt-id="${prompt.id}">
         <div class="user-message">
           <strong>You:</strong>
-          <p>${this.escapeHtml(prompt.content)}</p>
+          <div class="prompt-text">${this.formatMarkdown(prompt.content)}</div>
         </div>`
 
       if (prompt.hasResponse && prompt.response) {
@@ -403,6 +403,61 @@ export class PromptEditorComponent {
       .replace(/\n/g, '<br>')
       .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
       .replace(/`([^`]+)`/g, '<code>$1</code>')
+  }
+
+  /**
+   * Format markdown content for display
+   * Renders common markdown syntax to HTML
+   */
+  formatMarkdown(content) {
+    if (!content) return ''
+
+    // Use marked.js if available for full markdown support
+    if (window.marked) {
+      try {
+        return window.marked.parse(content)
+      } catch (e) {
+        console.warn('Marked.js parsing failed, falling back to basic formatting:', e)
+      }
+    }
+
+    // Basic markdown parsing fallback
+    let html = this.escapeHtml(content)
+
+    // Code blocks (must be before inline code)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+      return `<pre><code class="language-${lang}">${code}</code></pre>`
+    })
+
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+
+    // Headers
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+
+    // Bold
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+
+    // Italic
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+
+    // Unordered lists
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>')
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+
+    // Ordered lists
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+
+    // Line breaks (for remaining newlines)
+    html = html.replace(/\n/g, '<br>')
+
+    // Clean up extra breaks inside lists
+    html = html.replace(/<\/li><br>/g, '</li>')
+    html = html.replace(/<br><li>/g, '<li>')
+
+    return html
   }
 
   /**

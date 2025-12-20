@@ -37,6 +37,83 @@ As a user, I want to chain multiple handoff summaries together so that context i
 - User can view the complete handoff chain history
 - Each hop in the chain is clearly identified with its source thread
 
+### 🔄 Sprint Plan Review and Modification
+
+As a user, I want to review and modify the generated plan through follow-up prompts so that I can refine the implementation approach before starting work
+
+**Acceptance Criteria:**
+- User can send follow-up prompts to refine the plan
+- Plan modifications are tracked in the conversation history
+- User can explicitly approve the plan when satisfied
+- Sprint status updates to 'Ready for Implementation' after plan approval
+- The final approved plan is associated with the sprint
+
+### 📋 Implementation Branch Buttons per User Story
+
+As a user, I want to see implementation branch buttons below each user story header so that I can start focused implementation work on specific areas
+
+**Acceptance Criteria:**
+- Each user story header displays branch buttons (UI, Backend, etc.)
+- Branch buttons appear after the sprint plan is approved
+- Buttons are contextually relevant to the type of work in the story
+- Branch buttons are visually associated with their parent user story
+- User can identify which story each branch button belongs to
+
+### 📋 Start Implementation from Branch Button
+
+As a user, I want to click a branch button to start implementation so that a new turn is added to the current sprint thread with the appropriate context
+
+**Acceptance Criteria:**
+- Clicking a branch button adds a new turn to the sprint thread
+- The new turn includes context about which story and branch was selected
+- The implementation prompt references the approved plan
+- The branch type (UI, Backend, etc.) is passed to Claude for context
+- The sprint thread continues in the same window
+
+### 🔄 Sprint State Persistence
+
+As a user, I want the sprint state to persist so that I can return to a sprint and continue work where I left off
+
+**Acceptance Criteria:**
+- Sprint data is saved including selected stories, plan, and status
+- Reopening a sprint restores the header display with user stories
+- Implementation progress per branch is tracked and displayed
+- Sprint thread conversation history is preserved
+- User can see which branches have been started or completed
+
+### 📋 Sprint Progress Tracking per Story
+
+As a user, I want to see the implementation progress for each user story within the sprint so that I know what work remains
+
+**Acceptance Criteria:**
+- Each user story header shows implementation status
+- Branch buttons indicate whether they have been started
+- Completed branches are visually marked as done
+- Overall sprint progress is visible
+- User can identify blocked or incomplete work at a glance
+
+### 📋 Existing Prompt View Compatibility
+
+As a user, I want the existing prompt view to continue working as before so that I can still use free-form prompting without creating a sprint
+
+**Acceptance Criteria:**
+- Standard prompt threads work without sprint headers
+- User can create new threads without selecting user stories
+- Existing prompt functionality is unchanged
+- Sprint mode is opt-in through the Backlog selection workflow
+- User can distinguish between sprint threads and regular threads
+
+### 📋 Multi-Hop Handoff Chaining
+
+As a user, I want to chain multiple handoff summaries together so that context is preserved across multiple handoff sequences
+
+**Acceptance Criteria:**
+- When creating a new handoff from a thread that received a handoff, both summaries are linked
+- Chained handoff summaries are presented in chronological order
+- The receiving thread can access the full chain of handoff context
+- User can view the complete handoff chain history
+- Each hop in the chain is clearly identified with its source thread
+
 ### 🔄 Sprint Planning Phase with Plan Button
 
 As a user, I want a 'Plan' button available in the sprint view so that I can initiate the planning phase for the selected user stories
@@ -113,6 +190,48 @@ As a user, I want the existing prompt view to continue working as before so that
 - Existing prompt functionality is unchanged
 - Sprint mode is opt-in through the Backlog selection workflow
 - User can distinguish between sprint threads and regular threads
+
+### 📋 Default Maximum Iterations Configuration
+
+As a user, I want the system to default to 10 maximum iterations so that sprint execution has a sensible limit without manual configuration
+
+**Acceptance Criteria:**
+- New sprints default to 10 maximum iterations
+- The default value is applied when no custom value is specified
+- The maximum iterations value is visible in sprint configuration
+- User can override the default if needed
+
+### 📋 Auto-Continue Delay Configuration
+
+As a user, I want a 20 second delay between auto-continues so that I have time to review output before the next iteration begins
+
+**Acceptance Criteria:**
+- System waits 20 seconds between automatic continuation prompts
+- The delay countdown is visible to the user
+- User can manually trigger continuation before delay expires
+- User can cancel the auto-continue during the delay period
+
+### 📋 Stuck Detection Threshold
+
+As a user, I want the system to detect when execution is stuck after 3 similar iterations so that I am alerted to potential issues
+
+**Acceptance Criteria:**
+- System tracks iteration outputs for similarity
+- Alert is triggered after 3 consecutive similar iterations
+- User is notified when stuck state is detected
+- User can choose to continue, modify approach, or stop execution
+- Stuck detection resets when output changes significantly
+
+### 📋 Sprint Story Limit Enforcement
+
+As a user, I want the system to reject sprints with more than 4 stories so that I avoid exceeding token limits during execution
+
+**Acceptance Criteria:**
+- System validates story count when sprint is created
+- Sprints with more than 4 stories are rejected
+- Clear error message indicates token limit restriction
+- User is prompted to reduce story count before proceeding
+- Validation occurs before any sprint execution begins
 
 ---
 

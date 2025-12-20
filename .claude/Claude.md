@@ -133,6 +133,11 @@ As a user, I want to control when a handoff occurs regardless of Claude's comple
 
 ---
 
-## Branch Focus: Tmp
+## Branch Focus: Backend
 
-You are working on the **tmp** thread.
+You are working on the **backend thread**. Focus on:
+- API design and implementation
+- Data persistence and database operations
+- Business logic and validation
+- Error handling and logging
+- Security and authentication

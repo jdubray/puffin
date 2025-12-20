@@ -69,6 +69,7 @@ export class HistoryTreeComponent {
 
       item.addEventListener('click', () => {
         this.intents.selectBranch(branch.id)
+        this.intents.switchView('prompt')
       })
 
       // Context menu for custom branches
@@ -169,6 +170,7 @@ export class HistoryTreeComponent {
           this.intents.toggleThreadExpanded(prompt.id)
         }
         this.intents.selectPrompt(prompt.id)
+        this.intents.switchView('prompt')
       })
 
       // Rerun button click (only for regular prompts)

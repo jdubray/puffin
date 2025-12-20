@@ -870,3 +870,36 @@ export const deleteHandoff = (handoffId) => ({
     timestamp: Date.now()
   }
 })
+
+/**
+ * Git Integration Actions
+ */
+
+// Generate commit message with Claude (includes handoff summary context)
+export const generateCommitMessage = (gitContext) => ({
+  type: 'GENERATE_COMMIT_MESSAGE',
+  payload: {
+    stagedFiles: gitContext.stagedFiles,
+    diff: gitContext.diff,
+    currentBranch: gitContext.currentBranch,
+    timestamp: Date.now()
+  }
+})
+
+// Receive generated commit message from Claude
+export const receiveCommitMessage = (message) => ({
+  type: 'RECEIVE_COMMIT_MESSAGE',
+  payload: {
+    message,
+    timestamp: Date.now()
+  }
+})
+
+// Commit message generation error
+export const commitMessageError = (error) => ({
+  type: 'COMMIT_MESSAGE_ERROR',
+  payload: {
+    error: error.message || error,
+    timestamp: Date.now()
+  }
+})

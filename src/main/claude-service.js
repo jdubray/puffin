@@ -1185,6 +1185,128 @@ ${content}`
   }
 
   /**
+   * Send a simple prompt and get a response (non-streaming)
+   * Useful for simple tasks like generating commit messages
+   * @param {string} prompt - The prompt to send
+   * @param {Object} options - Options for the request
+   * @param {string} options.model - Model to use (default: 'haiku')
+   * @param {number} options.maxTokens - Max tokens in response (informational only)
+   * @param {number} options.maxTurns - Max turns (default: 1)
+   * @returns {Promise<{success: boolean, response?: string, error?: string}>}
+   */
+  async sendPrompt(prompt, options = {}) {
+    return new Promise((resolve) => {
+      const model = options.model || 'haiku'
+      const maxTurns = options.maxTurns || 1
+
+      const args = [
+        '--print',
+        '--output-format', 'stream-json',
+        '--verbose',
+        '--max-turns', String(maxTurns),
+        '--model', model,
+        '--permission-mode', 'acceptEdits',
+        '-'
+      ]
+
+      const cwd = this.projectPath || process.cwd()
+      const spawnOptions = this.getSpawnOptions(cwd)
+      spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
+
+      console.log('[sendPrompt] Sending prompt with model:', model)
+
+      const proc = spawn('claude', args, spawnOptions)
+
+      if (!proc.pid) {
+        resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
+        return
+      }
+
+      let buffer = ''
+      let resultText = ''
+      let errorOutput = ''
+
+      // Write prompt to stdin and close
+      proc.stdin.write(prompt)
+      proc.stdin.end()
+
+      proc.stdout.on('data', (chunk) => {
+        buffer += chunk.toString()
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const json = JSON.parse(line)
+
+            // Extract text from assistant messages
+            if (json.type === 'assistant' && json.message?.content) {
+              for (const block of json.message.content) {
+                if (block.type === 'text') {
+                  resultText += block.text
+                }
+              }
+            }
+
+            // Also check for result type
+            if (json.type === 'result' && json.result) {
+              resultText = json.result
+            }
+          } catch (e) {
+            // Non-JSON line, accumulate as plain text
+            resultText += line + '\n'
+          }
+        }
+      })
+
+      proc.stderr.on('data', (chunk) => {
+        errorOutput += chunk.toString()
+      })
+
+      proc.on('close', (code) => {
+        // Process remaining buffer
+        if (buffer.trim()) {
+          try {
+            const json = JSON.parse(buffer)
+            if (json.type === 'result' && json.result) {
+              resultText = json.result
+            }
+          } catch (e) {
+            // Not JSON
+          }
+        }
+
+        if (code === 0 || resultText.length > 0) {
+          resolve({
+            success: true,
+            response: resultText.trim()
+          })
+        } else {
+          resolve({
+            success: false,
+            error: errorOutput || `Process exited with code ${code}`
+          })
+        }
+      })
+
+      proc.on('error', (error) => {
+        resolve({ success: false, error: error.message })
+      })
+
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        proc.kill()
+        if (resultText.length > 0) {
+          resolve({ success: true, response: resultText.trim() })
+        } else {
+          resolve({ success: false, error: 'Request timed out' })
+        }
+      }, 30000)
+    })
+  }
+
+  /**
    * Generate a fallback title from content
    * @param {string} content - The prompt content
    * @returns {string} - Fallback title

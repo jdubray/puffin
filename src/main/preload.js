@@ -173,7 +173,10 @@ contextBridge.exposeInMainWorld('puffin', {
     },
 
     // Generate a title for a prompt (used for new threads)
-    generateTitle: (content) => ipcRenderer.invoke('claude:generateTitle', content)
+    generateTitle: (content) => ipcRenderer.invoke('claude:generateTitle', content),
+
+    // Send a simple prompt and get a response (non-streaming)
+    sendPrompt: (prompt, options = {}) => ipcRenderer.invoke('claude:sendPrompt', prompt, options)
   },
 
   /**

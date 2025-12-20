@@ -614,6 +614,17 @@ function setupClaudeHandlers(ipcMain) {
       return { success: true, title: claudeService.generateFallbackTitle(content) }
     }
   })
+
+  // Send a simple prompt and get a response (non-streaming)
+  ipcMain.handle('claude:sendPrompt', async (event, prompt, options = {}) => {
+    try {
+      const result = await claudeService.sendPrompt(prompt, options)
+      return result
+    } catch (error) {
+      console.error('sendPrompt failed:', error)
+      return { success: false, error: error.message }
+    }
+  })
 }
 
 /**

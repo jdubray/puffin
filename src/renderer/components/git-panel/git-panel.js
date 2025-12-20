@@ -523,14 +523,16 @@ Rules:
 - If there are multiple changes, summarize the main purpose`
 
       // Call Claude to generate the message
+      console.log('[GIT-PANEL] Calling sendPrompt with prompt length:', prompt.length)
       const response = await window.puffin.claude.sendPrompt(prompt, {
         model: 'haiku',
         maxTokens: 200
       })
+      console.log('[GIT-PANEL] sendPrompt response:', JSON.stringify(response, null, 2))
 
-      if (response.success && response.content) {
+      if (response.success && response.response) {
         // Clean up the response - remove any markdown code blocks
-        let message = response.content.trim()
+        let message = response.response.trim()
         message = message.replace(/^```[a-z]*\n?/gm, '').replace(/```$/gm, '').trim()
 
         // Update the commit message textarea

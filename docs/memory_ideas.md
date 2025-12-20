@@ -95,4 +95,4 @@
   - Multi-turn chatbots and long-horizon agents
   - Systems requiring swift add/delete/update operations
 
-  This aligns perfectly with Puffin's role as a tracking/orchestration layer where transparency and editability matter.
+  This aligns perfectly with Puffin's role as a tracking/orchestration layer where transparency and editability matter.cd

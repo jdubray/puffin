@@ -37,6 +37,9 @@ export class StatePersistence {
       'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
       'ADD_STORIES_TO_BACKLOG', 'START_STORY_IMPLEMENTATION',
+      // Sprint actions
+      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT',
+      'START_SPRINT_STORY_IMPLEMENTATION',
       // Story generation tracking
       'RECEIVE_DERIVED_STORIES', 'CREATE_STORY_GENERATION', 'UPDATE_GENERATED_STORY_FEEDBACK',
       'FINALIZE_STORY_GENERATION', 'CREATE_IMPLEMENTATION_JOURNEY',
@@ -154,6 +157,12 @@ export class StatePersistence {
         }
       }
 
+      // Persist sprint state changes
+      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT'].includes(normalizedType)) {
+        console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
+        await window.puffin.state.updateActiveSprint(state.activeSprint)
+      }
+
       // Persist user stories and history when adding to backlog from derivation
       if (normalizedType === 'ADD_STORIES_TO_BACKLOG') {
         // Persist history (we added a prompt entry)
@@ -184,7 +193,12 @@ export class StatePersistence {
         // Persist history (we added a prompt entry)
         await window.puffin.state.updateHistory(state.history.raw)
 
-        // Check if there's a pending implementation to submit
+        // Persist sprint state (status changed to implementing)
+        if (state.activeSprint) {
+          await window.puffin.state.updateActiveSprint(state.activeSprint)
+        }
+
+        // Check if there's a pending implementation to submit (from backlog)
         const pendingImpl = state._pendingImplementation
         if (pendingImpl) {
           console.log('[IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingImpl.branchId)
@@ -206,6 +220,72 @@ export class StatePersistence {
               description: state.config.description
             } : null
           })
+        }
+
+        // Check if there's a pending story implementation from sprint
+        const pendingSprintImpl = state._pendingStoryImplementation
+        if (pendingSprintImpl) {
+          console.log('[SPRINT-IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingSprintImpl.branchId)
+
+          // Get session ID from last successful prompt in the target branch
+          const targetBranch = state.history.raw?.branches?.[pendingSprintImpl.branchId]
+          const lastPromptWithResponse = targetBranch?.prompts
+            ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
+            ?.pop()
+          const sessionId = lastPromptWithResponse?.response?.sessionId || null
+
+          // Submit to Claude
+          await window.puffin.claude.submit({
+            prompt: pendingSprintImpl.promptContent,
+            branchId: pendingSprintImpl.branchId,
+            sessionId,
+            project: state.config ? {
+              name: state.config.name,
+              description: state.config.description
+            } : null
+          })
+
+          // Clear the pending implementation flag
+          if (this.intents?.clearPendingStoryImplementation) {
+            this.intents.clearPendingStoryImplementation()
+          }
+        }
+      }
+
+      // Handle sprint story implementation - persist sprint and submit to Claude
+      if (normalizedType === 'START_SPRINT_STORY_IMPLEMENTATION') {
+        // Persist sprint state (status changed to implementing)
+        if (state.activeSprint) {
+          await window.puffin.state.updateActiveSprint(state.activeSprint)
+        }
+
+        // Check if there's a pending story implementation from sprint
+        const pendingSprintImpl = state._pendingStoryImplementation
+        if (pendingSprintImpl) {
+          console.log('[SPRINT-IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingSprintImpl.branchId)
+
+          // Get session ID from last successful prompt in the target branch
+          const targetBranch = state.history.raw?.branches?.[pendingSprintImpl.branchId]
+          const lastPromptWithResponse = targetBranch?.prompts
+            ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
+            ?.pop()
+          const sessionId = lastPromptWithResponse?.response?.sessionId || null
+
+          // Submit to Claude
+          await window.puffin.claude.submit({
+            prompt: pendingSprintImpl.promptContent,
+            branchId: pendingSprintImpl.branchId,
+            sessionId,
+            project: state.config ? {
+              name: state.config.name,
+              description: state.config.description
+            } : null
+          })
+
+          // Clear the pending implementation flag
+          if (this.intents?.clearPendingStoryImplementation) {
+            this.intents.clearPendingStoryImplementation()
+          }
         }
       }
 

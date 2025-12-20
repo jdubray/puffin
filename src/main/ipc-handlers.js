@@ -280,6 +280,17 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // ============ Sprint Operations ============
+
+  ipcMain.handle('state:updateActiveSprint', async (event, sprint) => {
+    try {
+      await puffinState.updateActiveSprint(sprint)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // ============ Story Generation Tracking Operations ============
 
   ipcMain.handle('state:getStoryGenerations', async () => {

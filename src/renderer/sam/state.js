@@ -70,7 +70,10 @@ export function computeState(model) {
     activeSprint: model.activeSprint || null,
 
     // Pending sprint planning (for Claude submission)
-    _pendingSprintPlanning: model._pendingSprintPlanning || null
+    _pendingSprintPlanning: model._pendingSprintPlanning || null,
+
+    // Pending story implementation from sprint (for Claude submission)
+    _pendingStoryImplementation: model._pendingStoryImplementation || null
   }
 }
 

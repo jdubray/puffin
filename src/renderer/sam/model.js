@@ -253,6 +253,7 @@ export const loadStateAcceptor = model => proposal => {
     model.history = state.history
     model.architecture = state.architecture
     model.userStories = state.userStories || []
+    model.activeSprint = state.activeSprint || null
     model.storyGenerations = state.storyGenerations || model.storyGenerations
     model.uiGuidelines = state.uiGuidelines || model.uiGuidelines
 
@@ -1930,8 +1931,8 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
     const { storyId, branchType } = proposal.payload
     const sprint = model.activeSprint
 
-    if (!sprint || sprint.status !== 'planned') {
-      console.warn('[SPRINT] Cannot start implementation - sprint not in planned state')
+    if (!sprint || (sprint.status !== 'planned' && sprint.status !== 'implementing')) {
+      console.warn('[SPRINT] Cannot start implementation - sprint not in planned or implementing state')
       return
     }
 

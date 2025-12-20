@@ -421,7 +421,7 @@ export class PromptEditorComponent {
       }
     }
 
-    // Basic markdown parsing fallback
+    // Comprehensive markdown parsing fallback
     let html = this.escapeHtml(content)
 
     // Code blocks (must be before inline code)
@@ -432,30 +432,64 @@ export class PromptEditorComponent {
     // Inline code
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
 
-    // Headers
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Horizontal rules (---, ***, ___)
+    html = html.replace(/^[-*_]{3,}\s*$/gm, '<hr>')
 
-    // Bold
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    // Headers (must be before bold/italic to avoid conflicts)
+    html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>')
+    html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>')
+    html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>')
+
+    // Bold (using non-greedy match)
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
 
     // Italic
-    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
 
     // Unordered lists
-    html = html.replace(/^- (.+)$/gm, '<li>$1</li>')
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    html = html.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>')
 
-    // Ordered lists
-    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Numbered lists
+    html = html.replace(/^\s*\d+\.\s+(.*)$/gm, '<li>$1</li>')
 
-    // Line breaks (for remaining newlines)
+    // Wrap consecutive list items in ul/ol
+    html = html.replace(/(<li>.*<\/li>)\n(?=<li>)/g, '$1')
+    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
+
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+
+    // Double newlines become paragraph breaks
+    html = html.replace(/\n\n/g, '</p><p>')
+
+    // Single newlines become line breaks
     html = html.replace(/\n/g, '<br>')
 
-    // Clean up extra breaks inside lists
-    html = html.replace(/<\/li><br>/g, '</li>')
-    html = html.replace(/<br><li>/g, '<li>')
+    // Wrap in paragraph
+    html = `<p>${html}</p>`
+
+    // Clean up empty paragraphs and fix block element wrapping
+    html = html.replace(/<p>\s*<\/p>/g, '')
+    html = html.replace(/<p>(<h[1-6]>)/g, '$1')
+    html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1')
+    html = html.replace(/<p>(<pre>)/g, '$1')
+    html = html.replace(/(<\/pre>)<\/p>/g, '$1')
+    html = html.replace(/<p>(<ul>)/g, '$1')
+    html = html.replace(/(<\/ul>)<\/p>/g, '$1')
+    html = html.replace(/<p>(<hr>)/g, '$1')
+    html = html.replace(/(<hr>)<\/p>/g, '$1')
+    html = html.replace(/<p><br>/g, '<p>')
+    html = html.replace(/<br><\/p>/g, '</p>')
+
+    // Clean up breaks around block elements
+    html = html.replace(/<\/h([1-6])><br>/g, '</h$1>')
+    html = html.replace(/<br><h([1-6])>/g, '<h$1>')
+    html = html.replace(/<\/ul><br>/g, '</ul>')
+    html = html.replace(/<br><ul>/g, '<ul>')
+    html = html.replace(/<\/pre><br>/g, '</pre>')
+    html = html.replace(/<br><pre>/g, '<pre>')
+    html = html.replace(/<hr><br>/g, '<hr>')
+    html = html.replace(/<br><hr>/g, '<hr>')
 
     return html
   }

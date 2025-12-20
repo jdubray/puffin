@@ -761,13 +761,15 @@ class PuffinApp {
       statusBadge.className = 'sprint-status-badge ' + sprint.status
     }
 
-    // Render story cards
+    // Render story cards with branch buttons when plan is approved
     const storiesContainer = document.getElementById('sprint-stories')
     if (storiesContainer && sprint.stories) {
+      const showBranchButtons = sprint.status === 'planned' || sprint.status === 'implementing'
       storiesContainer.innerHTML = sprint.stories.map(story => `
-        <div class="sprint-story-card">
+        <div class="sprint-story-card" data-story-id="${story.id}">
           <h4>${this.escapeHtml(story.title)}</h4>
           <p>${this.escapeHtml(story.description || '')}</p>
+          ${showBranchButtons ? this.renderStoryBranchButtons(story) : ''}
         </div>
       `).join('')
     }
@@ -811,6 +813,19 @@ class PuffinApp {
           this.showToast('Plan approved! Ready for implementation.', 'success')
         })
       }
+
+      // Story branch button clicks (event delegation)
+      sprintHeader.addEventListener('click', (e) => {
+        const branchBtn = e.target.closest('.story-branch-btn')
+        if (branchBtn) {
+          const storyId = branchBtn.dataset.storyId
+          const branchType = branchBtn.dataset.branch
+          const storyTitle = branchBtn.dataset.storyTitle
+          console.log('[SPRINT] Starting implementation:', { storyId, branchType, storyTitle })
+          this.intents.startSprintStoryImplementation(storyId, branchType)
+          this.showToast(`Starting ${branchType} implementation for "${storyTitle}"`, 'info')
+        }
+      })
     }
   }
 
@@ -825,6 +840,34 @@ class PuffinApp {
       'implementing': 'Implementing'
     }
     return statusMap[status] || status
+  }
+
+  /**
+   * Render branch buttons for a story card
+   */
+  renderStoryBranchButtons(story) {
+    const branches = [
+      { id: 'ui', label: 'UI', icon: '🎨' },
+      { id: 'backend', label: 'Backend', icon: '⚙️' },
+      { id: 'fullstack', label: 'Full Stack', icon: '🔗' }
+    ]
+
+    const escapedTitle = this.escapeHtml(story.title).replace(/"/g, '&quot;')
+
+    return `
+      <div class="story-branch-buttons">
+        ${branches.map(branch => `
+          <button class="story-branch-btn"
+                  data-story-id="${story.id}"
+                  data-branch="${branch.id}"
+                  data-story-title="${escapedTitle}"
+                  title="Start ${branch.label} implementation for this story">
+            <span class="branch-icon">${branch.icon}</span>
+            <span class="branch-label">${branch.label}</span>
+          </button>
+        `).join('')}
+      </div>
+    `
   }
 
   /**

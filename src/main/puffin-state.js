@@ -20,6 +20,7 @@ const CONFIG_FILE = 'config.json'
 const HISTORY_FILE = 'history.json'
 const ARCHITECTURE_FILE = 'architecture.md'
 const USER_STORIES_FILE = 'user-stories.json'
+const ACTIVE_SPRINT_FILE = 'active-sprint.json'
 const STORY_GENERATIONS_FILE = 'story-generations.json'
 const GIT_OPERATIONS_FILE = 'git-operations.json'
 const GUI_DESIGNS_DIR = 'gui-designs'
@@ -60,6 +61,7 @@ class PuffinState {
     this.history = await this.loadHistory()
     this.architecture = await this.loadArchitecture()
     this.userStories = await this.loadUserStories()
+    this.activeSprint = await this.loadActiveSprint()
     this.storyGenerations = await this.loadStoryGenerations()
     this.uiGuidelines = await this.loadUiGuidelines()
     this.gitOperations = await this.loadGitOperations()
@@ -107,6 +109,7 @@ class PuffinState {
       history: this.history,
       architecture: this.architecture,
       userStories: this.userStories,
+      activeSprint: this.activeSprint,
       storyGenerations: this.storyGenerations,
       uiGuidelines: this.uiGuidelines,
       gitOperations: this.gitOperations
@@ -1186,6 +1189,49 @@ Document your API endpoints...
   async saveUserStories(stories = this.userStories) {
     const storiesPath = path.join(this.puffinPath, USER_STORIES_FILE)
     await fs.writeFile(storiesPath, JSON.stringify(stories, null, 2), 'utf-8')
+  }
+
+  /**
+   * Load active sprint or return null
+   * @private
+   */
+  async loadActiveSprint() {
+    const sprintPath = path.join(this.puffinPath, ACTIVE_SPRINT_FILE)
+    try {
+      const content = await fs.readFile(sprintPath, 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      // No active sprint
+      return null
+    }
+  }
+
+  /**
+   * Save active sprint (or delete file if null)
+   * @private
+   */
+  async saveActiveSprint(sprint = this.activeSprint) {
+    const sprintPath = path.join(this.puffinPath, ACTIVE_SPRINT_FILE)
+    if (sprint) {
+      await fs.writeFile(sprintPath, JSON.stringify(sprint, null, 2), 'utf-8')
+    } else {
+      // Remove the file if sprint is cleared
+      try {
+        await fs.unlink(sprintPath)
+      } catch {
+        // File doesn't exist, that's fine
+      }
+    }
+  }
+
+  /**
+   * Update active sprint
+   * @param {Object|null} sprint - Sprint data or null to clear
+   */
+  async updateActiveSprint(sprint) {
+    this.activeSprint = sprint
+    await this.saveActiveSprint(sprint)
+    return { success: true }
   }
 
   /**

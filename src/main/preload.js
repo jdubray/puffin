@@ -59,6 +59,9 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.invoke('state:updateUserStory', { storyId, updates }),
     deleteUserStory: (storyId) => ipcRenderer.invoke('state:deleteUserStory', storyId),
 
+    // Sprint operations
+    updateActiveSprint: (sprint) => ipcRenderer.invoke('state:updateActiveSprint', sprint),
+
     // Story generation tracking operations
     getStoryGenerations: () => ipcRenderer.invoke('state:getStoryGenerations'),
     addStoryGeneration: (generation) => ipcRenderer.invoke('state:addStoryGeneration', generation),

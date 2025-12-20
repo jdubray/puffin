@@ -64,7 +64,13 @@ export function computeState(model) {
     _pendingImplementation: model._pendingImplementation || null,
 
     // Last updated story ID (for persistence tracking)
-    _lastUpdatedStoryId: model._lastUpdatedStoryId || null
+    _lastUpdatedStoryId: model._lastUpdatedStoryId || null,
+
+    // Active Sprint state
+    activeSprint: model.activeSprint || null,
+
+    // Pending sprint planning (for Claude submission)
+    _pendingSprintPlanning: model._pendingSprintPlanning || null
   }
 }
 

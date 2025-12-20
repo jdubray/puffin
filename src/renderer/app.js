@@ -167,7 +167,9 @@ class PuffinApp {
       'toolStart', 'toolEnd', 'clearActivity',
       'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity',
       // Handoff actions
-      'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff'
+      'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
+      // Sprint actions
+      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint'
     ]
 
     const samResult = SAM({
@@ -272,7 +274,13 @@ class PuffinApp {
           ['UPDATE_HANDOFF_SUMMARY', actions.updateHandoffSummary],
           ['COMPLETE_HANDOFF', actions.completeHandoff],
           ['CANCEL_HANDOFF', actions.cancelHandoff],
-          ['DELETE_HANDOFF', actions.deleteHandoff]
+          ['DELETE_HANDOFF', actions.deleteHandoff],
+
+          // Sprint actions
+          ['CREATE_SPRINT', actions.createSprint],
+          ['START_SPRINT_PLANNING', actions.startSprintPlanning],
+          ['APPROVE_PLAN', actions.approvePlan],
+          ['CLEAR_SPRINT', actions.clearSprint]
         ],
         acceptors: [
           ...appFsm.acceptors,

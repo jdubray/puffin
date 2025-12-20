@@ -872,6 +872,44 @@ export const deleteHandoff = (handoffId) => ({
 })
 
 /**
+ * Sprint Actions
+ * For grouping user stories into focused implementation sprints
+ */
+
+// Create a sprint from selected user stories
+export const createSprint = (stories) => ({
+  type: 'CREATE_SPRINT',
+  payload: {
+    stories,
+    timestamp: Date.now()
+  }
+})
+
+// Start sprint planning - triggers planning prompt to Claude
+export const startSprintPlanning = () => ({
+  type: 'START_SPRINT_PLANNING',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Approve the sprint plan
+export const approvePlan = () => ({
+  type: 'APPROVE_PLAN',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Clear/close the active sprint
+export const clearSprint = () => ({
+  type: 'CLEAR_SPRINT',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
  * Git Integration Actions
  */
 

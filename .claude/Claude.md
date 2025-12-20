@@ -37,17 +37,6 @@ As a user, I want to chain multiple handoff summaries together so that context i
 - User can view the complete handoff chain history
 - Each hop in the chain is clearly identified with its source thread
 
-### 📋 Multi-Hop Handoff Chaining
-
-As a user, I want to chain multiple handoff summaries together so that context is preserved across multiple handoff sequences
-
-**Acceptance Criteria:**
-- When creating a new handoff from a thread that received a handoff, both summaries are linked
-- Chained handoff summaries are presented in chronological order
-- The receiving thread can access the full chain of handoff context
-- User can view the complete handoff chain history
-- Each hop in the chain is clearly identified with its source thread
-
 ### 🔄 Sprint Planning Phase with Plan Button
 
 As a user, I want a 'Plan' button available in the sprint view so that I can initiate the planning phase for the selected user stories
@@ -59,7 +48,7 @@ As a user, I want a 'Plan' button available in the sprint view so that I can ini
 - The sprint status changes to 'Planning' while plan is being generated
 - User can see the generated plan in the prompt conversation
 
-### 📋 Sprint Plan Review and Modification
+### 🔄 Sprint Plan Review and Modification
 
 As a user, I want to review and modify the generated plan through follow-up prompts so that I can refine the implementation approach before starting work
 
@@ -92,7 +81,7 @@ As a user, I want to click a branch button to start implementation so that a new
 - The branch type (UI, Backend, etc.) is passed to Claude for context
 - The sprint thread continues in the same window
 
-### 📋 Sprint State Persistence
+### 🔄 Sprint State Persistence
 
 As a user, I want the sprint state to persist so that I can return to a sprint and continue work where I left off
 

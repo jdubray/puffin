@@ -1727,6 +1727,130 @@ export const deleteHandoffAcceptor = model => proposal => {
 }
 
 /**
+ * Sprint Acceptors
+ * Handle sprint creation, planning, and management
+ */
+
+// Create a sprint from selected stories
+export const createSprintAcceptor = model => proposal => {
+  if (proposal?.type === 'CREATE_SPRINT') {
+    const { stories, timestamp } = proposal.payload
+
+    // Generate sprint ID
+    const sprintId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+
+    // Create the sprint
+    model.activeSprint = {
+      id: sprintId,
+      stories: stories,
+      status: 'created', // 'created' | 'planning' | 'planned' | 'implementing'
+      promptId: null,
+      plan: null,
+      createdAt: timestamp
+    }
+
+    // Switch to prompt view
+    model.currentView = 'prompt'
+  }
+}
+
+// Start sprint planning - builds and submits planning prompt
+export const startSprintPlanningAcceptor = model => proposal => {
+  if (proposal?.type === 'START_SPRINT_PLANNING') {
+    if (!model.activeSprint) return
+
+    const sprint = model.activeSprint
+    const stories = sprint.stories
+
+    // Update sprint status to planning
+    sprint.status = 'planning'
+
+    // Build planning prompt with all story context
+    const storyDescriptions = stories.map((story, i) => {
+      let desc = `### Story ${i + 1}: ${story.title}\n`
+      if (story.description) {
+        desc += `${story.description}\n`
+      }
+      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
+        desc += `\n**Acceptance Criteria:**\n`
+        desc += story.acceptanceCriteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n')
+      }
+      return desc
+    }).join('\n\n')
+
+    const planningPrompt = `## Sprint Planning Request
+
+Please create a detailed implementation plan for the following user stories:
+
+${storyDescriptions}
+
+---
+
+**Planning Requirements:**
+
+1. **Architecture Analysis**: Analyze how these stories fit together and identify shared components or dependencies
+2. **Implementation Order**: Recommend the optimal order to implement these stories
+3. **Technical Approach**: For each story, outline the key technical decisions and approach
+4. **File Changes**: Identify the main files that will need to be created or modified
+5. **Risk Assessment**: Note any potential challenges or risks
+6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
+
+Please provide a comprehensive plan that I can review before starting implementation.`
+
+    // Get the current branch
+    const branchId = model.history.activeBranch || 'specifications'
+
+    // Ensure branch exists
+    if (!model.history.branches[branchId]) {
+      model.history.branches[branchId] = {
+        id: branchId,
+        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
+        prompts: []
+      }
+    }
+
+    // Create prompt entry
+    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+    const prompt = {
+      id: promptId,
+      content: planningPrompt,
+      parentId: null,
+      timestamp: Date.now(),
+      response: null,
+      storyIds: stories.map(s => s.id)
+    }
+
+    // Add to branch
+    model.history.branches[branchId].prompts.push(prompt)
+
+    // Set as active prompt
+    model.history.activePromptId = promptId
+
+    // Set pending prompt for streaming
+    model.pendingPromptId = promptId
+    model.streamingResponse = ''
+
+    // Update sprint with prompt reference
+    sprint.promptId = promptId
+
+    // Store for IPC submission
+    model._pendingSprintPlanning = {
+      promptId,
+      promptContent: planningPrompt,
+      branchId,
+      storyIds: stories.map(s => s.id)
+    }
+  }
+}
+
+// Clear the active sprint
+export const clearSprintAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_SPRINT') {
+    model.activeSprint = null
+  }
+}
+
+/**
  * Helper: Build handoff summary from thread context
  */
 function buildHandoffSummary(thread, branch, model) {
@@ -2044,6 +2168,11 @@ export const acceptors = [
   completeHandoffAcceptor,
   cancelHandoffAcceptor,
   deleteHandoffAcceptor,
+
+  // Sprint
+  createSprintAcceptor,
+  startSprintPlanningAcceptor,
+  clearSprintAcceptor,
 
   // Activity Tracking
   setCurrentToolAcceptor,

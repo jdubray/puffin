@@ -788,6 +788,16 @@ export const reviewArchitectureAcceptor = model => proposal => {
 
 export const addUserStoryAcceptor = model => proposal => {
   if (proposal?.type === 'ADD_USER_STORY') {
+    // Check for duplicate by ID
+    const existingById = model.userStories.find(s => s.id === proposal.payload.id)
+    if (existingById) {
+      console.warn(`[DUPLICATE] ADD_USER_STORY: Story with ID "${proposal.payload.id}" already exists. Skipping.`, {
+        existing: existingById,
+        attempted: proposal.payload
+      })
+      return // Skip duplicate
+    }
+
     model.userStories.push({
       id: proposal.payload.id,
       title: proposal.payload.title,
@@ -1008,9 +1018,29 @@ export const addStoriesToBacklogAcceptor = model => proposal => {
       s => storyIds.includes(s.id)
     )
 
-    // Add each story to the backlog (userStories)
+    // Add each story to the backlog (userStories) - with duplicate detection
     const sourceBranchId = model.storyDerivation.branchId || null
     selectedStories.forEach(story => {
+      // Check for duplicate by ID
+      const existingById = model.userStories.find(s => s.id === story.id)
+      if (existingById) {
+        console.warn(`[DUPLICATE] Story with ID "${story.id}" already exists in backlog. Skipping.`, {
+          existing: existingById,
+          attempted: story
+        })
+        return // Skip this story
+      }
+
+      // Check for duplicate by title
+      const existingByTitle = model.userStories.find(s => s.title === story.title)
+      if (existingByTitle) {
+        console.warn(`[DUPLICATE] Story with title "${story.title}" already exists in backlog.`, {
+          existingId: existingByTitle.id,
+          attemptedId: story.id
+        })
+        // Still allow adding - titles can legitimately be similar
+      }
+
       model.userStories.push({
         id: story.id,
         branchId: sourceBranchId,
@@ -1740,13 +1770,33 @@ export const createSprintAcceptor = model => proposal => {
   if (proposal?.type === 'CREATE_SPRINT') {
     const { stories, timestamp } = proposal.payload
 
+    // Deduplicate stories by ID
+    const seenIds = new Set()
+    const uniqueStories = []
+    stories.forEach(story => {
+      if (seenIds.has(story.id)) {
+        console.warn(`[SPRINT DUPLICATE] Story with ID "${story.id}" appears multiple times. Skipping duplicate.`, {
+          title: story.title,
+          id: story.id
+        })
+        return
+      }
+      seenIds.add(story.id)
+      uniqueStories.push(story)
+    })
+
+    // Log if duplicates were found
+    if (uniqueStories.length !== stories.length) {
+      console.warn(`[SPRINT] Removed ${stories.length - uniqueStories.length} duplicate stories. Original: ${stories.length}, Unique: ${uniqueStories.length}`)
+    }
+
     // Generate sprint ID
     const sprintId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
 
-    // Create the sprint
+    // Create the sprint with deduplicated stories
     model.activeSprint = {
       id: sprintId,
-      stories: stories,
+      stories: uniqueStories,
       status: 'created', // 'created' | 'planning' | 'planned' | 'implementing'
       promptId: null,
       plan: null,

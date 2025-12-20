@@ -20,6 +20,8 @@ const CONFIG_FILE = 'config.json'
 const HISTORY_FILE = 'history.json'
 const ARCHITECTURE_FILE = 'architecture.md'
 const USER_STORIES_FILE = 'user-stories.json'
+const STORY_GENERATIONS_FILE = 'story-generations.json'
+const GIT_OPERATIONS_FILE = 'git-operations.json'
 const GUI_DESIGNS_DIR = 'gui-designs'
 const GUI_DEFINITIONS_DIR = 'gui-definitions'
 const UI_GUIDELINES_FILE = 'ui-guidelines.json'
@@ -33,7 +35,9 @@ class PuffinState {
     this.history = null
     this.architecture = null
     this.userStories = null
+    this.storyGenerations = null
     this.uiGuidelines = null
+    this.gitOperations = null
   }
 
   /**
@@ -56,7 +60,9 @@ class PuffinState {
     this.history = await this.loadHistory()
     this.architecture = await this.loadArchitecture()
     this.userStories = await this.loadUserStories()
+    this.storyGenerations = await this.loadStoryGenerations()
     this.uiGuidelines = await this.loadUiGuidelines()
+    this.gitOperations = await this.loadGitOperations()
 
     // Auto-archive completed stories older than 2 weeks
     await this.autoArchiveOldStories()
@@ -101,7 +107,9 @@ class PuffinState {
       history: this.history,
       architecture: this.architecture,
       userStories: this.userStories,
-      uiGuidelines: this.uiGuidelines
+      storyGenerations: this.storyGenerations,
+      uiGuidelines: this.uiGuidelines,
+      gitOperations: this.gitOperations
     }
   }
 
@@ -251,6 +259,141 @@ class PuffinState {
    */
   getUserStories() {
     return this.userStories
+  }
+
+  // ============ Story Generation Tracking Methods ============
+
+  /**
+   * Get all story generations
+   */
+  getStoryGenerations() {
+    return this.storyGenerations
+  }
+
+  /**
+   * Add a story generation record
+   * @param {Object} generation - Story generation object
+   */
+  async addStoryGeneration(generation) {
+    const newGeneration = {
+      id: generation.id || this.generateId(),
+      user_prompt: generation.user_prompt,
+      project_context: generation.project_context || null,
+      generated_stories: (generation.generated_stories || []).map(story => ({
+        id: story.id || this.generateId(),
+        title: story.title,
+        description: story.description || '',
+        acceptance_criteria: story.acceptance_criteria || [],
+        user_action: story.user_action || 'pending',
+        modification_diff: story.modification_diff || null,
+        rejection_reason: story.rejection_reason || null,
+        backlog_story_id: story.backlog_story_id || null
+      })),
+      timestamp: generation.timestamp || new Date().toISOString(),
+      model_used: generation.model_used || 'sonnet'
+    }
+    this.storyGenerations.generations.push(newGeneration)
+    await this.saveStoryGenerations()
+    return newGeneration
+  }
+
+  /**
+   * Update a story generation record
+   * @param {string} generationId - Generation ID
+   * @param {Object} updates - Partial updates
+   */
+  async updateStoryGeneration(generationId, updates) {
+    const index = this.storyGenerations.generations.findIndex(g => g.id === generationId)
+    if (index === -1) return null
+
+    this.storyGenerations.generations[index] = {
+      ...this.storyGenerations.generations[index],
+      ...updates
+    }
+    await this.saveStoryGenerations()
+    return this.storyGenerations.generations[index]
+  }
+
+  /**
+   * Update a generated story's feedback within a generation
+   * @param {string} generationId - Generation ID
+   * @param {string} storyId - Story ID within the generation
+   * @param {Object} feedback - Feedback updates (user_action, modification_diff, rejection_reason, etc.)
+   */
+  async updateGeneratedStoryFeedback(generationId, storyId, feedback) {
+    const generation = this.storyGenerations.generations.find(g => g.id === generationId)
+    if (!generation) return null
+
+    const story = generation.generated_stories.find(s => s.id === storyId)
+    if (!story) return null
+
+    Object.assign(story, feedback)
+    await this.saveStoryGenerations()
+    return story
+  }
+
+  /**
+   * Add an implementation journey
+   * @param {Object} journey - Implementation journey object
+   */
+  async addImplementationJourney(journey) {
+    const newJourney = {
+      id: journey.id || this.generateId(),
+      story_id: journey.story_id,
+      prompt_id: journey.prompt_id,
+      turn_count: journey.turn_count || 0,
+      inputs: journey.inputs || [],
+      status: journey.status || 'pending',
+      outcome_notes: journey.outcome_notes || null,
+      started_at: journey.started_at || new Date().toISOString(),
+      completed_at: journey.completed_at || null
+    }
+    this.storyGenerations.implementation_journeys.push(newJourney)
+    await this.saveStoryGenerations()
+    return newJourney
+  }
+
+  /**
+   * Update an implementation journey
+   * @param {string} journeyId - Journey ID
+   * @param {Object} updates - Partial updates
+   */
+  async updateImplementationJourney(journeyId, updates) {
+    const index = this.storyGenerations.implementation_journeys.findIndex(j => j.id === journeyId)
+    if (index === -1) return null
+
+    this.storyGenerations.implementation_journeys[index] = {
+      ...this.storyGenerations.implementation_journeys[index],
+      ...updates
+    }
+    await this.saveStoryGenerations()
+    return this.storyGenerations.implementation_journeys[index]
+  }
+
+  /**
+   * Add an input to an implementation journey
+   * @param {string} journeyId - Journey ID
+   * @param {Object} input - Input object with turn_number, type, content_summary
+   */
+  async addImplementationInput(journeyId, input) {
+    const journey = this.storyGenerations.implementation_journeys.find(j => j.id === journeyId)
+    if (!journey) return null
+
+    journey.inputs.push({
+      turn_number: input.turn_number,
+      type: input.type || 'technical',
+      content_summary: input.content_summary || '',
+      timestamp: new Date().toISOString()
+    })
+    await this.saveStoryGenerations()
+    return journey
+  }
+
+  /**
+   * Export story generations data for analysis
+   */
+  exportStoryGenerations() {
+    return JSON.stringify(this.storyGenerations, null, 2)
   }
 
   /**
@@ -764,6 +907,93 @@ class PuffinState {
     return { path: claudeMdPath, content }
   }
 
+  // ============ Git Operations Methods ============
+
+  /**
+   * Add a Git operation to the history log
+   * @param {Object} operation - Operation details
+   */
+  async addGitOperation(operation) {
+    const newOperation = {
+      id: this.generateId(),
+      type: operation.type,
+      timestamp: new Date().toISOString(),
+      branch: operation.branch || null,
+      hash: operation.hash || null,
+      message: operation.message || null,
+      sourceBranch: operation.sourceBranch || null,
+      sessionId: operation.sessionId || null,
+      details: operation.details || {}
+    }
+
+    this.gitOperations.operations.push(newOperation)
+
+    // Keep only the last 500 operations to prevent unbounded growth
+    if (this.gitOperations.operations.length > 500) {
+      this.gitOperations.operations = this.gitOperations.operations.slice(-500)
+    }
+
+    await this.saveGitOperations()
+    return newOperation
+  }
+
+  /**
+   * Get Git operation history with optional filtering
+   * @param {Object} options - Filter options
+   * @param {number} [options.limit=100] - Maximum number of operations to return
+   * @param {string} [options.type] - Filter by operation type
+   * @param {string} [options.sessionId] - Filter by session ID
+   * @returns {Array} Filtered operations
+   */
+  getGitOperationHistory(options = {}) {
+    const { limit = 100, type, sessionId } = options
+
+    let operations = [...this.gitOperations.operations]
+
+    // Filter by type if specified
+    if (type) {
+      operations = operations.filter(op => op.type === type)
+    }
+
+    // Filter by session ID if specified
+    if (sessionId) {
+      operations = operations.filter(op => op.sessionId === sessionId)
+    }
+
+    // Sort by timestamp descending (most recent first)
+    operations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+
+    // Limit results
+    return operations.slice(0, limit)
+  }
+
+  /**
+   * Update Git settings in config
+   * @param {Object} settings - Git settings to update
+   */
+  async updateGitSettings(settings) {
+    if (!this.config.gitSettings) {
+      this.config.gitSettings = {}
+    }
+
+    this.config.gitSettings = {
+      ...this.config.gitSettings,
+      ...settings,
+      updatedAt: new Date().toISOString()
+    }
+
+    await this.saveConfig()
+    return this.config.gitSettings
+  }
+
+  /**
+   * Get Git settings from config
+   * @returns {Object} Git settings
+   */
+  getGitSettings() {
+    return this.config.gitSettings || {}
+  }
+
   // ============ Private Methods ============
 
   /**
@@ -959,6 +1189,38 @@ Document your API endpoints...
   }
 
   /**
+   * Load story generations or create default
+   * @private
+   */
+  async loadStoryGenerations() {
+    const generationsPath = path.join(this.puffinPath, STORY_GENERATIONS_FILE)
+    try {
+      const content = await fs.readFile(generationsPath, 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      // Create default story generations structure
+      const defaultGenerations = {
+        generations: [],
+        implementation_journeys: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      await this.saveStoryGenerations(defaultGenerations)
+      return defaultGenerations
+    }
+  }
+
+  /**
+   * Save story generations
+   * @private
+   */
+  async saveStoryGenerations(generations = this.storyGenerations) {
+    generations.updatedAt = new Date().toISOString()
+    const generationsPath = path.join(this.puffinPath, STORY_GENERATIONS_FILE)
+    await fs.writeFile(generationsPath, JSON.stringify(generations, null, 2), 'utf-8')
+  }
+
+  /**
    * Load UI guidelines or create default
    * @private
    */
@@ -1124,6 +1386,37 @@ Document your API endpoints...
   async saveUiGuidelines(guidelines = this.uiGuidelines) {
     const guidelinesPath = path.join(this.puffinPath, UI_GUIDELINES_FILE)
     await fs.writeFile(guidelinesPath, JSON.stringify(guidelines, null, 2), 'utf-8')
+  }
+
+  /**
+   * Load Git operations or create default
+   * @private
+   */
+  async loadGitOperations() {
+    const operationsPath = path.join(this.puffinPath, GIT_OPERATIONS_FILE)
+    try {
+      const content = await fs.readFile(operationsPath, 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      // Create default Git operations structure
+      const defaultOperations = {
+        operations: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      await this.saveGitOperations(defaultOperations)
+      return defaultOperations
+    }
+  }
+
+  /**
+   * Save Git operations
+   * @private
+   */
+  async saveGitOperations(operations = this.gitOperations) {
+    operations.updatedAt = new Date().toISOString()
+    const operationsPath = path.join(this.puffinPath, GIT_OPERATIONS_FILE)
+    await fs.writeFile(operationsPath, JSON.stringify(operations, null, 2), 'utf-8')
   }
 
   /**

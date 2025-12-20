@@ -59,6 +59,20 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.invoke('state:updateUserStory', { storyId, updates }),
     deleteUserStory: (storyId) => ipcRenderer.invoke('state:deleteUserStory', storyId),
 
+    // Story generation tracking operations
+    getStoryGenerations: () => ipcRenderer.invoke('state:getStoryGenerations'),
+    addStoryGeneration: (generation) => ipcRenderer.invoke('state:addStoryGeneration', generation),
+    updateStoryGeneration: (generationId, updates) =>
+      ipcRenderer.invoke('state:updateStoryGeneration', { generationId, updates }),
+    updateGeneratedStoryFeedback: (generationId, storyId, feedback) =>
+      ipcRenderer.invoke('state:updateGeneratedStoryFeedback', { generationId, storyId, feedback }),
+    addImplementationJourney: (journey) => ipcRenderer.invoke('state:addImplementationJourney', journey),
+    updateImplementationJourney: (journeyId, updates) =>
+      ipcRenderer.invoke('state:updateImplementationJourney', { journeyId, updates }),
+    addImplementationInput: (journeyId, input) =>
+      ipcRenderer.invoke('state:addImplementationInput', { journeyId, input }),
+    exportStoryGenerations: () => ipcRenderer.invoke('state:exportStoryGenerations'),
+
     // UI Guidelines operations
     updateUiGuidelines: (updates) => ipcRenderer.invoke('state:updateUiGuidelines', updates),
     updateGuidelineSection: (section, content) =>
@@ -159,7 +173,10 @@ contextBridge.exposeInMainWorld('puffin', {
     },
 
     // Generate a title for a prompt (used for new threads)
-    generateTitle: (content) => ipcRenderer.invoke('claude:generateTitle', content)
+    generateTitle: (content) => ipcRenderer.invoke('claude:generateTitle', content),
+
+    // Send a simple prompt and get a response (non-streaming)
+    sendPrompt: (prompt, options = {}) => ipcRenderer.invoke('claude:sendPrompt', prompt, options)
   },
 
   /**
@@ -167,7 +184,8 @@ contextBridge.exposeInMainWorld('puffin', {
    */
   file: {
     export: (data) => ipcRenderer.invoke('file:export', data),
-    import: (type) => ipcRenderer.invoke('file:import', type)
+    import: (type) => ipcRenderer.invoke('file:import', type),
+    saveMarkdown: (content) => ipcRenderer.invoke('file:saveMarkdown', content)
   },
 
   /**
@@ -203,14 +221,95 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * Git repository operations
+   */
+  git: {
+    // Check if Git is installed and available
+    isAvailable: () => ipcRenderer.invoke('git:isAvailable'),
+
+    // Check if project is a Git repository
+    isRepository: () => ipcRenderer.invoke('git:isRepository'),
+
+    // Get repository status (branch, files, ahead/behind)
+    getStatus: () => ipcRenderer.invoke('git:getStatus'),
+
+    // Get current branch name
+    getCurrentBranch: () => ipcRenderer.invoke('git:getCurrentBranch'),
+
+    // Get list of all branches
+    getBranches: () => ipcRenderer.invoke('git:getBranches'),
+
+    // Validate a branch name
+    validateBranchName: (name) => ipcRenderer.invoke('git:validateBranchName', name),
+
+    // Create a new branch
+    createBranch: (name, prefix, checkout = true) =>
+      ipcRenderer.invoke('git:createBranch', { name, prefix, checkout }),
+
+    // Checkout a branch
+    checkout: (name) => ipcRenderer.invoke('git:checkout', name),
+
+    // Stage files for commit
+    stageFiles: (files) => ipcRenderer.invoke('git:stageFiles', files),
+
+    // Unstage files
+    unstageFiles: (files) => ipcRenderer.invoke('git:unstageFiles', files),
+
+    // Create a commit
+    commit: (message, sessionId = null) =>
+      ipcRenderer.invoke('git:commit', { message, sessionId }),
+
+    // Merge a branch into current branch
+    merge: (sourceBranch, noFf = false) =>
+      ipcRenderer.invoke('git:merge', { sourceBranch, noFf }),
+
+    // Abort an ongoing merge
+    abortMerge: () => ipcRenderer.invoke('git:abortMerge'),
+
+    // Delete a branch
+    deleteBranch: (name, force = false) =>
+      ipcRenderer.invoke('git:deleteBranch', { name, force }),
+
+    // Get commit log
+    getLog: (options = {}) => ipcRenderer.invoke('git:getLog', options),
+
+    // Get diff
+    getDiff: (options = {}) => ipcRenderer.invoke('git:getDiff', options),
+
+    // Get Git settings
+    getSettings: () => ipcRenderer.invoke('git:getSettings'),
+
+    // Update Git settings
+    updateSettings: (settings) => ipcRenderer.invoke('git:updateSettings', settings),
+
+    // Get Git operation history (tracked by Puffin)
+    getOperationHistory: (options = {}) =>
+      ipcRenderer.invoke('git:getOperationHistory', options),
+
+    // Configure Git user identity
+    configureUserIdentity: (name, email, global = false) =>
+      ipcRenderer.invoke('git:configureUserIdentity', { name, email, global }),
+
+    // Get Git user identity
+    getUserIdentity: (global = false) =>
+      ipcRenderer.invoke('git:getUserIdentity', global)
+  },
+
+  /**
    * GitHub integration operations
    */
   github: {
+    // Connect with Personal Access Token
+    connectWithPAT: (token) => ipcRenderer.invoke('github:connectWithPAT', token),
+
     // Start OAuth Device Flow authentication
     startAuth: () => ipcRenderer.invoke('github:startAuth'),
 
     // Open GitHub verification URL in browser
     openAuth: (verificationUri) => ipcRenderer.invoke('github:openAuth', verificationUri),
+
+    // Open external URL (for generating PAT)
+    openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
     // Poll for access token (call after user authorizes in browser)
     pollToken: (deviceCode, interval, expiresIn) =>

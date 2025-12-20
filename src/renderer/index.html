@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="styles/components.css">
   <link rel="stylesheet" href="styles/themes.css">
   <link rel="stylesheet" href="styles/debugger.css">
+  <link rel="stylesheet" href="components/story-generations/story-generations.css">
+  <link rel="stylesheet" href="components/git-panel/git-panel.css">
 </head>
 <body>
   <!-- Splash Screen -->
@@ -32,8 +34,10 @@
         <button class="nav-btn" data-view="user-stories">Backlog</button>
         <button class="nav-btn" data-view="architecture">Architecture</button>
         <button class="nav-btn" data-view="cli-output">CLI Output</button>
+        <button class="nav-btn" data-view="git">Git</button>
       </nav>
       <div class="header-right">
+        <div id="git-status-indicator" class="git-indicator hidden" title="Git branch status"></div>
         <span id="project-name" class="project-indicator"></span>
         <span id="save-indicator" class="save-indicator hidden">●</span>
         <button id="debugger-toggle" class="icon-btn" title="SAM Debugger (Ctrl+Shift+D)">
@@ -309,6 +313,16 @@
                   <input type="checkbox" id="derive-stories-checkbox">
                   <span>Derive User Stories</span>
                 </label>
+                <div class="prompt-option-group input-type-group hidden" id="input-type-group">
+                  <label for="input-type" class="prompt-select-label">Input Type:</label>
+                  <select id="input-type" class="prompt-model-select" title="Classify this input for tracking">
+                    <option value="technical" selected>Technical</option>
+                    <option value="clarification">Clarification</option>
+                    <option value="correction">Correction</option>
+                    <option value="expansion">Expansion</option>
+                    <option value="approval">Approval</option>
+                  </select>
+                </div>
               </div>
               <div class="prompt-actions">
                 <button id="new-thread-btn" class="btn outline" title="Start a new conversation thread">
@@ -377,25 +391,54 @@
           </div>
         </section>
 
-        <!-- Backlog View -->
+        <!-- Backlog View (with Insights subtab) -->
         <section id="user-stories-view" class="view">
           <div class="view-content user-stories-layout">
-            <div class="user-stories-header">
-              <h2>Backlog</h2>
-              <p class="subtitle">User stories derived from prompts using "Derive User Stories"</p>
+            <!-- Subtab navigation -->
+            <div class="backlog-tabs">
+              <button class="backlog-tab active" data-tab="stories">Backlog</button>
+              <button class="backlog-tab" data-tab="insights">Insights</button>
             </div>
-            <div class="user-stories-toolbar">
-              <div class="filter-group">
-                <button class="filter-btn active" data-status="all">All</button>
-                <button class="filter-btn" data-status="pending">Pending</button>
-                <button class="filter-btn" data-status="in-progress">In Progress</button>
-                <button class="filter-btn" data-status="completed">Completed</button>
+
+            <!-- Stories Tab Content -->
+            <div id="backlog-stories-tab" class="backlog-tab-content active">
+              <div class="user-stories-header">
+                <p class="subtitle">User stories derived from prompts using "Derive User Stories"</p>
               </div>
-              <button id="add-story-btn" class="btn small">+ Add Story</button>
+              <div class="user-stories-toolbar">
+                <div class="filter-group">
+                  <button class="filter-btn active" data-status="all">All</button>
+                  <button class="filter-btn" data-status="pending">Pending</button>
+                  <button class="filter-btn" data-status="in-progress">In Progress</button>
+                  <button class="filter-btn" data-status="completed">Completed</button>
+                </div>
+                <button id="add-story-btn" class="btn small">+ Add Story</button>
+              </div>
+              <div id="user-stories-list" class="user-stories-list">
+                <!-- User stories rendered dynamically -->
+                <p class="placeholder">No user stories yet. Use "Derive User Stories" checkbox when submitting prompts.</p>
+              </div>
             </div>
-            <div id="user-stories-list" class="user-stories-list">
-              <!-- User stories rendered dynamically -->
-              <p class="placeholder">No user stories yet. Use "Derive User Stories" checkbox when submitting prompts.</p>
+
+            <!-- Insights Tab Content -->
+            <div id="backlog-insights-tab" class="backlog-tab-content">
+              <div class="insights-container">
+                <div class="generations-toolbar">
+                  <div class="toolbar-actions">
+                    <select class="filter-select">
+                      <option value="all">All Actions</option>
+                      <option value="accepted">Accepted</option>
+                      <option value="modified">Modified</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                    <button class="btn small export-btn">Export JSON</button>
+                  </div>
+                </div>
+                <div class="generations-list">
+                  <!-- Generation cards rendered dynamically -->
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -470,9 +513,11 @@ Document your API endpoints..."></textarea>
           </div>
         </section>
 
-        <!-- Profile View -->
-        <section id="profile-view" class="view">
-          <!-- Profile content will be rendered dynamically by the DeveloperProfileComponent -->
+        <!-- Git Panel View -->
+        <section id="git-view" class="view">
+          <div id="git-panel-view" class="view-content">
+            <!-- Git panel content will be rendered dynamically by the GitPanelComponent -->
+          </div>
         </section>
       </div>
     </main>

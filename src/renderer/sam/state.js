@@ -41,6 +41,13 @@ export function computeState(model) {
     // User Stories state
     userStories: model.userStories || [],
 
+    // Story Generation Tracking state
+    storyGenerations: model.storyGenerations || {
+      generations: [],
+      implementation_journeys: [],
+      currentGenerationId: null
+    },
+
     // Story Derivation state
     storyDerivation: computeStoryDerivationState(model),
 

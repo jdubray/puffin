@@ -1,0 +1,385 @@
+/**
+ * Story Generations Component Styles (Insights View)
+ */
+
+/* Backlog Tabs */
+.backlog-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-color, #e1e5e9);
+  margin-bottom: 1rem;
+}
+
+.backlog-tab {
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-muted, #6c757d);
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.backlog-tab:hover {
+  color: var(--text-color, #212529);
+}
+
+.backlog-tab.active {
+  color: var(--primary, #007bff);
+  border-bottom-color: var(--primary, #007bff);
+  font-weight: 500;
+}
+
+/* Tab Content */
+.backlog-tab-content {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.backlog-tab-content.active {
+  display: flex;
+}
+
+/* Container - now a subtab within Backlog */
+.insights-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Toolbar */
+.generations-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color, #e1e5e9);
+}
+
+.generations-toolbar h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.filter-select {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border-color, #e1e5e9);
+  border-radius: 4px;
+  background: var(--bg-color, #fff);
+  font-size: 0.875rem;
+}
+
+.export-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+/* List container */
+.generations-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted, #6c757d);
+}
+
+.empty-state .hint {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+/* Generation card */
+.generation-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-color, #e1e5e9);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.generation-header {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--card-header-bg, #f8f9fa);
+  transition: background 0.2s;
+}
+
+.generation-header:hover {
+  background: var(--card-header-hover, #e9ecef);
+}
+
+.generation-info {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-muted, #6c757d);
+}
+
+.generation-date {
+  font-weight: 500;
+}
+
+.generation-model {
+  background: var(--badge-bg, #e9ecef);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}
+
+.generation-prompt {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-color, #212529);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.generation-stats {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.stat-item {
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  background: var(--badge-bg, #e9ecef);
+}
+
+.stat-item.accepted {
+  background: var(--success-light, #d4edda);
+  color: var(--success-dark, #155724);
+}
+
+.stat-item.modified {
+  background: var(--warning-light, #fff3cd);
+  color: var(--warning-dark, #856404);
+}
+
+.stat-item.rejected {
+  background: var(--error-light, #f8d7da);
+  color: var(--error-dark, #721c24);
+}
+
+.stat-item.pending {
+  background: var(--info-light, #cce5ff);
+  color: var(--info-dark, #004085);
+}
+
+.expand-icon {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6c757d);
+  margin-left: auto;
+}
+
+/* Expanded details */
+.generation-details {
+  padding: 1rem;
+  border-top: 1px solid var(--border-color, #e1e5e9);
+  background: var(--bg-color, #fff);
+}
+
+.generation-details h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted, #6c757d);
+}
+
+/* Story detail */
+.stories-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.story-detail {
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: var(--card-bg-alt, #f8f9fa);
+  border-left: 3px solid var(--border-color, #e1e5e9);
+}
+
+.story-detail.accepted {
+  border-left-color: var(--success, #28a745);
+}
+
+.story-detail.modified {
+  border-left-color: var(--warning, #ffc107);
+}
+
+.story-detail.rejected {
+  border-left-color: var(--error, #dc3545);
+}
+
+.story-detail.pending {
+  border-left-color: var(--info, #17a2b8);
+}
+
+.story-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.story-action-badge {
+  font-size: 0.7rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.story-action-badge.accepted {
+  background: var(--success-light, #d4edda);
+  color: var(--success-dark, #155724);
+}
+
+.story-action-badge.modified {
+  background: var(--warning-light, #fff3cd);
+  color: var(--warning-dark, #856404);
+}
+
+.story-action-badge.rejected {
+  background: var(--error-light, #f8d7da);
+  color: var(--error-dark, #721c24);
+}
+
+.story-action-badge.pending {
+  background: var(--info-light, #cce5ff);
+  color: var(--info-dark, #004085);
+}
+
+.story-detail-title {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.story-modification,
+.story-rejection,
+.story-journey-link {
+  font-size: 0.8rem;
+  color: var(--text-muted, #6c757d);
+  margin-top: 0.25rem;
+}
+
+.story-modification .label,
+.story-rejection .label,
+.story-journey-link .label {
+  font-weight: 500;
+}
+
+/* Journey detail */
+.journeys-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.journey-detail {
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: var(--card-bg-alt, #f8f9fa);
+  border-left: 3px solid var(--border-color, #e1e5e9);
+}
+
+.journey-detail.success {
+  border-left-color: var(--success, #28a745);
+}
+
+.journey-detail.partial {
+  border-left-color: var(--warning, #ffc107);
+}
+
+.journey-detail.failed {
+  border-left-color: var(--error, #dc3545);
+}
+
+.journey-detail.pending {
+  border-left-color: var(--info, #17a2b8);
+}
+
+.journey-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.journey-status-badge {
+  font-size: 0.7rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.journey-status-badge.success {
+  background: var(--success-light, #d4edda);
+  color: var(--success-dark, #155724);
+}
+
+.journey-status-badge.partial {
+  background: var(--warning-light, #fff3cd);
+  color: var(--warning-dark, #856404);
+}
+
+.journey-status-badge.failed {
+  background: var(--error-light, #f8d7da);
+  color: var(--error-dark, #721c24);
+}
+
+.journey-status-badge.pending {
+  background: var(--info-light, #cce5ff);
+  color: var(--info-dark, #004085);
+}
+
+.journey-story {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.journey-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6c757d);
+}
+
+.journey-inputs,
+.journey-notes {
+  font-size: 0.8rem;
+  color: var(--text-muted, #6c757d);
+  margin-top: 0.25rem;
+}
+
+.journey-inputs .label,
+.journey-notes .label {
+  font-weight: 500;
+}

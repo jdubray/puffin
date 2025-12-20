@@ -782,6 +782,33 @@ class DeveloperProfileManager {
   }
 
   /**
+   * Connect to GitHub using a Personal Access Token (PAT)
+   * @param {string} token - GitHub Personal Access Token
+   * @returns {Object} Updated profile with GitHub data
+   */
+  async connectWithPAT(token) {
+    if (!token || !token.trim()) {
+      throw new Error('Token is required')
+    }
+
+    // Validate token format
+    const trimmedToken = token.trim()
+    if (!trimmedToken.startsWith('ghp_') && !trimmedToken.startsWith('github_pat_')) {
+      throw new Error('Invalid token format. GitHub PATs start with ghp_ or github_pat_')
+    }
+
+    // Create token info object (similar to OAuth response)
+    const tokenInfo = {
+      accessToken: trimmedToken,
+      tokenType: 'bearer',
+      scope: 'repo read:user user:email'
+    }
+
+    // Use the same completion flow as OAuth
+    return await this.completeGithubAuth(tokenInfo)
+  }
+
+  /**
    * Disconnect GitHub from profile
    * @returns {Object} Updated profile without GitHub connection
    */

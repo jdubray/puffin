@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puffin & Le Pattern SAM</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/theme/black.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/highlight/monokai.css">
+  <style>
+    :root {
+      --r-background-color: #1a1a2e;
+      --r-main-color: #eee;
+      --r-heading-color: #6c63ff;
+      --r-link-color: #48bb78;
+      --r-selection-background-color: #6c63ff;
+      --accent: #6c63ff;
+      --success: #48bb78;
+      --warning: #ecc94b;
+      --error: #f56565;
+    }
+
+    .reveal {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 32px;
+    }
+
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-transform: none;
+      font-weight: 700;
+    }
+
+    .reveal h1 {
+      font-size: 2em;
+      background: linear-gradient(135deg, #6c63ff 0%, #48bb78 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .reveal h2 {
+      color: var(--accent);
+      font-size: 1.5em;
+    }
+
+    .reveal h3 {
+      color: var(--success);
+      font-size: 1.1em;
+    }
+
+    .reveal pre {
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      border-radius: 10px;
+      font-size: 0.45em;
+      width: 100%;
+      margin: 15px auto;
+    }
+
+    .reveal pre code {
+      padding: 15px;
+      border-radius: 10px;
+      max-height: 400px;
+    }
+
+    .reveal table {
+      margin: 15px auto;
+      border-collapse: collapse;
+      font-size: 0.6em;
+    }
+
+    .reveal table th {
+      background: var(--accent);
+      color: white;
+      padding: 8px 15px;
+    }
+
+    .reveal table td {
+      padding: 6px 15px;
+      border-bottom: 1px solid #333;
+    }
+
+    .reveal table tr:hover td {
+      background: rgba(108, 99, 255, 0.1);
+    }
+
+    .reveal ul, .reveal ol {
+      display: block;
+      text-align: left;
+      margin-left: 0.5em;
+      font-size: 0.85em;
+    }
+
+    .reveal li {
+      margin: 0.4em 0;
+    }
+
+    .reveal .subtitle {
+      color: #888;
+      font-size: 0.7em;
+      margin-top: -15px;
+    }
+
+    .reveal .highlight {
+      color: var(--accent);
+      font-weight: bold;
+    }
+
+    .reveal .success { color: var(--success); }
+    .reveal .warning { color: var(--warning); }
+    .reveal .error { color: var(--error); }
+
+    .reveal .box {
+      background: rgba(108, 99, 255, 0.1);
+      border: 2px solid var(--accent);
+      border-radius: 10px;
+      padding: 15px;
+      margin: 15px 0;
+      font-size: 0.8em;
+    }
+
+    .reveal .diagram {
+      font-family: monospace;
+      background: #0d0d1a;
+      border-radius: 10px;
+      padding: 15px;
+      font-size: 0.42em;
+      line-height: 1.3;
+      text-align: left;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .reveal .two-column {
+      display: flex;
+      gap: 80px;
+      font-size: 0.85em;
+      justify-content: center;
+    }
+
+    .reveal .two-column > div {
+      flex: 0 1 auto;
+      text-align: center;
+    }
+
+    .reveal .two-column ul {
+      display: inline-block;
+      text-align: left;
+    }
+
+    .reveal .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 15px;
+      font-size: 0.65em;
+      margin: 3px;
+    }
+
+    .reveal .badge-opus {
+      background: linear-gradient(135deg, #6c63ff, #8b5cf6);
+    }
+
+    .reveal .badge-sonnet {
+      background: linear-gradient(135deg, #48bb78, #38a169);
+    }
+
+    .reveal .badge-haiku {
+      background: linear-gradient(135deg, #ecc94b, #d69e2e);
+      color: #1a1a2e;
+    }
+
+    .reveal .slide-number {
+      color: var(--accent);
+    }
+
+    .reveal .progress {
+      color: var(--accent);
+      height: 3px;
+    }
+
+    .puffin-logo {
+      font-size: 3em;
+      margin-bottom: 15px;
+    }
+
+    .sam-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.7em;
+      flex-wrap: wrap;
+    }
+
+    .sam-flow .step {
+      background: rgba(108, 99, 255, 0.2);
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+    }
+
+    .sam-flow .arrow {
+      color: var(--success);
+      font-size: 1.3em;
+    }
+
+    .sam-diagram {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 0.65em;
+      gap: 0;
+    }
+
+    .sam-diagram .main-flow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sam-diagram .step {
+      background: rgba(108, 99, 255, 0.2);
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      min-width: 70px;
+      text-align: center;
+    }
+
+    .sam-diagram .arrow {
+      color: var(--success);
+      font-size: 1.3em;
+    }
+
+    .sam-diagram .loop-container {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      margin-top: 0;
+      margin-left: 95px;
+    }
+
+    .sam-diagram .loop-visual {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 15px;
+      border: 2px solid var(--success);
+      border-top: none;
+      border-radius: 0 0 15px 15px;
+    }
+
+    .sam-diagram .loop-visual .step {
+      background: rgba(72, 187, 120, 0.15);
+      border-color: var(--success);
+    }
+
+    .sam-diagram .loop-visual .arrow {
+      font-size: 1.1em;
+    }
+
+    .terminal {
+      background: #0d0d1a;
+      border-radius: 10px;
+      padding: 15px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.45em;
+      text-align: left;
+      border: 1px solid #333;
+    }
+
+    .terminal-header {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .terminal-btn {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .terminal-btn.red { background: #f56565; }
+    .terminal-btn.yellow { background: #ecc94b; }
+    .terminal-btn.green { background: #48bb78; }
+
+    .reveal .small-text {
+      font-size: 0.7em;
+    }
+
+    .reveal .tiny-text {
+      font-size: 0.55em;
+    }
+
+    .reveal img.screenshot {
+      max-height: 350px;
+      border-radius: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    .fragment.fade-up {
+      transform: translateY(15px);
+    }
+
+    .fragment.fade-up.visible {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- Title Slide -->
+      <section data-background-gradient="linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)">
+        <div class="puffin-logo">🐧</div>
+        <h1>La Gestion du Contexte Est<br> au Coeur du Développement IA</h1>
+        <h2>Puffin & Le Pattern SAM</h2>
+        <p style="margin-top: 50px; color: #666; font-size: 0.7em;">
+          Jean-Jacques Dubray • Retraité
+        </p>
+      </section>
+
+      <!-- Outline -->
+      <section>
+        <h2>Plan</h2>
+        <div class="two-column">
+          <div class="fragment fade-up">
+            <h3>Le Pattern SAM</h3>
+            <ul>
+              <li>Qu'est-ce que SAM ?</li>
+              <li>SAM vs Autres Patterns</li>
+              <li>SAM en Pratique</li>
+            </ul>
+          </div>
+          <div class="fragment fade-up">
+            <h3>Puffin</h3>
+            <ul>
+              <li>Gestion du Contexte</li>
+              <li>Sessions Claude Code</li>
+              <li>Branches & Modèles</li>
+              <li>GUI Designer</li>
+              <li>User Stories</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- PART 1: SAM PATTERN -->
+      <section data-background-color="#16213e">
+        <h1>Le Pattern SAM</h1>
+      </section>
+
+      <!-- What is SAM -->
+      <section>
+        <h2>Qu'est-ce que SAM ?</h2>
+        <p class="subtitle">State-Action-Model : Pattern Fonctionnel Réactif</p>
+
+        <div class="sam-diagram fragment fade-up">
+          <div class="main-flow">
+            <span class="step">Intention</span>
+            <span class="arrow">→</span>
+            <span class="step">Action</span>
+            <span class="arrow">→</span>
+            <span class="step">Model</span>
+            <span class="arrow">→</span>
+            <span class="step">State</span>
+          </div>
+          <div class="loop-container">
+            <div class="loop-visual">
+              <span class="arrow">←</span>
+              <span class="step">Next-Action</span>
+              <span class="arrow">←</span>
+            </div>
+          </div>
+        </div>
+
+        <table class="fragment fade-up" style="margin-top: 30px;">
+          <tr>
+            <th>Composant</th>
+            <th>Responsabilité</th>
+          </tr>
+          <tr>
+            <td><strong>Action</strong></td>
+            <td>Traduit l'intention en proposition</td>
+          </tr>
+          <tr>
+            <td><strong>Model</strong></td>
+            <td>Valide et applique via accepteurs</td>
+          </tr>
+          <tr>
+            <td><strong>State</strong></td>
+            <td>Calcule états dérivés et de contrôle</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- SAM Key Principles -->
+      <section>
+        <h2>Principes Clés</h2>
+        <ul>
+          <li class="fragment fade-up"><span class="highlight">Arbre d'État Unique</span> — Source de vérité unique</li>
+          <li class="fragment fade-up"><span class="highlight">Flux Unidirectionnel</span> — Mutations prévisibles</li>
+          <li class="fragment fade-up"><span class="highlight">Accepteurs</span> — Accepter, partiellement accepter ou rejeter</li>
+          <li class="fragment fade-up"><span class="highlight">États de Contrôle</span> — Détermine les actions permises</li>
+          <li class="fragment fade-up"><span class="highlight">Variables Prime</span> — x' = valeur suivante (TLA+)</li>
+          <li class="fragment fade-up"><span class="highlight">Logique Temporelle</span> — Invariants et vivacité</li>
+        </ul>
+        <p class="fragment fade-up small-text" style="margin-top: 30px;">
+          <a href="https://sam.js.org">sam.js.org</a> •
+          <a href="https://dzone.com/articles/the-three-approximations-you-should-never-use-when">Article DZone</a>
+        </p>
+      </section>
+
+      <!-- SAM vs Others -->
+      <section>
+        <h2>SAM vs Autres Patterns</h2>
+        <table>
+          <tr>
+            <th>Aspect</th>
+            <th>MVC</th>
+            <th>Redux</th>
+            <th>SAM</th>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Flux</td>
+            <td>Bidirectionnel</td>
+            <td>Unidirectionnel</td>
+            <td class="success">Unidirectionnel + Contrôle</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Mutation</td>
+            <td>Directe</td>
+            <td>Reducers</td>
+            <td class="success">Accepteurs</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Effets</td>
+            <td>Contrôleur</td>
+            <td>Middleware</td>
+            <td class="success">Actions</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Contrôle</td>
+            <td>Implicite</td>
+            <td>Implicite</td>
+            <td class="success">Explicite (FSM)</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- SAM in Practice -->
+      <section>
+        <h2>SAM en Pratique</h2>
+        <pre><code class="language-javascript" data-trim data-line-numbers="1-4|6-13|15-21|23-24">
+// 1. ACTION
+const proposal = actions.submitPrompt({
+  content: "Construis un formulaire"
+})
+
+// 2. MODEL (accepteur)
+const submitPromptAcceptor = model => proposal => {
+  if (proposal.type !== 'SUBMIT_PROMPT') return
+  if (!proposal.content?.trim()) return
+  model.pendingPromptId = generateId()
+  model.prompts.push({ id: model.pendingPromptId,
+    content: proposal.content, status: 'pending' })
+}
+
+// 3. STATE (états de contrôle)
+const state = model => ({
+  ...model,
+  canSubmit: !model.pendingPromptId,
+  canCancel: !!model.pendingPromptId,
+  isProcessing: !!model.pendingPromptId
+})
+
+// 4. VUE
+render(state) // Bouton désactivé si !canSubmit
+        </code></pre>
+      </section>
+
+      <!-- PART 2: PUFFIN -->
+      <section data-background-color="#16213e">
+        <h1>Puffin</h1>
+      </section>
+
+      <!-- The Problem: Context -->
+      <section>
+        <h2>Pollution du Contexte</h2>
+        <div class="box fragment fade-up">
+          <p><em>"Ajoute un bouton dans le header"</em></p>
+        </div>
+        <div class="box fragment fade-up" style="border-color: var(--error);">
+          <p><strong>IA :</strong> "Je vais ajouter le bouton, mais d'abord laisse-moi refactoriser ton authentification..."</p>
+        </div>
+        <div class="fragment fade-up" style="margin-top: 30px;">
+          <p class="highlight">1 conversation = Tout visible = L'IA adresse tout</p>
+        </div>
+      </section>
+
+      <!-- Claude Code Sessions -->
+      <section>
+        <h2>Claude Code : Sessions</h2>
+        <pre><code class="language-bash" data-trim>
+# Sélecteur interactif
+claude --resume
+
+# Reprendre la plus récente
+claude --continue
+
+# Session spécifique
+claude --resume abc123 "Continuer"
+
+# Forker (brancher)
+claude --resume abc123 --fork-session
+        </code></pre>
+        <table class="fragment fade-up">
+          <tr><th>Aspect</th><th>Comportement</th></tr>
+          <tr><td>Stockage</td><td>Local</td></tr>
+          <tr><td>Durée</td><td>Persistant</td></tr>
+          <tr><td>Expiration</td><td>Aucune</td></tr>
+        </table>
+      </section>
+
+      <!-- Ephemeral History -->
+      <section>
+        <h2>L'Historique Éphémère</h2>
+        <div class="terminal">
+          <div class="terminal-header">
+            <span class="terminal-btn red"></span>
+            <span class="terminal-btn yellow"></span>
+            <span class="terminal-btn green"></span>
+          </div>
+          <span style="color: #888;">$</span> claude<br>
+          <span style="color: #48bb78;">></span> Construis un système d'auth<br>
+          <span style="color: #666;">[15 fichiers en 2 heures]</span><br>
+          <span style="color: #48bb78;">></span> Ajoute OAuth<br>
+          <span style="color: #666;">[Google/GitHub OAuth]</span><br>
+          <span style="color: #48bb78;">></span> Ajoute rate limiting<br>
+          <span style="color: #666;">[Implémenté]</span><br><br>
+          <span style="color: #666;">[Terminal fermé]</span><br><br>
+          <span style="color: #f56565;">💀 HISTORIQUE PERDU 💀</span>
+        </div>
+      </section>
+
+      <!-- What is Puffin -->
+      <section>
+        <h2>Qu'est-ce que Puffin ?</h2>
+        <div class="diagram">
+┌────────────────────────────────────────┐
+│              PUFFIN                    │
+│  ┌─────────┐ ┌─────────┐ ┌──────────┐  │
+│  │Branches │ │ Backlog │ │CLAUDE.md │  │
+│  │& History│ │& Stories│ │ Dynamique│  │
+│  └─────────┘ └─────────┘ └──────────┘  │
+└────────────────────────────────────────┘
+                    │
+                    ▼ lance & gère
+┌────────────────────────────────────────┐
+│         Claude Code CLI                │
+│    (Capacités agentiques complètes)    │
+└────────────────────────────────────────┘
+                    │
+                    ▼ construit
+┌────────────────────────────────────────┐
+│           Votre Projet                 │
+└────────────────────────────────────────┘
+        </div>
+      </section>
+
+      <!-- Puffin Features -->
+      <section>
+        <h2>Ce que Puffin Fait</h2>
+        <ul>
+          <li class="fragment fade-up"><span class="highlight">Organise</span> — Conversations en branches</li>
+          <li class="fragment fade-up"><span class="highlight">Suit</span> — Prompts, réponses, fichiers</li>
+          <li class="fragment fade-up"><span class="highlight">Injecte</span> — Contexte dynamique par branche</li>
+          <li class="fragment fade-up"><span class="highlight">Gère</span> — Stories de spec à complétion</li>
+          <li class="fragment fade-up"><span class="highlight">Persiste</span> — Tout dans <code>.puffin/</code></li>
+        </ul>
+      </section>
+
+      <!-- Branched Conversations -->
+      <section>
+        <h2>Conversations par Branches</h2>
+        <table>
+          <tr>
+            <th>Branche</th>
+            <th>Focus</th>
+            <th>Contexte</th>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Specifications</td>
+            <td>Exigences</td>
+            <td>Description projet</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Architecture</td>
+            <td>Design système</td>
+            <td>Doc architecture</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>UI</td>
+            <td>Composants</td>
+            <td>Design tokens</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Backend</td>
+            <td>APIs, DB</td>
+            <td>Modèle données</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Deployment</td>
+            <td>CI/CD</td>
+            <td>Infra</td>
+          </tr>
+        </table>
+        <p class="fragment fade-up small-text" style="margin-top: 20px;">
+          <span class="success">Branche = Session = Contexte focalisé</span>
+        </p>
+      </section>
+
+      <!-- Model Selection -->
+      <section>
+        <h2>Sélection du Modèle</h2>
+        <div style="margin: 20px 0;">
+          <span class="badge badge-opus">Opus</span>
+          <span class="badge badge-sonnet">Sonnet</span>
+          <span class="badge badge-haiku">Haiku</span>
+        </div>
+        <table>
+          <tr>
+            <th>Modèle</th>
+            <th>Forces</th>
+            <th>Usage</th>
+          </tr>
+          <tr class="fragment fade-up">
+            <td><span class="badge badge-opus">Opus</span></td>
+            <td>Plus capable</td>
+            <td>Architecture complexe</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td><span class="badge badge-sonnet">Sonnet</span></td>
+            <td>Équilibré</td>
+            <td>Dev quotidien</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td><span class="badge badge-haiku">Haiku</span></td>
+            <td>Rapide</td>
+            <td>Questions simples</td>
+          </tr>
+        </table>
+        <p class="fragment fade-up small-text" style="margin-top: 15px;">
+          <strong>Config projet</strong> + <strong>Override par thread</strong>
+        </p>
+      </section>
+
+      <!-- Dynamic Context -->
+      <section>
+        <h2>CLAUDE.md Dynamique</h2>
+        <pre><code class="language-markdown" data-trim>
+## Focus Branche : UI/UX
+
+### Tokens Couleur
+| Token           | Valeur  | Usage           |
+|-----------------|---------|-----------------|
+| --color-primary | #6c63ff | Marque          |
+
+### Bouton Principal
+HTML: &lt;button class="btn-primary"&gt;...&lt;/button&gt;
+CSS: .btn-primary { background: var(--color-primary); }
+        </code></pre>
+        <p class="fragment fade-up small-text">
+          <span class="success">Régénéré auto</span> au changement de branche/config
+        </p>
+      </section>
+
+      <!-- GUI Designer -->
+      <section>
+        <h2>GUI Designer</h2>
+        <p class="subtitle">Une image vaut mille prompts</p>
+        <div class="diagram" style="font-size: 0.38em;">
+┌────────────────────────────────────────┐
+│  Palette          Canvas               │
+│  ┌─────────┐  ┌─────────────────────┐  │
+│  │Container│  │  ┌──────────────┐   │  │
+│  │ Texte   │  │  │  Login Form  │   │  │
+│  │ Input   │  │  │ ┌──────────┐ │   │  │
+│  │ Bouton  │  │  │ │ Email    │ │   │  │
+│  │ Image   │  │  │ └──────────┘ │   │  │
+│  │ Liste   │  │  │ ┌──────────┐ │   │  │
+│  │ Card    │  │  │ │ Password │ │   │  │
+│  └─────────┘  │  │ └──────────┘ │   │  │
+│               │  │ [x] Remember │   │  │
+│  Props:       │  │ ┌──────────┐ │   │  │
+│  x:100 y:50   │  │ │  Login   │ │   │  │
+│  w:300        │  │ └──────────┘ │   │  │
+│               │  └──────────────┘   │  │
+│               └─────────────────────┘  │
+└────────────────────────────────────────┘
+        </div>
+        <p class="fragment fade-up small-text" style="margin-top: 15px;">
+          Dessiner: <span class="success">30s</span> vs Décrire: <span class="error">5min + itérations</span>
+        </p>
+      </section>
+
+      <!-- User Stories -->
+      <section>
+        <h2>User Stories & Backlog</h2>
+        <div class="sam-flow" style="font-size: 0.6em;">
+          <span class="step">Prompt</span>
+          <span class="arrow">→</span>
+          <span class="step">Dériver</span>
+          <span class="arrow">→</span>
+          <span class="step">Réviser</span>
+          <span class="arrow">→</span>
+          <span class="step">Backlog</span>
+          <span class="arrow">→</span>
+          <span class="step">Implémenter</span>
+        </div>
+        <img src="../screenshots/story-review-model.png" alt="Story Review Modal" class="screenshot fragment fade-up" style="margin-top: 20px;">
+      </section>
+
+      <!-- Acceptance Criteria -->
+      <section>
+        <h2>Vérification des Critères</h2>
+        <pre><code class="language-markdown" data-trim>
+## Vérification
+
+- ✅ Critère 1 : LoginForm avec TextField email/password
+
+- ✅ Critère 2 : Validation Formik + yup, erreurs inline
+
+- ⚠️ Critère 3 : Bouton désactivé si invalide,
+     mais actif pendant l'appel API → besoin loading
+        </code></pre>
+        <div class="fragment fade-up" style="margin-top: 20px;">
+          <span class="success">✅ Fait</span> •
+          <span class="warning">⚠️ Partiel</span> •
+          <span class="error">❌ Bloqué</span>
+        </div>
+      </section>
+
+      <!-- SAM in Puffin -->
+      <section>
+        <h2>SAM dans Puffin</h2>
+        <p class="small-text"><strong>44 accepteurs</strong> • <strong>3 FSMs</strong></p>
+        <table style="font-size: 0.55em;">
+          <tr>
+            <th>Catégorie</th>
+            <th>#</th>
+            <th>Exemples</th>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Application</td>
+            <td>4</td>
+            <td>initialize, loadState</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Prompt/History</td>
+            <td>15</td>
+            <td>submitPrompt, completeResponse</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>GUI Designer</td>
+            <td>7</td>
+            <td>addElement, moveElement</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>User Stories</td>
+            <td>14</td>
+            <td>deriveStories, addToBacklog</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- FSM States -->
+      <section>
+        <h2>Machines à États</h2>
+        <h3>App FSM</h3>
+        <div class="diagram" style="font-size: 0.5em; text-align: center;">
+INITIALIZING → LOADING → READY ↔ PROCESSING
+                          ↑________|    ↓
+                                     ERROR
+        </div>
+        <h3 style="margin-top: 25px;">Prompt FSM</h3>
+        <div class="diagram" style="font-size: 0.5em; text-align: center;">
+IDLE → COMPOSING → SUBMITTED → STREAMING → COMPLETED
+  ↑                                             │
+  └─────────────────────────────────────────────┘
+        </div>
+      </section>
+
+      <!-- Results -->
+      <section>
+        <h2>Résultats</h2>
+        <table>
+          <tr>
+            <th>Métrique</th>
+            <th>Avant</th>
+            <th>Après</th>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Pollution contexte</td>
+            <td class="error">Fréquente</td>
+            <td class="success">Rare</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Hors-sujet</td>
+            <td class="error">Commun</td>
+            <td class="success">Minimal</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Suivi stories</td>
+            <td class="warning">Manuel</td>
+            <td class="success">Auto</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Patterns</td>
+            <td class="warning">Variable</td>
+            <td class="success">Tokens</td>
+          </tr>
+          <tr class="fragment fade-up">
+            <td>Débogage</td>
+            <td class="error">Difficile</td>
+            <td class="success">Time-travel</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- Lessons Learned -->
+      <section>
+        <h2>Leçons Apprises</h2>
+        <ul>
+          <li class="fragment fade-up"><span class="highlight">Le Contexte est Tout</span><br>
+            <small class="tiny-text">Même IA, contexte différent = comportement différent</small></li>
+          <li class="fragment fade-up"><span class="highlight">SAM Scale Bien</span><br>
+            <small class="tiny-text">44 accepteurs, 3 FSMs - toujours gérable</small></li>
+          <li class="fragment fade-up"><span class="highlight">Explicite > Implicite</span><br>
+            <small class="tiny-text">États de contrôle = "ce qui peut arriver" évident</small></li>
+          <li class="fragment fade-up"><span class="highlight">L'IA a Besoin de Structure</span><br>
+            <small class="tiny-text">Critères numérotés, format clair</small></li>
+        </ul>
+      </section>
+
+      <!-- What's Next -->
+      <section>
+        <h2>Prochaines Étapes</h2>
+        <ul>
+          <li class="fragment fade-up">🖥️ Better GUI Designer</li>
+          <li class="fragment fade-up">🔌 Intégration MCP</li>
+          <li class="fragment fade-up">👥 Collaboration équipe</li>
+          
+        </ul>
+      </section>
+
+      <!-- Demo -->
+      <section data-background-color="#16213e">
+        <h1>Démo</h1>
+        <p class="subtitle">Puffin en action</p>
+      </section>
+
+      <!-- Q&A -->
+      <section>
+        <h2>Questions ?</h2>
+        <div style="margin-top: 40px;">
+          <p style="font-size: 2.5em;">🐧</p>
+          <p class="small-text">
+            <a href="https://github.com/jdubray/puffin">github.com/jdubray/puffin</a><br>
+            <a href="https://sam.js.org">sam.js.org</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- Thank You -->
+      <section data-background-gradient="linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)">
+        <h1>Merci !</h1>
+        <p style="font-size: 2.5em; margin-top: 30px;">🐧</p>
+        <p class="small-text">Puffin v1.1.0</p>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/highlight/highlight.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/notes/notes.js"></script>
+  <script>
+    Reveal.initialize({
+      hash: true,
+      slideNumber: 'c/t',
+      progress: true,
+      center: true,
+      transition: 'slide',
+      transitionSpeed: 'default',
+      backgroundTransition: 'fade',
+      width: 1280,
+      height: 720,
+      margin: 0.1,
+      plugins: [RevealHighlight, RevealNotes]
+    });
+  </script>
+</body>
+</html>

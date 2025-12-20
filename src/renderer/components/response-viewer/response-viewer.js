@@ -197,12 +197,28 @@ export class ResponseViewerComponent {
       <div class="response-display">
         <div class="response-label">Claude</div>
         <div class="response-message">${html}</div>
+        <div class="response-actions">
+          <button class="response-action-btn" data-action="copy-md" title="Copy markdown to clipboard">
+            <span class="btn-icon">📋</span>
+            <span class="btn-text">Copy MD</span>
+          </button>
+          <button class="response-action-btn" data-action="save-md" title="Save markdown to file">
+            <span class="btn-icon">💾</span>
+            <span class="btn-text">Save MD</span>
+          </button>
+        </div>
         ${filesModifiedHtml}
         <div class="response-meta">
           ${metaParts.join(' • ')}
         </div>
       </div>
     `
+
+    // Store the raw markdown content for later access
+    this.currentMarkdown = prompt.response.content
+
+    // Attach event listeners to the action buttons
+    this.attachActionListeners()
   }
 
   /**
@@ -297,6 +313,9 @@ export class ResponseViewerComponent {
     // Inline code
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
 
+    // Tables - parse markdown tables into HTML
+    html = this.parseMarkdownTables(html)
+
     // Headers
     html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>')
     html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>')
@@ -331,8 +350,98 @@ export class ResponseViewerComponent {
     html = html.replace(/(<\/pre>)<\/p>/g, '$1')
     html = html.replace(/<p>(<ul>)/g, '$1')
     html = html.replace(/(<\/ul>)<\/p>/g, '$1')
+    html = html.replace(/<p>(<div class="table-wrapper">)/g, '$1')
+    html = html.replace(/(<\/table><\/div>)<\/p>/g, '$1')
 
     return html
+  }
+
+  /**
+   * Parse markdown tables into HTML tables
+   */
+  parseMarkdownTables(text) {
+    const lines = text.split('\n')
+    const result = []
+    let inTable = false
+    let tableRows = []
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+
+      // Check if this looks like a table row (starts and ends with |, or has | separators)
+      const isTableRow = line.startsWith('|') && line.endsWith('|')
+      const isSeparatorRow = /^\|[\s\-:|\s]+\|$/.test(line)
+
+      if (isTableRow || isSeparatorRow) {
+        if (!inTable) {
+          inTable = true
+          tableRows = []
+        }
+        tableRows.push(line)
+      } else {
+        // If we were in a table, process it
+        if (inTable && tableRows.length >= 2) {
+          result.push(this.renderTable(tableRows))
+        } else if (inTable) {
+          // Not enough rows for a table, just add them back
+          result.push(...tableRows)
+        }
+        inTable = false
+        tableRows = []
+        result.push(lines[i])
+      }
+    }
+
+    // Handle table at end of text
+    if (inTable && tableRows.length >= 2) {
+      result.push(this.renderTable(tableRows))
+    } else if (inTable) {
+      result.push(...tableRows)
+    }
+
+    return result.join('\n')
+  }
+
+  /**
+   * Render table rows into HTML table
+   */
+  renderTable(rows) {
+    if (rows.length < 2) return rows.join('\n')
+
+    // Parse cells from each row
+    const parseCells = (row) => {
+      return row
+        .split('|')
+        .slice(1, -1) // Remove empty first and last elements from split
+        .map(cell => cell.trim())
+    }
+
+    const headerCells = parseCells(rows[0])
+
+    // Check if second row is a separator (contains only -, :, |, and spaces)
+    const isSeparator = /^[\s\-:|]+$/.test(rows[1].replace(/\|/g, ''))
+
+    let bodyStartIndex = isSeparator ? 2 : 1
+
+    // Build table HTML
+    let tableHtml = '<div class="table-wrapper"><table>\n<thead>\n<tr>'
+
+    for (const cell of headerCells) {
+      tableHtml += `<th>${cell}</th>`
+    }
+    tableHtml += '</tr>\n</thead>\n<tbody>\n'
+
+    for (let i = bodyStartIndex; i < rows.length; i++) {
+      const cells = parseCells(rows[i])
+      tableHtml += '<tr>'
+      for (const cell of cells) {
+        tableHtml += `<td>${cell}</td>`
+      }
+      tableHtml += '</tr>\n'
+    }
+
+    tableHtml += '</tbody>\n</table></div>'
+    return tableHtml
   }
 
   /**
@@ -363,6 +472,70 @@ export class ResponseViewerComponent {
   formatDate(timestamp) {
     const date = new Date(timestamp)
     return date.toLocaleString()
+  }
+
+  /**
+   * Attach event listeners to response action buttons
+   */
+  attachActionListeners() {
+    const copyBtn = this.container.querySelector('[data-action="copy-md"]')
+    const saveBtn = this.container.querySelector('[data-action="save-md"]')
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => this.handleCopyMarkdown())
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => this.handleSaveMarkdown())
+    }
+  }
+
+  /**
+   * Handle copy markdown to clipboard
+   */
+  async handleCopyMarkdown() {
+    if (!this.currentMarkdown) return
+
+    try {
+      await navigator.clipboard.writeText(this.currentMarkdown)
+      this.showToast('Markdown copied to clipboard', 'success')
+    } catch (err) {
+      console.error('Failed to copy markdown:', err)
+      this.showToast('Failed to copy markdown', 'error')
+    }
+  }
+
+  /**
+   * Handle save markdown to file
+   */
+  async handleSaveMarkdown() {
+    if (!this.currentMarkdown) return
+
+    try {
+      // Use the Puffin file API to save the markdown
+      const result = await window.puffin.file.saveMarkdown(this.currentMarkdown)
+
+      if (result.success) {
+        this.showToast(`Markdown saved to ${result.filePath}`, 'success')
+      } else if (result.canceled) {
+        // User canceled, no message needed
+      } else {
+        this.showToast('Failed to save markdown', 'error')
+      }
+    } catch (err) {
+      console.error('Failed to save markdown:', err)
+      this.showToast('Failed to save markdown', 'error')
+    }
+  }
+
+  /**
+   * Show a toast notification
+   */
+  showToast(message, type = 'info') {
+    const event = new CustomEvent('show-toast', {
+      detail: { message, type }
+    })
+    document.dispatchEvent(event)
   }
 
   /**

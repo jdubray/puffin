@@ -5,15 +5,17 @@
  * Uses PuffinState for directory-based state management.
  */
 
-const { dialog } = require('electron')
+const { dialog, shell } = require('electron')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
 const { DeveloperProfileManager } = require('./developer-profile')
+const { GitService } = require('./git-service')
 const ClaudeMdGenerator = require('./claude-md-generator')
 
 let puffinState = null
 let claudeService = null
 let developerProfile = null
+let gitService = null
 let claudeMdGenerator = null
 let projectPath = null
 
@@ -27,10 +29,14 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
   puffinState = new PuffinState()
   claudeService = new ClaudeService()
   developerProfile = new DeveloperProfileManager()
+  gitService = new GitService()
   claudeMdGenerator = new ClaudeMdGenerator()
 
   // Set Claude CLI working directory to the project path
   claudeService.setProjectPath(projectPath)
+
+  // Set Git service project path
+  gitService.setProjectPath(projectPath)
 
   // State handlers
   setupStateHandlers(ipcMain)
@@ -43,6 +49,12 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
 
   // Developer profile handlers
   setupProfileHandlers(ipcMain)
+
+  // Git handlers
+  setupGitHandlers(ipcMain)
+
+  // Shell handlers
+  setupShellHandlers(ipcMain)
 }
 
 /**
@@ -263,6 +275,80 @@ function setupStateHandlers(ipcMain) {
       await claudeMdGenerator.updateBase(state, activeBranch)
 
       return { success: true, deleted }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ============ Story Generation Tracking Operations ============
+
+  ipcMain.handle('state:getStoryGenerations', async () => {
+    try {
+      const generations = puffinState.getStoryGenerations()
+      return { success: true, generations }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:addStoryGeneration', async (event, generation) => {
+    try {
+      const newGeneration = await puffinState.addStoryGeneration(generation)
+      return { success: true, generation: newGeneration }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateStoryGeneration', async (event, { generationId, updates }) => {
+    try {
+      const generation = await puffinState.updateStoryGeneration(generationId, updates)
+      return { success: true, generation }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateGeneratedStoryFeedback', async (event, { generationId, storyId, feedback }) => {
+    try {
+      const story = await puffinState.updateGeneratedStoryFeedback(generationId, storyId, feedback)
+      return { success: true, story }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:addImplementationJourney', async (event, journey) => {
+    try {
+      const newJourney = await puffinState.addImplementationJourney(journey)
+      return { success: true, journey: newJourney }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:updateImplementationJourney', async (event, { journeyId, updates }) => {
+    try {
+      const journey = await puffinState.updateImplementationJourney(journeyId, updates)
+      return { success: true, journey }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:addImplementationInput', async (event, { journeyId, input }) => {
+    try {
+      const journey = await puffinState.addImplementationInput(journeyId, input)
+      return { success: true, journey }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('state:exportStoryGenerations', async () => {
+    try {
+      const data = puffinState.exportStoryGenerations()
+      return { success: true, data }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -528,6 +614,17 @@ function setupClaudeHandlers(ipcMain) {
       return { success: true, title: claudeService.generateFallbackTitle(content) }
     }
   })
+
+  // Send a simple prompt and get a response (non-streaming)
+  ipcMain.handle('claude:sendPrompt', async (event, prompt, options = {}) => {
+    try {
+      const result = await claudeService.sendPrompt(prompt, options)
+      return result
+    } catch (error) {
+      console.error('sendPrompt failed:', error)
+      return { success: false, error: error.message }
+    }
+  })
 }
 
 /**
@@ -579,6 +676,31 @@ function setupFileHandlers(ipcMain) {
       }
 
       return { success: false, error: 'Import cancelled' }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Save markdown content to file
+  ipcMain.handle('file:saveMarkdown', async (event, content) => {
+    try {
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        title: 'Save Markdown',
+        defaultPath: 'response.md',
+        filters: [
+          { name: 'Markdown', extensions: ['md'] },
+          { name: 'Text', extensions: ['txt'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      })
+
+      if (canceled || !filePath) {
+        return { success: false, canceled: true }
+      }
+
+      const fs = require('fs').promises
+      await fs.writeFile(filePath, content, 'utf-8')
+      return { success: true, filePath }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -751,6 +873,16 @@ function setupProfileHandlers(ipcMain) {
   // GitHub Integration Handlers
   // ============================================
 
+  // Connect with Personal Access Token
+  ipcMain.handle('github:connectWithPAT', async (event, token) => {
+    try {
+      const profile = await developerProfile.connectWithPAT(token)
+      return { success: true, profile }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // Start GitHub OAuth Device Flow
   ipcMain.handle('github:startAuth', async () => {
     try {
@@ -828,6 +960,315 @@ function setupProfileHandlers(ipcMain) {
     try {
       const { events, rateLimit } = await developerProfile.fetchGithubActivity(perPage)
       return { success: true, events, rateLimit }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+/**
+ * Git operation IPC handlers
+ */
+function setupGitHandlers(ipcMain) {
+  // Check if Git is available on the system
+  ipcMain.handle('git:isAvailable', async () => {
+    try {
+      const available = await gitService.isGitAvailable()
+      return { success: true, available }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Check if project is a Git repository
+  ipcMain.handle('git:isRepository', async () => {
+    try {
+      const result = await gitService.isGitRepository()
+      return { success: true, ...result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get repository status (branch, files, ahead/behind)
+  ipcMain.handle('git:getStatus', async () => {
+    try {
+      const result = await gitService.getStatus()
+      if (result.success) {
+        return { success: true, status: result.status }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get current branch name
+  ipcMain.handle('git:getCurrentBranch', async () => {
+    try {
+      const result = await gitService.getCurrentBranch()
+      if (result.success) {
+        return { success: true, branch: result.branch }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get list of all branches
+  ipcMain.handle('git:getBranches', async () => {
+    try {
+      const result = await gitService.getBranches()
+      if (result.success) {
+        return { success: true, branches: result.branches }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Validate branch name
+  ipcMain.handle('git:validateBranchName', async (event, name) => {
+    try {
+      const result = gitService.validateBranchName(name)
+      return { success: true, ...result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Create a new branch
+  ipcMain.handle('git:createBranch', async (event, { name, prefix, checkout }) => {
+    try {
+      const result = await gitService.createBranch(name, { prefix, checkout })
+      if (result.success) {
+        // Log the operation
+        await puffinState.addGitOperation({
+          type: 'branch_create',
+          branch: result.branch,
+          details: { prefix, checkout }
+        })
+        return { success: true, branch: result.branch }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Checkout a branch
+  ipcMain.handle('git:checkout', async (event, name) => {
+    try {
+      const result = await gitService.checkout(name)
+      if (result.success) {
+        // Log the operation
+        await puffinState.addGitOperation({
+          type: 'checkout',
+          branch: result.branch
+        })
+        return { success: true, branch: result.branch }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Stage files
+  ipcMain.handle('git:stageFiles', async (event, files) => {
+    try {
+      const result = await gitService.stageFiles(files)
+      if (result.success) {
+        return { success: true, staged: result.staged }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Unstage files
+  ipcMain.handle('git:unstageFiles', async (event, files) => {
+    try {
+      const result = await gitService.unstageFiles(files)
+      if (result.success) {
+        return { success: true, unstaged: result.unstaged }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Create a commit
+  ipcMain.handle('git:commit', async (event, { message, sessionId }) => {
+    try {
+      const result = await gitService.commit(message)
+      if (result.success) {
+        // Log the operation with session link if provided
+        await puffinState.addGitOperation({
+          type: 'commit',
+          hash: result.hash,
+          message: message,
+          sessionId: sessionId || null
+        })
+        return { success: true, hash: result.hash }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Merge a branch
+  ipcMain.handle('git:merge', async (event, { sourceBranch, noFf }) => {
+    try {
+      const result = await gitService.merge(sourceBranch, { noFf })
+      if (result.success) {
+        // Log the operation
+        await puffinState.addGitOperation({
+          type: 'merge',
+          sourceBranch,
+          details: { noFf }
+        })
+        return { success: true, merged: result.merged }
+      }
+      // Return merge conflict details if present
+      if (result.conflicts) {
+        return {
+          success: false,
+          conflicts: result.conflicts,
+          error: result.error,
+          guidance: result.guidance
+        }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Abort merge
+  ipcMain.handle('git:abortMerge', async () => {
+    try {
+      const result = await gitService.abortMerge()
+      if (result.success) {
+        return { success: true }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Delete a branch
+  ipcMain.handle('git:deleteBranch', async (event, { name, force }) => {
+    try {
+      const result = await gitService.deleteBranch(name, { force })
+      if (result.success) {
+        // Log the operation
+        await puffinState.addGitOperation({
+          type: 'branch_delete',
+          branch: result.deleted
+        })
+        return { success: true, deleted: result.deleted }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get commit log
+  ipcMain.handle('git:getLog', async (event, options = {}) => {
+    try {
+      const result = await gitService.getLog(options)
+      if (result.success) {
+        return { success: true, commits: result.commits }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get diff
+  ipcMain.handle('git:getDiff', async (event, options = {}) => {
+    try {
+      const result = await gitService.getDiff(options)
+      if (result.success) {
+        return { success: true, diff: result.diff }
+      }
+      return { success: false, error: result.error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get Git settings
+  ipcMain.handle('git:getSettings', async () => {
+    try {
+      const settings = gitService.getSettings()
+      return { success: true, settings }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Update Git settings
+  ipcMain.handle('git:updateSettings', async (event, settings) => {
+    try {
+      gitService.updateSettings(settings)
+      // Also persist to puffin state
+      await puffinState.updateGitSettings(settings)
+      return { success: true, settings: gitService.getSettings() }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get Git operation history
+  ipcMain.handle('git:getOperationHistory', async (event, options = {}) => {
+    try {
+      const history = puffinState.getGitOperationHistory(options)
+      return { success: true, history }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Configure Git user identity
+  ipcMain.handle('git:configureUserIdentity', async (event, { name, email, global = false }) => {
+    try {
+      const result = await gitService.configureUserIdentity(name, email, global)
+      return result
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get Git user identity
+  ipcMain.handle('git:getUserIdentity', async (event, global = false) => {
+    try {
+      const result = await gitService.getUserIdentity(global)
+      return result
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+/**
+ * Shell operation handlers
+ */
+function setupShellHandlers(ipcMain) {
+  // Open external URL in default browser
+  ipcMain.handle('shell:openExternal', async (event, url) => {
+    try {
+      await shell.openExternal(url)
+      return { success: true }
     } catch (error) {
       return { success: false, error: error.message }
     }

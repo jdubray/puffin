@@ -441,11 +441,12 @@ export const updateDerivedStory = (storyId, updates) => ({
   }
 })
 
-// Delete a pending story from the review list
-export const deleteDerivedStory = (storyId) => ({
+// Delete a pending story from the review list (with optional rejection reason for tracking)
+export const deleteDerivedStory = (storyId, reason = null) => ({
   type: 'DELETE_DERIVED_STORY',
   payload: {
-    storyId
+    storyId,
+    reason // Optional reason for rejecting the story (US-2)
   }
 })
 
@@ -488,6 +489,91 @@ export const startStoryImplementation = (stories) => ({
   payload: {
     stories,
     timestamp: Date.now()
+  }
+})
+
+/**
+ * Story Generation Tracking Actions
+ * For tracking how Claude decomposes prompts into stories and implementation outcomes
+ */
+
+// Load story generations from storage
+export const loadStoryGenerations = (generations) => ({
+  type: 'LOAD_STORY_GENERATIONS',
+  payload: {
+    generations
+  }
+})
+
+// Create a new story generation record when Claude derives stories
+export const createStoryGeneration = (data) => ({
+  type: 'CREATE_STORY_GENERATION',
+  payload: {
+    id: generateId(),
+    user_prompt: data.user_prompt,
+    project_context: data.project_context || null,
+    generated_stories: data.generated_stories || [],
+    model_used: data.model_used || 'sonnet',
+    timestamp: new Date().toISOString()
+  }
+})
+
+// Update feedback on a generated story (accept/modify/reject)
+export const updateGeneratedStoryFeedback = (generationId, storyId, feedback) => ({
+  type: 'UPDATE_GENERATED_STORY_FEEDBACK',
+  payload: {
+    generationId,
+    storyId,
+    feedback // { user_action, modification_diff?, rejection_reason? }
+  }
+})
+
+// Finalize generation when adding stories to backlog (links backlog IDs)
+export const finalizeStoryGeneration = (generationId, storyMappings) => ({
+  type: 'FINALIZE_STORY_GENERATION',
+  payload: {
+    generationId,
+    storyMappings // [{ generatedStoryId, backlogStoryId }]
+  }
+})
+
+// Create an implementation journey when starting to implement a story
+export const createImplementationJourney = (data) => ({
+  type: 'CREATE_IMPLEMENTATION_JOURNEY',
+  payload: {
+    id: generateId(),
+    story_id: data.story_id,
+    prompt_id: data.prompt_id,
+    turn_count: data.turn_count || 0,
+    inputs: data.inputs || []
+  }
+})
+
+// Add an input to an implementation journey (for tracking input types)
+export const addImplementationInput = (journeyId, input) => ({
+  type: 'ADD_IMPLEMENTATION_INPUT',
+  payload: {
+    journeyId,
+    input // { turn_number, type, content_summary }
+  }
+})
+
+// Update implementation journey (e.g., turn count)
+export const updateImplementationJourney = (journeyId, updates) => ({
+  type: 'UPDATE_IMPLEMENTATION_JOURNEY',
+  payload: {
+    journeyId,
+    updates
+  }
+})
+
+// Complete implementation journey with outcome
+export const completeImplementationJourney = (journeyId, status, outcome_notes = null) => ({
+  type: 'COMPLETE_IMPLEMENTATION_JOURNEY',
+  payload: {
+    journeyId,
+    status, // 'success' | 'partial' | 'failed'
+    outcome_notes
   }
 })
 
@@ -716,11 +802,13 @@ export const toggleThreadExpanded = (promptId) => ({
   }
 })
 
-// Mark a thread as complete
-export const markThreadComplete = (promptId) => ({
+// Mark a thread as complete (with optional journey outcome for implementation threads)
+export const markThreadComplete = (promptId, journeyOutcome = 'success', outcomeNotes = null) => ({
   type: 'MARK_THREAD_COMPLETE',
   payload: {
     promptId,
+    journeyOutcome, // 'success' | 'partial' | 'failed'
+    outcomeNotes,
     timestamp: Date.now()
   }
 })

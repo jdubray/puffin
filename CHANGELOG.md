@@ -5,6 +5,38 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-12-19
+
+### Added
+
+- **Git Panel**: Full Git integration with branch management and commit workflow
+  - View current branch, uncommitted changes, and ahead/behind status
+  - Stage/unstage files with diff preview
+  - Create commits with AI-generated messages via Claude API
+  - View commit history with file changes
+  - Create and switch branches
+  - GitHub PR creation support
+- **Story Generation Tracking**: Experience Memory system for tracking prompt-to-story decomposition
+  - Captures how Claude decomposes user prompts into user stories
+  - Records user feedback (accepted/modified/rejected) for each generated story
+  - Tracks implementation journeys with turn counts and outcomes
+  - Insights view as subtab within Backlog for viewing generation history
+- **AI Commit Messages**: Generate commit messages using Claude based on staged changes
+- **Markdown Rendering**: Response viewer now renders markdown with proper formatting
+
+### Changed
+
+- Claude context files now include branch-specific focus areas
+- Prompt editor optimized for better keystroke handling
+- Modal manager extended with new modal types for Git operations
+
+### Documentation
+
+- **SPEC_story_generation_tracking.md**: Full specification for Experience Memory system
+- **Security Assessments**: Added security review documentation
+- **Presentation Updates**: Updated presentation materials in English and French
+- **Memory Research**: Added research document on AI agent memory patterns
+
 ## [1.1.0] - 2025-12-15
 
 ### Added

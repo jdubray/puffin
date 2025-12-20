@@ -30,6 +30,8 @@ import { CliOutputComponent } from './components/cli-output/cli-output.js'
 import { UserStoriesComponent } from './components/user-stories/user-stories.js'
 import { UserStoryReviewModalComponent } from './components/user-story-review-modal/user-story-review-modal.js'
 import { DeveloperProfileComponent } from './components/developer-profile/developer-profile.js'
+import { StoryGenerationsComponent } from './components/story-generations/story-generations.js'
+import { GitPanelComponent } from './components/git-panel/git-panel.js'
 
 /**
  * Main application class
@@ -345,7 +347,9 @@ class PuffinApp {
       cliOutput: new CliOutputComponent(this.intents),
       userStories: new UserStoriesComponent(this.intents),
       userStoryReviewModal: new UserStoryReviewModalComponent(this.intents),
-      developerProfile: new DeveloperProfileComponent(this.intents)
+      developerProfile: new DeveloperProfileComponent(this.intents),
+      storyGenerations: new StoryGenerationsComponent(this.intents),
+      gitPanel: new GitPanelComponent(this.intents)
     }
 
     Object.values(this.components).forEach(component => {
@@ -678,7 +682,7 @@ class PuffinApp {
    * Update view visibility
    */
   updateViews(state) {
-    const views = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output']
+    const views = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'git', 'profile']
     views.forEach(viewName => {
       const view = document.getElementById(`${viewName}-view`)
       if (view) {

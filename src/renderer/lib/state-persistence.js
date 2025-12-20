@@ -36,7 +36,16 @@ export class StatePersistence {
       'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
       'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
-      'ADD_STORIES_TO_BACKLOG', 'START_STORY_IMPLEMENTATION'
+      'ADD_STORIES_TO_BACKLOG', 'START_STORY_IMPLEMENTATION',
+      // Story generation tracking
+      'RECEIVE_DERIVED_STORIES', 'CREATE_STORY_GENERATION', 'UPDATE_GENERATED_STORY_FEEDBACK',
+      'FINALIZE_STORY_GENERATION', 'CREATE_IMPLEMENTATION_JOURNEY',
+      'ADD_IMPLEMENTATION_INPUT', 'UPDATE_IMPLEMENTATION_JOURNEY',
+      'COMPLETE_IMPLEMENTATION_JOURNEY',
+      // Story feedback actions (trigger generation tracking persistence)
+      'MARK_STORY_READY', 'UNMARK_STORY_READY', 'UPDATE_DERIVED_STORY', 'DELETE_DERIVED_STORY',
+      // Thread completion (triggers journey completion)
+      'MARK_THREAD_COMPLETE', 'UNMARK_THREAD_COMPLETE'
     ]
 
     if (!persistActions.includes(normalizedType)) {
@@ -76,6 +85,20 @@ export class StatePersistence {
 
         await window.puffin.state.updateHistory(state.history.raw)
         console.log('[PERSIST-DEBUG] History persisted successfully')
+
+        // If COMPLETE_RESPONSE, also persist any updated implementation journeys (turn count)
+        if (normalizedType === 'COMPLETE_RESPONSE' && state.storyGenerations?.implementation_journeys) {
+          const journeys = state.storyGenerations.implementation_journeys
+          // Persist pending journeys that may have been updated
+          for (const journey of journeys.filter(j => j.status === 'pending')) {
+            try {
+              await window.puffin.state.updateImplementationJourney(journey.id, journey)
+            } catch (e) {
+              // Journey might not exist yet, which is fine
+              console.log('[PERSIST-DEBUG] Journey update skipped:', journey.id)
+            }
+          }
+        }
 
         // When switching branches, activate the branch-specific CLAUDE.md
         if (normalizedType === 'SELECT_BRANCH') {
@@ -164,6 +187,78 @@ export class StatePersistence {
               description: state.config.description
             } : null
           })
+        }
+      }
+
+      // Story Generation Tracking persistence
+      const storyGenActions = [
+        'RECEIVE_DERIVED_STORIES', 'CREATE_STORY_GENERATION', 'UPDATE_GENERATED_STORY_FEEDBACK',
+        'FINALIZE_STORY_GENERATION', 'CREATE_IMPLEMENTATION_JOURNEY',
+        'ADD_IMPLEMENTATION_INPUT', 'UPDATE_IMPLEMENTATION_JOURNEY',
+        'COMPLETE_IMPLEMENTATION_JOURNEY',
+        'START_STORY_IMPLEMENTATION', // Creates implementation journeys
+        'MARK_THREAD_COMPLETE', 'UNMARK_THREAD_COMPLETE' // Updates journey status
+      ]
+      if (storyGenActions.includes(normalizedType)) {
+        // Persist the entire story generations state
+        const generations = state.storyGenerations
+        if (generations) {
+          // For individual updates, use specific IPC methods
+          if (normalizedType === 'RECEIVE_DERIVED_STORIES' || normalizedType === 'CREATE_STORY_GENERATION') {
+            // Save the newly created generation
+            const latestGen = generations.generations[generations.generations.length - 1]
+            if (latestGen) {
+              await window.puffin.state.addStoryGeneration(latestGen)
+            }
+          } else if (normalizedType === 'UPDATE_GENERATED_STORY_FEEDBACK') {
+            const currentGenId = generations.currentGenerationId
+            const currentGen = generations.generations.find(g => g.id === currentGenId)
+            if (currentGen) {
+              await window.puffin.state.updateStoryGeneration(currentGenId, currentGen)
+            }
+          } else if (normalizedType === 'FINALIZE_STORY_GENERATION') {
+            const currentGenId = generations.currentGenerationId
+            const currentGen = generations.generations.find(g => g.id === currentGenId)
+            if (currentGen) {
+              await window.puffin.state.updateStoryGeneration(currentGenId, currentGen)
+            }
+          } else if (normalizedType === 'CREATE_IMPLEMENTATION_JOURNEY') {
+            const latestJourney = generations.implementation_journeys[generations.implementation_journeys.length - 1]
+            if (latestJourney) {
+              await window.puffin.state.addImplementationJourney(latestJourney)
+            }
+          } else if (normalizedType === 'START_STORY_IMPLEMENTATION') {
+            // Persist all newly created journeys (one per story being implemented)
+            const journeys = generations.implementation_journeys
+            // Get journeys created in this action (status: pending, recently created)
+            const recentJourneys = journeys.filter(j => j.status === 'pending' && !j.completed_at)
+            for (const journey of recentJourneys) {
+              try {
+                await window.puffin.state.addImplementationJourney(journey)
+              } catch (e) {
+                // Journey might already exist, try updating
+                await window.puffin.state.updateImplementationJourney(journey.id, journey)
+              }
+            }
+          } else if (['MARK_THREAD_COMPLETE', 'UNMARK_THREAD_COMPLETE'].includes(normalizedType)) {
+            // Persist updated journeys (status changed to success/partial/failed or back to pending)
+            const journeys = generations.implementation_journeys
+            for (const journey of journeys) {
+              try {
+                await window.puffin.state.updateImplementationJourney(journey.id, journey)
+              } catch (e) {
+                console.error('Failed to persist journey:', journey.id, e)
+              }
+            }
+          } else if (['ADD_IMPLEMENTATION_INPUT', 'UPDATE_IMPLEMENTATION_JOURNEY', 'COMPLETE_IMPLEMENTATION_JOURNEY'].includes(normalizedType)) {
+            // Find the most recently updated journey and persist it
+            const journeys = generations.implementation_journeys
+            if (journeys.length > 0) {
+              const latestJourney = journeys[journeys.length - 1]
+              await window.puffin.state.updateImplementationJourney(latestJourney.id, latestJourney)
+            }
+          }
+          console.log('[PERSIST-DEBUG] Story generation tracking persisted for action:', normalizedType)
         }
       }
 

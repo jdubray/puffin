@@ -95,6 +95,10 @@ export const initialModel = {
   // User stories state (from .puffin/user-stories.json)
   userStories: [],
 
+  // Sprint state - for grouping stories into focused implementation sprints
+  activeSprint: null, // { id, stories, status, promptId, createdAt }
+  // Sprint statuses: 'created' | 'planning' | 'planned' | 'implementing'
+
   // Story generation tracking state (from .puffin/story-generations.json)
   storyGenerations: {
     generations: [],

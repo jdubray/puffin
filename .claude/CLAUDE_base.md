@@ -26,68 +26,16 @@ Puffin is an Electron-based GUI application that serves as a **management layer*
 
 ## Active User Stories
 
-### 🔄 Merge Feature Branch to Main
+### 📋 Multi-Hop Handoff Chaining
 
-As a user, I want to merge my feature branch into the main branch so that my completed work is integrated into the primary codebase
-
-**Acceptance Criteria:**
-- User can select the target branch to merge into (defaults to main/master)
-- Puffin performs a merge operation from the current branch to the target branch
-- User is warned if there are uncommitted changes before merging
-- Successful merge displays a confirmation message
-- Merge conflicts are detected and reported to the user with affected files listed
-- User is given guidance on resolving merge conflicts outside Puffin
-
-### 🔄 Post-Merge Branch Workflow
-
-As a user, I want Puffin to help me prepare for the next feature after a successful merge so that I can maintain a clean workflow
+As a user, I want to chain multiple handoff summaries together so that context is preserved across multiple handoff sequences
 
 **Acceptance Criteria:**
-- After a successful merge, user is prompted to create a new feature branch
-- User can optionally delete the merged feature branch
-- User can choose to stay on the main branch or switch to a new branch
-- The workflow is optional and can be skipped
-
-### 🔄 Merge Feature Branch to Main
-
-As a user, I want to merge my feature branch into the main branch so that my completed work is integrated into the primary codebase
-
-**Acceptance Criteria:**
-- User can select the target branch to merge into (defaults to main/master)
-- Puffin performs a merge operation from the current branch to the target branch
-- User is warned if there are uncommitted changes before merging
-- Successful merge displays a confirmation message
-- Merge conflicts are detected and reported to the user with affected files listed
-- User is given guidance on resolving merge conflicts outside Puffin
-
-### 🔄 Post-Merge Branch Workflow
-
-As a user, I want Puffin to help me prepare for the next feature after a successful merge so that I can maintain a clean workflow
-
-**Acceptance Criteria:**
-- After a successful merge, user is prompted to create a new feature branch
-- User can optionally delete the merged feature branch
-- User can choose to stay on the main branch or switch to a new branch
-- The workflow is optional and can be skipped
-
-### 🔄 Handoff Persistence Without Expiration
-
-As a user, I want handoffs to persist indefinitely until I explicitly delete them so that I don't lose context due to automatic expiration
-
-**Acceptance Criteria:**
-- Handoffs remain available until manually deleted by the user
-- User can delete a handoff through a clear UI action
-- Deleted handoffs are permanently removed from storage
-- Confirmation dialog appears before deleting a handoff
-
-### 🔄 Handoff Summary Updates
-
-As a user, I want handoff summaries to be updated as I refine my work so that code changes and bug fixes are reflected in the handoff context
-
-**Acceptance Criteria:**
-- Handoff summaries are automatically updated when relevant code changes occur
-- User can manually trigger a handoff summary refresh
-- The current summary always reflects the latest state of the work
+- When creating a new handoff from a thread that received a handoff, both summaries are linked
+- Chained handoff summaries are presented in chronological order
+- The receiving thread can access the full chain of handoff context
+- User can view the complete handoff chain history
+- Each hop in the chain is clearly identified with its source thread
 
 ### 📋 Multi-Hop Handoff Chaining
 
@@ -100,33 +48,79 @@ As a user, I want to chain multiple handoff summaries together so that context i
 - User can view the complete handoff chain history
 - Each hop in the chain is clearly identified with its source thread
 
-### 🔄 Handoff Ready Button in Prompt Area
+### 🔄 Sprint Planning Phase with Plan Button
 
-As a user, I want a 'Handoff Ready' button to appear below the prompt input so that I can initiate a handoff when I decide the work is ready
-
-**Acceptance Criteria:**
-- A 'Handoff Ready' button appears below the prompt input area
-- The button is always accessible regardless of Claude's assessment of completion
-- The button is visually distinct and easy to identify
-- Clicking the button opens the handoff review modal
-
-### 🔄 Handoff Review Modal
-
-As a user, I want to review the handoff summary in a modal before completing the handoff so that I can verify the context being passed to the new thread
+As a user, I want a 'Plan' button available in the sprint view so that I can initiate the planning phase for the selected user stories
 
 **Acceptance Criteria:**
-- Modal displays the current handoff summary content
-- User can read and review all context that will be handed off
-- Modal includes a 'Hand Off to New Thread' action button
-- Modal includes a 'Cancel' option to return without handing off
-- User can continue working and refining before completing the handoff
+- A 'Plan' button is visible when a sprint is first created
+- Clicking 'Plan' triggers a planning prompt to Claude
+- The planning request includes context from all selected user stories
+- The sprint status changes to 'Planning' while plan is being generated
+- User can see the generated plan in the prompt conversation
 
-### 🔄 User-Controlled Handoff Timing
+### 📋 Sprint Plan Review and Modification
 
-As a user, I want to control when a handoff occurs regardless of Claude's completion assessment so that I can fix bugs and refine features before handing off
+As a user, I want to review and modify the generated plan through follow-up prompts so that I can refine the implementation approach before starting work
 
 **Acceptance Criteria:**
-- Handoff initiation is entirely user-driven
-- User can continue making changes after a handoff summary is generated
-- Changes made after summary generation trigger summary updates
-- User decides when the work is ready to hand off, not the system
+- User can send follow-up prompts to refine the plan
+- Plan modifications are tracked in the conversation history
+- User can explicitly approve the plan when satisfied
+- Sprint status updates to 'Ready for Implementation' after plan approval
+- The final approved plan is associated with the sprint
+
+### 📋 Implementation Branch Buttons per User Story
+
+As a user, I want to see implementation branch buttons below each user story header so that I can start focused implementation work on specific areas
+
+**Acceptance Criteria:**
+- Each user story header displays branch buttons (UI, Backend, etc.)
+- Branch buttons appear after the sprint plan is approved
+- Buttons are contextually relevant to the type of work in the story
+- Branch buttons are visually associated with their parent user story
+- User can identify which story each branch button belongs to
+
+### 📋 Start Implementation from Branch Button
+
+As a user, I want to click a branch button to start implementation so that a new turn is added to the current sprint thread with the appropriate context
+
+**Acceptance Criteria:**
+- Clicking a branch button adds a new turn to the sprint thread
+- The new turn includes context about which story and branch was selected
+- The implementation prompt references the approved plan
+- The branch type (UI, Backend, etc.) is passed to Claude for context
+- The sprint thread continues in the same window
+
+### 📋 Sprint State Persistence
+
+As a user, I want the sprint state to persist so that I can return to a sprint and continue work where I left off
+
+**Acceptance Criteria:**
+- Sprint data is saved including selected stories, plan, and status
+- Reopening a sprint restores the header display with user stories
+- Implementation progress per branch is tracked and displayed
+- Sprint thread conversation history is preserved
+- User can see which branches have been started or completed
+
+### 📋 Sprint Progress Tracking per Story
+
+As a user, I want to see the implementation progress for each user story within the sprint so that I know what work remains
+
+**Acceptance Criteria:**
+- Each user story header shows implementation status
+- Branch buttons indicate whether they have been started
+- Completed branches are visually marked as done
+- Overall sprint progress is visible
+- User can identify blocked or incomplete work at a glance
+
+### 📋 Existing Prompt View Compatibility
+
+As a user, I want the existing prompt view to continue working as before so that I can still use free-form prompting without creating a sprint
+
+**Acceptance Criteria:**
+- Standard prompt threads work without sprint headers
+- User can create new threads without selecting user stories
+- Existing prompt functionality is unchanged
+- Sprint mode is opt-in through the Backlog selection workflow
+- User can distinguish between sprint threads and regular threads

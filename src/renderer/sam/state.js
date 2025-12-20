@@ -61,7 +61,10 @@ export function computeState(model) {
     activity: computeActivityState(model),
 
     // Pending implementation context (for Claude submission)
-    _pendingImplementation: model._pendingImplementation || null
+    _pendingImplementation: model._pendingImplementation || null,
+
+    // Last updated story ID (for persistence tracking)
+    _lastUpdatedStoryId: model._lastUpdatedStoryId || null
   }
 }
 

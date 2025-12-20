@@ -361,6 +361,10 @@ export const submitPromptAcceptor = model => proposal => {
       const parentPrompt = model.history.branches[branchId].prompts
         .find(p => p.id === proposal.payload.parentId)
       if (parentPrompt) {
+        // Ensure children array exists (for older prompts that may not have it)
+        if (!parentPrompt.children) {
+          parentPrompt.children = []
+        }
         parentPrompt.children.push(prompt.id)
       }
     }

@@ -163,6 +163,8 @@ class PuffinApp {
       'deriveUserStories', 'receiveDerivedStories', 'markStoryReady', 'unmarkStoryReady',
       'updateDerivedStory', 'deleteDerivedStory', 'requestStoryChanges',
       'addStoriesToBacklog', 'cancelStoryReview', 'storyDerivationError', 'startStoryImplementation',
+      // Implementation journey actions
+      'createImplementationJourney', 'addImplementationInput', 'updateImplementationJourney', 'completeImplementationJourney',
       'switchView', 'toggleSidebar', 'showModal', 'hideModal',
       'toolStart', 'toolEnd', 'clearActivity',
       'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity',
@@ -252,6 +254,12 @@ class PuffinApp {
           ['CANCEL_STORY_REVIEW', actions.cancelStoryReview],
           ['STORY_DERIVATION_ERROR', actions.storyDerivationError],
           ['START_STORY_IMPLEMENTATION', actions.startStoryImplementation],
+
+          // Implementation journey actions
+          ['CREATE_IMPLEMENTATION_JOURNEY', actions.createImplementationJourney],
+          ['ADD_IMPLEMENTATION_INPUT', actions.addImplementationInput],
+          ['UPDATE_IMPLEMENTATION_JOURNEY', actions.updateImplementationJourney],
+          ['COMPLETE_IMPLEMENTATION_JOURNEY', actions.completeImplementationJourney],
 
           // UI Navigation actions
           ['SWITCH_VIEW', actions.switchView],

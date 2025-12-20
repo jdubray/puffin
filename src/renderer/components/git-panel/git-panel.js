@@ -41,6 +41,9 @@ export class GitPanelComponent {
     // Branch creation state
     this.newBranchName = ''
     this.selectedPrefix = ''
+
+    // Puffin state (for accessing handoffs)
+    this.puffinState = null
   }
 
   /**
@@ -84,8 +87,8 @@ export class GitPanelComponent {
   subscribeToState() {
     document.addEventListener('puffin-state-change', (e) => {
       const { state } = e.detail
-      // Git state is managed locally via API, not through SAM
-      // But we can respond to other state changes if needed
+      // Store the state for accessing handoffs and other context
+      this.puffinState = state
     })
   }
 
@@ -159,6 +162,10 @@ export class GitPanelComponent {
 
       case 'merge-branch':
         await this.handleMerge(value)
+        break
+
+      case 'merge-current-to':
+        await this.handleMergeCurrentTo()
         break
 
       case 'toggle-file-select':
@@ -601,16 +608,32 @@ Rules:
   }
 
   /**
-   * Handle merging a branch - shows the merge dialog
+   * Handle merging current branch into target branch - shows the merge dialog
+   * @param {string} targetBranch - The branch to merge INTO
    */
-  async handleMerge(sourceBranch) {
+  async handleMerge(targetBranch) {
     // Check for uncommitted changes first
     if (this.status?.hasUncommittedChanges) {
-      this.showUncommittedChangesWarning(sourceBranch)
+      this.showUncommittedChangesWarning()
       return
     }
 
-    this.showMergeDialog(sourceBranch)
+    // sourceBranch is the current branch, targetBranch is where we're merging to
+    this.showMergeDialog(this.currentBranch, targetBranch)
+  }
+
+  /**
+   * Handle "Merge To..." button on current branch - shows dialog to select target
+   */
+  async handleMergeCurrentTo() {
+    // Check for uncommitted changes first
+    if (this.status?.hasUncommittedChanges) {
+      this.showUncommittedChangesWarning()
+      return
+    }
+
+    // Show dialog with target branch selection
+    this.showMergeDialog(this.currentBranch)
   }
 
   /**
@@ -701,24 +724,29 @@ Rules:
 
   /**
    * Show the merge dialog with target branch selection
+   * @param {string} sourceBranch - The branch to merge FROM (usually current)
+   * @param {string} [preselectedTarget] - Optional pre-selected target branch
    */
-  showMergeDialog(sourceBranch) {
+  showMergeDialog(sourceBranch, preselectedTarget = null) {
     const mainBranch = this.getMainBranch()
     const targetBranches = this.branches.filter(b => b.name !== sourceBranch)
+
+    // Determine the default selected target
+    const defaultTarget = preselectedTarget || mainBranch
 
     const dialog = document.createElement('div')
     dialog.className = 'git-dialog-overlay'
     dialog.innerHTML = `
       <div class="git-dialog git-merge-dialog">
         <h3>Merge Branch</h3>
-        <p>Merge <strong>${this.escapeHtml(sourceBranch)}</strong> into another branch.</p>
+        <p>Merge <strong>${this.escapeHtml(sourceBranch)}</strong> into the selected target branch.</p>
 
         <div class="merge-branch-selector">
-          <label for="merge-target-branch">Target Branch</label>
+          <label for="merge-target-branch">Target Branch (merge into)</label>
           <select id="merge-target-branch" class="merge-target-select">
             ${targetBranches.map(b => `
-              <option value="${this.escapeHtml(b.name)}" ${b.name === mainBranch ? 'selected' : ''}>
-                ${this.escapeHtml(b.name)}${b.current ? ' (current)' : ''}${b.name === mainBranch ? ' ★' : ''}
+              <option value="${this.escapeHtml(b.name)}" ${b.name === defaultTarget ? 'selected' : ''}>
+                ${this.escapeHtml(b.name)}${b.name === mainBranch ? ' ★' : ''}
               </option>
             `).join('')}
           </select>
@@ -728,7 +756,7 @@ Rules:
           <div class="merge-arrow">
             <span class="branch-badge source">${this.escapeHtml(sourceBranch)}</span>
             <span class="arrow">→</span>
-            <span class="branch-badge target" id="merge-target-preview">${this.escapeHtml(mainBranch)}</span>
+            <span class="branch-badge target" id="merge-target-preview">${this.escapeHtml(defaultTarget)}</span>
           </div>
         </div>
 
@@ -1204,18 +1232,24 @@ Rules:
                       title="Switch to this branch"
                     >Switch</button>
                     <button
-                      class="btn small"
+                      class="btn small primary"
                       data-action="merge-branch"
                       data-value="${this.escapeHtml(branch.name)}"
-                      title="Merge into current branch"
-                    >Merge</button>
+                      title="Merge ${this.escapeHtml(this.currentBranch)} into ${this.escapeHtml(branch.name)}"
+                    >Merge Here</button>
                     <button
                       class="btn small danger"
                       data-action="delete-branch"
                       data-value="${this.escapeHtml(branch.name)}"
                       title="Delete branch"
                     >×</button>
-                  ` : '<span class="current-label">current</span>'}
+                  ` : `
+                    <button
+                      class="btn small primary"
+                      data-action="merge-current-to"
+                      title="Merge this branch into another branch"
+                    >Merge To...</button>
+                  `}
                 </div>
               </li>
             `).join('')}

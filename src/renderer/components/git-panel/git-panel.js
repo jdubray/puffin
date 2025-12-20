@@ -808,6 +808,18 @@ Rules:
           this.render()
           return
         }
+
+        // After checkout, refresh status and check for uncommitted changes on target branch
+        const statusResult = await window.puffin.git.getStatus()
+        if (statusResult.success && statusResult.status.hasUncommittedChanges) {
+          // Update local status for the warning dialog
+          this.status = statusResult.status
+          this.currentBranch = statusResult.status.branch
+          this.isLoading = false
+          this.render()
+          this.showUncommittedChangesWarning()
+          return
+        }
       }
 
       const result = await window.puffin.git.merge(sourceBranch, false)

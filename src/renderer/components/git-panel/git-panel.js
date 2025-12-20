@@ -601,26 +601,191 @@ Rules:
   }
 
   /**
-   * Handle merging a branch
+   * Handle merging a branch - shows the merge dialog
    */
   async handleMerge(sourceBranch) {
+    // Check for uncommitted changes first
     if (this.status?.hasUncommittedChanges) {
-      this.showToast('Please commit or stash your changes before merging', 'error')
+      this.showUncommittedChangesWarning(sourceBranch)
       return
     }
 
-    if (!confirm(`Merge "${sourceBranch}" into "${this.currentBranch}"?`)) {
-      return
+    this.showMergeDialog(sourceBranch)
+  }
+
+  /**
+   * Show warning dialog for uncommitted changes
+   */
+  showUncommittedChangesWarning(sourceBranch) {
+    const dialog = document.createElement('div')
+    dialog.className = 'git-dialog-overlay'
+    dialog.innerHTML = `
+      <div class="git-dialog git-warning-dialog">
+        <h3>⚠️ Uncommitted Changes</h3>
+        <p>You have uncommitted changes in your working tree. Please commit or stash your changes before merging.</p>
+        <div class="uncommitted-files-preview">
+          ${this.renderUncommittedFilesList()}
+        </div>
+        <div class="git-dialog-actions">
+          <button class="btn secondary" data-action="dismiss-dialog">Cancel</button>
+          <button class="btn primary" data-action="go-to-changes">View Changes</button>
+        </div>
+      </div>
+    `
+
+    document.body.appendChild(dialog)
+
+    dialog.addEventListener('click', (e) => {
+      const action = e.target.dataset.action
+
+      if (action === 'dismiss-dialog') {
+        dialog.remove()
+      } else if (action === 'go-to-changes') {
+        dialog.remove()
+        this.activeTab = 'changes'
+        this.render()
+      }
+    })
+  }
+
+  /**
+   * Render a list of uncommitted files for the warning dialog
+   */
+  renderUncommittedFilesList() {
+    const files = []
+    if (this.status?.files?.staged) {
+      files.push(...this.status.files.staged.map(f => ({ ...f, section: 'staged' })))
+    }
+    if (this.status?.files?.unstaged) {
+      files.push(...this.status.files.unstaged.map(f => ({ ...f, section: 'unstaged' })))
+    }
+    if (this.status?.files?.untracked) {
+      files.push(...this.status.files.untracked.map(f => ({ path: f.path || f, status: 'untracked', section: 'untracked' })))
     }
 
+    if (files.length === 0) {
+      return '<p class="empty-message">No files to display</p>'
+    }
+
+    const displayFiles = files.slice(0, 5)
+    const remaining = files.length - displayFiles.length
+
+    return `
+      <ul class="uncommitted-files-list">
+        ${displayFiles.map(f => `
+          <li>
+            <span class="file-status ${f.status}">${this.getStatusIcon(f.status)}</span>
+            <span class="file-path">${this.escapeHtml(f.path)}</span>
+          </li>
+        `).join('')}
+      </ul>
+      ${remaining > 0 ? `<p class="files-remaining">...and ${remaining} more file${remaining !== 1 ? 's' : ''}</p>` : ''}
+    `
+  }
+
+  /**
+   * Detect the main/master branch
+   */
+  getMainBranch() {
+    // Check for common main branch names
+    const mainBranchNames = ['main', 'master', 'develop', 'development']
+    for (const name of mainBranchNames) {
+      const found = this.branches.find(b => b.name === name)
+      if (found) {
+        return found.name
+      }
+    }
+    // Default to first branch if no common name found
+    return this.branches.length > 0 ? this.branches[0].name : 'main'
+  }
+
+  /**
+   * Show the merge dialog with target branch selection
+   */
+  showMergeDialog(sourceBranch) {
+    const mainBranch = this.getMainBranch()
+    const targetBranches = this.branches.filter(b => b.name !== sourceBranch)
+
+    const dialog = document.createElement('div')
+    dialog.className = 'git-dialog-overlay'
+    dialog.innerHTML = `
+      <div class="git-dialog git-merge-dialog">
+        <h3>Merge Branch</h3>
+        <p>Merge <strong>${this.escapeHtml(sourceBranch)}</strong> into another branch.</p>
+
+        <div class="merge-branch-selector">
+          <label for="merge-target-branch">Target Branch</label>
+          <select id="merge-target-branch" class="merge-target-select">
+            ${targetBranches.map(b => `
+              <option value="${this.escapeHtml(b.name)}" ${b.name === mainBranch ? 'selected' : ''}>
+                ${this.escapeHtml(b.name)}${b.current ? ' (current)' : ''}${b.name === mainBranch ? ' ★' : ''}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div class="merge-preview">
+          <div class="merge-arrow">
+            <span class="branch-badge source">${this.escapeHtml(sourceBranch)}</span>
+            <span class="arrow">→</span>
+            <span class="branch-badge target" id="merge-target-preview">${this.escapeHtml(mainBranch)}</span>
+          </div>
+        </div>
+
+        <div class="git-dialog-actions">
+          <button class="btn secondary" data-action="dismiss-dialog">Cancel</button>
+          <button class="btn primary" data-action="execute-merge">Merge</button>
+        </div>
+      </div>
+    `
+
+    document.body.appendChild(dialog)
+
+    // Update preview when target changes
+    const targetSelect = dialog.querySelector('#merge-target-branch')
+    const targetPreview = dialog.querySelector('#merge-target-preview')
+    targetSelect.addEventListener('change', () => {
+      targetPreview.textContent = targetSelect.value
+    })
+
+    dialog.addEventListener('click', async (e) => {
+      const action = e.target.dataset.action
+
+      if (action === 'dismiss-dialog') {
+        dialog.remove()
+      } else if (action === 'execute-merge') {
+        const targetBranch = targetSelect.value
+        dialog.remove()
+        await this.executeMerge(sourceBranch, targetBranch)
+      }
+    })
+  }
+
+  /**
+   * Execute the merge operation
+   */
+  async executeMerge(sourceBranch, targetBranch) {
     this.isLoading = true
     this.render()
 
     try {
+      // If target is not the current branch, we need to switch first
+      const needsCheckout = targetBranch !== this.currentBranch
+
+      if (needsCheckout) {
+        const checkoutResult = await window.puffin.git.checkout(targetBranch)
+        if (!checkoutResult.success) {
+          this.showToast(`Failed to switch to ${targetBranch}: ${checkoutResult.error}`, 'error')
+          this.isLoading = false
+          this.render()
+          return
+        }
+      }
+
       const result = await window.puffin.git.merge(sourceBranch, false)
 
       if (result.success) {
-        this.showToast(`Successfully merged ${sourceBranch}`, 'success')
+        this.showToast(`Successfully merged ${sourceBranch} into ${targetBranch}`, 'success')
 
         // Offer post-merge workflow
         this.showPostMergeDialog(sourceBranch)
@@ -628,8 +793,10 @@ Rules:
         await this.refreshGitState()
       } else if (result.conflicts) {
         this.showMergeConflictDialog(result.conflicts, result.guidance)
+        await this.refreshGitState()
       } else {
         this.showToast(result.error, 'error')
+        // If we switched branches and merge failed, consider switching back
       }
     } catch (err) {
       this.showToast(err.message, 'error')

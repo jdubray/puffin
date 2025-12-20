@@ -802,6 +802,154 @@
 }
 
 /* ========================================
+   Merge Dialog
+   ======================================== */
+
+.git-merge-dialog {
+  max-width: 480px;
+}
+
+.merge-branch-selector {
+  margin-bottom: 1.25rem;
+}
+
+.merge-branch-selector label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.merge-target-select {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-primary);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2rem;
+}
+
+.merge-target-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.2);
+}
+
+.merge-target-select option {
+  padding: 0.5rem;
+  background: var(--bg-primary);
+}
+
+.merge-preview {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.merge-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.merge-arrow .arrow {
+  font-size: 1.25rem;
+  color: var(--text-muted);
+}
+
+.branch-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.branch-badge.source {
+  background: rgba(108, 99, 255, 0.15);
+  color: var(--accent-primary);
+  border: 1px solid rgba(108, 99, 255, 0.3);
+}
+
+.branch-badge.target {
+  background: rgba(72, 187, 120, 0.15);
+  color: var(--success-color, #48bb78);
+  border: 1px solid rgba(72, 187, 120, 0.3);
+}
+
+/* ========================================
+   Warning Dialog (Uncommitted Changes)
+   ======================================== */
+
+.git-warning-dialog {
+  max-width: 480px;
+}
+
+.uncommitted-files-preview {
+  margin-bottom: 1.25rem;
+}
+
+.uncommitted-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.uncommitted-files-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.8125rem;
+}
+
+.uncommitted-files-list .file-status {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 3px;
+}
+
+.uncommitted-files-list .file-path {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.files-remaining {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ========================================
    Button Variants
    ======================================== */
 

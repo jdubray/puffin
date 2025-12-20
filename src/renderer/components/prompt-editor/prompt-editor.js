@@ -72,9 +72,9 @@ export class PromptEditorComponent {
       this.submit()
     })
 
-    // New thread button
+    // New thread button - clears and starts fresh
     this.newThreadBtn.addEventListener('click', () => {
-      this.submitAsNewThread()
+      this.createNewThread()
     })
 
     // Cancel button
@@ -538,6 +538,29 @@ export class PromptEditorComponent {
         model: this.modelSelect?.value || this.defaultModel || 'sonnet'
       })
     }
+  }
+
+  /**
+   * Create a new thread - clears the prompt and starts fresh
+   */
+  createNewThread() {
+    // Clear the textarea
+    this.textarea.value = ''
+
+    // Clear any pending handoff context
+    this.pendingHandoff = null
+
+    // Disable submit button until user types
+    this.submitBtn.disabled = true
+
+    // Remove handoff banner if present
+    this.hideHandoffBanner()
+
+    // Focus the textarea
+    this.textarea.focus()
+
+    // Trigger SAM action to clear active prompt selection
+    this.intents.selectPrompt(null)
   }
 
   /**

@@ -69,11 +69,17 @@ export function computeState(model) {
     // Active Sprint state
     activeSprint: model.activeSprint || null,
 
+    // Sprint progress (computed)
+    sprintProgress: computeSprintProgress(model),
+
     // Pending sprint planning (for Claude submission)
     _pendingSprintPlanning: model._pendingSprintPlanning || null,
 
     // Pending story implementation from sprint (for Claude submission)
-    _pendingStoryImplementation: model._pendingStoryImplementation || null
+    _pendingStoryImplementation: model._pendingStoryImplementation || null,
+
+    // Sprint progress update trigger (for persistence)
+    _sprintProgressUpdated: model._sprintProgressUpdated || false
   }
 }
 
@@ -381,6 +387,114 @@ function getActivityStatusText(status, currentTool) {
       return 'Complete'
     default:
       return 'Unknown'
+  }
+}
+
+/**
+ * Sprint Progress computation
+ * Provides detailed progress tracking for each story and overall sprint
+ */
+function computeSprintProgress(model) {
+  const sprint = model.activeSprint
+  if (!sprint) {
+    return null
+  }
+
+  const storyProgress = sprint.storyProgress || {}
+
+  // Compute per-story progress
+  const storiesWithProgress = sprint.stories.map(story => {
+    const progress = storyProgress[story.id] || { branches: {} }
+    const branches = progress.branches || {}
+
+    // Count branch statuses
+    const branchEntries = Object.entries(branches)
+    const completedBranches = branchEntries.filter(([, b]) => b.status === 'completed').length
+    const inProgressBranches = branchEntries.filter(([, b]) => b.status === 'in_progress').length
+    const totalBranches = branchEntries.length
+
+    // Determine overall story status
+    let storyStatus = 'pending'
+    if (progress.status === 'completed') {
+      storyStatus = 'completed'
+    } else if (inProgressBranches > 0 || completedBranches > 0) {
+      storyStatus = 'in_progress'
+    }
+
+    // Check for blocked state (has in_progress for too long without completion)
+    const isBlocked = branchEntries.some(([, b]) => {
+      if (b.status === 'in_progress' && b.startedAt) {
+        // Consider blocked if in progress for more than 2 hours without activity
+        const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000)
+        return b.startedAt < twoHoursAgo
+      }
+      return false
+    })
+
+    return {
+      id: story.id,
+      title: story.title,
+      status: storyStatus,
+      isBlocked,
+      branches: Object.entries(branches).map(([branchType, branchData]) => ({
+        type: branchType,
+        status: branchData.status,
+        startedAt: branchData.startedAt,
+        completedAt: branchData.completedAt,
+        isStarted: !!branchData.startedAt,
+        isCompleted: branchData.status === 'completed',
+        isInProgress: branchData.status === 'in_progress'
+      })),
+      completedBranches,
+      inProgressBranches,
+      totalBranches,
+      branchPercentage: totalBranches > 0
+        ? Math.round((completedBranches / totalBranches) * 100)
+        : 0,
+      completedAt: progress.completedAt
+    }
+  })
+
+  // Compute overall sprint progress
+  const completedStories = storiesWithProgress.filter(s => s.status === 'completed').length
+  const inProgressStories = storiesWithProgress.filter(s => s.status === 'in_progress').length
+  const blockedStories = storiesWithProgress.filter(s => s.isBlocked).length
+  const totalStories = storiesWithProgress.length
+
+  const totalBranches = storiesWithProgress.reduce((sum, s) => sum + s.totalBranches, 0)
+  const completedBranches = storiesWithProgress.reduce((sum, s) => sum + s.completedBranches, 0)
+  const inProgressBranches = storiesWithProgress.reduce((sum, s) => sum + s.inProgressBranches, 0)
+
+  return {
+    // Sprint metadata
+    sprintId: sprint.id,
+    sprintStatus: sprint.status,
+    isComplete: sprint.status === 'completed',
+    createdAt: sprint.createdAt,
+    completedAt: sprint.completedAt,
+
+    // Story-level progress
+    stories: storiesWithProgress,
+    totalStories,
+    completedStories,
+    inProgressStories,
+    blockedStories,
+    storyPercentage: totalStories > 0
+      ? Math.round((completedStories / totalStories) * 100)
+      : 0,
+
+    // Branch-level progress (across all stories)
+    totalBranches,
+    completedBranches,
+    inProgressBranches,
+    branchPercentage: totalBranches > 0
+      ? Math.round((completedBranches / totalBranches) * 100)
+      : 0,
+
+    // Helper flags
+    hasBlockedWork: blockedStories > 0,
+    hasInProgressWork: inProgressStories > 0,
+    allStoriesComplete: completedStories === totalStories && totalStories > 0
   }
 }
 

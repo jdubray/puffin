@@ -621,8 +621,19 @@ class PuffinApp {
       const filesModified = this.activityTracker.getFilesModified()
       console.log('[SAM-DEBUG] filesModified at completion:', filesModified.length, 'files')
 
-      this.intents.completeResponse(response, filesModified)
-      this.intents.clearActivity()
+      try {
+        this.intents.completeResponse(response, filesModified)
+      } catch (err) {
+        console.error('[SAM-ERROR] completeResponse failed:', err)
+      }
+
+      // Always clear activity and processing state, even if completeResponse fails
+      try {
+        this.intents.clearActivity()
+      } catch (err) {
+        console.error('[SAM-ERROR] clearActivity failed:', err)
+      }
+
       this.components.cliOutput.setProcessing(false)
     })
     this.claudeListeners.push(unsubComplete)

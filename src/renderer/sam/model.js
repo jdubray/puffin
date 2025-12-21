@@ -1950,10 +1950,29 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
     }
     const targetBranch = branchMap[branchType] || branchType
 
+    // Initialize storyProgress if not exists
+    if (!model.activeSprint.storyProgress) {
+      model.activeSprint.storyProgress = {}
+    }
+
+    // Initialize progress for this story if not exists
+    if (!model.activeSprint.storyProgress[storyId]) {
+      model.activeSprint.storyProgress[storyId] = {
+        branches: {}
+      }
+    }
+
+    // Mark this branch as started
+    model.activeSprint.storyProgress[storyId].branches[branchType] = {
+      status: 'in_progress',
+      startedAt: Date.now()
+    }
+
     // Update sprint status
     model.activeSprint = {
       ...model.activeSprint,
-      status: 'implementing'
+      status: 'implementing',
+      storyProgress: model.activeSprint.storyProgress
     }
 
     // Build implementation prompt context
@@ -1974,6 +1993,72 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
 export const clearPendingStoryImplementationAcceptor = model => proposal => {
   if (proposal?.type === 'CLEAR_PENDING_STORY_IMPLEMENTATION') {
     model._pendingStoryImplementation = null
+  }
+}
+
+// Mark a story branch as completed
+export const completeStoryBranchAcceptor = model => proposal => {
+  if (proposal?.type === 'COMPLETE_STORY_BRANCH') {
+    const { storyId, branchType, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) {
+      console.warn('[SPRINT] Cannot complete branch - no active sprint')
+      return
+    }
+
+    // Initialize storyProgress if not exists
+    if (!sprint.storyProgress) {
+      sprint.storyProgress = {}
+    }
+
+    // Initialize progress for this story if not exists
+    if (!sprint.storyProgress[storyId]) {
+      sprint.storyProgress[storyId] = {
+        branches: {}
+      }
+    }
+
+    // Mark this branch as completed
+    sprint.storyProgress[storyId].branches[branchType] = {
+      status: 'completed',
+      startedAt: sprint.storyProgress[storyId].branches[branchType]?.startedAt || timestamp,
+      completedAt: timestamp
+    }
+
+    // Check if all branches for this story are completed
+    const storyProgress = sprint.storyProgress[storyId]
+    const allBranchesCompleted = Object.values(storyProgress.branches).every(
+      b => b.status === 'completed'
+    )
+
+    if (allBranchesCompleted && Object.keys(storyProgress.branches).length > 0) {
+      storyProgress.status = 'completed'
+      storyProgress.completedAt = timestamp
+
+      // Update the story in userStories as well
+      const story = model.userStories.find(s => s.id === storyId)
+      if (story) {
+        story.status = 'completed'
+        story.updatedAt = timestamp
+      }
+    }
+
+    // Check if all stories in the sprint are completed
+    const allStoriesCompleted = sprint.stories.every(story => {
+      const progress = sprint.storyProgress[story.id]
+      return progress?.status === 'completed'
+    })
+
+    if (allStoriesCompleted && sprint.stories.length > 0) {
+      sprint.status = 'completed'
+      sprint.completedAt = timestamp
+    }
+
+    // Trigger persistence
+    model._sprintProgressUpdated = true
+
+    console.log('[SPRINT] Marked branch as completed:', { storyId, branchType, allStoriesCompleted })
   }
 }
 
@@ -2349,6 +2434,7 @@ export const acceptors = [
   clearPendingSprintPlanningAcceptor,
   startSprintStoryImplementationAcceptor,
   clearPendingStoryImplementationAcceptor,
+  completeStoryBranchAcceptor,
 
   // Activity Tracking
   setCurrentToolAcceptor,

@@ -291,6 +291,26 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Update sprint story progress (for branch started/completed tracking)
+  ipcMain.handle('state:updateSprintStoryProgress', async (event, { storyId, branchType, progressUpdate }) => {
+    try {
+      const result = await puffinState.updateSprintStoryProgress(storyId, branchType, progressUpdate)
+      return result
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get sprint progress summary
+  ipcMain.handle('state:getSprintProgress', async () => {
+    try {
+      const progress = puffinState.getSprintProgress()
+      return { success: true, progress }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // ============ Story Generation Tracking Operations ============
 
   ipcMain.handle('state:getStoryGenerations', async () => {

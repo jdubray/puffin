@@ -1235,6 +1235,113 @@ Document your API endpoints...
   }
 
   /**
+   * Update sprint story progress
+   * @param {string} storyId - Story ID
+   * @param {string} branchType - Branch type (ui, backend, fullstack)
+   * @param {Object} progressUpdate - Progress update { status, startedAt?, completedAt? }
+   */
+  async updateSprintStoryProgress(storyId, branchType, progressUpdate) {
+    if (!this.activeSprint) {
+      return { success: false, error: 'No active sprint' }
+    }
+
+    // Initialize storyProgress if not exists
+    if (!this.activeSprint.storyProgress) {
+      this.activeSprint.storyProgress = {}
+    }
+
+    // Initialize progress for this story if not exists
+    if (!this.activeSprint.storyProgress[storyId]) {
+      this.activeSprint.storyProgress[storyId] = {
+        branches: {}
+      }
+    }
+
+    // Update the branch progress
+    this.activeSprint.storyProgress[storyId].branches[branchType] = {
+      ...this.activeSprint.storyProgress[storyId].branches[branchType],
+      ...progressUpdate
+    }
+
+    // Check if all branches for this story are completed
+    const storyProgress = this.activeSprint.storyProgress[storyId]
+    const allBranchesCompleted = Object.values(storyProgress.branches).every(
+      b => b.status === 'completed'
+    )
+
+    if (allBranchesCompleted && Object.keys(storyProgress.branches).length > 0) {
+      storyProgress.status = 'completed'
+      storyProgress.completedAt = Date.now()
+    }
+
+    // Check if all stories in the sprint are completed
+    const allStoriesCompleted = this.activeSprint.stories.every(story => {
+      const progress = this.activeSprint.storyProgress[story.id]
+      return progress?.status === 'completed'
+    })
+
+    if (allStoriesCompleted && this.activeSprint.stories.length > 0) {
+      this.activeSprint.status = 'completed'
+      this.activeSprint.completedAt = Date.now()
+    }
+
+    await this.saveActiveSprint(this.activeSprint)
+    return { success: true, sprint: this.activeSprint }
+  }
+
+  /**
+   * Get sprint progress summary
+   * @returns {Object} Progress summary with counts and percentages
+   */
+  getSprintProgress() {
+    if (!this.activeSprint) {
+      return null
+    }
+
+    const sprint = this.activeSprint
+    const storyProgress = sprint.storyProgress || {}
+
+    let totalBranches = 0
+    let completedBranches = 0
+    let inProgressBranches = 0
+    let completedStories = 0
+
+    sprint.stories.forEach(story => {
+      const progress = storyProgress[story.id]
+      if (progress) {
+        if (progress.status === 'completed') {
+          completedStories++
+        }
+
+        Object.values(progress.branches || {}).forEach(branch => {
+          totalBranches++
+          if (branch.status === 'completed') {
+            completedBranches++
+          } else if (branch.status === 'in_progress') {
+            inProgressBranches++
+          }
+        })
+      }
+    })
+
+    return {
+      totalStories: sprint.stories.length,
+      completedStories,
+      storyPercentage: sprint.stories.length > 0
+        ? Math.round((completedStories / sprint.stories.length) * 100)
+        : 0,
+      totalBranches,
+      completedBranches,
+      inProgressBranches,
+      branchPercentage: totalBranches > 0
+        ? Math.round((completedBranches / totalBranches) * 100)
+        : 0,
+      status: sprint.status,
+      isComplete: sprint.status === 'completed'
+    }
+  }
+
+  /**
    * Load story generations or create default
    * @private
    */

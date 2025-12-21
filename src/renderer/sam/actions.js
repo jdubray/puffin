@@ -931,6 +931,16 @@ export const clearPendingStoryImplementation = () => ({
   payload: {}
 })
 
+// Mark a story branch as completed
+export const completeStoryBranch = (storyId, branchType) => ({
+  type: 'COMPLETE_STORY_BRANCH',
+  payload: {
+    storyId,
+    branchType,
+    timestamp: Date.now()
+  }
+})
+
 /**
  * Git Integration Actions
  */

@@ -115,6 +115,7 @@ class ClaudeService {
       let resultData = null
       let buffer = ''
       let allMessages = [] // Store all messages for debugging/fallback
+      let completionCalled = false // Track if we've already called onComplete
 
       console.log('Claude CLI process started, PID:', this.currentProcess.pid)
 
@@ -161,10 +162,36 @@ class ClaudeService {
 
             this.handleStreamMessage(json, onChunk)
 
-            // Capture final result
+            // Capture final result and trigger completion immediately
             if (json.type === 'result') {
               resultData = json
               console.log('[CLAUDE-DEBUG] Captured result, result field length:', json.result?.length || 0)
+
+              // Call onComplete immediately when we get the result message
+              // Don't wait for process close - the CLI may hang
+              if (!completionCalled) {
+                completionCalled = true
+                console.log('[CLAUDE-DEBUG] Calling onComplete from result message handler')
+
+                // Build response using streamed content (preferred) or result field
+                let responseContent = ''
+                if (streamedContent && streamedContent.length > 0) {
+                  responseContent = streamedContent
+                } else if (json.result && json.result.length > 0) {
+                  responseContent = json.result
+                }
+
+                const response = {
+                  content: responseContent,
+                  sessionId: json.session_id,
+                  cost: json.total_cost_usd,
+                  turns: json.num_turns,
+                  duration: json.duration_ms,
+                  exitCode: 0
+                }
+                console.log('[CLAUDE-DEBUG] onComplete response.content length:', response.content?.length || 0)
+                onComplete(response)
+              }
             }
           } catch (e) {
             // Not JSON, treat as plain text
@@ -221,6 +248,13 @@ class ClaudeService {
         }
 
         if (code === 0 || resultData) {
+          // If completion was already called when we received the result message, just resolve
+          if (completionCalled) {
+            console.log('[CLAUDE-DEBUG] onComplete already called from result handler, skipping')
+            resolve({ content: streamedContent || resultData?.result || '', exitCode: code })
+            return
+          }
+
           // Determine best response content:
           // Due to a known bug in Claude Code CLI (issue #8126), the result field
           // can be empty even when the conversation completed successfully.
@@ -267,6 +301,7 @@ class ClaudeService {
             duration: resultData?.duration_ms,
             exitCode: code
           }
+          completionCalled = true
           console.log('[CLAUDE-DEBUG] Calling onComplete with response.content length:', response.content?.length || 0)
           onComplete(response)
           resolve(response)

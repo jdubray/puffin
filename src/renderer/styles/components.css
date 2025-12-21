@@ -549,6 +549,26 @@
   border-left-color: var(--color-warning);
 }
 
+.sprint-story-card.story-blocked {
+  border-left-color: var(--color-error);
+  background: rgba(245, 101, 101, 0.08);
+}
+
+.sprint-story-card.story-blocked::after {
+  content: 'Blocked';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: var(--color-error);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .story-header-row {
   display: flex;
   align-items: center;

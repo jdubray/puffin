@@ -73,10 +73,12 @@ export class GuiDesignerComponent {
     document.addEventListener('mousemove', (e) => this.handleMouseMove(e))
     document.addEventListener('mouseup', (e) => this.handleMouseUp(e))
 
-    // Keyboard events
+    // Keyboard events - only delete element when not in a text input
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (this.selectedElement && document.activeElement.tagName !== 'INPUT') {
+        const activeTag = document.activeElement.tagName
+        const isTextInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA'
+        if (this.selectedElement && !isTextInput) {
           e.preventDefault()
           this.intents.deleteGuiElement(this.selectedElement)
         }

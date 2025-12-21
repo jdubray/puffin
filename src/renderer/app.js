@@ -878,28 +878,34 @@ class PuffinApp {
       const showBranchButtons = sprint.status === 'planned' || sprint.status === 'implementing'
       const storyProgress = sprint.storyProgress || {}
 
-      // Calculate overall progress
-      const progressStats = this.calculateSprintProgress(sprint.stories, storyProgress)
-      const progressBarHtml = (sprint.status === 'implementing' || progressStats.completed > 0) ? `
+      // Use computed progress from state (includes blocked detection)
+      const sprintProgress = state.sprintProgress
+      const hasProgress = sprintProgress && (sprint.status === 'implementing' || sprintProgress.completedBranches > 0)
+      const progressBarHtml = hasProgress ? `
         <div class="sprint-progress">
           <div class="sprint-progress-label">
-            <span>Sprint Progress</span>
-            <span>${progressStats.completed}/${progressStats.total} branches (${progressStats.percentage}%)</span>
+            <span>Sprint Progress${sprintProgress.blockedStories > 0 ? ' ⚠️' : ''}</span>
+            <span>${sprintProgress.completedBranches}/${sprintProgress.totalBranches || sprint.stories.length * 3} branches (${sprintProgress.branchPercentage || 0}%)</span>
           </div>
           <div class="sprint-progress-bar">
-            <div class="sprint-progress-fill" style="width: ${progressStats.percentage}%"></div>
+            <div class="sprint-progress-fill" style="width: ${sprintProgress.branchPercentage || 0}%"></div>
           </div>
         </div>
       ` : ''
 
+      // Use per-story progress from computed state
+      const storiesWithProgress = sprintProgress?.stories || []
+
       storiesContainer.innerHTML = progressBarHtml + sprint.stories.map(story => {
+        const computedStory = storiesWithProgress.find(s => s.id === story.id)
         const progress = storyProgress[story.id]
-        const storyStatus = progress?.status || 'pending'
+        const storyStatus = computedStory?.status || progress?.status || 'pending'
+        const isBlocked = computedStory?.isBlocked || false
         const storyStatusClass = storyStatus === 'completed' ? 'story-completed' : storyStatus === 'in_progress' ? 'story-in-progress' : ''
-        const storyStatusIcon = storyStatus === 'completed' ? '✅' : ''
+        const storyStatusIcon = storyStatus === 'completed' ? '✅' : isBlocked ? '⚠️' : ''
 
         return `
-          <div class="sprint-story-card ${storyStatusClass}" data-story-id="${story.id}">
+          <div class="sprint-story-card ${storyStatusClass}${isBlocked ? ' story-blocked' : ''}" data-story-id="${story.id}">
             <div class="story-header-row">
               <h4>${this.escapeHtml(story.title)} ${storyStatusIcon}</h4>
             </div>

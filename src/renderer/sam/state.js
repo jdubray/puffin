@@ -82,7 +82,17 @@ export function computeState(model) {
     _pendingStoryImplementation: model._pendingStoryImplementation || null,
 
     // Sprint progress update trigger (for persistence)
-    _sprintProgressUpdated: model._sprintProgressUpdated || false
+    _sprintProgressUpdated: model._sprintProgressUpdated || false,
+
+    // Stuck detection state
+    stuckDetection: model.stuckDetection || {
+      isStuck: false,
+      consecutiveCount: 0,
+      threshold: 3,
+      recentOutputs: [],
+      lastAction: null,
+      timestamp: null
+    }
   }
 }
 

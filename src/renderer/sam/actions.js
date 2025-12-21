@@ -941,6 +941,37 @@ export const completeStoryBranch = (storyId, branchType) => ({
   }
 })
 
+// Clear sprint validation error
+export const clearSprintError = () => ({
+  type: 'CLEAR_SPRINT_ERROR',
+  payload: { timestamp: Date.now() }
+})
+
+// Record iteration output for stuck detection
+export const recordIterationOutput = (outputHash, outputSummary) => ({
+  type: 'RECORD_ITERATION_OUTPUT',
+  payload: {
+    outputHash,
+    outputSummary,
+    timestamp: Date.now()
+  }
+})
+
+// Resolve stuck state with user action
+export const resolveStuckState = (action) => ({
+  type: 'RESOLVE_STUCK_STATE',
+  payload: {
+    action, // 'continue' | 'modify' | 'stop' | 'dismiss'
+    timestamp: Date.now()
+  }
+})
+
+// Reset stuck detection (when output changes significantly)
+export const resetStuckDetection = () => ({
+  type: 'RESET_STUCK_DETECTION',
+  payload: { timestamp: Date.now() }
+})
+
 /**
  * Git Integration Actions
  */

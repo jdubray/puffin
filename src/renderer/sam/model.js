@@ -100,6 +100,16 @@ export const initialModel = {
   // Sprint statuses: 'created' | 'planning' | 'planned' | 'implementing'
   sprintError: null, // { type, message, details, timestamp } - for validation errors
 
+  // Stuck detection state - tracks iteration outputs to detect loops
+  stuckDetection: {
+    isStuck: false,
+    consecutiveCount: 0,
+    threshold: 3, // Number of similar iterations before triggering alert
+    recentOutputs: [], // Array of { hash, summary, timestamp } - last N outputs
+    lastAction: null, // 'continue' | 'modify' | 'stop' | 'dismiss' | null
+    timestamp: null
+  },
+
   // Story generation tracking state (from .puffin/story-generations.json)
   storyGenerations: {
     generations: [],
@@ -2114,6 +2124,82 @@ export const completeStoryBranchAcceptor = model => proposal => {
   }
 }
 
+// Clear sprint validation error
+export const clearSprintErrorAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_SPRINT_ERROR') {
+    model.sprintError = null
+  }
+}
+
+// Record iteration output for stuck detection
+export const recordIterationOutputAcceptor = model => proposal => {
+  if (proposal?.type === 'RECORD_ITERATION_OUTPUT') {
+    const { outputHash, outputSummary, timestamp } = proposal.payload
+    const detection = model.stuckDetection
+
+    // Keep only the last N outputs (threshold + 1 for comparison)
+    const maxOutputs = detection.threshold + 1
+    detection.recentOutputs.push({ hash: outputHash, summary: outputSummary, timestamp })
+    if (detection.recentOutputs.length > maxOutputs) {
+      detection.recentOutputs.shift()
+    }
+
+    // Check for consecutive similar outputs
+    if (detection.recentOutputs.length >= detection.threshold) {
+      const recentHashes = detection.recentOutputs.slice(-detection.threshold).map(o => o.hash)
+      const allSame = recentHashes.every(h => h === recentHashes[0])
+
+      if (allSame) {
+        detection.isStuck = true
+        detection.consecutiveCount = detection.threshold
+        detection.timestamp = timestamp
+        console.log('[STUCK] Detected stuck state after', detection.threshold, 'similar iterations')
+      }
+    }
+  }
+}
+
+// Resolve stuck state with user action
+export const resolveStuckStateAcceptor = model => proposal => {
+  if (proposal?.type === 'RESOLVE_STUCK_STATE') {
+    const { action, timestamp } = proposal.payload
+    const detection = model.stuckDetection
+
+    detection.lastAction = action
+    detection.isStuck = false
+    detection.timestamp = timestamp
+
+    if (action === 'stop') {
+      // Clear all tracking when stopping
+      detection.recentOutputs = []
+      detection.consecutiveCount = 0
+    } else if (action === 'continue' || action === 'dismiss') {
+      // Reset counter but keep tracking
+      detection.consecutiveCount = 0
+    } else if (action === 'modify') {
+      // Clear outputs so new approach starts fresh
+      detection.recentOutputs = []
+      detection.consecutiveCount = 0
+    }
+
+    console.log('[STUCK] Resolved with action:', action)
+  }
+}
+
+// Reset stuck detection (when output changes significantly)
+export const resetStuckDetectionAcceptor = model => proposal => {
+  if (proposal?.type === 'RESET_STUCK_DETECTION') {
+    model.stuckDetection = {
+      isStuck: false,
+      consecutiveCount: 0,
+      threshold: 3,
+      recentOutputs: [],
+      lastAction: null,
+      timestamp: proposal.payload.timestamp
+    }
+  }
+}
+
 /**
  * Helper: Build implementation prompt for a story
  */
@@ -2487,6 +2573,12 @@ export const acceptors = [
   startSprintStoryImplementationAcceptor,
   clearPendingStoryImplementationAcceptor,
   completeStoryBranchAcceptor,
+  clearSprintErrorAcceptor,
+
+  // Stuck Detection
+  recordIterationOutputAcceptor,
+  resolveStuckStateAcceptor,
+  resetStuckDetectionAcceptor,
 
   // Activity Tracking
   setCurrentToolAcceptor,

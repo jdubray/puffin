@@ -132,10 +132,32 @@ class PuffinApp {
   }
 
   /**
+   * Clean up any leftover overlay elements from previous sessions
+   * This prevents stuck overlays from blocking the UI
+   */
+  cleanupLeftoverOverlays() {
+    // Remove any stuck-alert overlays
+    const stuckAlert = document.getElementById('stuck-alert')
+    if (stuckAlert) {
+      console.log('[CLEANUP] Removing leftover stuck-alert overlay')
+      stuckAlert.remove()
+    }
+
+    // Clear any leftover toasts
+    const toastContainer = document.getElementById('toast-container')
+    if (toastContainer) {
+      toastContainer.innerHTML = ''
+    }
+  }
+
+  /**
    * Initialize the application
    */
   async init() {
     console.log('Puffin initializing...')
+
+    // Clean up any leftover overlays from previous sessions
+    this.cleanupLeftoverOverlays()
 
     // Initialize SAM with FSMs
     this.initSAM()
@@ -253,7 +275,10 @@ class PuffinApp {
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       // Sprint actions
       'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearPendingSprintPlanning',
-      'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch'
+      'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
+      'clearSprintError',
+      // Stuck detection actions
+      'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection'
     ]
 
     const samResult = SAM({
@@ -793,6 +818,8 @@ class PuffinApp {
     this.modalManager.update(state)
     this.updateHeader(state)
     this.updateSprintHeader(state)
+    this.handleSprintError(state)
+    this.handleStuckDetection(state)
 
     if (state.rerunRequest) {
       this.handleRerunRequest(state.rerunRequest, state)
@@ -802,6 +829,129 @@ class PuffinApp {
     if (state._pendingSprintPlanning) {
       this.handleSprintPlanning(state._pendingSprintPlanning, state)
     }
+  }
+
+  /**
+   * Handle sprint error display
+   */
+  handleSprintError(state) {
+    const error = state.sprintError
+
+    // Track shown errors to avoid duplicates
+    if (!this._lastSprintErrorTimestamp) {
+      this._lastSprintErrorTimestamp = null
+    }
+
+    if (error && error.timestamp !== this._lastSprintErrorTimestamp) {
+      this._lastSprintErrorTimestamp = error.timestamp
+
+      // Show appropriate error message based on type
+      if (error.type === 'STORY_LIMIT_EXCEEDED') {
+        this.showToast({
+          type: 'error',
+          title: 'Too Many Stories Selected',
+          message: `${error.message} You selected ${error.details?.selected} stories (max: ${error.details?.maximum}). Please reduce your selection.`,
+          duration: 8000
+        })
+      } else {
+        // Generic sprint error
+        this.showToast({
+          type: 'error',
+          title: 'Sprint Error',
+          message: error.message,
+          duration: 6000
+        })
+      }
+
+      // Clear the error after showing
+      this.intents.clearSprintError()
+    }
+  }
+
+  /**
+   * Handle stuck detection alert
+   */
+  handleStuckDetection(state) {
+    const stuckState = state.stuckDetection
+
+    // Track shown alerts to avoid duplicates
+    if (!this._lastStuckAlertTimestamp) {
+      this._lastStuckAlertTimestamp = null
+    }
+
+    // Remove alert if not stuck anymore
+    if (!stuckState?.isStuck) {
+      const existingAlert = document.getElementById('stuck-alert')
+      if (existingAlert) {
+        existingAlert.remove()
+      }
+      this._lastStuckAlertTimestamp = null
+      return
+    }
+
+    if (stuckState.timestamp !== this._lastStuckAlertTimestamp) {
+      this._lastStuckAlertTimestamp = stuckState.timestamp
+      this.showStuckAlert(stuckState)
+    }
+  }
+
+  /**
+   * Show stuck detection alert with action options
+   */
+  showStuckAlert(stuckState) {
+    // Create a modal-like alert for stuck detection
+    const existingAlert = document.getElementById('stuck-alert')
+    if (existingAlert) {
+      existingAlert.remove()
+    }
+
+    const alert = document.createElement('div')
+    alert.id = 'stuck-alert'
+    alert.className = 'stuck-alert'
+    alert.innerHTML = `
+      <div class="stuck-alert-content">
+        <div class="stuck-alert-icon">⚠️</div>
+        <div class="stuck-alert-body">
+          <h4>Execution Appears Stuck</h4>
+          <p>The last ${stuckState.consecutiveCount} iterations produced similar outputs. This may indicate the task is stuck in a loop.</p>
+          <div class="stuck-alert-actions">
+            <button class="btn primary" data-action="continue">Continue Anyway</button>
+            <button class="btn secondary" data-action="modify">Modify Approach</button>
+            <button class="btn danger" data-action="stop">Stop Execution</button>
+          </div>
+        </div>
+        <button class="stuck-alert-close" aria-label="Close">×</button>
+      </div>
+    `
+
+    // Add event handlers
+    alert.querySelector('[data-action="continue"]').addEventListener('click', () => {
+      this.intents.resolveStuckState('continue')
+      alert.remove()
+    })
+
+    alert.querySelector('[data-action="modify"]').addEventListener('click', () => {
+      this.intents.resolveStuckState('modify')
+      alert.remove()
+      // Focus the prompt input so user can modify
+      const promptInput = document.getElementById('prompt-input')
+      if (promptInput) {
+        promptInput.focus()
+        promptInput.placeholder = 'Enter a modified approach or additional instructions...'
+      }
+    })
+
+    alert.querySelector('[data-action="stop"]').addEventListener('click', () => {
+      this.intents.resolveStuckState('stop')
+      alert.remove()
+    })
+
+    alert.querySelector('.stuck-alert-close').addEventListener('click', () => {
+      this.intents.resolveStuckState('dismiss')
+      alert.remove()
+    })
+
+    document.body.appendChild(alert)
   }
 
   /**

@@ -48,6 +48,87 @@ class PuffinApp {
     this.modalManager = null
     this.statePersistence = null
     this.activityTracker = null
+
+    // Toast container reference
+    this.toastContainer = null
+  }
+
+  /**
+   * Show a toast notification
+   * @param {Object} options - Toast options
+   * @param {string} options.type - 'error' | 'success' | 'warning' | 'info'
+   * @param {string} options.title - Toast title
+   * @param {string} options.message - Toast message
+   * @param {number} options.duration - Duration in ms (default: 5000, 0 = persistent)
+   */
+  showToast({ type = 'info', title, message, duration = 5000 }) {
+    if (!this.toastContainer) {
+      this.toastContainer = document.getElementById('toast-container')
+    }
+
+    if (!this.toastContainer) {
+      console.warn('[TOAST] Toast container not found')
+      return
+    }
+
+    const icons = {
+      error: '⚠️',
+      success: '✓',
+      warning: '⚡',
+      info: 'ℹ️'
+    }
+
+    const toast = document.createElement('div')
+    toast.className = `toast toast-${type}`
+    toast.innerHTML = `
+      <span class="toast-icon">${icons[type] || icons.info}</span>
+      <div class="toast-content">
+        <div class="toast-title">${this.escapeHtml(title)}</div>
+        ${message ? `<div class="toast-message">${this.escapeHtml(message)}</div>` : ''}
+      </div>
+      <button class="toast-close" aria-label="Close">×</button>
+    `
+
+    // Close button handler
+    const closeBtn = toast.querySelector('.toast-close')
+    closeBtn.addEventListener('click', () => this.removeToast(toast))
+
+    // Add to container
+    this.toastContainer.appendChild(toast)
+
+    // Auto-remove after duration (if not persistent)
+    if (duration > 0) {
+      setTimeout(() => this.removeToast(toast), duration)
+    }
+
+    return toast
+  }
+
+  /**
+   * Remove a toast with animation
+   * @param {HTMLElement} toast - Toast element to remove
+   */
+  removeToast(toast) {
+    if (!toast || !toast.parentNode) return
+
+    toast.classList.add('toast-hiding')
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast)
+      }
+    }, 300) // Match animation duration
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   * @param {string} str - String to escape
+   * @returns {string} Escaped string
+   */
+  escapeHtml(str) {
+    if (!str) return ''
+    const div = document.createElement('div')
+    div.textContent = str
+    return div.innerHTML
   }
 
   /**
@@ -645,6 +726,15 @@ class PuffinApp {
       console.error('[CLAUDE-ERROR] Error message:', error?.message || error)
       this.intents.responseError(error)
       this.components.cliOutput.setProcessing(false)
+
+      // Show error toast to user
+      const errorMessage = error?.message || String(error) || 'An unknown error occurred'
+      this.showToast({
+        type: 'error',
+        title: 'Claude Error',
+        message: errorMessage,
+        duration: 8000 // Show errors longer
+      })
     })
     this.claudeListeners.push(unsubError)
 
@@ -671,7 +761,14 @@ class PuffinApp {
       if (error.suggestion) {
         message += '\n\n' + error.suggestion
       }
-      this.showToast(message, 'error', 8000)
+
+      // Show error toast to user
+      this.showToast({
+        type: 'error',
+        title: 'Story Derivation Failed',
+        message: message,
+        duration: 8000
+      })
 
       if (error.rawResponse) {
         console.log('[STORY-DERIVATION] Raw response that failed to parse:', error.rawResponse)

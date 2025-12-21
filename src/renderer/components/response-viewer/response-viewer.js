@@ -192,7 +192,7 @@ export class ResponseViewerComponent {
     this.container.innerHTML = `
       <div class="prompt-display">
         <div class="prompt-label">You</div>
-        <div class="prompt-content">${this.escapeHtml(prompt.content)}</div>
+        <div class="prompt-content">${this.parseMarkdown(prompt.content)}</div>
       </div>
       <div class="response-display">
         <div class="response-label">Claude</div>
@@ -228,7 +228,7 @@ export class ResponseViewerComponent {
     this.container.innerHTML = `
       <div class="prompt-display">
         <div class="prompt-label">You</div>
-        <div class="prompt-content">${this.escapeHtml(prompt.content)}</div>
+        <div class="prompt-content">${this.parseMarkdown(prompt.content)}</div>
       </div>
       <div class="response-display pending">
         <div class="response-label">Claude</div>
@@ -253,7 +253,7 @@ export class ResponseViewerComponent {
     const promptHtml = prompt ? `
       <div class="prompt-display">
         <div class="prompt-label">You</div>
-        <div class="prompt-content">${this.escapeHtml(prompt.content)}</div>
+        <div class="prompt-content">${this.parseMarkdown(prompt.content)}</div>
       </div>
     ` : ''
 

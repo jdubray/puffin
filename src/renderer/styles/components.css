@@ -510,6 +510,86 @@
   font-weight: 500;
 }
 
+.story-branch-btn .branch-status-icon {
+  font-size: 0.75rem;
+  margin-left: 0.25rem;
+}
+
+/* Branch button states */
+.story-branch-btn.in-progress {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: var(--bg-primary);
+}
+
+.story-branch-btn.in-progress:hover {
+  background: #d4a93a;
+  border-color: #d4a93a;
+}
+
+.story-branch-btn.completed {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: white;
+  opacity: 0.85;
+}
+
+.story-branch-btn.completed:hover {
+  opacity: 1;
+  transform: none;
+}
+
+/* Story card status */
+.sprint-story-card.story-completed {
+  border-left-color: var(--color-success);
+  opacity: 0.9;
+}
+
+.sprint-story-card.story-in-progress {
+  border-left-color: var(--color-warning);
+}
+
+.story-header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.story-header-row h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Sprint progress bar */
+.sprint-progress {
+  margin-bottom: 0.75rem;
+}
+
+.sprint-progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.sprint-progress-bar {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sprint-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-success) 0%, #68d391 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
 .sprint-actions {
   display: flex;
   gap: 0.5rem;

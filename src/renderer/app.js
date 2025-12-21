@@ -641,6 +641,8 @@ class PuffinApp {
 
     // Response error
     const unsubError = window.puffin.claude.onError((error) => {
+      console.error('[CLAUDE-ERROR] Response error received:', error)
+      console.error('[CLAUDE-ERROR] Error message:', error?.message || error)
       this.intents.responseError(error)
       this.components.cliOutput.setProcessing(false)
     })
@@ -773,17 +775,42 @@ class PuffinApp {
       statusBadge.className = 'sprint-status-badge ' + sprint.status
     }
 
-    // Render story cards with branch buttons when plan is approved
+    // Render sprint progress bar and story cards
     const storiesContainer = document.getElementById('sprint-stories')
     if (storiesContainer && sprint.stories) {
       const showBranchButtons = sprint.status === 'planned' || sprint.status === 'implementing'
-      storiesContainer.innerHTML = sprint.stories.map(story => `
-        <div class="sprint-story-card" data-story-id="${story.id}">
-          <h4>${this.escapeHtml(story.title)}</h4>
-          <p>${this.escapeHtml(story.description || '')}</p>
-          ${showBranchButtons ? this.renderStoryBranchButtons(story) : ''}
+      const storyProgress = sprint.storyProgress || {}
+
+      // Calculate overall progress
+      const progressStats = this.calculateSprintProgress(sprint.stories, storyProgress)
+      const progressBarHtml = (sprint.status === 'implementing' || progressStats.completed > 0) ? `
+        <div class="sprint-progress">
+          <div class="sprint-progress-label">
+            <span>Sprint Progress</span>
+            <span>${progressStats.completed}/${progressStats.total} branches (${progressStats.percentage}%)</span>
+          </div>
+          <div class="sprint-progress-bar">
+            <div class="sprint-progress-fill" style="width: ${progressStats.percentage}%"></div>
+          </div>
         </div>
-      `).join('')
+      ` : ''
+
+      storiesContainer.innerHTML = progressBarHtml + sprint.stories.map(story => {
+        const progress = storyProgress[story.id]
+        const storyStatus = progress?.status || 'pending'
+        const storyStatusClass = storyStatus === 'completed' ? 'story-completed' : storyStatus === 'in_progress' ? 'story-in-progress' : ''
+        const storyStatusIcon = storyStatus === 'completed' ? '✅' : ''
+
+        return `
+          <div class="sprint-story-card ${storyStatusClass}" data-story-id="${story.id}">
+            <div class="story-header-row">
+              <h4>${this.escapeHtml(story.title)} ${storyStatusIcon}</h4>
+            </div>
+            <p>${this.escapeHtml(story.description || '')}</p>
+            ${showBranchButtons ? this.renderStoryBranchButtons(story, progress) : ''}
+          </div>
+        `
+      }).join('')
     }
 
     // Update action buttons based on status
@@ -842,6 +869,35 @@ class PuffinApp {
   }
 
   /**
+   * Calculate sprint progress statistics
+   */
+  calculateSprintProgress(stories, storyProgress) {
+    let completed = 0
+    let total = 0
+
+    stories.forEach(story => {
+      const progress = storyProgress[story.id]
+      if (progress?.branches) {
+        Object.values(progress.branches).forEach(branch => {
+          total++
+          if (branch.status === 'completed') {
+            completed++
+          }
+        })
+      }
+    })
+
+    // If no branches started yet, show potential total (3 branches per story)
+    if (total === 0) {
+      total = stories.length * 3
+    }
+
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0
+
+    return { completed, total, percentage }
+  }
+
+  /**
    * Format sprint status for display
    */
   formatSprintStatus(status) {
@@ -857,7 +913,7 @@ class PuffinApp {
   /**
    * Render branch buttons for a story card
    */
-  renderStoryBranchButtons(story) {
+  renderStoryBranchButtons(story, storyProgress) {
     const branches = [
       { id: 'ui', label: 'UI', icon: '🎨' },
       { id: 'backend', label: 'Backend', icon: '⚙️' },
@@ -865,19 +921,33 @@ class PuffinApp {
     ]
 
     const escapedTitle = this.escapeHtml(story.title).replace(/"/g, '&quot;')
+    const branchProgress = storyProgress?.branches || {}
 
     return `
       <div class="story-branch-buttons">
-        ${branches.map(branch => `
-          <button class="story-branch-btn"
-                  data-story-id="${story.id}"
-                  data-branch="${branch.id}"
-                  data-story-title="${escapedTitle}"
-                  title="Start ${branch.label} implementation for this story">
-            <span class="branch-icon">${branch.icon}</span>
-            <span class="branch-label">${branch.label}</span>
-          </button>
-        `).join('')}
+        ${branches.map(branch => {
+          const progress = branchProgress[branch.id]
+          const status = progress?.status || 'pending'
+          const statusClass = status === 'completed' ? 'completed' : status === 'in_progress' ? 'in-progress' : ''
+          const statusIcon = status === 'completed' ? '✓' : status === 'in_progress' ? '◐' : ''
+          const titleText = status === 'completed'
+            ? `${branch.label} implementation completed`
+            : status === 'in_progress'
+            ? `${branch.label} implementation in progress`
+            : `Start ${branch.label} implementation for this story`
+
+          return `
+            <button class="story-branch-btn ${statusClass}"
+                    data-story-id="${story.id}"
+                    data-branch="${branch.id}"
+                    data-story-title="${escapedTitle}"
+                    title="${titleText}">
+              <span class="branch-icon">${branch.icon}</span>
+              <span class="branch-label">${branch.label}</span>
+              ${statusIcon ? `<span class="branch-status-icon">${statusIcon}</span>` : ''}
+            </button>
+          `
+        }).join('')}
       </div>
     `
   }

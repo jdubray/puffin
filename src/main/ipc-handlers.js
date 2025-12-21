@@ -550,6 +550,8 @@ function setupClaudeHandlers(ipcMain) {
         }
       )
     } catch (error) {
+      console.error('[IPC-ERROR] claude:submit failed:', error)
+      console.error('[IPC-ERROR] Error stack:', error.stack)
       event.sender.send('claude:error', { message: error.message })
     }
   })

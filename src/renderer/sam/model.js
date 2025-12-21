@@ -98,6 +98,7 @@ export const initialModel = {
   // Sprint state - for grouping stories into focused implementation sprints
   activeSprint: null, // { id, stories, status, promptId, createdAt }
   // Sprint statuses: 'created' | 'planning' | 'planned' | 'implementing'
+  sprintError: null, // { type, message, details, timestamp } - for validation errors
 
   // Story generation tracking state (from .puffin/story-generations.json)
   storyGenerations: {
@@ -1766,6 +1767,9 @@ export const deleteHandoffAcceptor = model => proposal => {
  * Handle sprint creation, planning, and management
  */
 
+// Maximum stories allowed per sprint (to avoid token limits)
+const MAX_SPRINT_STORIES = 4
+
 // Create a sprint from selected stories
 export const createSprintAcceptor = model => proposal => {
   if (proposal?.type === 'CREATE_SPRINT') {
@@ -1790,6 +1794,24 @@ export const createSprintAcceptor = model => proposal => {
     if (uniqueStories.length !== stories.length) {
       console.warn(`[SPRINT] Removed ${stories.length - uniqueStories.length} duplicate stories. Original: ${stories.length}, Unique: ${uniqueStories.length}`)
     }
+
+    // Validate story count limit
+    if (uniqueStories.length > MAX_SPRINT_STORIES) {
+      console.warn(`[SPRINT] Too many stories selected: ${uniqueStories.length}. Maximum allowed: ${MAX_SPRINT_STORIES}`)
+      model.sprintError = {
+        type: 'STORY_LIMIT_EXCEEDED',
+        message: `Sprint cannot have more than ${MAX_SPRINT_STORIES} stories to avoid exceeding token limits during execution.`,
+        details: {
+          selected: uniqueStories.length,
+          maximum: MAX_SPRINT_STORIES
+        },
+        timestamp
+      }
+      return // Don't create the sprint
+    }
+
+    // Clear any previous sprint error
+    model.sprintError = null
 
     // Generate sprint ID
     const sprintId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
@@ -1978,12 +2000,42 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
     // Build implementation prompt context
     const implementationPrompt = buildStoryImplementationPrompt(story, branchType, sprint)
 
+    // Ensure target branch exists
+    if (!model.history.branches[targetBranch]) {
+      model.history.branches[targetBranch] = {
+        id: targetBranch,
+        name: targetBranch.charAt(0).toUpperCase() + targetBranch.slice(1),
+        prompts: []
+      }
+    }
+
+    // Create prompt entry in history (like submitPromptAcceptor does)
+    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+    const prompt = {
+      id: promptId,
+      parentId: null,
+      content: implementationPrompt,
+      title: `[Sprint] ${story.title} - ${branchType.toUpperCase()}`,
+      timestamp: Date.now(),
+      response: null,
+      children: [],
+      sprintId: sprint.id,
+      storyId: storyId,
+      branchType: branchType
+    }
+
+    model.history.branches[targetBranch].prompts.push(prompt)
+    model.history.activeBranch = targetBranch
+    model.pendingPromptId = promptId
+    model.streamingResponse = ''
+
     // Store pending implementation for IPC
     model._pendingStoryImplementation = {
       storyId,
       branchType,
       branchId: targetBranch,
       promptContent: implementationPrompt,
+      promptId: promptId,
       story
     }
   }

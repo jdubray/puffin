@@ -69,6 +69,9 @@ export function computeState(model) {
     // Active Sprint state
     activeSprint: model.activeSprint || null,
 
+    // Sprint error (validation errors like story limit exceeded)
+    sprintError: model.sprintError || null,
+
     // Sprint progress (computed)
     sprintProgress: computeSprintProgress(model),
 

@@ -577,23 +577,27 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  background: transparent !important;
 }
 
 .stat-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: transparent !important;
 }
 
 .stat-label {
   font-size: 0.8rem;
   color: var(--text-secondary);
+  background: transparent !important;
 }
 
 .stat-value {
   font-size: 0.8rem;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--color-neutral);
+  background: transparent !important;
 }
 
 /* Handoff Display in Right Panel */
@@ -1025,6 +1029,7 @@
   border: none;
   cursor: pointer;
   text-align: left;
+  color: var(--color-neutral);
 }
 
 .criteria-toggle-btn:hover {
@@ -1033,7 +1038,7 @@
 
 .criteria-toggle-icon {
   font-size: 0.6rem;
-  color: var(--text-muted);
+  color: var(--color-neutral);
   transition: transform 0.2s ease;
   flex-shrink: 0;
   width: 0.75rem;
@@ -1046,15 +1051,15 @@
 .criteria-label {
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--text-muted);
+  color: inherit;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
 .criteria-count {
   font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: inherit;
   margin-left: auto;
   margin-right: 0.5rem;
 }

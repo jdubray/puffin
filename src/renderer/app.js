@@ -1082,7 +1082,6 @@ class PuffinApp {
         const storyStatus = backlogStory?.status === 'completed' ? 'completed' :
                            (story.status === 'completed' ? 'completed' :
                            (computedStory?.status || progress?.status || 'pending'))
-        const isBlocked = computedStory?.isBlocked || false
         const storyStatusClass = storyStatus === 'completed' ? 'story-completed' : storyStatus === 'in_progress' ? 'story-in-progress' : ''
         const isCompleted = storyStatus === 'completed'
 
@@ -1096,7 +1095,7 @@ class PuffinApp {
         const isExpanded = expandedSections.has(story.id)
 
         return `
-          <div class="sprint-story-card ${storyStatusClass}${isBlocked ? ' story-blocked' : ''}" data-story-id="${story.id}">
+          <div class="sprint-story-card ${storyStatusClass}" data-story-id="${story.id}">
             <div class="story-header-with-indicator">
               <button class="story-complete-btn ${isCompleted ? 'completed' : ''}"
                       data-story-id="${story.id}"
@@ -1280,33 +1279,91 @@ class PuffinApp {
   updateMetadataPanel(state) {
     // Update thread statistics
     const turnsEl = document.getElementById('stat-turns')
+    const costEl = document.getElementById('stat-cost')
+    const durationEl = document.getElementById('stat-duration')
     const modelEl = document.getElementById('stat-model')
     const createdEl = document.getElementById('stat-created')
     const handoffSection = document.getElementById('handoff-section')
     const handoffDisplay = document.getElementById('handoff-display')
 
-    // Get current thread info
+    // Get current thread/branch info
     const activeBranch = state.history?.activeBranch
     const activePromptId = state.history?.activePromptId
-    const branch = activeBranch ? state.history?.branches?.[activeBranch] : null
-    const thread = branch?.prompts?.find(p => p.id === activePromptId)
+    const branch = activeBranch ? state.history?.raw?.branches?.[activeBranch] : null
+    const prompts = branch?.prompts || []
+    const thread = prompts.find(p => p.id === activePromptId)
+
+    // Aggregate statistics across all prompts in the branch
+    let totalTurns = 0
+    let totalCost = 0
+    let totalDuration = 0
+    let hasCostData = false
+    let hasDurationData = false
+
+    console.log('[STATS] Branch:', activeBranch, 'Prompts:', prompts.length)
+
+    prompts.forEach(prompt => {
+      if (prompt.response) {
+        // Turns
+        if (prompt.response.turns) {
+          totalTurns += prompt.response.turns
+        }
+        // Cost
+        if (prompt.response.cost !== undefined && prompt.response.cost !== null) {
+          totalCost += prompt.response.cost
+          hasCostData = true
+        }
+        // Duration
+        if (prompt.response.duration !== undefined && prompt.response.duration !== null) {
+          totalDuration += prompt.response.duration
+          hasDurationData = true
+        }
+      }
+    })
+
+    console.log('[STATS] Totals - turns:', totalTurns, 'cost:', totalCost, 'duration:', totalDuration)
 
     // Update turns count
     if (turnsEl) {
-      const turnCount = thread?.turns?.length || 0
-      turnsEl.textContent = turnCount.toString()
+      turnsEl.textContent = totalTurns.toString()
     }
 
-    // Update model
+    // Update cost
+    if (costEl) {
+      if (hasCostData) {
+        costEl.textContent = `$${totalCost.toFixed(4)}`
+      } else {
+        costEl.textContent = '-'
+      }
+    }
+
+    // Update duration (in hours and minutes)
+    if (durationEl) {
+      if (hasDurationData) {
+        const totalMinutes = Math.floor(totalDuration / 60000)
+        const hours = Math.floor(totalMinutes / 60)
+        const minutes = totalMinutes % 60
+        if (hours > 0) {
+          durationEl.textContent = `${hours}h ${minutes}m`
+        } else {
+          durationEl.textContent = `${minutes}m`
+        }
+      } else {
+        durationEl.textContent = '-'
+      }
+    }
+
+    // Update model (from current thread)
     if (modelEl) {
       const model = thread?.model || state.settings?.defaultModel || '-'
       modelEl.textContent = model.charAt(0).toUpperCase() + model.slice(1)
     }
 
-    // Update created date
+    // Update created date (from first prompt in branch)
     if (createdEl) {
-      if (thread?.createdAt) {
-        const date = new Date(thread.createdAt)
+      const firstPrompt = prompts[0]
+      if (firstPrompt?.createdAt) {
+        const date = new Date(firstPrompt.createdAt)
         createdEl.textContent = date.toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
@@ -1318,7 +1375,7 @@ class PuffinApp {
       }
     }
 
-    // Update handoff section
+    // Update handoff context section (incoming handoff)
     if (handoffSection && handoffDisplay) {
       const handoffContext = thread?.handoffContext
       if (handoffContext) {
@@ -1332,6 +1389,17 @@ class PuffinApp {
       } else {
         handoffSection.classList.add('hidden')
         handoffDisplay.innerHTML = ''
+      }
+    }
+
+    // Update notes/handoff summary section
+    const notesContent = document.getElementById('notes-content')
+    if (notesContent) {
+      const handoffContext = thread?.handoffContext
+      if (handoffContext?.summary) {
+        notesContent.innerHTML = `<pre class="handoff-summary-text">${this.escapeHtml(handoffContext.summary)}</pre>`
+      } else {
+        notesContent.innerHTML = '<p class="text-muted text-small">No handoff summary for this thread</p>'
       }
     }
   }

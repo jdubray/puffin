@@ -19,7 +19,7 @@ export class PromptEditorComponent {
     this.deriveStoriesCheckbox = null
     this.deriveUserStories = false
     this.modelSelect = null
-    this.defaultModel = 'sonnet' // Will be updated from project config
+    this.defaultModel = 'optus' // Will be updated from project config
     // Input type tracking (US-3)
     this.inputTypeGroup = null
     this.inputTypeSelect = null

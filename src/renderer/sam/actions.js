@@ -871,6 +871,25 @@ export const deleteHandoff = (handoffId) => ({
   }
 })
 
+// Set handoff context for a branch (persisted in history)
+export const setBranchHandoffContext = (branchId, handoffContext) => ({
+  type: 'SET_BRANCH_HANDOFF_CONTEXT',
+  payload: {
+    branchId,
+    handoffContext,
+    timestamp: Date.now()
+  }
+})
+
+// Clear handoff context for a branch
+export const clearBranchHandoffContext = (branchId) => ({
+  type: 'CLEAR_BRANCH_HANDOFF_CONTEXT',
+  payload: {
+    branchId,
+    timestamp: Date.now()
+  }
+})
+
 /**
  * Sprint Actions
  * For grouping user stories into focused implementation sprints

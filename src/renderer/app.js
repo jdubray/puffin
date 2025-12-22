@@ -273,6 +273,7 @@ class PuffinApp {
       'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity',
       // Handoff actions
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
+      'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
       'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
@@ -390,6 +391,8 @@ class PuffinApp {
           ['COMPLETE_HANDOFF', actions.completeHandoff],
           ['CANCEL_HANDOFF', actions.cancelHandoff],
           ['DELETE_HANDOFF', actions.deleteHandoff],
+          ['SET_BRANCH_HANDOFF_CONTEXT', actions.setBranchHandoffContext],
+          ['CLEAR_BRANCH_HANDOFF_CONTEXT', actions.clearBranchHandoffContext],
 
           // Sprint actions
           ['CREATE_SPRINT', actions.createSprint],
@@ -1711,17 +1714,25 @@ Keep it concise but informative. Use markdown formatting.`
 
     console.log('[HANDOFF] Sending to branch:', branchId, branchName)
 
+    const handoffContext = {
+      summary: this.generatedHandoffSummary.summary,
+      sourceThreadName: this.generatedHandoffSummary.sourceThreadName,
+      sourceBranch: this.generatedHandoffSummary.sourceBranch,
+      createdAt: Date.now()
+    }
+
+    // Store handoff context in the target branch state (persisted)
+    this.intents.setBranchHandoffContext(branchId, handoffContext)
+
     // Switch to the target branch
     this.intents.selectBranch(branchId)
 
-    // Dispatch handoff-received event for the prompt editor to handle
+    // Dispatch handoff-received event for the prompt editor UI to handle
     const event = new CustomEvent('handoff-received', {
       detail: {
         branchId,
         branchName,
-        summary: this.generatedHandoffSummary.summary,
-        sourceThreadName: this.generatedHandoffSummary.sourceThreadName,
-        sourceBranch: this.generatedHandoffSummary.sourceBranch
+        ...handoffContext
       }
     })
     document.dispatchEvent(event)

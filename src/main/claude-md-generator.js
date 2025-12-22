@@ -120,29 +120,20 @@ class ClaudeMdGenerator {
       lines.push('')
     }
 
-    // User stories summary (active ones only)
-    const activeStories = (state.userStories || []).filter(
-      s => s.status === 'in-progress' || s.status === 'pending'
+    // Completed user stories summary (for reference only)
+    // Active stories are passed in thread context, not in CLAUDE.md
+    const completedStories = (state.userStories || []).filter(
+      s => s.status === 'completed' || s.status === 'done'
     )
-    if (activeStories.length > 0) {
-      lines.push('## Active User Stories')
+    if (completedStories.length > 0) {
+      lines.push('## Completed User Stories')
       lines.push('')
-      activeStories.forEach(story => {
-        const statusIcon = story.status === 'in-progress' ? '🔄' : '📋'
-        lines.push(`### ${statusIcon} ${story.title}`)
-        if (story.description) {
-          lines.push('')
-          lines.push(story.description)
-        }
-        if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
-          lines.push('')
-          lines.push('**Acceptance Criteria:**')
-          story.acceptanceCriteria.forEach(c => {
-            lines.push(`- ${c}`)
-          })
-        }
-        lines.push('')
+      lines.push('The following stories have been completed and are available for reference:')
+      lines.push('')
+      completedStories.forEach(story => {
+        lines.push(`- **${story.title}**${story.description ? `: ${story.description}` : ''}`)
       })
+      lines.push('')
     }
 
     const content = lines.join('\n')

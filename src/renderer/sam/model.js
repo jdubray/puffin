@@ -1773,6 +1773,35 @@ export const deleteHandoffAcceptor = model => proposal => {
 }
 
 /**
+ * Set handoff context for a branch - persisted in history
+ * This allows the handoff summary to survive app restarts
+ */
+export const setBranchHandoffContextAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_BRANCH_HANDOFF_CONTEXT') {
+    const { branchId, handoffContext } = proposal.payload
+
+    if (model.history.branches[branchId]) {
+      model.history.branches[branchId].handoffContext = handoffContext
+      console.log('[HANDOFF] Stored handoff context in branch:', branchId)
+    }
+  }
+}
+
+/**
+ * Clear handoff context for a branch
+ */
+export const clearBranchHandoffContextAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_BRANCH_HANDOFF_CONTEXT') {
+    const { branchId } = proposal.payload
+
+    if (model.history.branches[branchId]) {
+      delete model.history.branches[branchId].handoffContext
+      console.log('[HANDOFF] Cleared handoff context from branch:', branchId)
+    }
+  }
+}
+
+/**
  * Sprint Acceptors
  * Handle sprint creation, planning, and management
  */
@@ -2713,6 +2742,8 @@ export const acceptors = [
   completeHandoffAcceptor,
   cancelHandoffAcceptor,
   deleteHandoffAcceptor,
+  setBranchHandoffContextAcceptor,
+  clearBranchHandoffContextAcceptor,
 
   // Sprint
   createSprintAcceptor,

@@ -581,8 +581,21 @@ export class PromptEditorComponent {
 
     // Submit to Claude via IPC
     if (window.puffin) {
+      // Get handoff context if present - must check BEFORE determining session
+      const handoffContext = this.pendingHandoff ? {
+        summary: this.pendingHandoff.summary,
+        sourceThreadName: this.pendingHandoff.sourceThreadName,
+        sourceBranch: this.pendingHandoff.sourceBranch
+      } : null
+
       // Get session ID to resume conversation (if continuing in same branch)
-      const sessionId = this.getLastSessionId(state)
+      // IMPORTANT: If there's a pending handoff, always start a NEW conversation
+      // to ensure the handoff context is included in the prompt
+      const sessionId = handoffContext ? null : this.getLastSessionId(state)
+
+      if (handoffContext) {
+        console.log('[CONTEXT-DEBUG] Handoff present - forcing NEW conversation to include handoff context')
+      }
 
       // Get GUI description if included
       let guiDescription = null
@@ -606,6 +619,10 @@ export class PromptEditorComponent {
 
       console.log('[CONTEXT-DEBUG] Submit mode:', isResumingSession ? 'RESUME session' : 'NEW conversation')
 
+      if (handoffContext) {
+        console.log('[CONTEXT-DEBUG] Including handoff context from:', handoffContext.sourceBranch)
+      }
+
       window.puffin.claude.submit({
         prompt: content,
         branchId: state.history.activeBranch,
@@ -624,8 +641,15 @@ export class PromptEditorComponent {
         // User stories are always relevant - they may have been updated
         userStories: userStories,
         guiDescription: guiDescription,
+        // Handoff context from another thread
+        handoffContext: handoffContext,
         model: this.modelSelect?.value || this.defaultModel || 'sonnet'
       })
+
+      // Clear pending handoff after submission
+      if (this.pendingHandoff) {
+        this.clearPendingHandoff()
+      }
     }
   }
 

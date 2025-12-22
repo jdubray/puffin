@@ -39,7 +39,8 @@ export class StatePersistence {
       'ADD_STORIES_TO_BACKLOG', 'START_STORY_IMPLEMENTATION',
       // Sprint actions
       'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT',
-      'START_SPRINT_STORY_IMPLEMENTATION',
+      'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
+      'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
       // Story generation tracking
       'RECEIVE_DERIVED_STORIES', 'CREATE_STORY_GENERATION', 'UPDATE_GENERATED_STORY_FEEDBACK',
       'FINALIZE_STORY_GENERATION', 'CREATE_IMPLEMENTATION_JOURNEY',
@@ -157,8 +158,9 @@ export class StatePersistence {
         }
       }
 
-      // Persist sprint state changes
-      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT'].includes(normalizedType)) {
+      // Persist sprint state changes (including criteria progress and story status)
+      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT',
+           'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
         await window.puffin.state.updateActiveSprint(state.activeSprint)
       }

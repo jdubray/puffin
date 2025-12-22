@@ -150,18 +150,16 @@ class ClaudeService {
               let messageText = ''
               for (const block of json.message.content) {
                 if (block.type === 'text') {
-                  // Add line break before text if previous content ended with an emoji
-                  const lastChar = streamedContent.slice(-1)
-                  const endsWithEmoji = /[\u{1F300}-\u{1F9FF}]/u.test(lastChar)
-                  if (endsWithEmoji && block.text.trim()) {
+                  // Add line break before text if content doesn't end with newline
+                  // This ensures text starts on a new line after tool emojis
+                  if (streamedContent.length > 0 && !streamedContent.endsWith('\n')) {
                     streamedContent += '\n'
                   }
                   messageText += block.text
                   streamedContent += block.text
                 } else if (block.type === 'tool_use') {
-                  // Add tool emoji indicator to content
+                  // Add tool emoji indicator to content with line break
                   const toolEmoji = getToolEmoji(block.name)
-                  // Add line break before emoji if there's preceding text
                   if (streamedContent.length > 0 && !streamedContent.endsWith('\n')) {
                     streamedContent += '\n'
                   }

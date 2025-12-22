@@ -414,6 +414,7 @@ function computeSprintProgress(model) {
   }
 
   const storyProgress = sprint.storyProgress || {}
+  const backlogStories = model.userStories || []
 
   // Compute per-story progress
   const storiesWithProgress = sprint.stories.map(story => {
@@ -427,8 +428,9 @@ function computeSprintProgress(model) {
     const inProgressBranches = branchEntries.filter(([, b]) => b.status === 'in_progress').length
     const totalBranches = branchEntries.length
 
-    // Count acceptance criteria completion
-    const acceptanceCriteria = story.acceptanceCriteria || []
+    // Get acceptance criteria from backlog (source of truth) or fall back to sprint copy
+    const backlogStory = backlogStories.find(bs => bs.id === story.id)
+    const acceptanceCriteria = backlogStory?.acceptanceCriteria || story.acceptanceCriteria || []
     const totalCriteria = acceptanceCriteria.length
     const completedCriteria = acceptanceCriteria.filter((_, idx) =>
       criteriaProgress[idx]?.checked === true

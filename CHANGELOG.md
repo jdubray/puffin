@@ -5,6 +5,58 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-12-22
+
+### Added
+
+- **Sprint Management**: Organize user stories into focused implementation sprints
+  - Select multiple stories from backlog to create a sprint
+  - Sprint context panel shows stories with completion status
+  - Track progress with visual progress bars
+  - Mark stories and acceptance criteria as complete
+  - Expandable acceptance criteria checklists with inline progress indicators
+
+- **Handoff Summary**: Pass context between threads and branches
+  - Generate handoff summaries to share context with new threads
+  - Handoff context automatically included in new conversations
+  - Track handoff chain history across multiple threads
+  - View handoff information in thread metadata panel
+
+- **Enhanced Git Integration**: Improved merge and branch workflow
+  - Merge branches with conflict detection and guidance
+  - Post-merge workflow prompts for branch cleanup
+  - Line ending normalization via `.gitattributes` for cross-platform compatibility
+  - Improved uncommitted changes detection during merge operations
+
+- **Toast Notifications**: User-visible error and status messages
+  - Error notifications for Claude CLI failures
+  - Success/warning/info notification types
+  - Auto-dismiss with manual close option
+
+- **Response Formatting**: Improved Claude response display
+  - Tool emojis (📖✏️📋) now displayed with proper line breaks
+  - Better separation between tool indicators and text content
+
+### Changed
+
+- Sprint stories now sync completion status with backlog (single source of truth)
+- Model selection improved with per-thread and project-level defaults
+- Prompt completion detection triggers on result message (not process close)
+
+### Fixed
+
+- Stuck-alert overlay blocking all input when not properly dismissed
+- Backspace in GUI Designer textarea deleting entire control instead of character
+- Duplicate user story detection when adding to backlog or sprint
+- Multiple SAM action registration issues resolved
+- State synchronization between CLI Output and Prompt View
+
+### Technical
+
+- ~57,000 lines of code across 94 files
+- Added cleanupLeftoverOverlays() for robust initialization
+- Post-processing of response content for consistent formatting
+
 ## [1.2.0] - 2025-12-19
 
 ### Added

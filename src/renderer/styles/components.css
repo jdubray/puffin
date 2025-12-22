@@ -1004,6 +1004,143 @@
   letter-spacing: 0.5px;
 }
 
+/* ===========================================
+   Acceptance Criteria Checklist
+   =========================================== */
+
+.story-criteria-section {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Toggle button for expand/collapse */
+.criteria-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.25rem 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.criteria-toggle-btn:hover {
+  opacity: 0.8;
+}
+
+.criteria-toggle-icon {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+  width: 0.75rem;
+}
+
+.story-criteria-section.expanded .criteria-toggle-icon {
+  transform: rotate(90deg);
+}
+
+.criteria-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.criteria-count {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
+/* Inline progress bar in toggle header */
+.criteria-progress-bar-inline {
+  width: 40px;
+  height: 4px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.criteria-progress-fill-inline {
+  height: 100%;
+  background: var(--color-success);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Checklist - collapsed by default */
+.criteria-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.2s ease;
+}
+
+.criteria-checklist.expanded {
+  max-height: 500px;
+  opacity: 1;
+  padding-top: 0.5rem;
+}
+
+.criteria-item {
+  display: flex;
+  align-items: flex-start;
+}
+
+.criteria-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+  width: 100%;
+  padding: 0.25rem 0;
+}
+
+.criteria-checkbox {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--color-success);
+}
+
+.criteria-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.criteria-item.checked .criteria-text {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+/* Completed story criteria styling */
+.sprint-story-card.story-completed .criteria-progress-fill-inline {
+  background: var(--color-success);
+}
+
+.sprint-story-card.story-completed .criteria-label,
+.sprint-story-card.story-completed .criteria-count {
+  color: var(--color-success);
+}
+
 .story-header-row {
   display: flex;
   align-items: center;

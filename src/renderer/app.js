@@ -276,7 +276,7 @@ class PuffinApp {
       // Sprint actions
       'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
-      'updateSprintStoryStatus', 'clearSprintError',
+      'updateSprintStoryStatus', 'clearSprintError', 'toggleCriteriaCompletion',
       // Stuck detection actions
       'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection'
     ]
@@ -400,7 +400,13 @@ class PuffinApp {
           ['START_SPRINT_STORY_IMPLEMENTATION', actions.startSprintStoryImplementation],
           ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation],
           ['COMPLETE_STORY_BRANCH', actions.completeStoryBranch],
-          ['UPDATE_SPRINT_STORY_STATUS', actions.updateSprintStoryStatus]
+          ['UPDATE_SPRINT_STORY_STATUS', actions.updateSprintStoryStatus],
+          ['CLEAR_SPRINT_ERROR', actions.clearSprintError],
+          ['TOGGLE_CRITERIA_COMPLETION', actions.toggleCriteriaCompletion],
+          // Stuck detection actions
+          ['RECORD_ITERATION_OUTPUT', actions.recordIterationOutput],
+          ['RESOLVE_STUCK_STATE', actions.resolveStuckState],
+          ['RESET_STUCK_DETECTION', actions.resetStuckDetection]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -1073,6 +1079,12 @@ class PuffinApp {
         const storyStatusClass = storyStatus === 'completed' ? 'story-completed' : storyStatus === 'in_progress' ? 'story-in-progress' : ''
         const isCompleted = storyStatus === 'completed'
 
+        // Get acceptance criteria with completion state
+        const criteriaList = computedStory?.acceptanceCriteria || []
+        const totalCriteria = criteriaList.length
+        const completedCriteria = criteriaList.filter(c => c.checked).length
+        const criteriaPercentage = totalCriteria > 0 ? Math.round((completedCriteria / totalCriteria) * 100) : 0
+
         return `
           <div class="sprint-story-card ${storyStatusClass}${isBlocked ? ' story-blocked' : ''}" data-story-id="${story.id}">
             <div class="story-header-with-indicator">
@@ -1084,6 +1096,32 @@ class PuffinApp {
               <h4>${this.escapeHtml(story.title)}</h4>
             </div>
             <p>${this.escapeHtml(story.description || '')}</p>
+            ${totalCriteria > 0 ? `
+              <div class="story-criteria-section" data-story-id="${story.id}">
+                <button class="criteria-toggle-btn" data-story-id="${story.id}" title="Toggle acceptance criteria">
+                  <span class="criteria-toggle-icon">▶</span>
+                  <span class="criteria-label">Acceptance Criteria</span>
+                  <span class="criteria-count">${completedCriteria}/${totalCriteria}</span>
+                  <div class="criteria-progress-bar-inline">
+                    <div class="criteria-progress-fill-inline" style="width: ${criteriaPercentage}%"></div>
+                  </div>
+                </button>
+                <ul class="criteria-checklist collapsed">
+                  ${criteriaList.map(c => `
+                    <li class="criteria-item ${c.checked ? 'checked' : ''}">
+                      <label class="criteria-checkbox-label">
+                        <input type="checkbox"
+                               class="criteria-checkbox"
+                               data-story-id="${story.id}"
+                               data-criteria-index="${c.index}"
+                               ${c.checked ? 'checked' : ''}>
+                        <span class="criteria-text">${this.escapeHtml(c.text)}</span>
+                      </label>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            ` : ''}
             ${showBranchButtons ? this.renderStoryBranchButtons(story, progress) : ''}
           </div>
         `
@@ -1177,6 +1215,35 @@ class PuffinApp {
               : `"${storyTitle}" marked as incomplete`,
             newStatus === 'completed' ? 'success' : 'info'
           )
+        }
+      })
+
+      // Acceptance criteria checkbox changes (event delegation)
+      sprintContextPanel.addEventListener('change', (e) => {
+        const checkbox = e.target.closest('.criteria-checkbox')
+        if (checkbox) {
+          const storyId = checkbox.dataset.storyId
+          const criteriaIndex = parseInt(checkbox.dataset.criteriaIndex, 10)
+          const checked = checkbox.checked
+
+          console.log('[SPRINT] Toggling criteria:', { storyId, criteriaIndex, checked })
+
+          // Dispatch action to toggle criteria completion
+          this.intents.toggleCriteriaCompletion(storyId, criteriaIndex, checked)
+        }
+      })
+
+      // Criteria toggle button clicks (expand/collapse)
+      sprintContextPanel.addEventListener('click', (e) => {
+        const toggleBtn = e.target.closest('.criteria-toggle-btn')
+        if (toggleBtn) {
+          const section = toggleBtn.closest('.story-criteria-section')
+          const checklist = section?.querySelector('.criteria-checklist')
+          if (section && checklist) {
+            section.classList.toggle('expanded')
+            checklist.classList.toggle('expanded')
+            checklist.classList.remove('collapsed')
+          }
         }
       })
     }

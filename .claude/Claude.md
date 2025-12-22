@@ -241,29 +241,6 @@ As a user, I want to see thread statistics in the right swimlane so that I can m
 - Statistics update in real-time as the conversation progresses
 - Additional relevant metrics (model used, thread ID) are accessible
 
-### 📋 Sprint Story Completion Button
-
-As a user, I want a completion checkmark button on each sprint story card so that I can manually mark stories as complete and sync with the backlog
-
-**Acceptance Criteria:**
-- Each story card in the sprint panel displays a completion checkmark button
-- Clicking the button marks the story as completed
-- Completed stories are visually distinguished (checkmark filled, card styling)
-- Completion status syncs immediately to the backlog view
-- User can toggle completion status (mark incomplete if needed)
-- Sprint progress percentage updates when stories are marked complete
-
-### 📋 Sprint Progress Based on Story Completion
-
-As a user, I want the sprint progress bar to reflect the percentage of completed stories so that I can see overall sprint progress regardless of branch work
-
-**Acceptance Criteria:**
-- Sprint progress is calculated as (completed stories / total stories) * 100
-- Progress bar updates in real-time when stories are marked complete
-- Progress percentage is displayed numerically alongside the bar
-- Progress calculation does not depend on branch buttons (UI/Backend/Full Stack)
-- 100% progress is shown when all stories are marked complete
-
 ### 📋 Acceptance Criteria Checklist Display
 
 As a user, I want to see acceptance criteria as a checklist in the sprint story cards so that I can track granular progress within each story

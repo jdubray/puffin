@@ -2208,6 +2208,79 @@ export const clearSprintErrorAcceptor = model => proposal => {
   }
 }
 
+// Toggle acceptance criteria completion for a story
+export const toggleCriteriaCompletionAcceptor = model => proposal => {
+  if (proposal?.type === 'TOGGLE_CRITERIA_COMPLETION') {
+    const { storyId, criteriaIndex, checked, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) {
+      console.warn('[SPRINT] No active sprint for criteria toggle')
+      return
+    }
+
+    // Initialize storyProgress if not exists
+    if (!sprint.storyProgress) {
+      sprint.storyProgress = {}
+    }
+
+    // Initialize progress for this story if not exists
+    if (!sprint.storyProgress[storyId]) {
+      sprint.storyProgress[storyId] = {
+        branches: {},
+        criteriaProgress: {}
+      }
+    }
+
+    // Initialize criteriaProgress if not exists
+    if (!sprint.storyProgress[storyId].criteriaProgress) {
+      sprint.storyProgress[storyId].criteriaProgress = {}
+    }
+
+    // Update the criteria completion state
+    sprint.storyProgress[storyId].criteriaProgress[criteriaIndex] = {
+      checked,
+      checkedAt: checked ? timestamp : null
+    }
+
+    // Check if all criteria are completed for auto-complete
+    const story = sprint.stories.find(s => s.id === storyId)
+    if (story && story.acceptanceCriteria?.length > 0) {
+      const criteriaProgress = sprint.storyProgress[storyId].criteriaProgress
+      const allChecked = story.acceptanceCriteria.every((_, idx) =>
+        criteriaProgress[idx]?.checked === true
+      )
+
+      // Auto-complete the story if all criteria are checked
+      if (allChecked && sprint.storyProgress[storyId].status !== 'completed') {
+        sprint.storyProgress[storyId].status = 'completed'
+        sprint.storyProgress[storyId].completedAt = timestamp
+
+        // Also update the story in the sprint
+        const sprintStory = sprint.stories.find(s => s.id === storyId)
+        if (sprintStory) {
+          sprintStory.status = 'completed'
+          sprintStory.completedAt = timestamp
+        }
+
+        // Sync to backlog (userStories)
+        const backlogStory = model.userStories?.find(s => s.id === storyId)
+        if (backlogStory) {
+          backlogStory.status = 'completed'
+          model._userStoriesUpdated = true
+        }
+
+        console.log('[SPRINT] Auto-completed story after all criteria checked:', storyId)
+      }
+    }
+
+    // Trigger persistence
+    model._sprintProgressUpdated = true
+
+    console.log('[SPRINT] Toggled criteria:', { storyId, criteriaIndex, checked })
+  }
+}
+
 // Record iteration output for stuck detection
 export const recordIterationOutputAcceptor = model => proposal => {
   if (proposal?.type === 'RECORD_ITERATION_OUTPUT') {
@@ -2652,6 +2725,7 @@ export const acceptors = [
   completeStoryBranchAcceptor,
   updateSprintStoryStatusAcceptor,
   clearSprintErrorAcceptor,
+  toggleCriteriaCompletionAcceptor,
 
   // Stuck Detection
   recordIterationOutputAcceptor,

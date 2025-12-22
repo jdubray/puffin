@@ -417,14 +417,25 @@ function computeSprintProgress(model) {
 
   // Compute per-story progress
   const storiesWithProgress = sprint.stories.map(story => {
-    const progress = storyProgress[story.id] || { branches: {} }
+    const progress = storyProgress[story.id] || { branches: {}, criteriaProgress: {} }
     const branches = progress.branches || {}
+    const criteriaProgress = progress.criteriaProgress || {}
 
     // Count branch statuses
     const branchEntries = Object.entries(branches)
     const completedBranches = branchEntries.filter(([, b]) => b.status === 'completed').length
     const inProgressBranches = branchEntries.filter(([, b]) => b.status === 'in_progress').length
     const totalBranches = branchEntries.length
+
+    // Count acceptance criteria completion
+    const acceptanceCriteria = story.acceptanceCriteria || []
+    const totalCriteria = acceptanceCriteria.length
+    const completedCriteria = acceptanceCriteria.filter((_, idx) =>
+      criteriaProgress[idx]?.checked === true
+    ).length
+    const criteriaPercentage = totalCriteria > 0
+      ? Math.round((completedCriteria / totalCriteria) * 100)
+      : 0
 
     // Determine overall story status
     let storyStatus = 'pending'
@@ -464,6 +475,16 @@ function computeSprintProgress(model) {
       branchPercentage: totalBranches > 0
         ? Math.round((completedBranches / totalBranches) * 100)
         : 0,
+      // Acceptance criteria progress
+      acceptanceCriteria: acceptanceCriteria.map((criteria, idx) => ({
+        text: criteria,
+        index: idx,
+        checked: criteriaProgress[idx]?.checked === true,
+        checkedAt: criteriaProgress[idx]?.checkedAt || null
+      })),
+      totalCriteria,
+      completedCriteria,
+      criteriaPercentage,
       completedAt: progress.completedAt
     }
   })

@@ -145,13 +145,27 @@ class ClaudeService {
             const json = JSON.parse(line)
             allMessages.push(json)
 
-            // Accumulate assistant text content
+            // Accumulate assistant text content with tool indicators
             if (json.type === 'assistant' && json.message?.content) {
               let messageText = ''
               for (const block of json.message.content) {
                 if (block.type === 'text') {
+                  // Add line break before text if previous content ended with an emoji
+                  const lastChar = streamedContent.slice(-1)
+                  const endsWithEmoji = /[\u{1F300}-\u{1F9FF}]/u.test(lastChar)
+                  if (endsWithEmoji && block.text.trim()) {
+                    streamedContent += '\n'
+                  }
                   messageText += block.text
                   streamedContent += block.text
+                } else if (block.type === 'tool_use') {
+                  // Add tool emoji indicator to content
+                  const toolEmoji = getToolEmoji(block.name)
+                  // Add line break before emoji if there's preceding text
+                  if (streamedContent.length > 0 && !streamedContent.endsWith('\n')) {
+                    streamedContent += '\n'
+                  }
+                  streamedContent += toolEmoji
                 }
               }
               // Keep track of the last assistant message with substantial text
@@ -173,11 +187,22 @@ class ClaudeService {
                 completionCalled = true
                 console.log('[CLAUDE-DEBUG] Calling onComplete from result message handler')
 
-                // Build response using streamed content (preferred) or result field
+                // Build response using the more complete content source
+                // Sometimes result field has more complete text than streamed content
                 let responseContent = ''
-                if (streamedContent && streamedContent.length > 0) {
+                const hasStreamedContent = streamedContent && streamedContent.length > 0
+                const hasResultContent = json.result && json.result.length > 0
+
+                if (hasStreamedContent && hasResultContent) {
+                  // Use whichever has more content (result might be more complete)
+                  responseContent = json.result.length > streamedContent.length
+                    ? json.result
+                    : streamedContent
+                  console.log('[CLAUDE-DEBUG] Chose content source:',
+                    responseContent === json.result ? 'result field' : 'streamed content')
+                } else if (hasStreamedContent) {
                   responseContent = streamedContent
-                } else if (json.result && json.result.length > 0) {
+                } else if (hasResultContent) {
                   responseContent = json.result
                 }
 
@@ -376,8 +401,8 @@ class ClaudeService {
             if (block.type === 'text') {
               onChunk(block.text)
             } else if (block.type === 'tool_use') {
-              // Show tool emoji only
-              onChunk(getToolEmoji(block.name))
+              // Show tool emoji with line break for readability
+              onChunk('\n' + getToolEmoji(block.name))
             }
           }
         }

@@ -982,6 +982,17 @@ export const resetStuckDetection = () => ({
   payload: { timestamp: Date.now() }
 })
 
+// Toggle acceptance criteria completion for a story in sprint
+export const toggleCriteriaCompletion = (storyId, criteriaIndex, checked) => ({
+  type: 'TOGGLE_CRITERIA_COMPLETION',
+  payload: {
+    storyId,
+    criteriaIndex,
+    checked,
+    timestamp: Date.now()
+  }
+})
+
 /**
  * Git Integration Actions
  */

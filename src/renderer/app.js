@@ -1112,9 +1112,6 @@ class PuffinApp {
                   <span class="criteria-toggle-icon">▶</span>
                   <span class="criteria-label">Acceptance Criteria</span>
                   <span class="criteria-count">${completedCriteria}/${totalCriteria}</span>
-                  <div class="criteria-progress-bar-inline">
-                    <div class="criteria-progress-fill-inline" style="width: ${criteriaPercentage}%"></div>
-                  </div>
                 </button>
                 <ul class="criteria-checklist${isExpanded ? ' expanded' : ''}">
                   ${criteriaList.map(c => `
@@ -1153,6 +1150,7 @@ class PuffinApp {
           progressSection.classList.add('hidden')
         }
       }
+
     }
 
     // Update action buttons based on status

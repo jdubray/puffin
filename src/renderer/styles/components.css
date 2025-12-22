@@ -1059,23 +1059,6 @@
   margin-right: 0.5rem;
 }
 
-/* Inline progress bar in toggle header */
-.criteria-progress-bar-inline {
-  width: 40px;
-  height: 4px;
-  background: var(--bg-primary);
-  border-radius: 2px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.criteria-progress-fill-inline {
-  height: 100%;
-  background: var(--color-success);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
 /* Checklist - collapsed by default */
 .criteria-checklist {
   list-style: none;
@@ -1132,10 +1115,6 @@
 }
 
 /* Completed story criteria styling */
-.sprint-story-card.story-completed .criteria-progress-fill-inline {
-  background: var(--color-success);
-}
-
 .sprint-story-card.story-completed .criteria-label,
 .sprint-story-card.story-completed .criteria-count {
   color: var(--color-success);

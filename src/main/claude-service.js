@@ -185,16 +185,16 @@ class ClaudeService {
                 completionCalled = true
                 console.log('[CLAUDE-DEBUG] Calling onComplete from result message handler')
 
-                // Build response - prefer streamedContent as it has proper formatting with emojis
-                // Only fall back to json.result if streamedContent is empty
+                // Build response - prefer result field, then format it
                 let responseContent = ''
-                if (streamedContent && streamedContent.length > 0) {
-                  responseContent = streamedContent
-                  console.log('[CLAUDE-DEBUG] Using streamedContent with emojis:', streamedContent.length, 'chars')
-                } else if (json.result && json.result.length > 0) {
+                if (json.result && json.result.length > 0) {
                   responseContent = json.result
-                  console.log('[CLAUDE-DEBUG] Falling back to result field:', json.result.length, 'chars')
+                } else if (streamedContent && streamedContent.length > 0) {
+                  responseContent = streamedContent
                 }
+
+                // Format content: add line breaks between emoji sequences and text
+                responseContent = this.formatResponseContent(responseContent)
 
                 const response = {
                   content: responseContent,
@@ -376,6 +376,34 @@ class ClaudeService {
     args.push('-')
 
     return args
+  }
+
+  /**
+   * Format response content to add line breaks between emoji sequences and text
+   * @param {string} content - Raw response content
+   * @returns {string} Formatted content with line breaks
+   */
+  formatResponseContent(content) {
+    if (!content) return ''
+
+    // Pattern to match tool emojis (including variants with skin tones, etc.)
+    // This matches common tool emojis and emoji sequences
+    const emojiPattern = /[\u{1F300}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu
+
+    // Add line break after emoji sequence before text starts
+    // Match: one or more emojis (possibly with spaces between them) followed by a letter/word
+    let formatted = content.replace(
+      /((?:[\u{1F300}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}][\u{FE00}-\u{FE0F}]?\s*)+)([A-Za-z])/gu,
+      '$1\n$2'
+    )
+
+    // Add line break before emoji sequence if preceded by text (letter/punctuation)
+    formatted = formatted.replace(
+      /([A-Za-z.!?:])(\s*)((?:[\u{1F300}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}][\u{FE00}-\u{FE0F}]?\s*)+)/gu,
+      '$1\n$3'
+    )
+
+    return formatted
   }
 
   /**

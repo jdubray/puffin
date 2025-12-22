@@ -276,7 +276,7 @@ class PuffinApp {
       // Sprint actions
       'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
-      'clearSprintError',
+      'updateSprintStoryStatus', 'clearSprintError',
       // Stuck detection actions
       'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection'
     ]
@@ -399,7 +399,8 @@ class PuffinApp {
           ['CLEAR_PENDING_SPRINT_PLANNING', actions.clearPendingSprintPlanning],
           ['START_SPRINT_STORY_IMPLEMENTATION', actions.startSprintStoryImplementation],
           ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation],
-          ['COMPLETE_STORY_BRANCH', actions.completeStoryBranch]
+          ['COMPLETE_STORY_BRANCH', actions.completeStoryBranch],
+          ['UPDATE_SPRINT_STORY_STATUS', actions.updateSprintStoryStatus]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -818,6 +819,7 @@ class PuffinApp {
     this.modalManager.update(state)
     this.updateHeader(state)
     this.updateSprintHeader(state)
+    this.updateMetadataPanel(state)
     this.handleSprintError(state)
     this.handleStuckDetection(state)
 
@@ -999,90 +1001,123 @@ class PuffinApp {
   }
 
   /**
-   * Update sprint header visibility and content
+   * Update sprint context panel (left swimlane) visibility and content
    */
   updateSprintHeader(state) {
-    const sprintHeader = document.getElementById('sprint-header')
-    if (!sprintHeader) return
+    const sprintContextPanel = document.getElementById('sprint-context-panel')
+    if (!sprintContextPanel) return
 
     const sprint = state.activeSprint
+    const statusBadge = document.getElementById('sprint-status-badge')
+    const closeBtn = document.getElementById('sprint-close-btn')
+    const progressSection = document.getElementById('sprint-progress-section')
+    const storiesContainer = document.getElementById('sprint-stories')
+    const planBtn = document.getElementById('sprint-plan-btn')
+    const approveBtn = document.getElementById('sprint-approve-btn')
 
+    // No active sprint - show empty state
     if (!sprint) {
-      sprintHeader.classList.add('hidden')
+      if (statusBadge) {
+        statusBadge.textContent = 'No Sprint'
+        statusBadge.className = 'sprint-status-badge'
+      }
+      if (closeBtn) closeBtn.classList.add('hidden')
+      if (progressSection) progressSection.classList.add('hidden')
+      if (planBtn) planBtn.classList.add('hidden')
+      if (approveBtn) approveBtn.classList.add('hidden')
+      if (storiesContainer) {
+        storiesContainer.innerHTML = `
+          <div class="sprint-empty-state">
+            <p class="text-muted">No active sprint</p>
+            <p class="text-small">Select stories from the Backlog to start a sprint</p>
+          </div>
+        `
+      }
       return
     }
 
-    // Show sprint header
-    sprintHeader.classList.remove('hidden')
-
-    // Update status badge
-    const statusBadge = sprintHeader.querySelector('.sprint-status-badge')
+    // Active sprint - update status badge
     if (statusBadge) {
       statusBadge.textContent = this.formatSprintStatus(sprint.status)
       statusBadge.className = 'sprint-status-badge ' + sprint.status
     }
 
-    // Render sprint progress bar and story cards
-    const storiesContainer = document.getElementById('sprint-stories')
+    // Show close button
+    if (closeBtn) closeBtn.classList.remove('hidden')
+
+    // Render story cards and update progress
+    const sprintProgress = state.sprintProgress
+    const backlogStories = state.userStories || []
     if (storiesContainer && sprint.stories) {
       const showBranchButtons = sprint.status === 'planned' || sprint.status === 'implementing'
       const storyProgress = sprint.storyProgress || {}
-
-      // Use computed progress from state (includes blocked detection)
-      const sprintProgress = state.sprintProgress
-      const hasProgress = sprintProgress && (sprint.status === 'implementing' || sprintProgress.completedBranches > 0)
-      const progressBarHtml = hasProgress ? `
-        <div class="sprint-progress">
-          <div class="sprint-progress-label">
-            <span>Sprint Progress${sprintProgress.blockedStories > 0 ? ' ⚠️' : ''}</span>
-            <span>${sprintProgress.completedBranches}/${sprintProgress.totalBranches || sprint.stories.length * 3} branches (${sprintProgress.branchPercentage || 0}%)</span>
-          </div>
-          <div class="sprint-progress-bar">
-            <div class="sprint-progress-fill" style="width: ${sprintProgress.branchPercentage || 0}%"></div>
-          </div>
-        </div>
-      ` : ''
-
-      // Use per-story progress from computed state
       const storiesWithProgress = sprintProgress?.stories || []
 
-      storiesContainer.innerHTML = progressBarHtml + sprint.stories.map(story => {
+      // Calculate story-based progress using backlog as source of truth
+      const completedStoryCount = sprint.stories.filter(sprintStory => {
+        const backlogStory = backlogStories.find(bs => bs.id === sprintStory.id)
+        return backlogStory?.status === 'completed'
+      }).length
+      const totalStoryCount = sprint.stories.length
+      const storyCompletionPercent = totalStoryCount > 0 ? Math.round((completedStoryCount / totalStoryCount) * 100) : 0
+
+      storiesContainer.innerHTML = sprint.stories.map(story => {
         const computedStory = storiesWithProgress.find(s => s.id === story.id)
         const progress = storyProgress[story.id]
-        const storyStatus = computedStory?.status || progress?.status || 'pending'
+        // Look up status from backlog (source of truth) first
+        const backlogStory = backlogStories.find(bs => bs.id === story.id)
+        const storyStatus = backlogStory?.status === 'completed' ? 'completed' :
+                           (story.status === 'completed' ? 'completed' :
+                           (computedStory?.status || progress?.status || 'pending'))
         const isBlocked = computedStory?.isBlocked || false
         const storyStatusClass = storyStatus === 'completed' ? 'story-completed' : storyStatus === 'in_progress' ? 'story-in-progress' : ''
-        const storyStatusIcon = storyStatus === 'completed' ? '✅' : isBlocked ? '⚠️' : ''
+        const isCompleted = storyStatus === 'completed'
 
         return `
           <div class="sprint-story-card ${storyStatusClass}${isBlocked ? ' story-blocked' : ''}" data-story-id="${story.id}">
-            <div class="story-header-row">
-              <h4>${this.escapeHtml(story.title)} ${storyStatusIcon}</h4>
+            <div class="story-header-with-indicator">
+              <button class="story-complete-btn ${isCompleted ? 'completed' : ''}"
+                      data-story-id="${story.id}"
+                      title="${isCompleted ? 'Mark as incomplete' : 'Mark as complete'}">
+                <span class="complete-icon">${isCompleted ? '✓' : '○'}</span>
+              </button>
+              <h4>${this.escapeHtml(story.title)}</h4>
             </div>
             <p>${this.escapeHtml(story.description || '')}</p>
             ${showBranchButtons ? this.renderStoryBranchButtons(story, progress) : ''}
           </div>
         `
       }).join('')
+
+      // Update progress section with story-based completion
+      if (progressSection) {
+        if (totalStoryCount > 0) {
+          progressSection.classList.remove('hidden')
+          const progressPercent = document.getElementById('sprint-progress-percent')
+          const progressFill = document.getElementById('sprint-progress-fill')
+          if (progressPercent) {
+            progressPercent.textContent = `${completedStoryCount}/${totalStoryCount} (${storyCompletionPercent}%)`
+          }
+          if (progressFill) {
+            progressFill.style.width = `${storyCompletionPercent}%`
+          }
+        } else {
+          progressSection.classList.add('hidden')
+        }
+      }
     }
 
     // Update action buttons based on status
-    const planBtn = document.getElementById('sprint-plan-btn')
-    const approveBtn = document.getElementById('sprint-approve-btn')
-
     if (planBtn && approveBtn) {
-      // Show Plan button only when sprint is created
       planBtn.classList.toggle('hidden', sprint.status !== 'created')
-      // Show Approve button only when sprint is planning (after plan generated)
       approveBtn.classList.toggle('hidden', sprint.status !== 'planning')
     }
 
     // Bind event handlers (only once)
-    if (!sprintHeader.dataset.bound) {
-      sprintHeader.dataset.bound = 'true'
+    if (!sprintContextPanel.dataset.bound) {
+      sprintContextPanel.dataset.bound = 'true'
 
       // Close button
-      const closeBtn = document.getElementById('sprint-close-btn')
       if (closeBtn) {
         closeBtn.addEventListener('click', () => {
           if (confirm('Close this sprint? You can create a new one from the Backlog.')) {
@@ -1107,7 +1142,7 @@ class PuffinApp {
       }
 
       // Story branch button clicks (event delegation)
-      sprintHeader.addEventListener('click', (e) => {
+      sprintContextPanel.addEventListener('click', (e) => {
         const branchBtn = e.target.closest('.story-branch-btn')
         if (branchBtn) {
           const storyId = branchBtn.dataset.storyId
@@ -1116,8 +1151,113 @@ class PuffinApp {
           console.log('[SPRINT] Starting implementation:', { storyId, branchType, storyTitle })
           this.intents.startSprintStoryImplementation(storyId, branchType)
           this.showToast(`Starting ${branchType} implementation for "${storyTitle}"`, 'info')
+          return
+        }
+
+        // Story completion button clicks (event delegation)
+        const completeBtn = e.target.closest('.story-complete-btn')
+        if (completeBtn) {
+          const storyId = completeBtn.dataset.storyId
+          const isCurrentlyCompleted = completeBtn.classList.contains('completed')
+          const newStatus = isCurrentlyCompleted ? 'pending' : 'completed'
+
+          console.log('[SPRINT] Toggling story completion:', { storyId, newStatus })
+
+          // Update the user story status (syncs to backlog)
+          this.intents.updateUserStory(storyId, { status: newStatus })
+
+          // Also update the sprint's copy of the story
+          this.intents.updateSprintStoryStatus(storyId, newStatus)
+
+          const storyCard = completeBtn.closest('.sprint-story-card')
+          const storyTitle = storyCard?.querySelector('h4')?.textContent || 'Story'
+          this.showToast(
+            newStatus === 'completed'
+              ? `"${storyTitle}" marked as complete`
+              : `"${storyTitle}" marked as incomplete`,
+            newStatus === 'completed' ? 'success' : 'info'
+          )
         }
       })
+    }
+  }
+
+  /**
+   * Render story status indicator icon
+   */
+  renderStoryStatusIndicator(status, isBlocked) {
+    if (isBlocked) {
+      return '<span class="story-status-indicator status-blocked" title="Blocked">!</span>'
+    }
+    switch (status) {
+      case 'completed':
+        return '<span class="story-status-indicator status-completed" title="Completed">✓</span>'
+      case 'in_progress':
+        return '<span class="story-status-indicator status-in-progress" title="In Progress">●</span>'
+      default:
+        return '<span class="story-status-indicator status-pending" title="Pending">○</span>'
+    }
+  }
+
+  /**
+   * Update the right swimlane metadata panel with thread stats and handoff info
+   */
+  updateMetadataPanel(state) {
+    // Update thread statistics
+    const turnsEl = document.getElementById('stat-turns')
+    const modelEl = document.getElementById('stat-model')
+    const createdEl = document.getElementById('stat-created')
+    const handoffSection = document.getElementById('handoff-section')
+    const handoffDisplay = document.getElementById('handoff-display')
+
+    // Get current thread info
+    const activeBranch = state.history?.activeBranch
+    const activePromptId = state.history?.activePromptId
+    const branch = activeBranch ? state.history?.branches?.[activeBranch] : null
+    const thread = branch?.prompts?.find(p => p.id === activePromptId)
+
+    // Update turns count
+    if (turnsEl) {
+      const turnCount = thread?.turns?.length || 0
+      turnsEl.textContent = turnCount.toString()
+    }
+
+    // Update model
+    if (modelEl) {
+      const model = thread?.model || state.settings?.defaultModel || '-'
+      modelEl.textContent = model.charAt(0).toUpperCase() + model.slice(1)
+    }
+
+    // Update created date
+    if (createdEl) {
+      if (thread?.createdAt) {
+        const date = new Date(thread.createdAt)
+        createdEl.textContent = date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      } else {
+        createdEl.textContent = '-'
+      }
+    }
+
+    // Update handoff section
+    if (handoffSection && handoffDisplay) {
+      const handoffContext = thread?.handoffContext
+      if (handoffContext) {
+        handoffSection.classList.remove('hidden')
+        handoffDisplay.innerHTML = `
+          <div class="handoff-source">
+            <span class="text-small text-muted">From: ${this.escapeHtml(handoffContext.sourceThreadName || 'Unknown')}</span>
+          </div>
+          <pre>${this.escapeHtml(handoffContext.summary || '')}</pre>
+        `
+      } else {
+        handoffSection.classList.add('hidden')
+        handoffDisplay.innerHTML = ''
+      }
     }
   }
 

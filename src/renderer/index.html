@@ -304,111 +304,176 @@
 
         <!-- Prompt View -->
         <section id="prompt-view" class="view active">
-          <div class="view-content prompt-layout">
-            <!-- Branch Tabs -->
-            <div class="branch-tabs">
-              <button class="branch-tab active" data-branch="specifications">Specifications</button>
-              <button class="branch-tab" data-branch="architecture">Architecture</button>
-              <button class="branch-tab" data-branch="ui">UI</button>
-              <button class="branch-tab" data-branch="backend">Backend</button>
-              <button class="branch-tab" data-branch="deployment">Deployment</button>
-              <button class="branch-tab" data-branch="tmp">Tmp</button>
-            </div>
-            <!-- Sprint Header (visible when sprint is active) -->
-            <div id="sprint-header" class="sprint-header hidden">
-              <div class="sprint-header-content">
-                <div class="sprint-title-row">
-                  <h3 class="sprint-title">Sprint</h3>
-                  <span class="sprint-status-badge">Created</span>
-                  <button id="sprint-close-btn" class="sprint-close-btn" title="Close Sprint">×</button>
+          <div class="view-content prompt-layout swimlane-container">
+            <!-- Left Swimlane: Sprint Context Panel -->
+            <aside class="swimlane swimlane-left">
+              <div id="sprint-context-panel" class="sprint-context-panel">
+                <!-- Sprint Header -->
+                <div class="sprint-panel-header">
+                  <div class="sprint-title-row">
+                    <h3 class="sprint-title">Sprint</h3>
+                    <span id="sprint-status-badge" class="sprint-status-badge">No Sprint</span>
+                    <button id="sprint-close-btn" class="sprint-close-btn hidden" title="Close Sprint">&times;</button>
+                  </div>
                 </div>
-                <div class="sprint-stories" id="sprint-stories">
-                  <!-- Story cards will be rendered here -->
+                <!-- Sprint Progress -->
+                <div id="sprint-progress-section" class="sprint-progress-section hidden">
+                  <div class="sprint-progress">
+                    <div class="sprint-progress-label">
+                      <span>Progress</span>
+                      <span id="sprint-progress-percent">0%</span>
+                    </div>
+                    <div class="sprint-progress-bar">
+                      <div id="sprint-progress-fill" class="sprint-progress-fill" style="width: 0%"></div>
+                    </div>
+                  </div>
                 </div>
-                <div class="sprint-actions" id="sprint-actions">
-                  <button id="sprint-plan-btn" class="btn primary">Plan</button>
+                <!-- Story Cards -->
+                <div class="sprint-stories-container">
+                  <div id="sprint-stories" class="sprint-stories">
+                    <!-- Story cards will be rendered here -->
+                    <div class="sprint-empty-state">
+                      <p class="text-muted">No active sprint</p>
+                      <p class="text-small">Select stories from the Backlog to start a sprint</p>
+                    </div>
+                  </div>
+                </div>
+                <!-- Sprint Actions -->
+                <div class="sprint-panel-actions" id="sprint-actions">
+                  <button id="sprint-plan-btn" class="btn primary hidden">Plan</button>
                   <button id="sprint-approve-btn" class="btn success hidden">Approve Plan</button>
                 </div>
               </div>
-            </div>
+            </aside>
 
-            <div class="response-area">
-              <div id="response-content" class="response-content">
-                <p class="placeholder">Select a thread and start a conversation with Claude...</p>
+            <!-- Middle Swimlane: Conversation View -->
+            <main class="swimlane swimlane-middle">
+              <!-- Branch Tabs -->
+              <div class="branch-tabs">
+                <button class="branch-tab active" data-branch="specifications">Specifications</button>
+                <button class="branch-tab" data-branch="architecture">Architecture</button>
+                <button class="branch-tab" data-branch="ui">UI</button>
+                <button class="branch-tab" data-branch="backend">Backend</button>
+                <button class="branch-tab" data-branch="deployment">Deployment</button>
+                <button class="branch-tab" data-branch="tmp">Tmp</button>
               </div>
-            </div>
-            <div class="prompt-area">
-              <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
-              <div class="prompt-options">
-                <div class="prompt-option-group">
-                  <label for="thread-model" class="prompt-select-label">Model:</label>
-                  <select id="thread-model" class="prompt-model-select" title="Select model for this thread">
-                    <option value="opus" selected>Opus</option>
-                    <option value="sonnet">Sonnet</option>
-                    <option value="haiku">Haiku</option>
-                  </select>
-                </div>
-                <label class="prompt-checkbox" title="Derive user stories from this prompt before implementation">
-                  <input type="checkbox" id="derive-stories-checkbox">
-                  <span>Derive User Stories</span>
-                </label>
-                <div class="prompt-option-group input-type-group hidden" id="input-type-group">
-                  <label for="input-type" class="prompt-select-label">Input Type:</label>
-                  <select id="input-type" class="prompt-model-select" title="Classify this input for tracking">
-                    <option value="technical" selected>Technical</option>
-                    <option value="clarification">Clarification</option>
-                    <option value="correction">Correction</option>
-                    <option value="expansion">Expansion</option>
-                    <option value="approval">Approval</option>
-                  </select>
+
+              <div class="response-area">
+                <div id="response-content" class="response-content">
+                  <p class="placeholder">Select a thread and start a conversation with Claude...</p>
                 </div>
               </div>
-              <div class="prompt-actions">
-                <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread">
-                  Create New Thread
-                </button>
-                <button id="cancel-prompt-btn" class="btn secondary hidden">Cancel</button>
-                <button id="submit-prompt-btn" class="btn primary">
-                  <span class="btn-text">Send</span>
-                  <span class="btn-loading hidden">...</span>
-                </button>
-                <div class="dropdown" id="include-gui-dropdown">
-                  <button id="include-gui-btn" class="btn secondary" title="Include GUI Design">
-                    Include GUI ▾
+              <div class="prompt-area">
+                <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
+                <div class="prompt-options">
+                  <div class="prompt-option-group">
+                    <label for="thread-model" class="prompt-select-label">Model:</label>
+                    <select id="thread-model" class="prompt-model-select" title="Select model for this thread">
+                      <option value="opus" selected>Opus</option>
+                      <option value="sonnet">Sonnet</option>
+                      <option value="haiku">Haiku</option>
+                    </select>
+                  </div>
+                  <label class="prompt-checkbox" title="Derive user stories from this prompt before implementation">
+                    <input type="checkbox" id="derive-stories-checkbox">
+                    <span>Derive User Stories</span>
+                  </label>
+                  <div class="prompt-option-group input-type-group hidden" id="input-type-group">
+                    <label for="input-type" class="prompt-select-label">Input Type:</label>
+                    <select id="input-type" class="prompt-model-select" title="Classify this input for tracking">
+                      <option value="technical" selected>Technical</option>
+                      <option value="clarification">Clarification</option>
+                      <option value="correction">Correction</option>
+                      <option value="expansion">Expansion</option>
+                      <option value="approval">Approval</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="prompt-actions">
+                  <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread">
+                    Create New Thread
                   </button>
-                  <div class="dropdown-menu" id="include-gui-menu">
-                    <!-- Populated dynamically -->
+                  <button id="cancel-prompt-btn" class="btn secondary hidden">Cancel</button>
+                  <button id="submit-prompt-btn" class="btn primary">
+                    <span class="btn-text">Send</span>
+                    <span class="btn-loading hidden">...</span>
+                  </button>
+                  <div class="dropdown" id="include-gui-dropdown">
+                    <button id="include-gui-btn" class="btn secondary" title="Include GUI Design">
+                      Include GUI ▾
+                    </button>
+                    <div class="dropdown-menu" id="include-gui-menu">
+                      <!-- Populated dynamically -->
+                    </div>
+                  </div>
+                </div>
+                <!-- Handoff Ready Button -->
+                <div class="handoff-actions">
+                  <button id="handoff-ready-btn" class="btn handoff-btn" title="Prepare handoff summary for this thread">
+                    <span class="handoff-icon">🤝</span>
+                    <span class="handoff-text">Handoff Ready</span>
+                  </button>
+                </div>
+                <!-- Iteration Counter (visible during sprint execution) -->
+                <div id="iteration-counter" class="iteration-counter hidden">
+                  <div class="iteration-stats">
+                    <span class="iteration-label">Iterations:</span>
+                    <span id="iteration-current" class="iteration-value">0</span>
+                    <span class="iteration-separator">/</span>
+                    <span id="iteration-max" class="iteration-value">10</span>
+                  </div>
+                  <div class="continuation-stats">
+                    <span class="continuation-label">Continuations:</span>
+                    <span id="continuation-count" class="continuation-value">0</span>
+                  </div>
+                  <div id="auto-continue-timer" class="auto-continue-timer hidden">
+                    <span class="timer-label">Auto-continue in:</span>
+                    <span id="timer-countdown" class="timer-value">20</span>
+                    <span class="timer-unit">s</span>
+                    <button id="timer-skip-btn" class="btn small outline" title="Continue now">Skip</button>
+                    <button id="timer-cancel-btn" class="btn small secondary" title="Cancel auto-continue">Cancel</button>
                   </div>
                 </div>
               </div>
-              <!-- Handoff Ready Button -->
-              <div class="handoff-actions">
-                <button id="handoff-ready-btn" class="btn handoff-btn" title="Prepare handoff summary for this thread">
-                  <span class="handoff-icon">🤝</span>
-                  <span class="handoff-text">Handoff Ready</span>
-                </button>
+            </main>
+
+            <!-- Right Swimlane: Metadata & Handoff -->
+            <aside class="swimlane swimlane-right">
+              <div id="metadata-panel" class="metadata-panel">
+                <!-- Thread Statistics -->
+                <div class="metadata-section">
+                  <h4 class="metadata-section-title">Thread Stats</h4>
+                  <div class="stats-grid">
+                    <div class="stat-item">
+                      <span class="stat-label">Turns</span>
+                      <span id="stat-turns" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">Model</span>
+                      <span id="stat-model" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">Created</span>
+                      <span id="stat-created" class="stat-value">-</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Handoff Summary -->
+                <div id="handoff-section" class="metadata-section handoff-section hidden">
+                  <h4 class="metadata-section-title">Handoff Context</h4>
+                  <div id="handoff-display" class="handoff-display">
+                    <!-- Handoff summary content rendered here -->
+                  </div>
+                </div>
+                <!-- Notes placeholder -->
+                <div class="metadata-section notes-section">
+                  <h4 class="metadata-section-title">Notes</h4>
+                  <div class="notes-placeholder">
+                    <p class="text-muted text-small">Thread notes will appear here</p>
+                  </div>
+                </div>
               </div>
-              <!-- Iteration Counter (visible during sprint execution) -->
-              <div id="iteration-counter" class="iteration-counter hidden">
-                <div class="iteration-stats">
-                  <span class="iteration-label">Iterations:</span>
-                  <span id="iteration-current" class="iteration-value">0</span>
-                  <span class="iteration-separator">/</span>
-                  <span id="iteration-max" class="iteration-value">10</span>
-                </div>
-                <div class="continuation-stats">
-                  <span class="continuation-label">Continuations:</span>
-                  <span id="continuation-count" class="continuation-value">0</span>
-                </div>
-                <div id="auto-continue-timer" class="auto-continue-timer hidden">
-                  <span class="timer-label">Auto-continue in:</span>
-                  <span id="timer-countdown" class="timer-value">20</span>
-                  <span class="timer-unit">s</span>
-                  <button id="timer-skip-btn" class="btn small outline" title="Continue now">Skip</button>
-                  <button id="timer-cancel-btn" class="btn small secondary" title="Cancel auto-continue">Cancel</button>
-                </div>
-              </div>
-            </div>
+            </aside>
           </div>
         </section>
 

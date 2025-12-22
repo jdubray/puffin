@@ -941,6 +941,16 @@ export const completeStoryBranch = (storyId, branchType) => ({
   }
 })
 
+// Update sprint story status (for completion toggle)
+export const updateSprintStoryStatus = (storyId, status) => ({
+  type: 'UPDATE_SPRINT_STORY_STATUS',
+  payload: {
+    storyId,
+    status,
+    timestamp: Date.now()
+  }
+})
+
 // Clear sprint validation error
 export const clearSprintError = () => ({
   type: 'CLEAR_SPRINT_ERROR',

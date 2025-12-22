@@ -1826,11 +1826,28 @@ export const createSprintAcceptor = model => proposal => {
     // Generate sprint ID
     const sprintId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
 
+    // Update story status to in-progress in both the sprint copy and the backlog
+    const sprintStories = uniqueStories.map(story => ({
+      ...story,
+      status: 'in-progress',
+      updatedAt: timestamp
+    }))
+
+    // Also update the stories in the userStories array (backlog)
+    sprintStories.forEach(sprintStory => {
+      const backlogStory = model.userStories.find(s => s.id === sprintStory.id)
+      if (backlogStory) {
+        backlogStory.status = 'in-progress'
+        backlogStory.updatedAt = timestamp
+      }
+    })
+
     // Create the sprint with deduplicated stories
     model.activeSprint = {
       id: sprintId,
-      stories: uniqueStories,
+      stories: sprintStories,
       status: 'created', // 'created' | 'planning' | 'planned' | 'implementing'
+      storyProgress: {}, // Initialize empty story progress
       promptId: null,
       plan: null,
       createdAt: timestamp
@@ -2121,6 +2138,66 @@ export const completeStoryBranchAcceptor = model => proposal => {
     model._sprintProgressUpdated = true
 
     console.log('[SPRINT] Marked branch as completed:', { storyId, branchType, allStoriesCompleted })
+  }
+}
+
+// Update sprint story status (for manual completion toggle)
+export const updateSprintStoryStatusAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_SPRINT_STORY_STATUS') {
+    const { storyId, status, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) {
+      console.warn('[SPRINT] Cannot update story status - no active sprint')
+      return
+    }
+
+    // Find and update the story in the sprint's stories array
+    const sprintStory = sprint.stories.find(s => s.id === storyId)
+    if (sprintStory) {
+      sprintStory.status = status
+      sprintStory.updatedAt = timestamp
+      if (status === 'completed') {
+        sprintStory.completedAt = timestamp
+      }
+    }
+
+    // Initialize storyProgress if not exists
+    if (!sprint.storyProgress) {
+      sprint.storyProgress = {}
+    }
+
+    // Initialize progress for this story if not exists
+    if (!sprint.storyProgress[storyId]) {
+      sprint.storyProgress[storyId] = {
+        branches: {}
+      }
+    }
+
+    // Update the story progress status
+    sprint.storyProgress[storyId].status = status
+    if (status === 'completed') {
+      sprint.storyProgress[storyId].completedAt = timestamp
+    } else {
+      sprint.storyProgress[storyId].completedAt = null
+    }
+
+    // Check if all stories in the sprint are completed
+    const allStoriesCompleted = sprint.stories.every(story => story.status === 'completed')
+
+    if (allStoriesCompleted && sprint.stories.length > 0) {
+      sprint.status = 'completed'
+      sprint.completedAt = timestamp
+    } else if (sprint.status === 'completed') {
+      // If sprint was completed but now a story is marked incomplete
+      sprint.status = 'implementing'
+      sprint.completedAt = null
+    }
+
+    // Trigger persistence
+    model._sprintProgressUpdated = true
+
+    console.log('[SPRINT] Updated story status:', { storyId, status, allStoriesCompleted })
   }
 }
 
@@ -2573,6 +2650,7 @@ export const acceptors = [
   startSprintStoryImplementationAcceptor,
   clearPendingStoryImplementationAcceptor,
   completeStoryBranchAcceptor,
+  updateSprintStoryStatusAcceptor,
   clearSprintErrorAcceptor,
 
   // Stuck Detection

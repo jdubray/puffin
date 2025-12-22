@@ -259,6 +259,13 @@ a:hover {
   margin: 0 auto;
 }
 
+/* Override for swimlane layout - use full width */
+.view-content.swimlane-container {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 /* Forms */
 .form-group {
   margin-bottom: 1.25rem;

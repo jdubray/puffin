@@ -187,23 +187,15 @@ class ClaudeService {
                 completionCalled = true
                 console.log('[CLAUDE-DEBUG] Calling onComplete from result message handler')
 
-                // Build response using the more complete content source
-                // Sometimes result field has more complete text than streamed content
+                // Build response - prefer streamedContent as it has proper formatting with emojis
+                // Only fall back to json.result if streamedContent is empty
                 let responseContent = ''
-                const hasStreamedContent = streamedContent && streamedContent.length > 0
-                const hasResultContent = json.result && json.result.length > 0
-
-                if (hasStreamedContent && hasResultContent) {
-                  // Use whichever has more content (result might be more complete)
-                  responseContent = json.result.length > streamedContent.length
-                    ? json.result
-                    : streamedContent
-                  console.log('[CLAUDE-DEBUG] Chose content source:',
-                    responseContent === json.result ? 'result field' : 'streamed content')
-                } else if (hasStreamedContent) {
+                if (streamedContent && streamedContent.length > 0) {
                   responseContent = streamedContent
-                } else if (hasResultContent) {
+                  console.log('[CLAUDE-DEBUG] Using streamedContent with emojis:', streamedContent.length, 'chars')
+                } else if (json.result && json.result.length > 0) {
                   responseContent = json.result
+                  console.log('[CLAUDE-DEBUG] Falling back to result field:', json.result.length, 'chars')
                 }
 
                 const response = {

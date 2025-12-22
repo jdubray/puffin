@@ -1067,6 +1067,13 @@ class PuffinApp {
       const totalStoryCount = sprint.stories.length
       const storyCompletionPercent = totalStoryCount > 0 ? Math.round((completedStoryCount / totalStoryCount) * 100) : 0
 
+      // Capture which criteria sections are currently expanded before re-rendering
+      const expandedSections = new Set()
+      storiesContainer.querySelectorAll('.story-criteria-section.expanded').forEach(section => {
+        const storyId = section.dataset.storyId
+        if (storyId) expandedSections.add(storyId)
+      })
+
       storiesContainer.innerHTML = sprint.stories.map(story => {
         const computedStory = storiesWithProgress.find(s => s.id === story.id)
         const progress = storyProgress[story.id]
@@ -1085,6 +1092,9 @@ class PuffinApp {
         const completedCriteria = criteriaList.filter(c => c.checked).length
         const criteriaPercentage = totalCriteria > 0 ? Math.round((completedCriteria / totalCriteria) * 100) : 0
 
+        // Check if this section was expanded before re-render
+        const isExpanded = expandedSections.has(story.id)
+
         return `
           <div class="sprint-story-card ${storyStatusClass}${isBlocked ? ' story-blocked' : ''}" data-story-id="${story.id}">
             <div class="story-header-with-indicator">
@@ -1097,7 +1107,7 @@ class PuffinApp {
             </div>
             <p>${this.escapeHtml(story.description || '')}</p>
             ${totalCriteria > 0 ? `
-              <div class="story-criteria-section" data-story-id="${story.id}">
+              <div class="story-criteria-section${isExpanded ? ' expanded' : ''}" data-story-id="${story.id}">
                 <button class="criteria-toggle-btn" data-story-id="${story.id}" title="Toggle acceptance criteria">
                   <span class="criteria-toggle-icon">▶</span>
                   <span class="criteria-label">Acceptance Criteria</span>
@@ -1106,7 +1116,7 @@ class PuffinApp {
                     <div class="criteria-progress-fill-inline" style="width: ${criteriaPercentage}%"></div>
                   </div>
                 </button>
-                <ul class="criteria-checklist collapsed">
+                <ul class="criteria-checklist${isExpanded ? ' expanded' : ''}">
                   ${criteriaList.map(c => `
                     <li class="criteria-item ${c.checked ? 'checked' : ''}">
                       <label class="criteria-checkbox-label">

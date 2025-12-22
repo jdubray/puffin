@@ -407,13 +407,6 @@
                     </div>
                   </div>
                 </div>
-                <!-- Handoff Ready Button -->
-                <div class="handoff-actions">
-                  <button id="handoff-ready-btn" class="btn handoff-btn" title="Prepare handoff summary for this thread">
-                    <span class="handoff-icon">🤝</span>
-                    <span class="handoff-text">Handoff Ready</span>
-                  </button>
-                </div>
                 <!-- Iteration Counter (visible during sprint execution) -->
                 <div id="iteration-counter" class="iteration-counter hidden">
                   <div class="iteration-stats">
@@ -466,18 +459,41 @@
                     </div>
                   </div>
                 </div>
-                <!-- Handoff Summary -->
-                <div id="handoff-section" class="metadata-section handoff-section hidden">
-                  <h4 class="metadata-section-title">Handoff Context</h4>
-                  <div id="handoff-display" class="handoff-display">
-                    <!-- Handoff summary content rendered here -->
+                <!-- Incoming Handoff Context (from another thread) -->
+                <div id="handoff-incoming-section" class="metadata-section handoff-section hidden">
+                  <h4 class="metadata-section-title">Incoming Handoff</h4>
+                  <div id="handoff-incoming-display" class="handoff-display">
+                    <!-- Incoming handoff summary rendered here -->
                   </div>
                 </div>
-                <!-- Handoff Summary / Notes -->
-                <div class="metadata-section notes-section">
-                  <h4 class="metadata-section-title">Handoff Summary</h4>
-                  <div id="notes-content" class="notes-content">
-                    <p class="text-muted text-small">No handoff summary for this thread</p>
+                <!-- Generate Handoff Section -->
+                <div class="metadata-section handoff-generate-section">
+                  <h4 class="metadata-section-title">Handoff</h4>
+                  <div id="handoff-generate-content" class="handoff-generate-content">
+                    <button id="generate-handoff-btn" class="btn handoff-btn handoff-btn-panel" title="Generate handoff summary from this thread">
+                      <span class="handoff-icon">✨</span>
+                      <span class="handoff-text">Generate Handoff</span>
+                    </button>
+                  </div>
+                  <!-- Generated summary display (hidden initially) -->
+                  <div id="handoff-generated-section" class="handoff-generated hidden">
+                    <div class="handoff-branch-buttons">
+                      <p class="handoff-branch-label">Send to branch:</p>
+                      <div id="handoff-branch-grid" class="handoff-branch-grid">
+                        <!-- Branch buttons rendered dynamically -->
+                      </div>
+                    </div>
+                    <div class="handoff-actions-row">
+                      <button id="handoff-regenerate-btn" class="btn small secondary handoff-regenerate-btn">
+                        Regenerate
+                      </button>
+                      <button id="handoff-clear-btn" class="btn small outline handoff-clear-btn">
+                        Clear
+                      </button>
+                    </div>
+                    <div id="handoff-generated-summary" class="handoff-generated-summary">
+                      <!-- Generated summary will be rendered here -->
+                    </div>
                   </div>
                 </div>
               </div>

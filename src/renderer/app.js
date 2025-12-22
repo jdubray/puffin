@@ -547,6 +547,97 @@ class PuffinApp {
 
     // Profile menu IPC handlers
     this.setupProfileMenuHandlers()
+
+    // Handoff panel event handlers
+    this.setupHandoffPanelHandlers()
+  }
+
+  /**
+   * Setup handoff panel event handlers
+   */
+  setupHandoffPanelHandlers() {
+    const generateBtn = document.getElementById('generate-handoff-btn')
+    const regenerateBtn = document.getElementById('handoff-regenerate-btn')
+    const clearBtn = document.getElementById('handoff-clear-btn')
+    const branchGrid = document.getElementById('handoff-branch-grid')
+
+    // Generate handoff button
+    if (generateBtn) {
+      generateBtn.addEventListener('click', () => {
+        this.generateHandoffSummary()
+      })
+    }
+
+    // Regenerate button
+    if (regenerateBtn) {
+      regenerateBtn.addEventListener('click', () => {
+        this.generateHandoffSummary()
+      })
+    }
+
+    // Clear button
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.clearHandoffSummary()
+      })
+    }
+
+    // Branch button clicks (event delegation)
+    if (branchGrid) {
+      branchGrid.addEventListener('click', (e) => {
+        const branchBtn = e.target.closest('.handoff-branch-btn')
+        if (branchBtn) {
+          const branchId = branchBtn.dataset.branch
+          const branchName = branchBtn.dataset.branchName
+          this.sendHandoffToBranch(branchId, branchName)
+        }
+      })
+    }
+
+    // Restore any persisted handoff summary on load
+    this.restoreHandoffSummary()
+  }
+
+  /**
+   * Clear the generated handoff summary
+   */
+  clearHandoffSummary() {
+    this.resetHandoffPanel()
+    // Also clear from localStorage
+    localStorage.removeItem('puffin-handoff-summary')
+    this.showToast('Handoff summary cleared', 'info')
+  }
+
+  /**
+   * Restore handoff summary from localStorage
+   */
+  restoreHandoffSummary() {
+    try {
+      const saved = localStorage.getItem('puffin-handoff-summary')
+      if (!saved) return
+
+      const data = JSON.parse(saved)
+      if (!data || !data.summary) return
+
+      this.generatedHandoffSummary = data
+
+      // Restore the UI
+      const generateBtn = document.getElementById('generate-handoff-btn')
+      const generatedSection = document.getElementById('handoff-generated-section')
+      const summaryDisplay = document.getElementById('handoff-generated-summary')
+      const branchGrid = document.getElementById('handoff-branch-grid')
+
+      if (generateBtn && generatedSection && summaryDisplay) {
+        summaryDisplay.innerHTML = `<div class="handoff-summary-content">${this.renderMarkdown(data.summary)}</div>`
+        this.renderHandoffBranchButtons(branchGrid, data.sourceBranch)
+        generatedSection.classList.remove('hidden')
+        generateBtn.style.display = 'none'
+        console.log('[HANDOFF] Restored saved handoff summary from', data.sourceBranch)
+      }
+    } catch (error) {
+      console.error('[HANDOFF] Error restoring handoff summary:', error)
+      localStorage.removeItem('puffin-handoff-summary')
+    }
   }
 
   /**
@@ -1392,16 +1483,271 @@ class PuffinApp {
       }
     }
 
-    // Update notes/handoff summary section
-    const notesContent = document.getElementById('notes-content')
-    if (notesContent) {
-      const handoffContext = thread?.handoffContext
-      if (handoffContext?.summary) {
-        notesContent.innerHTML = `<pre class="handoff-summary-text">${this.escapeHtml(handoffContext.summary)}</pre>`
-      } else {
-        notesContent.innerHTML = '<p class="text-muted text-small">No handoff summary for this thread</p>'
-      }
+  }
+
+  /**
+   * Generate handoff summary using Claude AI
+   * Collects all turns from the current thread and sends to Claude for summarization
+   */
+  async generateHandoffSummary() {
+    const generateBtn = document.getElementById('generate-handoff-btn')
+    const generatedSection = document.getElementById('handoff-generated-section')
+    const summaryDisplay = document.getElementById('handoff-generated-summary')
+    const branchGrid = document.getElementById('handoff-branch-grid')
+
+    if (!generateBtn || !generatedSection || !summaryDisplay) {
+      console.error('[HANDOFF] Missing required DOM elements')
+      return
     }
+
+    // Get current thread context
+    const activeBranch = this.state?.history?.activeBranch
+    const activePromptId = this.state?.history?.activePromptId
+    const branch = activeBranch ? this.state?.history?.raw?.branches?.[activeBranch] : null
+    const prompts = branch?.prompts || []
+
+    if (prompts.length === 0) {
+      this.showToast('No thread content to generate handoff from', 'warning')
+      return
+    }
+
+    // Show loading state
+    generateBtn.disabled = true
+    generateBtn.innerHTML = '<span class="handoff-icon">⏳</span><span class="handoff-text">Generating...</span>'
+
+    try {
+      // Build conversation context from all prompts in the thread
+      const conversationContext = this.buildConversationContext(prompts, activeBranch)
+
+      // Create the prompt for Claude
+      const handoffPrompt = `You are helping create a handoff summary for a development thread. The goal is to summarize what was accomplished and provide context for another developer to continue the work in a different branch.
+
+Here is the conversation from the "${activeBranch}" branch:
+
+${conversationContext}
+
+---
+
+Please create a concise handoff summary with these sections:
+
+1. **What Was Accomplished** - Brief summary of the main work done (2-3 sentences)
+2. **Key Changes** - List the most important files modified or created (if mentioned)
+3. **Current State** - Where the work left off, any pending items
+4. **Recommendations** - What the next developer should focus on or be aware of
+
+Keep it concise but informative. Use markdown formatting.`
+
+      console.log('[HANDOFF] Sending prompt to Claude for summary generation')
+
+      // Call Claude API
+      const response = await window.puffin.claude.sendPrompt(handoffPrompt, {
+        model: 'haiku',
+        maxTurns: 1
+      })
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to generate summary')
+      }
+
+      console.log('[HANDOFF] Received summary from Claude')
+
+      // Store the generated summary for later use
+      this.generatedHandoffSummary = {
+        summary: response.response,
+        sourceThreadId: activePromptId,
+        sourceThreadName: this.getThreadTitle(prompts),
+        sourceBranch: activeBranch,
+        createdAt: Date.now()
+      }
+
+      // Persist to localStorage so it survives navigation
+      localStorage.setItem('puffin-handoff-summary', JSON.stringify(this.generatedHandoffSummary))
+
+      // Display the generated summary
+      summaryDisplay.innerHTML = `<div class="handoff-summary-content">${this.renderMarkdown(response.response)}</div>`
+
+      // Render branch buttons (exclude current branch)
+      this.renderHandoffBranchButtons(branchGrid, activeBranch)
+
+      // Show the generated section
+      generatedSection.classList.remove('hidden')
+
+      // Hide the generate button
+      generateBtn.style.display = 'none'
+
+      this.showToast('Handoff summary generated!', 'success')
+
+    } catch (error) {
+      console.error('[HANDOFF] Error generating summary:', error)
+      this.showToast(`Failed to generate summary: ${error.message}`, 'error')
+    } finally {
+      // Reset button state
+      generateBtn.disabled = false
+      generateBtn.innerHTML = '<span class="handoff-icon">✨</span><span class="handoff-text">Generate Handoff</span>'
+    }
+  }
+
+  /**
+   * Build conversation context from prompts for handoff summary
+   */
+  buildConversationContext(prompts, branchName) {
+    const lines = []
+
+    prompts.forEach((prompt, index) => {
+      // Add user prompt
+      if (prompt.content) {
+        lines.push(`### Turn ${index + 1} - User Request:`)
+        lines.push(prompt.content.substring(0, 2000)) // Limit each turn to prevent token overflow
+        lines.push('')
+      }
+
+      // Add assistant response
+      if (prompt.response?.content) {
+        lines.push(`### Turn ${index + 1} - Assistant Response:`)
+        lines.push(prompt.response.content.substring(0, 2000)) // Limit response too
+        lines.push('')
+
+        // Note files modified
+        if (prompt.response.filesModified?.length > 0) {
+          lines.push(`Files modified: ${prompt.response.filesModified.slice(0, 10).join(', ')}`)
+          lines.push('')
+        }
+      }
+    })
+
+    // Limit total context to prevent token overflow
+    const fullContext = lines.join('\n')
+    if (fullContext.length > 15000) {
+      return fullContext.substring(0, 15000) + '\n\n[... context truncated for length ...]'
+    }
+
+    return fullContext
+  }
+
+  /**
+   * Get a title for the thread from prompts
+   */
+  getThreadTitle(prompts) {
+    if (prompts.length === 0) return 'Unknown Thread'
+    const firstPrompt = prompts[0]
+    if (firstPrompt.title) return firstPrompt.title
+    if (firstPrompt.content) {
+      return firstPrompt.content.substring(0, 50) + (firstPrompt.content.length > 50 ? '...' : '')
+    }
+    return 'Thread'
+  }
+
+  /**
+   * Render branch buttons for handoff destination
+   */
+  renderHandoffBranchButtons(container, currentBranch) {
+    if (!container) return
+
+    const branches = [
+      { id: 'specifications', name: 'Specifications', icon: '📋' },
+      { id: 'architecture', name: 'Architecture', icon: '🏗️' },
+      { id: 'ui', name: 'UI', icon: '🎨' },
+      { id: 'backend', name: 'Backend', icon: '⚙️' },
+      { id: 'deployment', name: 'Deployment', icon: '🚀' },
+      { id: 'tmp', name: 'Tmp', icon: '📝' }
+    ]
+
+    // Filter out current branch
+    const availableBranches = branches.filter(b => b.id !== currentBranch)
+
+    container.innerHTML = availableBranches.map(branch => `
+      <button class="handoff-branch-btn" data-branch="${branch.id}" data-branch-name="${branch.name}">
+        <span class="branch-icon">${branch.icon}</span>
+        <span class="branch-name">${branch.name}</span>
+      </button>
+    `).join('')
+  }
+
+  /**
+   * Simple markdown renderer for handoff summaries
+   */
+  renderMarkdown(text) {
+    if (!text) return ''
+
+    return text
+      // Headers
+      .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+      .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+      // Bold
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Italic
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Code blocks
+      .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+      // Inline code
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      // Unordered lists
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+      // Ordered lists
+      .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+      // Paragraphs (simple - just preserve line breaks)
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/^(.+)$/gm, '<p>$1</p>')
+      // Clean up empty paragraphs
+      .replace(/<p><\/p>/g, '')
+      .replace(/<p>(<h[234]>)/g, '$1')
+      .replace(/(<\/h[234]>)<\/p>/g, '$1')
+      .replace(/<p>(<ul>)/g, '$1')
+      .replace(/(<\/ul>)<\/p>/g, '$1')
+      .replace(/<p>(<pre>)/g, '$1')
+      .replace(/(<\/pre>)<\/p>/g, '$1')
+  }
+
+  /**
+   * Send handoff to a branch - create new thread with handoff context
+   */
+  sendHandoffToBranch(branchId, branchName) {
+    if (!this.generatedHandoffSummary) {
+      this.showToast('No handoff summary generated', 'warning')
+      return
+    }
+
+    console.log('[HANDOFF] Sending to branch:', branchId, branchName)
+
+    // Switch to the target branch
+    this.intents.selectBranch(branchId)
+
+    // Dispatch handoff-received event for the prompt editor to handle
+    const event = new CustomEvent('handoff-received', {
+      detail: {
+        branchId,
+        branchName,
+        summary: this.generatedHandoffSummary.summary,
+        sourceThreadName: this.generatedHandoffSummary.sourceThreadName,
+        sourceBranch: this.generatedHandoffSummary.sourceBranch
+      }
+    })
+    document.dispatchEvent(event)
+
+    // Reset the handoff panel UI
+    this.resetHandoffPanel()
+
+    this.showToast(`Handoff sent to ${branchName} branch!`, 'success')
+  }
+
+  /**
+   * Reset the handoff panel to initial state
+   */
+  resetHandoffPanel() {
+    const generateBtn = document.getElementById('generate-handoff-btn')
+    const generatedSection = document.getElementById('handoff-generated-section')
+
+    if (generateBtn) {
+      generateBtn.style.display = ''
+    }
+    if (generatedSection) {
+      generatedSection.classList.add('hidden')
+    }
+
+    // Clear stored summary
+    this.generatedHandoffSummary = null
   }
 
   /**

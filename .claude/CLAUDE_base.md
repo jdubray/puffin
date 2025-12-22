@@ -59,28 +59,6 @@ As a user, I want to click a branch button to start implementation so that a new
 - The branch type (UI, Backend, etc.) is passed to Claude for context
 - The sprint thread continues in the same window
 
-### 📋 Sprint Progress Tracking per Story
-
-As a user, I want to see the implementation progress for each user story within the sprint so that I know what work remains
-
-**Acceptance Criteria:**
-- Each user story header shows implementation status
-- Branch buttons indicate whether they have been started
-- Completed branches are visually marked as done
-- Overall sprint progress is visible
-- User can identify blocked or incomplete work at a glance
-
-### 📋 Existing Prompt View Compatibility
-
-As a user, I want the existing prompt view to continue working as before so that I can still use free-form prompting without creating a sprint
-
-**Acceptance Criteria:**
-- Standard prompt threads work without sprint headers
-- User can create new threads without selecting user stories
-- Existing prompt functionality is unchanged
-- Sprint mode is opt-in through the Backlog selection workflow
-- User can distinguish between sprint threads and regular threads
-
 ### 📋 Default Maximum Iterations Configuration
 
 As a user, I want the system to default to 10 maximum iterations so that sprint execution has a sensible limit without manual configuration
@@ -90,16 +68,6 @@ As a user, I want the system to default to 10 maximum iterations so that sprint 
 - The default value is applied when no custom value is specified
 - The maximum iterations value is visible in sprint configuration
 - User can override the default if needed
-
-### 📋 Auto-Continue Delay Configuration
-
-As a user, I want a 20 second delay between auto-continues so that I have time to review output before the next iteration begins
-
-**Acceptance Criteria:**
-- System waits 20 seconds between automatic continuation prompts
-- The delay countdown is visible to the user
-- User can manually trigger continuation before delay expires
-- User can cancel the auto-continue during the delay period
 
 ### 📋 Stuck Detection Threshold
 
@@ -229,26 +197,3 @@ As a user, I want the right swimlane to display handoff summaries so that I can 
 - Chained handoff summaries show in chronological order
 - Handoff source thread is clearly identified
 - Empty state is handled gracefully when no handoff exists
-
-### 📋 Right Swimlane - Thread Statistics
-
-As a user, I want to see thread statistics in the right swimlane so that I can monitor resource usage and conversation metrics
-
-**Acceptance Criteria:**
-- Token usage (input and output) is displayed
-- Number of turns in the conversation is shown
-- Thread creation timestamp is visible
-- Statistics update in real-time as the conversation progresses
-- Additional relevant metrics (model used, thread ID) are accessible
-
-### 📋 Acceptance Criteria Checklist Display
-
-As a user, I want to see acceptance criteria as a checklist in the sprint story cards so that I can track granular progress within each story
-
-**Acceptance Criteria:**
-- Each story card can be expanded to show acceptance criteria
-- Acceptance criteria are displayed as a checklist with checkboxes
-- User can check/uncheck individual acceptance criteria
-- Criteria completion state persists across sessions
-- Story completion percentage shows (checked criteria / total criteria)
-- Checking all criteria can optionally auto-complete the story

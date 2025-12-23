@@ -753,6 +753,26 @@ When asked to create documents, lists, or summaries, include the full content in
       return { success: false, error: 'Empty response from Claude' }
     }
 
+    // Check if Claude asked for clarification instead of generating stories
+    const clarificationPatterns = [
+      /need more information/i,
+      /could you (please )?(describe|specify|provide|clarify)/i,
+      /what (feature|functionality|capability) (do you|would you)/i,
+      /please (describe|specify|provide|clarify)/i,
+      /what would you like/i,
+      /can you (please )?(describe|specify|provide|tell me)/i
+    ]
+
+    for (const pattern of clarificationPatterns) {
+      if (pattern.test(responseText)) {
+        return {
+          success: false,
+          error: 'Claude asked for clarification instead of generating stories. Please provide a more specific description of the feature you want to implement.',
+          clarificationRequest: true
+        }
+      }
+    }
+
     // Strategy 1: Try to find a JSON array using bracket matching
     // This is more robust than a simple regex for nested structures
     const strategies = [
@@ -971,9 +991,16 @@ When asked to create documents, lists, or summaries, include the full content in
 
     progress('Initializing...')
 
-    const systemPrompt = `You are a requirements analyst. Your task is to derive user stories from the following request.
+    const systemPrompt = `You are a requirements analyst. Your ONLY task is to derive user stories from the request below.
 
-Output ONLY a valid JSON array of user stories in this exact format:
+CRITICAL INSTRUCTIONS:
+1. You MUST output a valid JSON array - nothing else
+2. Do NOT ask for clarification - use your best judgment to interpret the request
+3. Do NOT include any text before or after the JSON array
+4. Do NOT use markdown code blocks - output raw JSON only
+5. If the request is vague, make reasonable assumptions and create user stories anyway
+
+Output format (ONLY this, no other text):
 [
   {
     "title": "Brief title of the user story",
@@ -986,8 +1013,8 @@ Guidelines:
 - Each story should be focused on a single feature or capability
 - Write clear, actionable acceptance criteria
 - Keep stories at a granular enough level to be implemented individually
-- Output ONLY the JSON array, no other text or markdown
-- You MUST output at least one user story`
+- You MUST output at least one user story, even if the request is unclear
+- Make your best interpretation of what the user wants`
 
     const fullPrompt = `${systemPrompt}
 
@@ -1001,8 +1028,7 @@ ${prompt}`
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
-        '--max-turns', '3',
-        '--permission-mode', 'acceptEdits',
+        '--max-turns', '1',  // Single turn - no tool use, just output JSON
         '-'
       ]
 

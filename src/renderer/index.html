@@ -406,6 +406,14 @@
                       <!-- Populated dynamically -->
                     </div>
                   </div>
+                  <div class="dropdown" id="include-docs-dropdown">
+                    <button id="include-docs-btn" class="btn secondary" title="Include Design Document">
+                      Include Docs ▾
+                    </button>
+                    <div class="dropdown-menu" id="include-docs-menu">
+                      <!-- Populated dynamically from docs/ directory -->
+                    </div>
+                  </div>
                 </div>
                 <!-- Iteration Counter (visible during sprint execution) -->
                 <div id="iteration-counter" class="iteration-counter hidden">
@@ -450,12 +458,12 @@
                       <span id="stat-duration" class="stat-value">-</span>
                     </div>
                     <div class="stat-item">
-                      <span class="stat-label">Model</span>
-                      <span id="stat-model" class="stat-value">-</span>
-                    </div>
-                    <div class="stat-item">
                       <span class="stat-label">Created</span>
                       <span id="stat-created" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">Defects</span>
+                      <span id="stat-defects" class="stat-value">0</span>
                     </div>
                   </div>
                 </div>

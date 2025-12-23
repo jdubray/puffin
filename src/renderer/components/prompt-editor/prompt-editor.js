@@ -28,6 +28,12 @@ export class PromptEditorComponent {
     this.handoffReadyBtn = null
     // Current handoff context (to be injected in next prompt)
     this.pendingHandoff = null
+    // Design documents dropdown
+    this.includeDocsBtn = null
+    this.includeDocsDropdown = null
+    this.includeDocsMenu = null
+    this.includeDocs = false
+    this.selectedDocuments = [] // Array of selected document filenames
   }
 
   /**
@@ -48,6 +54,10 @@ export class PromptEditorComponent {
     this.inputTypeSelect = document.getElementById('input-type')
     // Handoff button
     this.handoffReadyBtn = document.getElementById('handoff-ready-btn')
+    // Design documents dropdown
+    this.includeDocsBtn = document.getElementById('include-docs-btn')
+    this.includeDocsDropdown = document.getElementById('include-docs-dropdown')
+    this.includeDocsMenu = document.getElementById('include-docs-menu')
 
     this.bindEvents()
     this.subscribeToState()
@@ -88,6 +98,14 @@ export class PromptEditorComponent {
       this.toggleDropdown()
     })
 
+    // Include Docs dropdown
+    if (this.includeDocsBtn) {
+      this.includeDocsBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this.toggleDocsDropdown()
+      })
+    }
+
     // Derive user stories checkbox
     this.deriveStoriesCheckbox.addEventListener('change', () => {
       this.deriveUserStories = this.deriveStoriesCheckbox.checked
@@ -114,10 +132,13 @@ export class PromptEditorComponent {
       this.handleHandoffReceived(e.detail)
     })
 
-    // Close dropdown when clicking outside
+    // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
       if (!this.includeGuiDropdown.contains(e.target)) {
         this.closeDropdown()
+      }
+      if (this.includeDocsDropdown && !this.includeDocsDropdown.contains(e.target)) {
+        this.closeDocsDropdown()
       }
     })
 
@@ -173,6 +194,9 @@ export class PromptEditorComponent {
    * Render component based on state
    */
   render(promptState, historyState, storyGenerations) {
+    // DEBUG: Track textarea disabled state
+    const wasDisabled = this.textarea.disabled
+
     // Note: We don't sync textarea value from SAM state.
     // The textarea is the source of truth for its own content.
     // This avoids performance issues from tracking every keystroke.
@@ -195,6 +219,25 @@ export class PromptEditorComponent {
 
     // Disable textarea during processing
     this.textarea.disabled = promptState.isProcessing
+
+    // DEBUG: Log when textarea disabled state changes
+    if (wasDisabled !== this.textarea.disabled) {
+      console.log('[PROMPT-EDITOR-DEBUG] Textarea disabled state changed:', {
+        wasDisabled,
+        nowDisabled: this.textarea.disabled,
+        isProcessing: promptState.isProcessing,
+        promptStateKeys: Object.keys(promptState),
+        stack: new Error().stack.split('\n').slice(1, 5).join('\n')
+      })
+    }
+
+    // DEBUG: Warn if textarea is disabled but isProcessing is false
+    if (this.textarea.disabled && !promptState.isProcessing) {
+      console.warn('[PROMPT-EDITOR-DEBUG] ANOMALY: Textarea disabled but isProcessing=false!', {
+        promptState,
+        textareaDisabled: this.textarea.disabled
+      })
+    }
 
     // Update include GUI button state
     this.includeGuiBtn.classList.toggle('active', this.includeGui)
@@ -609,6 +652,9 @@ export class PromptEditorComponent {
         }
       }
 
+      // Get design documents content if any selected
+      const docsContent = await this.getSelectedDocumentsContent()
+
       // Get relevant user stories for this branch
       const userStories = this.getRelevantUserStories(state)
 
@@ -623,8 +669,11 @@ export class PromptEditorComponent {
         console.log('[CONTEXT-DEBUG] Including handoff context from:', handoffContext.sourceBranch)
       }
 
+      // Append design documents to prompt if selected
+      const finalPrompt = docsContent ? content + docsContent : content
+
       window.puffin.claude.submit({
-        prompt: content,
+        prompt: finalPrompt,
         branchId: state.history.activeBranch,
         sessionId: sessionId,
         // Only send project context for new conversations or when it's changed
@@ -912,6 +961,167 @@ export class PromptEditorComponent {
     } else {
       this.includeGuiBtn.textContent = 'Include GUI ▾'
     }
+  }
+
+  // ============ Design Documents Dropdown ============
+
+  /**
+   * Toggle the Include Docs dropdown
+   */
+  async toggleDocsDropdown() {
+    if (!this.includeDocsDropdown) return
+    const isOpen = this.includeDocsDropdown.classList.contains('open')
+    if (isOpen) {
+      this.closeDocsDropdown()
+    } else {
+      await this.openDocsDropdown()
+    }
+  }
+
+  /**
+   * Open the docs dropdown and populate with documents from docs/
+   */
+  async openDocsDropdown() {
+    // Close GUI dropdown if open
+    this.closeDropdown()
+
+    // Fetch design documents
+    let documents = []
+    try {
+      const result = await window.puffin.state.getDesignDocuments()
+      if (result.success) {
+        documents = result.documents || []
+      }
+    } catch (error) {
+      console.error('Failed to load design documents:', error)
+    }
+
+    // Build menu HTML
+    let menuHtml = ''
+
+    // Clear selection option (if something is selected)
+    if (this.selectedDocuments.length > 0) {
+      menuHtml += `<div class="dropdown-item clear-selection" data-action="clear">
+        <span class="item-icon">✕</span>
+        <span class="item-label">Clear Selection</span>
+      </div>
+      <div class="dropdown-divider"></div>`
+    }
+
+    // Document list
+    if (documents.length > 0) {
+      documents.forEach(doc => {
+        const isSelected = this.selectedDocuments.includes(doc.filename)
+        const displayName = doc.name || doc.filename.replace(/\.md$/, '')
+        menuHtml += `<div class="dropdown-item ${isSelected ? 'selected' : ''}" data-action="toggle" data-filename="${this.escapeHtml(doc.filename)}">
+          <span class="item-checkbox">${isSelected ? '☑' : '☐'}</span>
+          <span class="item-label">${this.escapeHtml(displayName)}</span>
+        </div>`
+      })
+    } else {
+      menuHtml = `<div class="dropdown-item disabled">
+        <span class="item-label">No documents in docs/</span>
+      </div>`
+    }
+
+    this.includeDocsMenu.innerHTML = menuHtml
+    this.includeDocsDropdown.classList.add('open')
+
+    // Bind click events
+    this.includeDocsMenu.querySelectorAll('.dropdown-item:not(.disabled)').forEach(item => {
+      item.addEventListener('click', (e) => this.handleDocsDropdownSelect(e, item))
+    })
+  }
+
+  /**
+   * Close the docs dropdown
+   */
+  closeDocsDropdown() {
+    if (this.includeDocsDropdown) {
+      this.includeDocsDropdown.classList.remove('open')
+    }
+  }
+
+  /**
+   * Handle docs dropdown item selection
+   */
+  async handleDocsDropdownSelect(e, item) {
+    e.stopPropagation()
+    const action = item.dataset.action
+
+    switch (action) {
+      case 'clear':
+        this.clearDocsSelection()
+        this.closeDocsDropdown()
+        break
+      case 'toggle':
+        const filename = item.dataset.filename
+        this.toggleDocumentSelection(filename)
+        // Re-render dropdown to show updated checkboxes
+        await this.openDocsDropdown()
+        break
+    }
+  }
+
+  /**
+   * Toggle a document's selection state
+   */
+  toggleDocumentSelection(filename) {
+    const index = this.selectedDocuments.indexOf(filename)
+    if (index === -1) {
+      this.selectedDocuments.push(filename)
+    } else {
+      this.selectedDocuments.splice(index, 1)
+    }
+    this.includeDocs = this.selectedDocuments.length > 0
+    this.updateDocsButtonLabel()
+  }
+
+  /**
+   * Clear all document selections
+   */
+  clearDocsSelection() {
+    this.selectedDocuments = []
+    this.includeDocs = false
+    this.updateDocsButtonLabel()
+  }
+
+  /**
+   * Update the docs button label to show selection count
+   */
+  updateDocsButtonLabel() {
+    if (!this.includeDocsBtn) return
+    if (this.selectedDocuments.length > 0) {
+      this.includeDocsBtn.textContent = `Docs (${this.selectedDocuments.length}) ▾`
+      this.includeDocsBtn.classList.add('active')
+    } else {
+      this.includeDocsBtn.textContent = 'Include Docs ▾'
+      this.includeDocsBtn.classList.remove('active')
+    }
+  }
+
+  /**
+   * Get the content of selected documents for inclusion in prompt
+   * @returns {Promise<string>} Combined document content
+   */
+  async getSelectedDocumentsContent() {
+    if (this.selectedDocuments.length === 0) return ''
+
+    const contents = []
+    for (const filename of this.selectedDocuments) {
+      try {
+        const result = await window.puffin.state.loadDesignDocument(filename)
+        if (result.success && result.document) {
+          const displayName = result.document.name || filename.replace(/\.md$/, '')
+          contents.push(`## ${displayName}\n\n${result.document.content}`)
+        }
+      } catch (error) {
+        console.error(`Failed to load document ${filename}:`, error)
+      }
+    }
+
+    if (contents.length === 0) return ''
+    return `\n\n---\n# Included Design Documents\n\n${contents.join('\n\n---\n\n')}\n---\n`
   }
 
   /**

@@ -129,10 +129,24 @@ function computeConfigState(model) {
 /**
  * Prompt state computation
  */
+// DEBUG: Track pendingPromptId changes
+let _lastPendingPromptId = null
+
 function computePromptState(model) {
   const isComposing = model.currentPrompt.content.length > 0
   const isProcessing = !!model.pendingPromptId
   const hasStreamingResponse = model.streamingResponse.length > 0
+
+  // DEBUG: Log when pendingPromptId changes
+  if (model.pendingPromptId !== _lastPendingPromptId) {
+    console.log('[STATE-DEBUG] pendingPromptId changed:', {
+      from: _lastPendingPromptId,
+      to: model.pendingPromptId,
+      isProcessing,
+      activeBranch: model.history?.activeBranch
+    })
+    _lastPendingPromptId = model.pendingPromptId
+  }
 
   return {
     isComposing,

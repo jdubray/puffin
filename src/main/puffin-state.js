@@ -209,8 +209,16 @@ class PuffinState {
    * @param {Object} story - User story object
    */
   async addUserStory(story) {
+    // Check for duplicate by ID to prevent double-adds
+    const storyId = story.id || this.generateId()
+    const existingStory = this.userStories.find(s => s.id === storyId)
+    if (existingStory) {
+      console.warn(`[PUFFIN-STATE] Story with ID "${storyId}" already exists. Updating instead of adding.`)
+      return this.updateUserStory(storyId, story)
+    }
+
     const newStory = {
-      id: story.id || this.generateId(),
+      id: storyId,
       branchId: story.branchId || null, // Branch where story was derived from
       title: story.title,
       description: story.description || '',
@@ -1338,6 +1346,99 @@ Document your API endpoints...
         : 0,
       status: sprint.status,
       isComplete: sprint.status === 'completed'
+    }
+  }
+
+  // ============ Design Document Methods ============
+
+  /**
+   * Scan the docs/ directory for markdown files
+   * @returns {Promise<Array>} Array of document objects with name and path
+   */
+  async scanDesignDocuments() {
+    // Debug: write to file for visibility
+    const debugLog = async (msg) => {
+      const debugPath = path.join(this.projectPath || '.', '.puffin', 'design-docs-debug.log')
+      try {
+        await fs.appendFile(debugPath, `${new Date().toISOString()} - ${msg}\n`)
+      } catch (e) {
+        // Ignore debug write errors
+      }
+    }
+
+    await debugLog(`scanDesignDocuments called`)
+    await debugLog(`projectPath: ${this.projectPath}`)
+
+    const docsPath = path.join(this.projectPath, 'docs')
+    await debugLog(`docsPath: ${docsPath}`)
+
+    try {
+      const files = await fs.readdir(docsPath)
+      await debugLog(`Found ${files.length} total files`)
+      const mdFiles = files.filter(f => f.endsWith('.md'))
+      await debugLog(`Found ${mdFiles.length} .md files: ${mdFiles.join(', ')}`)
+
+      return mdFiles.map(filename => ({
+        filename,
+        name: filename.replace(/\.md$/, ''),
+        path: path.join(docsPath, filename)
+      }))
+    } catch (err) {
+      // docs/ directory doesn't exist or is not accessible
+      await debugLog(`Error: ${err.code} - ${err.message}`)
+      if (err.code === 'ENOENT') {
+        return []
+      }
+      throw err
+    }
+  }
+
+  /**
+   * Get list of available design documents
+   * Returns document metadata without content
+   * @returns {Promise<Array>} Array of document objects
+   */
+  async getDesignDocuments() {
+    if (!this.projectPath) {
+      console.warn('[PUFFIN-STATE] getDesignDocuments called before project opened')
+      return []
+    }
+    return this.scanDesignDocuments()
+  }
+
+  /**
+   * Load a design document's content
+   * @param {string} filename - The document filename (e.g., 'DESIGN.md')
+   * @returns {Promise<Object>} Document object with name and content
+   */
+  async loadDesignDocument(filename) {
+    // Validate filename to prevent path traversal
+    if (!filename || typeof filename !== 'string') {
+      throw new Error('Invalid filename: must be a non-empty string')
+    }
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      throw new Error('Invalid filename: path traversal not allowed')
+    }
+    if (!filename.endsWith('.md')) {
+      throw new Error('Invalid filename: must be a .md file')
+    }
+
+    const docsPath = path.join(this.projectPath, 'docs')
+    const filepath = path.join(docsPath, filename)
+
+    try {
+      const content = await fs.readFile(filepath, 'utf-8')
+      return {
+        filename,
+        name: filename.replace(/\.md$/, ''),
+        path: filepath,
+        content
+      }
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        throw new Error(`Design document not found: ${filename}`)
+      }
+      throw err
     }
   }
 

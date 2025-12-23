@@ -458,14 +458,6 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Start implementation for selected stories (legacy - now uses createSprint)
-   */
-  startImplementation() {
-    // Redirect to createSprint for backward compatibility
-    this.createSprint()
-  }
-
-  /**
    * Cycle through status values
    */
   cycleStatus(storyId) {

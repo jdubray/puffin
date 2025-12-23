@@ -483,15 +483,6 @@ export const storyDerivationError = (error) => ({
   }
 })
 
-// Start implementation for selected stories (moves from backlog to in-progress)
-export const startStoryImplementation = (stories) => ({
-  type: 'START_STORY_IMPLEMENTATION',
-  payload: {
-    stories,
-    timestamp: Date.now()
-  }
-})
-
 /**
  * Story Generation Tracking Actions
  * For tracking how Claude decomposes prompts into stories and implementation outcomes

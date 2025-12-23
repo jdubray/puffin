@@ -165,6 +165,15 @@ export const initialModel = {
     status: 'idle' // 'idle' | 'thinking' | 'tool-use' | 'complete'
   },
 
+  // Design documents state (from docs/ directory)
+  designDocuments: {
+    documents: [], // Array of { filename, name, path } - available documents
+    loadedDocument: null, // { filename, name, path, content } - currently loaded document
+    isScanning: false,
+    lastScanned: null,
+    error: null
+  },
+
   // Developer profile state (GitHub integration)
   developerProfile: {
     // Authentication state
@@ -360,6 +369,7 @@ export const submitPromptAcceptor = model => proposal => {
 
     model.history.branches[branchId].prompts.push(prompt)
     model.pendingPromptId = prompt.id
+    console.log('[MODEL-DEBUG] submitPromptAcceptor: SET pendingPromptId =', prompt.id)
     model.streamingResponse = ''
     model.currentPrompt = { content: '', branchId: null }
 
@@ -1169,142 +1179,6 @@ export const storyDerivationErrorAcceptor = model => proposal => {
   }
 }
 
-/**
- * Start implementation for selected stories
- * - Updates story status to 'in-progress'
- * - Uses the currently active branch for implementation
- * - Adds branch-specific context (UI guidelines for ui branch, architecture for others)
- * - Tracks which branches have implemented each story
- */
-export const startStoryImplementationAcceptor = model => proposal => {
-  if (proposal?.type === 'START_STORY_IMPLEMENTATION') {
-    const { stories } = proposal.payload
-
-    if (!stories || stories.length === 0) return
-
-    // Use the currently active branch for implementation
-    const branchId = model.history.activeBranch || 'backend'
-
-    // Update story statuses to in-progress and track implementation branch
-    stories.forEach(story => {
-      const existingStory = model.userStories.find(s => s.id === story.id)
-      if (existingStory) {
-        existingStory.status = 'in-progress'
-        existingStory.updatedAt = Date.now()
-        // Track which branches have implemented this story
-        if (!existingStory.implementedOn) {
-          existingStory.implementedOn = []
-        }
-        if (!existingStory.implementedOn.includes(branchId)) {
-          existingStory.implementedOn.push(branchId)
-        }
-      }
-    })
-
-    // Build implementation prompt with numbered acceptance criteria
-    const storyDescriptions = stories.map((story, i) => {
-      let desc = `### Story ${i + 1}: ${story.title}\n`
-      if (story.description) {
-        desc += `${story.description}\n`
-      }
-      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
-        desc += `\n**Acceptance Criteria:**\n`
-        desc += story.acceptanceCriteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n')
-      }
-      return desc
-    }).join('\n\n')
-
-    // Build branch-specific context
-    let branchContext = ''
-    if (branchId === 'ui') {
-      branchContext = buildUiBranchContext(model)
-    } else if (branchId === 'architecture') {
-      branchContext = buildArchitectureBranchContext(model)
-    } else if (branchId === 'backend') {
-      branchContext = buildBackendBranchContext(model)
-    }
-
-    const promptContent = `Please implement the following user ${stories.length === 1 ? 'story' : 'stories'}:
-
-${storyDescriptions}
-${branchContext}
-**Instructions:**
-1. First, think hard about the implementation approach and create a detailed plan
-2. Consider the existing codebase structure and patterns
-3. Identify all files that need to be created or modified
-4. Then implement the changes step by step
-
-**Criteria Verification Requirements:**
-After completing the implementation, you MUST verify each numbered acceptance criterion and report its status using this format:
-
-- ✅ Criterion N: [Brief explanation of how the implementation satisfies this criterion]
-- ⚠️ Criterion N: [Partially implemented - describe what's done and what's missing]
-- ❌ Criterion N: [Not implemented - explain why or what's blocking]
-
-**Important:** Do not skip any criteria. Every numbered criterion must have a verification status in your final response.
-
-Please start by outlining your implementation plan, then proceed with the implementation, and conclude with the criteria verification.`
-
-    // Ensure branch exists
-    if (!model.history.branches[branchId]) {
-      model.history.branches[branchId] = {
-        id: branchId,
-        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
-        prompts: []
-      }
-    }
-
-    // Create prompt entry (response will be filled by Claude)
-    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
-    const prompt = {
-      id: promptId,
-      content: promptContent,
-      parentId: null,
-      timestamp: Date.now(),
-      response: null, // Will be filled when Claude responds
-      storyIds: stories.map(s => s.id) // Track which stories this implements
-    }
-
-    // Add to branch
-    model.history.branches[branchId].prompts.push(prompt)
-
-    // Keep the active branch (don't switch)
-    model.history.activePromptId = promptId
-
-    // Set pending prompt for streaming
-    model.pendingPromptId = promptId
-    model.streamingResponse = ''
-
-    // Switch view to prompt
-    model.currentView = 'prompt'
-
-    // Store implementation context for IPC submission
-    model._pendingImplementation = {
-      promptId,
-      promptContent,
-      branchId,
-      storyIds: stories.map(s => s.id)
-    }
-
-    // Create implementation journeys for each story (US-3)
-    stories.forEach(story => {
-      const journeyId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
-      const journey = {
-        id: journeyId,
-        story_id: story.id,
-        prompt_id: promptId,
-        branch_id: branchId,
-        turn_count: 0, // Will be incremented when first response completes
-        inputs: [],
-        status: 'pending',
-        outcome_notes: null,
-        started_at: new Date().toISOString(),
-        completed_at: null
-      }
-      model.storyGenerations.implementation_journeys.push(journey)
-    })
-  }
-}
 
 /**
  * Build UI branch context with design tokens and guidelines
@@ -2053,8 +1927,8 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
       storyProgress: model.activeSprint.storyProgress
     }
 
-    // Build implementation prompt context
-    const implementationPrompt = buildStoryImplementationPrompt(story, branchType, sprint)
+    // Build implementation prompt context (includes approved plan if available)
+    const implementationPrompt = buildStoryImplementationPrompt(story, branchType, sprint, model)
 
     // Ensure target branch exists
     if (!model.history.branches[targetBranch]) {
@@ -2380,9 +2254,25 @@ export const resetStuckDetectionAcceptor = model => proposal => {
 }
 
 /**
+ * Helper: Find a prompt by ID across all branches
+ */
+function findPromptById(model, promptId) {
+  if (!model?.history?.branches || !promptId) return null
+
+  for (const branchId of Object.keys(model.history.branches)) {
+    const branch = model.history.branches[branchId]
+    if (branch.prompts) {
+      const prompt = branch.prompts.find(p => p.id === promptId)
+      if (prompt) return prompt
+    }
+  }
+  return null
+}
+
+/**
  * Helper: Build implementation prompt for a story
  */
-function buildStoryImplementationPrompt(story, branchType, sprint) {
+function buildStoryImplementationPrompt(story, branchType, sprint, model) {
   const branchDescriptions = {
     'ui': 'UI/UX thread',
     'backend': 'Backend thread',
@@ -2413,9 +2303,26 @@ ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 `
   }
 
+  // Include the approved plan if available
+  if (sprint?.promptId && model) {
+    const planPrompt = findPromptById(model, sprint.promptId)
+    if (planPrompt?.response?.content) {
+      prompt += `
+### Approved Implementation Plan
+
+The following plan was approved for this sprint. Please follow this guidance:
+
+${planPrompt.response.content}
+
+---
+
+`
+    }
+  }
+
   prompt += `
-### Sprint Context
-This is part of an approved sprint plan. Please implement this story following the established patterns in the codebase.
+### Implementation Notes
+This is part of an approved sprint plan. Please implement this story following the established patterns in the codebase and the guidance above.
 
 ---
 
@@ -2718,7 +2625,6 @@ export const acceptors = [
   addStoriesToBacklogAcceptor,
   cancelStoryReviewAcceptor,
   storyDerivationErrorAcceptor,
-  startStoryImplementationAcceptor,
 
   // Story Generation Tracking
   loadStoryGenerationsAcceptor,

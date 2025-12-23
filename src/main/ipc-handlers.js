@@ -311,6 +311,32 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // ============ Design Document Operations ============
+
+  // Get list of available design documents from docs/ directory
+  ipcMain.handle('state:getDesignDocuments', async () => {
+    try {
+      console.log('[IPC] state:getDesignDocuments called')
+      console.log('[IPC] puffinState.projectPath:', puffinState.projectPath)
+      const documents = await puffinState.getDesignDocuments()
+      console.log('[IPC] Found documents:', documents.length)
+      return { success: true, documents }
+    } catch (error) {
+      console.error('[IPC] state:getDesignDocuments error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Load a specific design document's content
+  ipcMain.handle('state:loadDesignDocument', async (event, filename) => {
+    try {
+      const document = await puffinState.loadDesignDocument(filename)
+      return { success: true, document }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // ============ Story Generation Tracking Operations ============
 
   ipcMain.handle('state:getStoryGenerations', async () => {

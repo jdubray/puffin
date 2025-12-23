@@ -1767,6 +1767,28 @@
   order: 4;
 }
 
+.prompt-actions #include-docs-btn {
+  order: 5;
+}
+
+.prompt-actions #include-docs-btn.active {
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+}
+
+/* Checkbox style for multi-select dropdowns */
+.dropdown-item .item-checkbox {
+  font-size: 1rem;
+  margin-right: 0.5rem;
+  opacity: 0.7;
+}
+
+.dropdown-item.selected .item-checkbox {
+  opacity: 1;
+  color: var(--accent-primary);
+}
+
 /* Streaming indicator */
 .streaming-cursor {
   display: inline-block;
@@ -4534,4 +4556,248 @@
 
 .stuck-alert-close:hover {
   opacity: 1;
+}
+
+/* Stuck Alert Modal (used by app.js) */
+.stuck-alert-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.stuck-alert-modal.visible {
+  opacity: 1;
+}
+
+.stuck-alert-modal .stuck-alert-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transform: translateY(-20px);
+  transition: transform 0.25s ease;
+}
+
+.stuck-alert-modal.visible .stuck-alert-content {
+  transform: translateY(0);
+}
+
+.stuck-alert-modal .stuck-alert-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.stuck-alert-modal .stuck-alert-header .stuck-alert-icon {
+  font-size: 1.5rem;
+}
+
+.stuck-alert-modal .stuck-alert-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.stuck-alert-modal .stuck-alert-body {
+  margin-bottom: 1.25rem;
+}
+
+.stuck-alert-modal .stuck-alert-message {
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.stuck-alert-modal .stuck-alert-details {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.stuck-alert-modal .stuck-alert-label {
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.stuck-alert-modal .stuck-alert-summary {
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.stuck-alert-modal .stuck-alert-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.stuck-alert-modal .stuck-btn-continue {
+  background: var(--color-success);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background 0.15s ease;
+}
+
+.stuck-alert-modal .stuck-btn-continue:hover {
+  background: #38a169;
+}
+
+.stuck-alert-modal .stuck-btn-modify {
+  background: var(--color-primary);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background 0.15s ease;
+}
+
+.stuck-alert-modal .stuck-btn-modify:hover {
+  background: #5a52d5;
+}
+
+.stuck-alert-modal .stuck-btn-stop {
+  background: var(--color-error);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background 0.15s ease;
+}
+
+.stuck-alert-modal .stuck-btn-stop:hover {
+  background: #e53e3e;
+}
+
+/* ============================================
+   Iteration Counter & Auto-Continue Timer
+   ============================================ */
+
+.iteration-counter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  margin-top: 0.75rem;
+  border: 1px solid var(--border-color);
+}
+
+.iteration-stats,
+.continuation-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.iteration-label,
+.continuation-label {
+  color: var(--text-muted);
+}
+
+.iteration-value,
+.continuation-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.iteration-separator {
+  color: var(--text-muted);
+}
+
+.auto-continue-timer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.auto-continue-timer .timer-label {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.auto-continue-timer .timer-value {
+  color: var(--color-warning);
+  font-weight: 700;
+  font-size: 1rem;
+  font-family: var(--font-mono);
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.auto-continue-timer .timer-unit {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.auto-continue-timer .btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.auto-continue-timer .btn.small {
+  min-height: auto;
+}
+
+.auto-continue-timer .btn.outline {
+  background: transparent;
+  border: 1px solid var(--color-success);
+  color: var(--color-success);
+}
+
+.auto-continue-timer .btn.outline:hover {
+  background: var(--color-success);
+  color: white;
+}
+
+.auto-continue-timer .btn.secondary {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.auto-continue-timer .btn.secondary:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }

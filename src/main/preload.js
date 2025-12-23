@@ -67,6 +67,10 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.invoke('state:updateSprintStoryProgress', { storyId, branchType, progressUpdate }),
     getSprintProgress: () => ipcRenderer.invoke('state:getSprintProgress'),
 
+    // Design document operations
+    getDesignDocuments: () => ipcRenderer.invoke('state:getDesignDocuments'),
+    loadDesignDocument: (filename) => ipcRenderer.invoke('state:loadDesignDocument', filename),
+
     // Story generation tracking operations
     getStoryGenerations: () => ipcRenderer.invoke('state:getStoryGenerations'),
     addStoryGeneration: (generation) => ipcRenderer.invoke('state:addStoryGeneration', generation),

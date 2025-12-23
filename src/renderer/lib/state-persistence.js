@@ -36,7 +36,7 @@ export class StatePersistence {
       'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
       'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
-      'ADD_STORIES_TO_BACKLOG', 'START_STORY_IMPLEMENTATION',
+      'ADD_STORIES_TO_BACKLOG',
       // Sprint actions
       'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
@@ -170,86 +170,16 @@ export class StatePersistence {
         // Persist history (we added a prompt entry)
         await window.puffin.state.updateHistory(state.history.raw)
 
-        // The stories have been added to state.userStories via the acceptor
-        for (const story of state.userStories) {
+        // Only persist the NEWLY added stories (from the action payload), not all stories
+        const newStoryIds = action.payload?.storyIds || []
+        const newStories = state.userStories.filter(s => newStoryIds.includes(s.id))
+
+        for (const story of newStories) {
           try {
             await window.puffin.state.addUserStory(story)
           } catch (e) {
             // Story might already exist, update instead
             await window.puffin.state.updateUserStory(story.id, story)
-          }
-        }
-      }
-
-      // Handle start story implementation - persist and submit to Claude
-      if (normalizedType === 'START_STORY_IMPLEMENTATION') {
-        // Persist updated user stories (status changed to in-progress)
-        for (const story of state.userStories) {
-          try {
-            await window.puffin.state.updateUserStory(story.id, story)
-          } catch (e) {
-            console.error('Failed to update story:', story.id, e)
-          }
-        }
-
-        // Persist history (we added a prompt entry)
-        await window.puffin.state.updateHistory(state.history.raw)
-
-        // Persist sprint state (status changed to implementing)
-        if (state.activeSprint) {
-          await window.puffin.state.updateActiveSprint(state.activeSprint)
-        }
-
-        // Check if there's a pending implementation to submit (from backlog)
-        const pendingImpl = state._pendingImplementation
-        if (pendingImpl) {
-          console.log('[IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingImpl.branchId)
-
-          // Get session ID from last successful prompt in the target branch
-          const targetBranch = state.history.raw?.branches?.[pendingImpl.branchId]
-          const lastPromptWithResponse = targetBranch?.prompts
-            ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
-            ?.pop()
-          const sessionId = lastPromptWithResponse?.response?.sessionId || null
-
-          // Submit to Claude
-          await window.puffin.claude.submit({
-            prompt: pendingImpl.promptContent,
-            branchId: pendingImpl.branchId,
-            sessionId,
-            project: state.config ? {
-              name: state.config.name,
-              description: state.config.description
-            } : null
-          })
-        }
-
-        // Check if there's a pending story implementation from sprint
-        const pendingSprintImpl = state._pendingStoryImplementation
-        if (pendingSprintImpl) {
-          console.log('[SPRINT-IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingSprintImpl.branchId)
-
-          // Get session ID from last successful prompt in the target branch
-          const targetBranch = state.history.raw?.branches?.[pendingSprintImpl.branchId]
-          const lastPromptWithResponse = targetBranch?.prompts
-            ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
-            ?.pop()
-          const sessionId = lastPromptWithResponse?.response?.sessionId || null
-
-          // Submit to Claude
-          await window.puffin.claude.submit({
-            prompt: pendingSprintImpl.promptContent,
-            branchId: pendingSprintImpl.branchId,
-            sessionId,
-            project: state.config ? {
-              name: state.config.name,
-              description: state.config.description
-            } : null
-          })
-
-          // Clear the pending implementation flag
-          if (this.intents?.clearPendingStoryImplementation) {
-            this.intents.clearPendingStoryImplementation()
           }
         }
       }
@@ -297,7 +227,6 @@ export class StatePersistence {
         'FINALIZE_STORY_GENERATION', 'CREATE_IMPLEMENTATION_JOURNEY',
         'ADD_IMPLEMENTATION_INPUT', 'UPDATE_IMPLEMENTATION_JOURNEY',
         'COMPLETE_IMPLEMENTATION_JOURNEY',
-        'START_STORY_IMPLEMENTATION', // Creates implementation journeys
         'MARK_THREAD_COMPLETE', 'UNMARK_THREAD_COMPLETE' // Updates journey status
       ]
       if (storyGenActions.includes(normalizedType)) {
@@ -327,19 +256,6 @@ export class StatePersistence {
             const latestJourney = generations.implementation_journeys[generations.implementation_journeys.length - 1]
             if (latestJourney) {
               await window.puffin.state.addImplementationJourney(latestJourney)
-            }
-          } else if (normalizedType === 'START_STORY_IMPLEMENTATION') {
-            // Persist all newly created journeys (one per story being implemented)
-            const journeys = generations.implementation_journeys
-            // Get journeys created in this action (status: pending, recently created)
-            const recentJourneys = journeys.filter(j => j.status === 'pending' && !j.completed_at)
-            for (const journey of recentJourneys) {
-              try {
-                await window.puffin.state.addImplementationJourney(journey)
-              } catch (e) {
-                // Journey might already exist, try updating
-                await window.puffin.state.updateImplementationJourney(journey.id, journey)
-              }
             }
           } else if (['MARK_THREAD_COMPLETE', 'UNMARK_THREAD_COMPLETE'].includes(normalizedType)) {
             // Persist updated journeys (status changed to success/partial/failed or back to pending)

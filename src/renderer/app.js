@@ -17,6 +17,7 @@ import { samDebugger } from './sam/debugger.js'
 import { ModalManager } from './lib/modal-manager.js'
 import { StatePersistence } from './lib/state-persistence.js'
 import { ActivityTracker } from './lib/activity-tracker.js'
+import { computeSimilarityHash, generateOutputSummary } from './lib/similarity-hash.js'
 
 // Components
 import { ProjectFormComponent } from './components/project-form/project-form.js'
@@ -265,7 +266,7 @@ class PuffinApp {
       'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories',
       'deriveUserStories', 'receiveDerivedStories', 'markStoryReady', 'unmarkStoryReady',
       'updateDerivedStory', 'deleteDerivedStory', 'requestStoryChanges',
-      'addStoriesToBacklog', 'cancelStoryReview', 'storyDerivationError', 'startStoryImplementation',
+      'addStoriesToBacklog', 'cancelStoryReview', 'storyDerivationError',
       // Implementation journey actions
       'createImplementationJourney', 'addImplementationInput', 'updateImplementationJourney', 'completeImplementationJourney',
       'switchView', 'toggleSidebar', 'showModal', 'hideModal',
@@ -361,7 +362,6 @@ class PuffinApp {
           ['ADD_STORIES_TO_BACKLOG', actions.addStoriesToBacklog],
           ['CANCEL_STORY_REVIEW', actions.cancelStoryReview],
           ['STORY_DERIVATION_ERROR', actions.storyDerivationError],
-          ['START_STORY_IMPLEMENTATION', actions.startStoryImplementation],
 
           // Implementation journey actions
           ['CREATE_IMPLEMENTATION_JOURNEY', actions.createImplementationJourney],
@@ -553,6 +553,9 @@ class PuffinApp {
 
     // Handoff panel event handlers
     this.setupHandoffPanelHandlers()
+
+    // Auto-continue timer handlers
+    this.setupAutoContinueTimerHandlers()
   }
 
   /**
@@ -641,6 +644,348 @@ class PuffinApp {
       console.error('[HANDOFF] Error restoring handoff summary:', error)
       localStorage.removeItem('puffin-handoff-summary')
     }
+  }
+
+  /**
+   * Setup auto-continue timer handlers
+   */
+  setupAutoContinueTimerHandlers() {
+    const skipBtn = document.getElementById('timer-skip-btn')
+    const cancelBtn = document.getElementById('timer-cancel-btn')
+
+    if (skipBtn) {
+      skipBtn.addEventListener('click', () => {
+        this.skipAutoContinueTimer()
+      })
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        this.cancelAutoContinueTimer()
+      })
+    }
+
+    // Initialize timer state
+    this.autoContinueTimer = null
+    this.autoContinueCountdown = 0
+
+    // Initialize auto-continue state
+    this.autoContinueState = {
+      enabled: true,                    // Master switch for auto-continue
+      continuationCount: 0,             // Current continuation count for this thread
+      maxContinuations: 10,             // Maximum continuations before stopping
+      timerSeconds: 15,                 // Delay before auto-continuing
+      lastPromptId: null,               // Track which prompt we're continuing
+      completionKeyword: '[Complete]',  // Keyword that signals completion
+      continuationPrompt: 'Continue the implementation. If you have finished, end your message with [Complete].'
+    }
+  }
+
+  /**
+   * Check if a response needs continuation (not complete)
+   * @param {Object} response - The Claude response object
+   * @returns {boolean} - True if continuation is needed
+   */
+  shouldAutoContinue(response) {
+    // Don't continue if auto-continue is disabled
+    if (!this.autoContinueState?.enabled) {
+      console.log('[AUTO-CONTINUE] Disabled, skipping')
+      return false
+    }
+
+    // Don't continue if max continuations reached
+    if (this.autoContinueState.continuationCount >= this.autoContinueState.maxContinuations) {
+      console.log('[AUTO-CONTINUE] Max continuations reached:', this.autoContinueState.maxContinuations)
+      this.showToast({
+        type: 'warning',
+        title: 'Auto-continue limit reached',
+        message: `Stopped after ${this.autoContinueState.maxContinuations} continuations`,
+        duration: 5000
+      })
+      return false
+    }
+
+    // Don't continue if there was an error
+    if (response?.exitCode !== 0) {
+      console.log('[AUTO-CONTINUE] Response had error, skipping')
+      return false
+    }
+
+    const content = response?.content || ''
+
+    // Check if response contains the completion keyword
+    if (content.includes(this.autoContinueState.completionKeyword)) {
+      console.log('[AUTO-CONTINUE] Found completion keyword, stopping')
+      this.resetAutoContinueState()
+      return false
+    }
+
+    // Check for explicit completion patterns
+    const completionPatterns = [
+      /implementation is complete/i,
+      /all.*criteria.*satisfied/i,
+      /successfully implemented/i,
+      /task.*completed/i,
+      /finished implementing/i
+    ]
+
+    for (const pattern of completionPatterns) {
+      if (pattern.test(content)) {
+        console.log('[AUTO-CONTINUE] Found completion pattern, stopping')
+        this.resetAutoContinueState()
+        return false
+      }
+    }
+
+    // Check for patterns that indicate Claude is waiting for input
+    const waitingPatterns = [
+      /would you like me to/i,
+      /shall I proceed/i,
+      /do you want me to/i,
+      /please (confirm|let me know|specify)/i,
+      /what would you like/i,
+      /which.*would you prefer/i
+    ]
+
+    for (const pattern of waitingPatterns) {
+      if (pattern.test(content)) {
+        console.log('[AUTO-CONTINUE] Claude is asking for input, stopping auto-continue')
+        return false
+      }
+    }
+
+    // If we get here, the response likely needs continuation
+    console.log('[AUTO-CONTINUE] Response needs continuation')
+    return true
+  }
+
+  /**
+   * Reset auto-continue state (e.g., when starting a new thread)
+   */
+  resetAutoContinueState() {
+    if (this.autoContinueState) {
+      this.autoContinueState.continuationCount = 0
+      this.autoContinueState.lastPromptId = null
+    }
+    this.clearAutoContinueTimer()
+    console.log('[AUTO-CONTINUE] State reset')
+  }
+
+  /**
+   * Trigger auto-continue for the current thread
+   * @param {string} promptId - The prompt ID to continue from
+   */
+  triggerAutoContinue(promptId) {
+    if (!this.autoContinueState?.enabled) return
+
+    this.autoContinueState.lastPromptId = promptId
+    this.autoContinueState.continuationCount++
+
+    console.log('[AUTO-CONTINUE] Triggering continuation', {
+      promptId,
+      count: this.autoContinueState.continuationCount,
+      max: this.autoContinueState.maxContinuations
+    })
+
+    // Update UI to show continuation count
+    this.updateContinuationCount(this.autoContinueState.continuationCount)
+
+    // Start timer with callback to submit continuation
+    this.startAutoContinueTimer(this.autoContinueState.timerSeconds, () => {
+      this.submitContinuationPrompt(promptId)
+    })
+  }
+
+  /**
+   * Submit a continuation prompt
+   * @param {string} parentPromptId - The prompt ID to continue from
+   */
+  async submitContinuationPrompt(parentPromptId) {
+    const state = this.state
+
+    if (!state?.history?.activeBranch) {
+      console.error('[AUTO-CONTINUE] No active branch')
+      return
+    }
+
+    const branchId = state.history.activeBranch
+    const branch = state.history.raw?.branches?.[branchId]
+
+    if (!branch) {
+      console.error('[AUTO-CONTINUE] Branch not found:', branchId)
+      return
+    }
+
+    // Find the parent prompt
+    const parentPrompt = branch.prompts?.find(p => p.id === parentPromptId)
+    if (!parentPrompt) {
+      console.error('[AUTO-CONTINUE] Parent prompt not found:', parentPromptId)
+      return
+    }
+
+    // Get session ID for continuity
+    const sessionId = parentPrompt.response?.sessionId || null
+
+    console.log('[AUTO-CONTINUE] Submitting continuation prompt', {
+      branchId,
+      parentPromptId,
+      sessionId,
+      count: this.autoContinueState.continuationCount
+    })
+
+    // Show toast notification
+    this.showToast({
+      type: 'info',
+      title: 'Auto-continuing',
+      message: `Continuation ${this.autoContinueState.continuationCount}/${this.autoContinueState.maxContinuations}`,
+      duration: 3000
+    })
+
+    // Submit the continuation prompt through the normal flow
+    this.intents.submitPrompt({
+      branchId,
+      content: this.autoContinueState.continuationPrompt,
+      parentId: parentPromptId
+    })
+
+    // The state-persistence layer will handle the actual submission to Claude
+  }
+
+  /**
+   * Toggle auto-continue enabled state
+   */
+  toggleAutoContinue() {
+    if (this.autoContinueState) {
+      this.autoContinueState.enabled = !this.autoContinueState.enabled
+      console.log('[AUTO-CONTINUE] Toggled to:', this.autoContinueState.enabled)
+      this.showToast({
+        type: 'info',
+        title: this.autoContinueState.enabled ? 'Auto-continue enabled' : 'Auto-continue disabled',
+        duration: 2000
+      })
+    }
+  }
+
+  /**
+   * Start the auto-continue countdown timer
+   *
+   * @param {number} seconds - Number of seconds to countdown
+   * @param {Function} onComplete - Callback when timer completes
+   */
+  startAutoContinueTimer(seconds = 20, onComplete) {
+    // Clear any existing timer
+    this.cancelAutoContinueTimer()
+
+    const timerEl = document.getElementById('auto-continue-timer')
+    const countdownEl = document.getElementById('timer-countdown')
+
+    if (!timerEl || !countdownEl) return
+
+    this.autoContinueCountdown = seconds
+    this.autoContinueCallback = onComplete
+
+    // Show timer UI
+    timerEl.classList.remove('hidden')
+    countdownEl.textContent = this.autoContinueCountdown
+
+    // Start countdown
+    this.autoContinueTimer = setInterval(() => {
+      this.autoContinueCountdown--
+      countdownEl.textContent = this.autoContinueCountdown
+
+      if (this.autoContinueCountdown <= 0) {
+        this.clearAutoContinueTimer()
+        if (this.autoContinueCallback) {
+          this.autoContinueCallback()
+        }
+      }
+    }, 1000)
+
+    console.log('[AUTO-CONTINUE] Timer started:', seconds, 'seconds')
+  }
+
+  /**
+   * Skip the auto-continue timer and execute immediately
+   */
+  skipAutoContinueTimer() {
+    console.log('[AUTO-CONTINUE] Timer skipped by user')
+    const callback = this.autoContinueCallback
+    this.clearAutoContinueTimer()
+    if (callback) {
+      callback()
+    }
+  }
+
+  /**
+   * Cancel the auto-continue timer
+   */
+  cancelAutoContinueTimer() {
+    console.log('[AUTO-CONTINUE] Timer cancelled by user')
+    this.clearAutoContinueTimer()
+    this.showToast({
+      type: 'info',
+      title: 'Auto-continue cancelled',
+      message: 'Manual control restored',
+      duration: 2000
+    })
+  }
+
+  /**
+   * Clear the auto-continue timer without triggering callback
+   */
+  clearAutoContinueTimer() {
+    if (this.autoContinueTimer) {
+      clearInterval(this.autoContinueTimer)
+      this.autoContinueTimer = null
+    }
+    this.autoContinueCountdown = 0
+    this.autoContinueCallback = null
+
+    const timerEl = document.getElementById('auto-continue-timer')
+    if (timerEl) {
+      timerEl.classList.add('hidden')
+    }
+  }
+
+  /**
+   * Update the iteration counter display
+   *
+   * @param {number} current - Current iteration number
+   * @param {number} max - Maximum iterations
+   */
+  updateIterationCounter(current, max) {
+    const counterEl = document.getElementById('iteration-counter')
+    const currentEl = document.getElementById('iteration-current')
+    const maxEl = document.getElementById('iteration-max')
+
+    if (counterEl && currentEl && maxEl) {
+      currentEl.textContent = current
+      maxEl.textContent = max
+      counterEl.classList.remove('hidden')
+    }
+  }
+
+  /**
+   * Update the continuation count display
+   *
+   * @param {number} count - Number of continuations
+   */
+  updateContinuationCount(count) {
+    const countEl = document.getElementById('continuation-count')
+    if (countEl) {
+      countEl.textContent = count
+    }
+  }
+
+  /**
+   * Hide the iteration counter
+   */
+  hideIterationCounter() {
+    const counterEl = document.getElementById('iteration-counter')
+    if (counterEl) {
+      counterEl.classList.add('hidden')
+    }
+    this.clearAutoContinueTimer()
   }
 
   /**
@@ -827,12 +1172,42 @@ class PuffinApp {
       console.log('[SAM-DEBUG] response.content length:', response?.content?.length || 0)
 
       const filesModified = this.activityTracker.getFilesModified()
+      const toolsUsed = this.activityTracker.getToolsUsed?.() || []
       console.log('[SAM-DEBUG] filesModified at completion:', filesModified.length, 'files')
 
       try {
         this.intents.completeResponse(response, filesModified)
       } catch (err) {
         console.error('[SAM-ERROR] completeResponse failed:', err)
+      }
+
+      // Track iteration for stuck detection
+      try {
+        this.trackIterationForStuckDetection(response, filesModified, toolsUsed)
+        // Note: The stuck alert is shown via handleStuckDetection in onStateChange
+      } catch (err) {
+        console.error('[SAM-ERROR] trackIterationForStuckDetection failed:', err)
+      }
+
+      // Check for auto-continue
+      try {
+        const activePromptId = this.state?.history?.activePromptId
+        const isStuck = this.state?.stuckDetection?.isStuck
+
+        // Don't auto-continue if stuck detection triggered
+        if (isStuck) {
+          console.log('[AUTO-CONTINUE] Stuck detection triggered, skipping auto-continue')
+        } else if (this.shouldAutoContinue(response)) {
+          // Trigger auto-continue with the current prompt ID
+          if (activePromptId) {
+            this.triggerAutoContinue(activePromptId)
+          }
+        } else {
+          // Response is complete or waiting for input - reset state
+          this.resetAutoContinueState()
+        }
+      } catch (err) {
+        console.error('[SAM-ERROR] Auto-continue check failed:', err)
       }
 
       // Always clear activity and processing state, even if completeResponse fails
@@ -1375,8 +1750,8 @@ class PuffinApp {
     const turnsEl = document.getElementById('stat-turns')
     const costEl = document.getElementById('stat-cost')
     const durationEl = document.getElementById('stat-duration')
-    const modelEl = document.getElementById('stat-model')
     const createdEl = document.getElementById('stat-created')
+    const defectsEl = document.getElementById('stat-defects')
     const handoffSection = document.getElementById('handoff-section')
     const handoffDisplay = document.getElementById('handoff-display')
 
@@ -1384,19 +1759,22 @@ class PuffinApp {
     const activeBranch = state.history?.activeBranch
     const activePromptId = state.history?.activePromptId
     const branch = activeBranch ? state.history?.raw?.branches?.[activeBranch] : null
-    const prompts = branch?.prompts || []
-    const thread = prompts.find(p => p.id === activePromptId)
+    const allPrompts = branch?.prompts || []
 
-    // Aggregate statistics across all prompts in the branch
+    // Get only prompts in the current thread (using thread traversal)
+    const threadPrompts = this.collectThreadPrompts(activePromptId, allPrompts)
+    const threadRoot = threadPrompts.length > 0 ? threadPrompts[0] : null
+
+    // Aggregate statistics across prompts in the current thread only
     let totalTurns = 0
     let totalCost = 0
     let totalDuration = 0
     let hasCostData = false
     let hasDurationData = false
 
-    console.log('[STATS] Branch:', activeBranch, 'Prompts:', prompts.length)
+    console.log('[STATS] Branch:', activeBranch, 'Thread prompts:', threadPrompts.length, 'of', allPrompts.length)
 
-    prompts.forEach(prompt => {
+    threadPrompts.forEach(prompt => {
       if (prompt.response) {
         // Turns
         if (prompt.response.turns) {
@@ -1447,17 +1825,11 @@ class PuffinApp {
       }
     }
 
-    // Update model (from current thread)
-    if (modelEl) {
-      const model = thread?.model || state.settings?.defaultModel || '-'
-      modelEl.textContent = model.charAt(0).toUpperCase() + model.slice(1)
-    }
-
-    // Update created date (from first prompt in branch)
+    // Update created date (from thread root, not branch first prompt)
     if (createdEl) {
-      const firstPrompt = prompts[0]
-      if (firstPrompt?.createdAt) {
-        const date = new Date(firstPrompt.createdAt)
+      const createdAt = threadRoot?.createdAt || threadRoot?.timestamp
+      if (createdAt) {
+        const date = new Date(createdAt)
         createdEl.textContent = date.toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
@@ -1469,9 +1841,16 @@ class PuffinApp {
       }
     }
 
+    // Update defect count
+    if (defectsEl) {
+      const defectCount = this.countThreadDefects(threadPrompts)
+      defectsEl.textContent = defectCount.toString()
+    }
+
     // Update handoff context section (incoming handoff)
+    const activePrompt = allPrompts.find(p => p.id === activePromptId)
     if (handoffSection && handoffDisplay) {
-      const handoffContext = thread?.handoffContext
+      const handoffContext = activePrompt?.handoffContext
       if (handoffContext) {
         handoffSection.classList.remove('hidden')
         handoffDisplay.innerHTML = `
@@ -1486,6 +1865,82 @@ class PuffinApp {
       }
     }
 
+  }
+
+  /**
+   * Collect all prompts in the thread containing the given prompt ID.
+   * Walks up to find the root, then collects all descendants via BFS.
+   *
+   * @param {string} promptId - The active prompt ID
+   * @param {Array} allPrompts - All prompts in the branch
+   * @returns {Array} Prompts in the thread, ordered from root to leaves
+   */
+  collectThreadPrompts(promptId, allPrompts) {
+    if (!promptId || !allPrompts || allPrompts.length === 0) {
+      return []
+    }
+
+    // Build lookup maps
+    const promptMap = new Map()
+    allPrompts.forEach(p => promptMap.set(p.id, p))
+
+    // Find the starting prompt
+    const startPrompt = promptMap.get(promptId)
+    if (!startPrompt) {
+      return []
+    }
+
+    // Walk up to find the thread root
+    let root = startPrompt
+    while (root.parentId && promptMap.has(root.parentId)) {
+      root = promptMap.get(root.parentId)
+    }
+
+    // BFS to collect all prompts in the thread from root
+    const threadPrompts = []
+    const queue = [root]
+    const visited = new Set()
+
+    while (queue.length > 0) {
+      const prompt = queue.shift()
+      if (visited.has(prompt.id)) continue
+      visited.add(prompt.id)
+      threadPrompts.push(prompt)
+
+      // Find children (prompts with parentId === prompt.id)
+      const children = allPrompts.filter(p => p.parentId === prompt.id)
+      queue.push(...children)
+    }
+
+    return threadPrompts
+  }
+
+  /**
+   * Count defects mentioned in thread prompts.
+   * Scans user prompt content for defect-related keywords.
+   *
+   * @param {Array} threadPrompts - Prompts in the thread
+   * @returns {number} Count of prompts containing defect keywords
+   */
+  countThreadDefects(threadPrompts) {
+    const defectKeywords = [
+      'bug', 'defect', 'broken', 'error', 'issue', 'problem',
+      'wrong', 'incorrect', "doesn't work", 'not working',
+      'failed', 'failing', 'fix', 'crash', 'regression'
+    ]
+
+    // Create regex pattern (case insensitive, word boundaries)
+    const pattern = new RegExp(`\\b(${defectKeywords.join('|')})\\b`, 'i')
+
+    let defectCount = 0
+    threadPrompts.forEach(prompt => {
+      const content = prompt.content || ''
+      if (pattern.test(content)) {
+        defectCount++
+      }
+    })
+
+    return defectCount
   }
 
   /**
@@ -1759,6 +2214,32 @@ Keep it concise but informative. Use markdown formatting.`
 
     // Clear stored summary
     this.generatedHandoffSummary = null
+  }
+
+  /**
+   * Track iteration output for stuck detection
+   * Called after each Claude response completes
+   *
+   * @param {Object} response - The response object from Claude
+   * @param {string[]} filesModified - Array of file paths modified
+   * @param {string[]} toolsUsed - Array of tool names used
+   */
+  trackIterationForStuckDetection(response, filesModified, toolsUsed) {
+    // Build response object for hashing
+    const responseData = {
+      content: response?.content || '',
+      filesModified: filesModified || [],
+      toolsUsed: toolsUsed || []
+    }
+
+    // Compute hash and summary
+    const hash = computeSimilarityHash(responseData)
+    const summary = generateOutputSummary(responseData)
+
+    console.log('[STUCK-DETECTION] Recording iteration:', { hash, summary })
+
+    // Record in state
+    this.intents.recordIterationOutput(hash, summary)
   }
 
   /**

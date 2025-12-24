@@ -1020,6 +1020,10 @@ class PuffinState {
       if (!config.uxStyle) {
         config.uxStyle = this.getDefaultUxStyle()
       }
+      // Ensure sprintExecution exists for older configs
+      if (!config.sprintExecution) {
+        config.sprintExecution = this.getDefaultSprintExecution()
+      }
       return config
     } catch {
       // Create default config
@@ -1040,11 +1044,24 @@ class PuffinState {
           }
         },
         uxStyle: this.getDefaultUxStyle(),
+        sprintExecution: this.getDefaultSprintExecution(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
       await this.saveConfig(defaultConfig)
       return defaultConfig
+    }
+  }
+
+  /**
+   * Get default sprint execution configuration
+   * @private
+   */
+  getDefaultSprintExecution() {
+    return {
+      maxIterations: 10,
+      autoContinueDelay: 20,
+      stuckDetectionThreshold: 3
     }
   }
 

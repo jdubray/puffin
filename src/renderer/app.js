@@ -669,15 +669,31 @@ class PuffinApp {
     this.autoContinueTimer = null
     this.autoContinueCountdown = 0
 
-    // Initialize auto-continue state
+    // Initialize auto-continue state (values will be loaded from config in onStateChange)
     this.autoContinueState = {
       enabled: true,                    // Master switch for auto-continue
       continuationCount: 0,             // Current continuation count for this thread
-      maxContinuations: 10,             // Maximum continuations before stopping
-      timerSeconds: 15,                 // Delay before auto-continuing
+      maxContinuations: 10,             // Maximum continuations before stopping (loaded from config)
+      timerSeconds: 20,                 // Delay before auto-continuing (loaded from config)
       lastPromptId: null,               // Track which prompt we're continuing
       completionKeyword: '[Complete]',  // Keyword that signals completion
-      continuationPrompt: 'Continue the implementation. If you have finished, end your message with [Complete].'
+      continuationPrompt: 'Complete the implementation, if it is complete return [Complete]'
+    }
+  }
+
+  /**
+   * Load auto-continue settings from config
+   * Called when state changes to sync with persisted config
+   */
+  loadAutoContinueConfig() {
+    const sprintExecution = this.state?.config?.sprintExecution
+    if (sprintExecution) {
+      this.autoContinueState.maxContinuations = sprintExecution.maxIterations || 10
+      this.autoContinueState.timerSeconds = sprintExecution.autoContinueDelay || 20
+      console.log('[AUTO-CONTINUE] Loaded config:', {
+        maxContinuations: this.autoContinueState.maxContinuations,
+        timerSeconds: this.autoContinueState.timerSeconds
+      })
     }
   }
 
@@ -693,14 +709,22 @@ class PuffinApp {
       return false
     }
 
-    // Don't continue if max continuations reached
+    // Only auto-continue during active sprint implementation sessions
+    const activeSprint = this.state?.activeSprint
+    const isImplementing = activeSprint?.status === 'implementing'
+    if (!isImplementing) {
+      console.log('[AUTO-CONTINUE] Not in sprint implementation session, skipping')
+      return false
+    }
+
+    // Don't continue if max continuations reached (but allow manual override)
     if (this.autoContinueState.continuationCount >= this.autoContinueState.maxContinuations) {
       console.log('[AUTO-CONTINUE] Max continuations reached:', this.autoContinueState.maxContinuations)
       this.showToast({
         type: 'warning',
         title: 'Auto-continue limit reached',
-        message: `Stopped after ${this.autoContinueState.maxContinuations} continuations`,
-        duration: 5000
+        message: `Stopped after ${this.autoContinueState.continuationCount} continuations. You can manually continue if needed.`,
+        duration: 6000
       })
       return false
     }
@@ -713,9 +737,10 @@ class PuffinApp {
 
     const content = response?.content || ''
 
-    // Check if response contains the completion keyword
+    // Check if response contains the completion keyword [Complete]
     if (content.includes(this.autoContinueState.completionKeyword)) {
       console.log('[AUTO-CONTINUE] Found completion keyword, stopping')
+      this.handleImplementationComplete()
       this.resetAutoContinueState()
       return false
     }
@@ -732,6 +757,7 @@ class PuffinApp {
     for (const pattern of completionPatterns) {
       if (pattern.test(content)) {
         console.log('[AUTO-CONTINUE] Found completion pattern, stopping')
+        this.handleImplementationComplete()
         this.resetAutoContinueState()
         return false
       }
@@ -757,6 +783,24 @@ class PuffinApp {
     // If we get here, the response likely needs continuation
     console.log('[AUTO-CONTINUE] Response needs continuation')
     return true
+  }
+
+  /**
+   * Handle implementation completion - show notification to user
+   */
+  handleImplementationComplete() {
+    const continuationCount = this.autoContinueState?.continuationCount || 0
+    console.log('[AUTO-CONTINUE] Implementation complete after', continuationCount, 'continuations')
+
+    this.showToast({
+      type: 'success',
+      title: 'Implementation Complete',
+      message: `Completed after ${continuationCount} continuation${continuationCount !== 1 ? 's' : ''}. You can now test and mark the story as complete.`,
+      duration: 8000
+    })
+
+    // Update the metadata panel to show final continuation count
+    this.updateMetadataPanel(this.state)
   }
 
   /**
@@ -1288,6 +1332,12 @@ class PuffinApp {
    * Handle state changes
    */
   onStateChange({ state, changed }) {
+    // Load auto-continue config when config changes
+    if (changed?.includes('config') || !this._configLoaded) {
+      this.loadAutoContinueConfig()
+      this._configLoaded = true
+    }
+
     this.updateNavigation(state)
     this.updateSidebar(state)
     this.updateViews(state)
@@ -1845,6 +1895,12 @@ class PuffinApp {
     if (defectsEl) {
       const defectCount = this.countThreadDefects(threadPrompts)
       defectsEl.textContent = defectCount.toString()
+    }
+
+    // Update continuations count (from auto-continue state)
+    const continuationsEl = document.getElementById('stat-continuations')
+    if (continuationsEl) {
+      continuationsEl.textContent = (this.autoContinueState?.continuationCount || 0).toString()
     }
 
     // Update handoff context section (incoming handoff)

@@ -5,6 +5,10 @@
  * Stories can be manually added or auto-extracted from specifications branch.
  */
 
+// Search configuration
+const SEARCH_MIN_CHARS = 3
+const SEARCH_DEBOUNCE_MS = 150
+
 export class UserStoriesComponent {
   constructor(intents) {
     this.intents = intents
@@ -13,8 +17,11 @@ export class UserStoriesComponent {
     this.addBtn = null
     this.listContainer = null
     this.branchSelect = null
+    this.searchInput = null
     this.currentFilter = 'in-progress'
     this.currentBranch = 'all' // Filter by branch
+    this.searchQuery = ''
+    this.searchDebounceTimer = null
     this.stories = []
     this.branches = {}
     this.selectedStoryIds = new Set() // Track selected stories for batch operations
@@ -28,6 +35,7 @@ export class UserStoriesComponent {
     this.listContainer = document.getElementById('user-stories-list')
     this.addBtn = document.getElementById('add-story-btn')
     this.filterBtns = this.container.querySelectorAll('.filter-btn')
+    this.searchInput = document.getElementById('story-search-input')
 
     this.bindEvents()
     this.subscribeToState()
@@ -55,6 +63,25 @@ export class UserStoriesComponent {
     this.addBtn.addEventListener('click', () => {
       this.showAddStoryModal()
     })
+
+    // Search input with debounce
+    if (this.searchInput) {
+      this.searchInput.addEventListener('input', (e) => {
+        this.handleSearchInput(e.target.value)
+      })
+    }
+  }
+
+  /**
+   * Handle search input with debouncing
+   * @param {string} value - The search input value
+   */
+  handleSearchInput(value) {
+    clearTimeout(this.searchDebounceTimer)
+    this.searchDebounceTimer = setTimeout(() => {
+      this.searchQuery = value
+      this.render()
+    }, SEARCH_DEBOUNCE_MS)
   }
 
   /**
@@ -105,7 +132,7 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Get filtered stories (by status and branch)
+   * Get filtered stories (by status, branch, and search query)
    */
   getFilteredStories() {
     let filtered = this.stories
@@ -118,6 +145,15 @@ export class UserStoriesComponent {
     // Filter by status
     if (this.currentFilter !== 'all') {
       filtered = filtered.filter(s => s.status === this.currentFilter)
+    }
+
+    // Filter by search query (minimum 3 characters)
+    if (this.searchQuery.length >= SEARCH_MIN_CHARS) {
+      const query = this.searchQuery.toLowerCase()
+      filtered = filtered.filter(s =>
+        s.title.toLowerCase().includes(query) ||
+        (s.description && s.description.toLowerCase().includes(query))
+      )
     }
 
     return filtered

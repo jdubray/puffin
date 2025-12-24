@@ -581,9 +581,11 @@ class ClaudeService {
    */
   getBranchContext(branchId) {
     const branchContexts = {
-      specifications: `[SPECIFICATIONS THREAD]
+      specifications: `[SPECIFICATIONS THREAD - PLANNING ONLY, NO CODE CHANGES]
 Focus on: Requirements gathering, feature definitions, user stories, acceptance criteria, and functional specifications.
-Help clarify requirements, identify edge cases, and ensure completeness.`,
+Help clarify requirements, identify edge cases, and ensure completeness.
+CRITICAL: Do NOT write, modify, or delete any source code files. This thread is for planning and documentation only.
+If implementation is requested, advise the user to move to an appropriate implementation branch (UI, Backend, or feature branch).`,
 
       architecture: `[ARCHITECTURE THREAD]
 Focus on: System design, component structure, data flow, API design, technology choices, and architectural patterns.

@@ -465,6 +465,10 @@
                       <span class="stat-label">Defects</span>
                       <span id="stat-defects" class="stat-value">0</span>
                     </div>
+                    <div class="stat-item">
+                      <span class="stat-label">Continuations</span>
+                      <span id="stat-continuations" class="stat-value">0</span>
+                    </div>
                   </div>
                 </div>
                 <!-- Incoming Handoff Context (from another thread) -->
@@ -565,10 +569,13 @@
 
             <!-- Stories Tab Content -->
             <div id="backlog-stories-tab" class="backlog-tab-content active">
-              <div class="user-stories-header">
-                <p class="subtitle">User stories derived from prompts using "Derive User Stories"</p>
-              </div>
               <div class="user-stories-toolbar">
+                <div class="story-search-container">
+                  <input type="search"
+                         id="story-search-input"
+                         class="story-search-input"
+                         placeholder="Search stories...">
+                </div>
                 <div class="filter-group">
                   <button class="filter-btn" data-status="all">All</button>
                   <button class="filter-btn" data-status="pending">Pending</button>

@@ -75,6 +75,14 @@ export class PromptEditorComponent {
     this.textarea.addEventListener('input', () => {
       const hasContent = this.textarea.value.trim().length > 0
       this.submitBtn.disabled = !hasContent
+
+      // Cancel auto-continue when user starts typing (Story 2: User Intercept)
+      this.cancelAutoContinueIfActive()
+    })
+
+    // Cancel auto-continue when user focuses the textarea (Story 2: User Intercept)
+    this.textarea.addEventListener('focus', () => {
+      this.cancelAutoContinueIfActive()
     })
 
     // Submit button
@@ -186,14 +194,14 @@ export class PromptEditorComponent {
       }
       this.wasProcessing = state.prompt.isProcessing
 
-      this.render(state.prompt, state.history, state.storyGenerations)
+      this.render(state.prompt, state.history, state.storyGenerations, state.storyDerivation)
     })
   }
 
   /**
    * Render component based on state
    */
-  render(promptState, historyState, storyGenerations) {
+  render(promptState, historyState, storyGenerations, storyDerivation) {
     // DEBUG: Track textarea disabled state
     const wasDisabled = this.textarea.disabled
 
@@ -201,15 +209,19 @@ export class PromptEditorComponent {
     // The textarea is the source of truth for its own content.
     // This avoids performance issues from tracking every keystroke.
 
+    // Check if story derivation is in progress
+    const isDerivingStories = storyDerivation?.status === 'deriving'
+    const isProcessing = promptState.isProcessing || isDerivingStories
+
     // Update button states - canSubmit is based on local textarea content
     const hasContent = this.textarea.value.trim().length > 0
-    this.submitBtn.disabled = promptState.isProcessing || !hasContent
+    this.submitBtn.disabled = isProcessing || !hasContent
     this.cancelBtn.classList.toggle('hidden', !promptState.canCancel)
 
     // Show loading state
     const btnText = this.submitBtn.querySelector('.btn-text')
     const btnLoading = this.submitBtn.querySelector('.btn-loading')
-    if (promptState.isProcessing) {
+    if (isProcessing) {
       btnText.classList.add('hidden')
       btnLoading.classList.remove('hidden')
     } else {
@@ -217,24 +229,29 @@ export class PromptEditorComponent {
       btnLoading.classList.add('hidden')
     }
 
+    // Show derivation status message
+    this.updateDerivationStatus(isDerivingStories)
+
     // Disable textarea during processing
-    this.textarea.disabled = promptState.isProcessing
+    this.textarea.disabled = isProcessing
 
     // DEBUG: Log when textarea disabled state changes
     if (wasDisabled !== this.textarea.disabled) {
       console.log('[PROMPT-EDITOR-DEBUG] Textarea disabled state changed:', {
         wasDisabled,
         nowDisabled: this.textarea.disabled,
-        isProcessing: promptState.isProcessing,
+        isProcessing,
+        isDerivingStories,
         promptStateKeys: Object.keys(promptState),
         stack: new Error().stack.split('\n').slice(1, 5).join('\n')
       })
     }
 
-    // DEBUG: Warn if textarea is disabled but isProcessing is false
-    if (this.textarea.disabled && !promptState.isProcessing) {
+    // DEBUG: Warn if textarea is disabled but no processing is happening
+    if (this.textarea.disabled && !isProcessing) {
       console.warn('[PROMPT-EDITOR-DEBUG] ANOMALY: Textarea disabled but isProcessing=false!', {
         promptState,
+        isDerivingStories,
         textareaDisabled: this.textarea.disabled
       })
     }
@@ -547,6 +564,19 @@ export class PromptEditorComponent {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
+  }
+
+  /**
+   * Cancel auto-continue timer if one is active
+   * Called when user interacts with the prompt input (focus or typing)
+   * This allows users to intercept the auto-continue process
+   */
+  cancelAutoContinueIfActive() {
+    // Check if there's an active auto-continue timer via the main app
+    if (window.puffinApp?.autoContinueTimer) {
+      console.log('[PROMPT-EDITOR] User interaction detected, cancelling auto-continue')
+      window.puffinApp.cancelAutoContinueTimer()
+    }
   }
 
   /**
@@ -1364,6 +1394,45 @@ export class PromptEditorComponent {
       console.log('[DERIVE-STORIES] IPC call sent')
     } else {
       console.error('[DERIVE-STORIES] IPC not available!')
+    }
+  }
+
+  /**
+   * Update the derivation status indicator
+   */
+  updateDerivationStatus(isDerivingStories) {
+    let statusEl = document.getElementById('derivation-status')
+
+    if (isDerivingStories) {
+      // Create status element if it doesn't exist
+      if (!statusEl) {
+        statusEl = document.createElement('div')
+        statusEl.id = 'derivation-status'
+        statusEl.className = 'derivation-status'
+        statusEl.innerHTML = `
+          <div class="derivation-status-content">
+            <span class="spinner"></span>
+            <span class="status-text">Deriving user stories from your prompt...</span>
+          </div>
+        `
+        // Insert above the prompt input area
+        const promptArea = document.querySelector('.prompt-input-area')
+        if (promptArea) {
+          promptArea.parentNode.insertBefore(statusEl, promptArea)
+        }
+      }
+      statusEl.classList.add('visible')
+    } else {
+      // Hide and remove the status element
+      if (statusEl) {
+        statusEl.classList.remove('visible')
+        // Remove after animation
+        setTimeout(() => {
+          if (statusEl && !statusEl.classList.contains('visible')) {
+            statusEl.remove()
+          }
+        }, 300)
+      }
     }
   }
 

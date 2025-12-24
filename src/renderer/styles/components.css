@@ -1676,6 +1676,12 @@
   resize: none;
 }
 
+.prompt-area textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--bg-tertiary);
+}
+
 .prompt-options {
   display: flex;
   gap: 1rem;
@@ -2739,13 +2745,41 @@
 .user-stories-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1rem;
+}
+
+/* Story Search */
+.story-search-container {
+  flex: 0 0 auto;
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.story-search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease;
+}
+
+.story-search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.story-search-input::placeholder {
+  color: var(--text-muted);
 }
 
 .filter-group {
   display: flex;
   gap: 0.25rem;
+  margin-left: auto;
 }
 
 .filter-btn {
@@ -4116,6 +4150,47 @@
   border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+/* Story Derivation Status */
+.derivation-status {
+  display: none;
+  padding: 0.75rem 1rem;
+  margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, var(--accent-primary-alpha, rgba(108, 99, 255, 0.1)), var(--bg-secondary));
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.derivation-status.visible {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.derivation-status-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--accent-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.derivation-status .spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--accent-primary-alpha, rgba(108, 99, 255, 0.3));
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.derivation-status .status-text {
+  flex: 1;
 }
 
 /* Handoff Chain Visualization */

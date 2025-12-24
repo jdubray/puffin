@@ -992,6 +992,12 @@ export const resetStuckDetection = () => ({
   payload: { timestamp: Date.now() }
 })
 
+// Clear active implementation story (when [Complete] detected or manually cancelled)
+export const clearActiveImplementationStory = () => ({
+  type: 'CLEAR_ACTIVE_IMPLEMENTATION_STORY',
+  payload: { timestamp: Date.now() }
+})
+
 // Toggle acceptance criteria completion for a story in sprint
 export const toggleCriteriaCompletion = (storyId, criteriaIndex, checked) => ({
   type: 'TOGGLE_CRITERIA_COMPLETION',

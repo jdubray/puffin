@@ -709,13 +709,14 @@ class PuffinApp {
       return false
     }
 
-    // Only auto-continue during active sprint implementation sessions
-    const activeSprint = this.state?.activeSprint
-    const isImplementing = activeSprint?.status === 'implementing'
-    if (!isImplementing) {
-      console.log('[AUTO-CONTINUE] Not in sprint implementation session, skipping')
+    // Check for active implementation story (PRIMARY CHECK - story-scoped auto-continue)
+    const activeStory = this.state?.activeImplementationStory
+    if (!activeStory) {
+      console.log('[AUTO-CONTINUE] No active implementation story, skipping')
       return false
     }
+
+    console.log('[AUTO-CONTINUE] Active story:', activeStory.title)
 
     // Don't continue if max continuations reached (but allow manual override)
     if (this.autoContinueState.continuationCount >= this.autoContinueState.maxContinuations) {
@@ -726,6 +727,8 @@ class PuffinApp {
         message: `Stopped after ${this.autoContinueState.continuationCount} continuations. You can manually continue if needed.`,
         duration: 6000
       })
+      // Clear the active story when max iterations reached
+      this.intents.clearActiveImplementationStory()
       return false
     }
 
@@ -789,13 +792,19 @@ class PuffinApp {
    * Handle implementation completion - show notification to user
    */
   handleImplementationComplete() {
+    const activeStory = this.state?.activeImplementationStory
+    const storyTitle = activeStory?.title || 'Story'
     const continuationCount = this.autoContinueState?.continuationCount || 0
-    console.log('[AUTO-CONTINUE] Implementation complete after', continuationCount, 'continuations')
+
+    console.log('[AUTO-CONTINUE] Implementation complete for:', storyTitle, 'after', continuationCount, 'continuations')
+
+    // Clear the active implementation story
+    this.intents.clearActiveImplementationStory()
 
     this.showToast({
       type: 'success',
       title: 'Implementation Complete',
-      message: `Completed after ${continuationCount} continuation${continuationCount !== 1 ? 's' : ''}. You can now test and mark the story as complete.`,
+      message: `"${storyTitle}" implementation finished after ${continuationCount} continuation${continuationCount !== 1 ? 's' : ''}. Test and mark complete when ready.`,
       duration: 8000
     })
 
@@ -841,6 +850,21 @@ class PuffinApp {
   }
 
   /**
+   * Get the continuation prompt, including acceptance criteria from active story if available
+   * @returns {string} - The continuation prompt text
+   */
+  getContinuationPrompt() {
+    const activeStory = this.state?.activeImplementationStory
+    if (activeStory?.acceptanceCriteria?.length > 0) {
+      const criteria = activeStory.acceptanceCriteria
+        .map((c, i) => `${i + 1}. ${c}`)
+        .join('\n')
+      return `Continue the implementation. Review these acceptance criteria and respond with [Complete] when ALL are satisfied:\n\n${criteria}`
+    }
+    return this.autoContinueState.continuationPrompt
+  }
+
+  /**
    * Submit a continuation prompt
    * @param {string} parentPromptId - The prompt ID to continue from
    */
@@ -870,11 +894,15 @@ class PuffinApp {
     // Get session ID for continuity
     const sessionId = parentPrompt.response?.sessionId || null
 
+    // Get the continuation prompt (includes acceptance criteria if active story exists)
+    const continuationPrompt = this.getContinuationPrompt()
+
     console.log('[AUTO-CONTINUE] Submitting continuation prompt', {
       branchId,
       parentPromptId,
       sessionId,
-      count: this.autoContinueState.continuationCount
+      count: this.autoContinueState.continuationCount,
+      activeStory: state.activeImplementationStory?.title
     })
 
     // Show toast notification
@@ -888,7 +916,7 @@ class PuffinApp {
     // Submit the continuation prompt through the normal flow
     this.intents.submitPrompt({
       branchId,
-      content: this.autoContinueState.continuationPrompt,
+      content: continuationPrompt,
       parentId: parentPromptId
     })
 
@@ -1593,6 +1621,9 @@ class PuffinApp {
         if (storyId) expandedSections.add(storyId)
       })
 
+      // Get the active implementation story ID for highlighting
+      const activeImplementationStoryId = state.activeImplementationStory?.id
+
       storiesContainer.innerHTML = sprint.stories.map(story => {
         const computedStory = storiesWithProgress.find(s => s.id === story.id)
         const progress = storyProgress[story.id]
@@ -1604,6 +1635,10 @@ class PuffinApp {
         const storyStatusClass = storyStatus === 'completed' ? 'story-completed' : storyStatus === 'in_progress' ? 'story-in-progress' : ''
         const isCompleted = storyStatus === 'completed'
 
+        // Check if this is the currently active implementation story
+        const isActiveImplementation = story.id === activeImplementationStoryId
+        const implementingClass = isActiveImplementation ? 'story-implementing' : ''
+
         // Get acceptance criteria with completion state
         const criteriaList = computedStory?.acceptanceCriteria || []
         const totalCriteria = criteriaList.length
@@ -1614,7 +1649,7 @@ class PuffinApp {
         const isExpanded = expandedSections.has(story.id)
 
         return `
-          <div class="sprint-story-card ${storyStatusClass}" data-story-id="${story.id}">
+          <div class="sprint-story-card ${storyStatusClass} ${implementingClass}" data-story-id="${story.id}">
             <div class="story-header-with-indicator">
               <button class="story-complete-btn ${isCompleted ? 'completed' : ''}"
                       data-story-id="${story.id}"
@@ -1622,6 +1657,7 @@ class PuffinApp {
                 <span class="complete-icon">${isCompleted ? '✓' : '○'}</span>
               </button>
               <h4>${this.escapeHtml(story.title)}</h4>
+              ${isActiveImplementation ? '<span class="implementing-badge">Implementing...</span>' : ''}
             </div>
             <p>${this.escapeHtml(story.description || '')}</p>
             ${totalCriteria > 0 ? `
@@ -1648,6 +1684,14 @@ class PuffinApp {
               </div>
             ` : ''}
             ${showBranchButtons ? this.renderStoryBranchButtons(story, progress) : ''}
+            ${isActiveImplementation ? `
+              <div class="cancel-implementation-section">
+                <button class="cancel-implementation-btn" data-story-id="${story.id}" title="Cancel implementation and stop auto-continue">
+                  <span class="cancel-icon">✕</span>
+                  <span class="cancel-label">Cancel Implementation</span>
+                </button>
+              </div>
+            ` : ''}
           </div>
         `
       }).join('')
@@ -1741,6 +1785,30 @@ class PuffinApp {
               : `"${storyTitle}" marked as incomplete`,
             newStatus === 'completed' ? 'success' : 'info'
           )
+          return
+        }
+
+        // Cancel implementation button clicks (event delegation)
+        const cancelBtn = e.target.closest('.cancel-implementation-btn')
+        if (cancelBtn) {
+          const storyId = cancelBtn.dataset.storyId
+          const storyCard = cancelBtn.closest('.sprint-story-card')
+          const storyTitle = storyCard?.querySelector('h4')?.textContent || 'Story'
+
+          console.log('[SPRINT] Cancelling implementation:', { storyId, storyTitle })
+
+          // Clear the active implementation story
+          this.intents.clearActiveImplementationStory()
+
+          // Reset auto-continue state
+          this.resetAutoContinueState()
+
+          this.showToast({
+            type: 'info',
+            title: 'Implementation Cancelled',
+            message: `Stopped auto-continue for "${storyTitle}". Manual control restored.`,
+            duration: 4000
+          })
         }
       })
 

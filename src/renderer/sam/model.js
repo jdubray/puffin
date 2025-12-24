@@ -100,6 +100,10 @@ export const initialModel = {
   // Sprint statuses: 'created' | 'planning' | 'planned' | 'implementing'
   sprintError: null, // { type, message, details, timestamp } - for validation errors
 
+  // Active implementation story - tracks which story is currently being implemented
+  // This enables story-scoped auto-continue (instead of sprint-scoped)
+  activeImplementationStory: null, // { id, title, description, acceptanceCriteria, branchType, startedAt }
+
   // Stuck detection state - tracks iteration outputs to detect loops
   stuckDetection: {
     isStuck: false,
@@ -1878,6 +1882,9 @@ export const clearSprintAcceptor = model => proposal => {
     }
 
     model.activeSprint = null
+
+    // Also clear the active implementation story when sprint is cleared
+    model.activeImplementationStory = null
   }
 }
 
@@ -1949,6 +1956,16 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
       ...model.activeSprint,
       status: 'implementing',
       storyProgress: model.activeSprint.storyProgress
+    }
+
+    // Set the active implementation story for story-scoped auto-continue
+    model.activeImplementationStory = {
+      id: story.id,
+      title: story.title,
+      description: story.description || '',
+      acceptanceCriteria: story.acceptanceCriteria || [],
+      branchType: branchType,
+      startedAt: Date.now()
     }
 
     // Build implementation prompt context (includes approved plan if available)
@@ -2274,6 +2291,14 @@ export const resetStuckDetectionAcceptor = model => proposal => {
       lastAction: null,
       timestamp: proposal.payload.timestamp
     }
+  }
+}
+
+// Clear the active implementation story (for story-scoped auto-continue)
+export const clearActiveImplementationStoryAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_ACTIVE_IMPLEMENTATION_STORY') {
+    console.log('[MODEL] Clearing active implementation story')
+    model.activeImplementationStory = null
   }
 }
 
@@ -2692,6 +2717,9 @@ export const acceptors = [
   recordIterationOutputAcceptor,
   resolveStuckStateAcceptor,
   resetStuckDetectionAcceptor,
+
+  // Active Implementation Story (story-scoped auto-continue)
+  clearActiveImplementationStoryAcceptor,
 
   // Activity Tracking
   setCurrentToolAcceptor,

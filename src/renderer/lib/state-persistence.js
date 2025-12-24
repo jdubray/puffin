@@ -163,6 +163,41 @@ export class StatePersistence {
            'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
         await window.puffin.state.updateActiveSprint(state.activeSprint)
+
+        // For COMPLETE_STORY_BRANCH: also persist any user stories that were marked complete
+        // The model updates userStories when all branches for a story are complete
+        if (normalizedType === 'COMPLETE_STORY_BRANCH' && state.activeSprint?.storyProgress) {
+          for (const [storyId, progress] of Object.entries(state.activeSprint.storyProgress)) {
+            if (progress?.status === 'completed') {
+              const story = state.userStories?.find(s => s.id === storyId)
+              if (story && story.status === 'completed') {
+                try {
+                  await window.puffin.state.updateUserStory(storyId, story)
+                  console.log('[PERSIST-DEBUG] Persisted completed story:', storyId)
+                } catch (e) {
+                  console.error('[PERSIST-DEBUG] Failed to persist completed story:', storyId, e)
+                }
+              }
+            }
+          }
+        }
+
+        // For CLEAR_SPRINT: persist any stories that were synced during clear
+        // The model stores _completedStoryIdsToSync before clearing activeSprint
+        if (normalizedType === 'CLEAR_SPRINT' && state._completedStoryIdsToSync?.length > 0) {
+          console.log('[PERSIST-DEBUG] Syncing completed stories on sprint clear:', state._completedStoryIdsToSync)
+          for (const storyId of state._completedStoryIdsToSync) {
+            const story = state.userStories?.find(s => s.id === storyId)
+            if (story) {
+              try {
+                await window.puffin.state.updateUserStory(storyId, story)
+                console.log('[PERSIST-DEBUG] Persisted completed story on clear:', storyId)
+              } catch (e) {
+                console.error('[PERSIST-DEBUG] Failed to persist story on clear:', storyId, e)
+              }
+            }
+          }
+        }
       }
 
       // Persist user stories and history when adding to backlog from derivation

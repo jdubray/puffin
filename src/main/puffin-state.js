@@ -1181,7 +1181,30 @@ Document your API endpoints...
     const storiesPath = path.join(this.puffinPath, USER_STORIES_FILE)
     try {
       const content = await fs.readFile(storiesPath, 'utf-8')
-      return JSON.parse(content)
+      const stories = JSON.parse(content)
+
+      // Deduplicate stories by ID (cleanup for any existing duplicates)
+      const seenIds = new Set()
+      const uniqueStories = []
+      let duplicateCount = 0
+
+      for (const story of stories) {
+        if (seenIds.has(story.id)) {
+          duplicateCount++
+          console.warn(`[PUFFIN-STATE] Removing duplicate story: "${story.title}" (${story.id})`)
+          continue
+        }
+        seenIds.add(story.id)
+        uniqueStories.push(story)
+      }
+
+      // If duplicates were found, save the cleaned list
+      if (duplicateCount > 0) {
+        console.log(`[PUFFIN-STATE] Removed ${duplicateCount} duplicate stories from storage`)
+        await this.saveUserStories(uniqueStories)
+      }
+
+      return uniqueStories
     } catch {
       // Create empty user stories array
       const defaultStories = []

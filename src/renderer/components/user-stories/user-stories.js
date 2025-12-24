@@ -13,7 +13,7 @@ export class UserStoriesComponent {
     this.addBtn = null
     this.listContainer = null
     this.branchSelect = null
-    this.currentFilter = 'all'
+    this.currentFilter = 'in-progress'
     this.currentBranch = 'all' // Filter by branch
     this.stories = []
     this.branches = {}

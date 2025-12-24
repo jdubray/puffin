@@ -1853,6 +1853,30 @@ Please provide a comprehensive plan that I can review before starting implementa
 // Clear the active sprint
 export const clearSprintAcceptor = model => proposal => {
   if (proposal?.type === 'CLEAR_SPRINT') {
+    // IMPORTANT: Sync completed story statuses to userStories BEFORE clearing
+    // This prevents "ghost" pending stories after sprint completion
+    if (model.activeSprint?.storyProgress) {
+      const storyProgress = model.activeSprint.storyProgress
+      const timestamp = Date.now()
+
+      for (const [storyId, progress] of Object.entries(storyProgress)) {
+        if (progress?.status === 'completed') {
+          // Find and update the corresponding user story
+          const userStory = model.userStories?.find(s => s.id === storyId)
+          if (userStory && userStory.status !== 'completed') {
+            userStory.status = 'completed'
+            userStory.updatedAt = timestamp
+            console.log('[SPRINT-CLEAR] Synced completed status for story:', storyId)
+          }
+        }
+      }
+
+      // Track which stories were synced so persistence can update them
+      model._completedStoryIdsToSync = Object.entries(storyProgress)
+        .filter(([_, progress]) => progress?.status === 'completed')
+        .map(([storyId, _]) => storyId)
+    }
+
     model.activeSprint = null
   }
 }

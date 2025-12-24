@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:">
   <title>Puffin</title>
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/components.css">
@@ -570,9 +570,9 @@
               </div>
               <div class="user-stories-toolbar">
                 <div class="filter-group">
-                  <button class="filter-btn active" data-status="all">All</button>
+                  <button class="filter-btn" data-status="all">All</button>
                   <button class="filter-btn" data-status="pending">Pending</button>
-                  <button class="filter-btn" data-status="in-progress">In Progress</button>
+                  <button class="filter-btn active" data-status="in-progress">In Progress</button>
                   <button class="filter-btn" data-status="completed">Completed</button>
                 </div>
                 <button id="add-story-btn" class="btn small">+ Add Story</button>

@@ -307,7 +307,7 @@ export class StatePersistence {
             prompt: pendingSprintImpl.promptContent,
             branchId: pendingSprintImpl.branchId,
             sessionId,
-            maxTurns: state.config?.sprintExecution?.maxIterations || 10,
+            maxTurns: state.config?.sprintExecution?.maxIterations || 40,
             project: state.config ? {
               name: state.config.name,
               description: state.config.description

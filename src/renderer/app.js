@@ -688,7 +688,7 @@ class PuffinApp {
   loadAutoContinueConfig() {
     const sprintExecution = this.state?.config?.sprintExecution
     if (sprintExecution) {
-      this.autoContinueState.maxContinuations = sprintExecution.maxIterations || 10
+      this.autoContinueState.maxContinuations = sprintExecution.maxIterations || 40
       this.autoContinueState.timerSeconds = sprintExecution.autoContinueDelay || 20
       console.log('[AUTO-CONTINUE] Loaded config:', {
         maxContinuations: this.autoContinueState.maxContinuations,
@@ -717,7 +717,7 @@ class PuffinApp {
     }
 
     // Check if Claude hit the turn limit (indicates max turns reached)
-    const maxTurnsLimit = this.state?.config?.sprintExecution?.maxIterations || 10
+    const maxTurnsLimit = this.state?.config?.sprintExecution?.maxIterations || 40
     const turnsUsed = response?.turns || 0
     const hitTurnLimit = turnsUsed >= maxTurnsLimit
 

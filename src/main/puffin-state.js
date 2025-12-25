@@ -1140,7 +1140,7 @@ class PuffinState {
    */
   getDefaultSprintExecution() {
     return {
-      maxIterations: 10,
+      maxIterations: 40,
       autoContinueDelay: 20,
       stuckDetectionThreshold: 3
     }

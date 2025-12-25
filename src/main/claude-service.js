@@ -204,7 +204,11 @@ class ClaudeService {
                   duration: json.duration_ms,
                   exitCode: 0
                 }
-                console.log('[CLAUDE-DEBUG] onComplete response.content length:', response.content?.length || 0)
+                console.log('[CLAUDE-DEBUG] onComplete response:', {
+                  contentLength: response.content?.length || 0,
+                  turns: response.turns,
+                  exitCode: response.exitCode
+                })
                 onComplete(response)
               }
             }
@@ -317,7 +321,11 @@ class ClaudeService {
             exitCode: code
           }
           completionCalled = true
-          console.log('[CLAUDE-DEBUG] Calling onComplete with response.content length:', response.content?.length || 0)
+          console.log('[CLAUDE-DEBUG] onComplete (close handler) response:', {
+            contentLength: response.content?.length || 0,
+            turns: response.turns,
+            exitCode: response.exitCode
+          })
           onComplete(response)
           resolve(response)
         } else {

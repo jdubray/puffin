@@ -703,6 +703,13 @@ class PuffinApp {
    * @returns {boolean} - True if continuation is needed
    */
   shouldAutoContinue(response) {
+    console.log('[AUTO-CONTINUE] shouldAutoContinue called with response:', {
+      hasResponse: !!response,
+      turns: response?.turns,
+      exitCode: response?.exitCode,
+      contentLength: response?.content?.length || 0
+    })
+
     // Don't continue if auto-continue is disabled
     if (!this.autoContinueState?.enabled) {
       console.log('[AUTO-CONTINUE] Disabled, skipping')
@@ -714,7 +721,7 @@ class PuffinApp {
     const turnsUsed = response?.turns || 0
     const hitTurnLimit = turnsUsed >= maxTurnsLimit
 
-    console.log('[AUTO-CONTINUE] Turns used:', turnsUsed, 'Hit limit:', hitTurnLimit)
+    console.log('[AUTO-CONTINUE] Turns check:', { turnsUsed, maxTurnsLimit, hitTurnLimit })
 
     // If Claude didn't hit the turn limit, it completed naturally - no continuation needed
     if (!hitTurnLimit) {
@@ -744,9 +751,9 @@ class PuffinApp {
       return false
     }
 
-    // Don't continue if there was an error
-    if (response?.exitCode !== 0) {
-      console.log('[AUTO-CONTINUE] Response had error, skipping')
+    // Don't continue if there was an error (only check if exitCode is explicitly non-zero)
+    if (response?.exitCode != null && response.exitCode !== 0) {
+      console.log('[AUTO-CONTINUE] Response had error (exitCode:', response.exitCode, '), skipping')
       return false
     }
 
@@ -1278,16 +1285,42 @@ class PuffinApp {
         const activePromptId = this.state?.history?.activePromptId
         const isStuck = this.state?.stuckDetection?.isStuck
 
+        console.log('[AUTO-CONTINUE-DEBUG] Checking auto-continue:', {
+          activePromptId,
+          isStuck,
+          autoContinueEnabled: this.autoContinueState?.enabled,
+          responseTurns: response?.turns,
+          continuationCount: this.autoContinueState?.continuationCount
+        })
+
         // Don't auto-continue if stuck detection triggered
         if (isStuck) {
           console.log('[AUTO-CONTINUE] Stuck detection triggered, skipping auto-continue')
         } else if (this.shouldAutoContinue(response)) {
           // Trigger auto-continue with the current prompt ID
           if (activePromptId) {
+            console.log('[AUTO-CONTINUE] Triggering with promptId:', activePromptId)
             this.triggerAutoContinue(activePromptId)
+          } else {
+            // Fallback: try to get the last prompt from the active branch
+            console.log('[AUTO-CONTINUE] WARNING: No activePromptId in state, attempting fallback')
+            const branch = this.state?.history?.activeBranch
+            const rawBranch = this.state?.history?.raw?.branches?.[branch]
+            if (rawBranch?.prompts?.length > 0) {
+              const lastPrompt = rawBranch.prompts[rawBranch.prompts.length - 1]
+              if (lastPrompt?.id) {
+                console.log('[AUTO-CONTINUE] Using fallback promptId:', lastPrompt.id)
+                this.triggerAutoContinue(lastPrompt.id)
+              } else {
+                console.error('[AUTO-CONTINUE] ERROR: Fallback also failed - no prompt ID available')
+              }
+            } else {
+              console.error('[AUTO-CONTINUE] ERROR: No prompts in active branch')
+            }
           }
         } else {
           // Response is complete or waiting for input - reset state
+          console.log('[AUTO-CONTINUE] shouldAutoContinue returned false, resetting state')
           this.resetAutoContinueState()
         }
       } catch (err) {

@@ -1709,16 +1709,18 @@ class PuffinApp {
       const storyProgress = sprint.storyProgress || {}
       const storiesWithProgress = sprintProgress?.stories || []
 
-      // Calculate story-based progress using backlog as source of truth
+      // Calculate story-based progress - check multiple sources for completion
       const completedStoryCount = sprint.stories.filter(sprintStory => {
         const backlogStory = backlogStories.find(bs => bs.id === sprintStory.id)
-        console.log(`[SPRINT-UI-DEBUG] Story: "${sprintStory.title?.substring(0, 30)}" | backlogFound: ${!!backlogStory} | backlogStatus: ${backlogStory?.status}`)
-        return backlogStory?.status === 'completed'
+        const progressStatus = storyProgress[sprintStory.id]?.status
+        // Check all sources: backlog status, sprint story status, or progress status
+        const isComplete = backlogStory?.status === 'completed' ||
+                          sprintStory.status === 'completed' ||
+                          progressStatus === 'completed'
+        return isComplete
       }).length
       const totalStoryCount = sprint.stories.length
       const storyCompletionPercent = totalStoryCount > 0 ? Math.round((completedStoryCount / totalStoryCount) * 100) : 0
-
-      console.log(`[SPRINT-UI-DEBUG] Progress: ${completedStoryCount}/${totalStoryCount} (${storyCompletionPercent}%) | backlogStories: ${backlogStories.length}`)
 
       // Capture which criteria sections are currently expanded before re-rendering
       const expandedSections = new Set()

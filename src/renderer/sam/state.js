@@ -457,8 +457,9 @@ function computeSprintProgress(model) {
       : 0
 
     // Determine overall story status
+    // Check multiple sources: sprint storyProgress, sprint story copy, and backlog story
     let storyStatus = 'pending'
-    if (progress.status === 'completed') {
+    if (progress.status === 'completed' || backlogStory?.status === 'completed' || story.status === 'completed') {
       storyStatus = 'completed'
     } else if (inProgressBranches > 0 || completedBranches > 0) {
       storyStatus = 'in_progress'

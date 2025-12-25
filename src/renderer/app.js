@@ -2148,6 +2148,46 @@ class PuffinApp {
   }
 
   /**
+   * Get the linear path from root to a specific prompt.
+   * Unlike collectThreadPrompts which gets all descendants, this returns only
+   * the direct ancestor chain - useful for handoff summaries where we want
+   * just the current conversation thread, not sibling branches.
+   *
+   * @param {string} promptId - The target prompt ID
+   * @param {Array} allPrompts - All prompts in the branch
+   * @returns {Array} Prompts in the linear path from root to target, ordered root-first
+   */
+  getLinearThreadPath(promptId, allPrompts) {
+    if (!promptId || !allPrompts || allPrompts.length === 0) {
+      return []
+    }
+
+    // Build lookup map
+    const promptMap = new Map()
+    allPrompts.forEach(p => promptMap.set(p.id, p))
+
+    // Find the target prompt
+    const targetPrompt = promptMap.get(promptId)
+    if (!targetPrompt) {
+      return []
+    }
+
+    // Walk backwards from target to root, collecting the chain
+    const chain = []
+    let current = targetPrompt
+    while (current) {
+      chain.unshift(current) // Add to front to maintain root-first order
+      if (current.parentId && promptMap.has(current.parentId)) {
+        current = promptMap.get(current.parentId)
+      } else {
+        break // Reached root
+      }
+    }
+
+    return chain
+  }
+
+  /**
    * Count defects mentioned in thread prompts.
    * Scans user prompt content for defect-related keywords.
    *
@@ -2194,20 +2234,30 @@ class PuffinApp {
     const activeBranch = this.state?.history?.activeBranch
     const activePromptId = this.state?.history?.activePromptId
     const branch = activeBranch ? this.state?.history?.raw?.branches?.[activeBranch] : null
-    const prompts = branch?.prompts || []
+    const allPrompts = branch?.prompts || []
 
-    if (prompts.length === 0) {
+    if (allPrompts.length === 0) {
       this.showToast('No thread content to generate handoff from', 'warning')
       return
     }
+
+    // Get only the current thread (linear path from root to active prompt)
+    const threadPrompts = this.getLinearThreadPath(activePromptId, allPrompts)
+
+    if (threadPrompts.length === 0) {
+      this.showToast('No active thread selected', 'warning')
+      return
+    }
+
+    console.log(`[HANDOFF] Using ${threadPrompts.length} prompts from current thread (out of ${allPrompts.length} total in branch)`)
 
     // Show loading state
     generateBtn.disabled = true
     generateBtn.innerHTML = '<span class="handoff-icon">⏳</span><span class="handoff-text">Generating...</span>'
 
     try {
-      // Build conversation context from all prompts in the thread
-      const conversationContext = this.buildConversationContext(prompts, activeBranch)
+      // Build conversation context from the current thread only
+      const conversationContext = this.buildConversationContext(threadPrompts, activeBranch)
 
       // Create the prompt for Claude
       const handoffPrompt = `You are helping create a handoff summary for a development thread. The goal is to summarize what was accomplished and provide context for another developer to continue the work in a different branch.

@@ -709,16 +709,26 @@ class PuffinApp {
       return false
     }
 
-    // Check for active implementation story (PRIMARY CHECK - story-scoped auto-continue)
-    const activeStory = this.state?.activeImplementationStory
-    if (!activeStory) {
-      console.log('[AUTO-CONTINUE] No active implementation story, skipping')
+    // Check if Claude hit the turn limit (10 turns indicates max turns reached)
+    const maxTurnsLimit = 10
+    const turnsUsed = response?.turns || 0
+    const hitTurnLimit = turnsUsed >= maxTurnsLimit
+
+    console.log('[AUTO-CONTINUE] Turns used:', turnsUsed, 'Hit limit:', hitTurnLimit)
+
+    // If Claude didn't hit the turn limit, it completed naturally - no continuation needed
+    if (!hitTurnLimit) {
+      console.log('[AUTO-CONTINUE] Response completed naturally (< 10 turns), no continuation needed')
       return false
     }
 
-    console.log('[AUTO-CONTINUE] Active story:', activeStory.title)
+    // Check for active implementation story (optional - provides context for logging)
+    const activeStory = this.state?.activeImplementationStory
+    if (activeStory) {
+      console.log('[AUTO-CONTINUE] Active story:', activeStory.title)
+    }
 
-    // Don't continue if max continuations reached (but allow manual override)
+    // Don't continue if max continuations reached (safety limit)
     if (this.autoContinueState.continuationCount >= this.autoContinueState.maxContinuations) {
       console.log('[AUTO-CONTINUE] Max continuations reached:', this.autoContinueState.maxContinuations)
       this.showToast({
@@ -727,8 +737,10 @@ class PuffinApp {
         message: `Stopped after ${this.autoContinueState.continuationCount} continuations. You can manually continue if needed.`,
         duration: 6000
       })
-      // Clear the active story when max iterations reached
-      this.intents.clearActiveImplementationStory()
+      // Clear the active story if present
+      if (activeStory) {
+        this.intents.clearActiveImplementationStory()
+      }
       return false
     }
 
@@ -783,8 +795,8 @@ class PuffinApp {
       }
     }
 
-    // If we get here, the response likely needs continuation
-    console.log('[AUTO-CONTINUE] Response needs continuation')
+    // Claude hit the turn limit and didn't complete - needs continuation
+    console.log('[AUTO-CONTINUE] Response hit turn limit, needs continuation')
     return true
   }
 

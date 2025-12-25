@@ -983,8 +983,9 @@ When asked to create documents, lists, or summaries, include the full content in
    * @param {Object} project - Project context
    * @returns {Promise<{success: boolean, stories?: Array, error?: string, rawResponse?: string}>}
    */
-  async deriveStories(prompt, projectPath, project = null, progressCallback = null) {
+  async deriveStories(prompt, projectPath, project = null, progressCallback = null, conversationContext = null) {
     console.log('[STORY-DERIVATION] Starting story derivation for prompt:', prompt.substring(0, 100) + '...')
+    console.log('[STORY-DERIVATION] Conversation context length:', conversationContext?.length || 0)
 
     const progress = (msg) => {
       console.log('[STORY-DERIVATION]', msg)
@@ -1000,7 +1001,8 @@ CRITICAL INSTRUCTIONS:
 2. Do NOT ask for clarification - use your best judgment to interpret the request
 3. Do NOT include any text before or after the JSON array
 4. Do NOT use markdown code blocks - output raw JSON only
-5. If the request is vague, make reasonable assumptions and create user stories anyway
+5. If the request is vague, USE THE CONVERSATION CONTEXT to understand what the user is referring to
+6. Make reasonable assumptions and create user stories based on the conversation
 
 Output format (ONLY this, no other text):
 [
@@ -1016,13 +1018,21 @@ Guidelines:
 - Write clear, actionable acceptance criteria
 - Keep stories at a granular enough level to be implemented individually
 - You MUST output at least one user story, even if the request is unclear
+- Use the conversation context to understand references like "Phase 1", "that feature", etc.
 - Make your best interpretation of what the user wants`
 
-    const fullPrompt = `${systemPrompt}
+    // Build the full prompt with conversation context if available
+    let fullPrompt = systemPrompt + '\n\n'
 
-${project?.description ? `Project Context: ${project.description}\n` : ''}
-Request to analyze:
-${prompt}`
+    if (project?.description) {
+      fullPrompt += `Project Context: ${project.description}\n\n`
+    }
+
+    if (conversationContext) {
+      fullPrompt += `Recent Conversation Context (use this to understand what the user is referring to):\n${conversationContext}\n\n`
+    }
+
+    fullPrompt += `Current Request to derive user stories from:\n${prompt}`
 
     return new Promise((resolve, reject) => {
       const cwd = projectPath || this.projectPath || process.cwd()

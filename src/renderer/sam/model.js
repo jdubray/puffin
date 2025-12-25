@@ -433,8 +433,16 @@ export const completeResponseAcceptor = model => proposal => {
       if (prompt) {
         console.log('[ACCEPTOR-DEBUG] Found prompt in branch:', branchId, 'promptId:', prompt.id)
 
+        // Strip the [Complete] keyword from the response content if present
+        let responseContent = proposal.payload.content || ''
+        const completionKeyword = '[Complete]'
+        if (responseContent.includes(completionKeyword)) {
+          console.log('[ACCEPTOR-DEBUG] Stripping [Complete] keyword from response')
+          responseContent = responseContent.replace(completionKeyword, '').trim()
+        }
+
         prompt.response = {
-          content: proposal.payload.content,
+          content: responseContent,
           sessionId: proposal.payload.sessionId,
           cost: proposal.payload.cost,
           turns: proposal.payload.turns,

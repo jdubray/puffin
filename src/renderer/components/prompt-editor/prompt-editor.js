@@ -1383,9 +1383,35 @@ export class PromptEditorComponent {
     // Call the IPC to derive stories
     if (window.puffin && window.puffin.claude.deriveStories) {
       console.log('[DERIVE-STORIES] Calling IPC deriveStories...')
+
+      // Include recent conversation context so Claude understands references like "Phase 1"
+      let conversationContext = ''
+      const activeBranch = state.history.activeBranch
+      const branchData = state.history.raw?.branches?.[activeBranch]
+      if (branchData?.prompts?.length > 0) {
+        // Get the last few prompts/responses for context (limit to avoid token overflow)
+        const recentPrompts = branchData.prompts.slice(-3)
+        const contextParts = []
+        for (const p of recentPrompts) {
+          if (p.content) {
+            contextParts.push(`User: ${p.content.substring(0, 500)}${p.content.length > 500 ? '...' : ''}`)
+          }
+          if (p.response?.content) {
+            // Limit response content to avoid token overflow
+            const responsePreview = p.response.content.substring(0, 2000)
+            contextParts.push(`Assistant: ${responsePreview}${p.response.content.length > 2000 ? '...' : ''}`)
+          }
+        }
+        if (contextParts.length > 0) {
+          conversationContext = contextParts.join('\n\n')
+          console.log('[DERIVE-STORIES] Including conversation context:', conversationContext.length, 'chars')
+        }
+      }
+
       window.puffin.claude.deriveStories({
         prompt: content,
         branchId: state.history.activeBranch,
+        conversationContext: conversationContext,
         project: state.config ? {
           name: state.config.name,
           description: state.config.description

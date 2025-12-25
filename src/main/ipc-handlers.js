@@ -591,6 +591,7 @@ function setupClaudeHandlers(ipcMain) {
   ipcMain.on('claude:deriveStories', async (event, data) => {
     console.log('[IPC] claude:deriveStories received')
     console.log('[IPC] prompt length:', data?.prompt?.length || 0)
+    console.log('[IPC] conversationContext length:', data?.conversationContext?.length || 0)
     console.log('[IPC] projectPath:', projectPath)
 
     // Send progress updates to renderer for debugging
@@ -607,7 +608,8 @@ function setupClaudeHandlers(ipcMain) {
         data.prompt,
         projectPath,
         data.project,
-        sendProgress  // Pass progress callback
+        sendProgress,  // Pass progress callback
+        data.conversationContext  // Pass conversation context
       )
 
       console.log('[IPC] deriveStories result:', result?.success, 'stories:', result?.stories?.length || 0)
@@ -1334,4 +1336,98 @@ function setupShellHandlers(ipcMain) {
   })
 }
 
-module.exports = { setupIpcHandlers }
+/**
+ * Plugin system IPC handlers
+ * @param {IpcMain} ipcMain
+ * @param {PluginLoader} pluginLoader
+ */
+function setupPluginHandlers(ipcMain, pluginLoader) {
+  // Get list of all plugins
+  ipcMain.handle('plugins:list', async () => {
+    try {
+      const plugins = pluginLoader.getAllPlugins().map(p => p.toJSON())
+      return { success: true, plugins }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get loaded plugins only
+  ipcMain.handle('plugins:listLoaded', async () => {
+    try {
+      const plugins = pluginLoader.getLoadedPlugins().map(p => p.toJSON())
+      return { success: true, plugins }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get failed plugins with errors
+  ipcMain.handle('plugins:listFailed', async () => {
+    try {
+      const plugins = pluginLoader.getFailedPlugins().map(p => p.toJSON())
+      return { success: true, plugins }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get plugin by name
+  ipcMain.handle('plugins:get', async (event, name) => {
+    try {
+      const plugin = pluginLoader.getPlugin(name)
+      if (!plugin) {
+        return { success: false, error: `Plugin not found: ${name}` }
+      }
+      return { success: true, plugin: plugin.toJSON() }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get plugin load errors
+  ipcMain.handle('plugins:getErrors', async () => {
+    try {
+      const errors = pluginLoader.getErrors()
+      return { success: true, errors }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get plugin summary
+  ipcMain.handle('plugins:getSummary', async () => {
+    try {
+      const summary = pluginLoader.getSummary()
+      return { success: true, summary }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Reload all plugins
+  ipcMain.handle('plugins:reload', async () => {
+    try {
+      const result = await pluginLoader.reloadPlugins()
+      return {
+        success: true,
+        loaded: result.loaded.map(p => p.toJSON()),
+        failed: result.failed.map(p => p.toJSON())
+      }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get plugins directory path
+  ipcMain.handle('plugins:getDirectory', async () => {
+    try {
+      const directory = pluginLoader.getPluginsDirectory()
+      return { success: true, directory }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+module.exports = { setupIpcHandlers, setupPluginHandlers }

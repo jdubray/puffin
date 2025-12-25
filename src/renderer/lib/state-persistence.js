@@ -15,8 +15,9 @@ export class StatePersistence {
   /**
    * Persist state changes based on action type
    * @param {string} actionType - The action that triggered the persist
+   * @param {Object} action - The full action object with payload
    */
-  async persist(actionType) {
+  async persist(actionType, action = {}) {
     if (!window.puffin) {
       console.log('Persist skipped: no window.puffin')
       return
@@ -198,6 +199,22 @@ export class StatePersistence {
             }
           }
         }
+
+        // For TOGGLE_CRITERIA_COMPLETION: sync story status if it changed to completed
+        if (normalizedType === 'TOGGLE_CRITERIA_COMPLETION') {
+          const storyId = action.payload?.storyId
+          if (storyId) {
+            const story = state.userStories?.find(s => s.id === storyId)
+            if (story) {
+              try {
+                await window.puffin.state.updateUserStory(storyId, story)
+                console.log('[PERSIST-DEBUG] Synced story after criteria toggle:', storyId, story.status)
+              } catch (e) {
+                console.error('[PERSIST-DEBUG] Failed to sync story after criteria toggle:', storyId, e)
+              }
+            }
+          }
+        }
       }
 
       // Persist user stories and history when adding to backlog from derivation
@@ -205,16 +222,63 @@ export class StatePersistence {
         // Persist history (we added a prompt entry)
         await window.puffin.state.updateHistory(state.history.raw)
 
-        // Only persist the NEWLY added stories (from the action payload), not all stories
+        // Get story IDs from action payload
         const newStoryIds = action.payload?.storyIds || []
-        const newStories = state.userStories.filter(s => newStoryIds.includes(s.id))
+        console.log('[PERSIST-DEBUG] ADD_STORIES_TO_BACKLOG - storyIds from payload:', newStoryIds)
 
-        for (const story of newStories) {
-          try {
-            await window.puffin.state.addUserStory(story)
-          } catch (e) {
-            // Story might already exist, update instead
-            await window.puffin.state.updateUserStory(story.id, story)
+        if (newStoryIds.length > 0) {
+          const newStories = state.userStories.filter(s => newStoryIds.includes(s.id))
+          console.log('[PERSIST-DEBUG] Found stories to persist:', newStories.length)
+
+          for (const story of newStories) {
+            try {
+              await window.puffin.state.addUserStory(story)
+              console.log('[PERSIST-DEBUG] Added story to backlog:', story.id, story.title)
+            } catch (e) {
+              // Story might already exist, update instead
+              try {
+                await window.puffin.state.updateUserStory(story.id, story)
+                console.log('[PERSIST-DEBUG] Updated existing story:', story.id)
+              } catch (e2) {
+                console.error('[PERSIST-DEBUG] Failed to persist story:', story.id, e2)
+              }
+            }
+          }
+        } else {
+          console.warn('[PERSIST-DEBUG] No storyIds in action payload - stories may not persist!')
+        }
+      }
+
+      // Persist user story status changes when sprint is created (stories become in-progress)
+      if (normalizedType === 'CREATE_SPRINT') {
+        const sprintStoryIds = action.payload?.stories?.map(s => s.id) || []
+        console.log('[PERSIST-DEBUG] CREATE_SPRINT - syncing story statuses for:', sprintStoryIds.length, 'stories')
+
+        for (const storyId of sprintStoryIds) {
+          const story = state.userStories?.find(s => s.id === storyId)
+          if (story) {
+            try {
+              await window.puffin.state.updateUserStory(storyId, story)
+              console.log('[PERSIST-DEBUG] Synced story status to in-progress:', storyId)
+            } catch (e) {
+              console.error('[PERSIST-DEBUG] Failed to sync story status:', storyId, e)
+            }
+          }
+        }
+      }
+
+      // Persist user story status when manually updated in sprint
+      if (normalizedType === 'UPDATE_SPRINT_STORY_STATUS') {
+        const storyId = action.payload?.storyId
+        if (storyId) {
+          const story = state.userStories?.find(s => s.id === storyId)
+          if (story) {
+            try {
+              await window.puffin.state.updateUserStory(storyId, story)
+              console.log('[PERSIST-DEBUG] Synced story status change:', storyId, story.status)
+            } catch (e) {
+              console.error('[PERSIST-DEBUG] Failed to sync story status:', storyId, e)
+            }
           }
         }
       }

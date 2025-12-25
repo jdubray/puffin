@@ -436,7 +436,7 @@ class PuffinApp {
 
         // Auto-persist state changes to .puffin/
         if (this.statePersistence) {
-          this.statePersistence.persist(actionType)
+          this.statePersistence.persist(actionType, actionInfo)
         }
       }
     })

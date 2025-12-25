@@ -281,6 +281,21 @@ export const loadStateAcceptor = model => proposal => {
     model.storyGenerations = state.storyGenerations || model.storyGenerations
     model.uiGuidelines = state.uiGuidelines || model.uiGuidelines
 
+    // Clear any in-progress state from previous session
+    // This ensures the prompt textarea is enabled on startup
+    model.pendingPromptId = null
+    model.streamingResponse = ''
+    model._pendingStoryImplementation = null
+    model.storyDerivation = {
+      status: 'idle',
+      pendingStories: [],
+      error: null,
+      originalPrompt: null,
+      branchId: null
+    }
+
+    console.log('[LOAD_STATE] Cleared in-progress state to ensure prompt is enabled')
+
     // Switch to prompt view once loaded
     model.currentView = 'prompt'
   }

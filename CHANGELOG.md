@@ -5,6 +5,35 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-12-25
+
+### Added
+
+- **Archived Stories Separation**: Archived stories now stored in separate `archived-stories.json` file
+  - Keeps active stories file lean and focused
+  - Automatic migration of existing archived stories on startup
+  - New API methods: `getArchivedStories()` and `restoreArchivedStory()`
+  - State includes `archivedStoriesCount` for UI display
+
+### Changed
+
+- **Backlog Default Filter**: Changed from 'in-progress' to 'pending' so new stories are visible immediately
+- **Auto-Continue Timer**: High-contrast amber styling with pulse animation for better visibility
+  - Distinct background and border visible on all themes
+  - Larger glowing countdown value
+
+### Fixed
+
+- **Story Preservation**: Unselected stories are now preserved when adding selected stories to backlog
+  - Previously clicking "Add Selected" cleared ALL pending stories, losing unselected ones
+  - Modal now stays open with remaining stories for continued review
+
+- **Story Persistence**: User stories now properly persist on all state changes
+  - Fixed `action.payload` access in persistence layer (was undefined)
+  - Added persistence for CREATE_SPRINT (syncs in-progress status)
+  - Added persistence for UPDATE_SPRINT_STORY_STATUS
+  - Added persistence for TOGGLE_CRITERIA_COMPLETION
+
 ## [2.0.0] - 2025-12-22
 
 ### Added

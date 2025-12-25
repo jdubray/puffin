@@ -1011,6 +1011,8 @@ CRITICAL INSTRUCTIONS:
 4. Do NOT use markdown code blocks - output raw JSON only
 5. If the request is vague, USE THE CONVERSATION CONTEXT to understand what the user is referring to
 6. Make reasonable assumptions and create user stories based on the conversation
+7. Do NOT use any tools - do NOT read files, do NOT analyze code, do NOT call any functions
+8. Generate stories IMMEDIATELY based on the information provided in the prompt and context
 
 Output format (ONLY this, no other text):
 [
@@ -1027,7 +1029,8 @@ Guidelines:
 - Keep stories at a granular enough level to be implemented individually
 - You MUST output at least one user story, even if the request is unclear
 - Use the conversation context to understand references like "Phase 1", "that feature", etc.
-- Make your best interpretation of what the user wants`
+- Make your best interpretation of what the user wants
+- RESPOND IMMEDIATELY with JSON - do not research or analyze first`
 
     // Build the full prompt with conversation context if available
     let fullPrompt = systemPrompt + '\n\n'
@@ -1208,14 +1211,14 @@ Guidelines:
         resolve({ success: false, error: error.message })
       })
 
-      // Timeout after 90 seconds (increased from 60)
+      // Timeout after 180 seconds (increased to handle slow responses)
       const timeoutId = setTimeout(() => {
         if (resolved) {
           progress('Timeout fired but already resolved, ignoring')
           return
         }
         resolved = true
-        progress('TIMEOUT: 90 seconds elapsed, killing process')
+        progress('TIMEOUT: 180 seconds elapsed, killing process')
         progress(`Data received before timeout: ${dataReceived}`)
         progress(`Messages received before timeout: ${allMessages.length}`)
         progress(`Result text length before timeout: ${resultText.length}`)
@@ -1225,7 +1228,7 @@ Guidelines:
           error: 'Story derivation timed out',
           rawResponse: resultText.length > 0 ? resultText.substring(0, 500) : 'No response received'
         })
-      }, 90000)
+      }, 180000)
     })
   }
 

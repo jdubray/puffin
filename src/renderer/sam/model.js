@@ -1146,14 +1146,23 @@ export const addStoriesToBacklogAcceptor = model => proposal => {
       model.storyGenerations.currentGenerationId = null
     }
 
-    // Reset derivation state
-    model.storyDerivation.status = 'idle'
-    model.storyDerivation.pendingStories = []
-    model.storyDerivation.originalPrompt = null
-    model.storyDerivation.branchId = null
+    // Remove only the added stories from pendingStories (keep unselected ones)
+    const remainingStories = model.storyDerivation.pendingStories.filter(
+      s => !storyIds.includes(s.id)
+    )
 
-    // Close modal
-    model.modal = null
+    if (remainingStories.length > 0) {
+      // Keep modal open with remaining stories for user to review
+      model.storyDerivation.pendingStories = remainingStories
+      console.log(`[BACKLOG] Added ${selectedStories.length} stories. ${remainingStories.length} remaining for review.`)
+    } else {
+      // All stories processed - reset derivation state and close modal
+      model.storyDerivation.status = 'idle'
+      model.storyDerivation.pendingStories = []
+      model.storyDerivation.originalPrompt = null
+      model.storyDerivation.branchId = null
+      model.modal = null
+    }
   }
 }
 

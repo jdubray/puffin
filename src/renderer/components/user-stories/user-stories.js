@@ -18,7 +18,7 @@ export class UserStoriesComponent {
     this.listContainer = null
     this.branchSelect = null
     this.searchInput = null
-    this.currentFilter = 'in-progress'
+    this.currentFilter = 'pending'
     this.currentBranch = 'all' // Filter by branch
     this.searchQuery = ''
     this.searchDebounceTimer = null

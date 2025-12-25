@@ -186,6 +186,17 @@ export class ProjectFormComponent {
     // Assumptions
     this.assumptions = config.assumptions || []
     this.renderAssumptions()
+
+    // Sprint Execution Settings
+    const sprintExecution = config.sprintExecution || {}
+    const maxIterations = document.getElementById('sprint-max-iterations')
+    const autoContinueDelay = document.getElementById('sprint-auto-continue-delay')
+    if (maxIterations) maxIterations.value = sprintExecution.maxIterations || 40
+    if (autoContinueDelay) autoContinueDelay.value = sprintExecution.autoContinueDelay || 20
+
+    // Debug Mode
+    const debugCheckbox = document.getElementById('debug-mode-checkbox')
+    if (debugCheckbox) debugCheckbox.checked = config.debugMode || false
   }
 
   /**
@@ -244,7 +255,12 @@ export class ProjectFormComponent {
           text: document.getElementById('ux-color-text').value,
           error: document.getElementById('ux-color-error').value
         }
-      }
+      },
+      sprintExecution: {
+        maxIterations: parseInt(document.getElementById('sprint-max-iterations')?.value || '40', 10),
+        autoContinueDelay: parseInt(document.getElementById('sprint-auto-continue-delay')?.value || '20', 10)
+      },
+      debugMode: document.getElementById('debug-mode-checkbox')?.checked || false
     }
   }
 

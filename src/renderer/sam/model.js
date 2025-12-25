@@ -178,6 +178,12 @@ export const initialModel = {
     error: null
   },
 
+  // Debug state - stores the last prompt sent to Claude CLI
+  debug: {
+    lastPrompt: null, // { content, branch, model, sessionId, timestamp }
+    enabled: false // Whether debug mode is enabled (from config)
+  },
+
   // Developer profile state (GitHub integration)
   developerProfile: {
     // Authentication state
@@ -1594,6 +1600,35 @@ export const loadDeveloperProfileAcceptor = model => proposal => {
 }
 
 /**
+ * Debug Acceptors
+ * For storing and displaying prompts sent to Claude CLI
+ */
+
+export const storeDebugPromptAcceptor = model => proposal => {
+  if (proposal?.type === 'STORE_DEBUG_PROMPT') {
+    model.debug.lastPrompt = {
+      content: proposal.payload.content,
+      branch: proposal.payload.branch,
+      model: proposal.payload.model,
+      sessionId: proposal.payload.sessionId,
+      timestamp: proposal.payload.timestamp
+    }
+  }
+}
+
+export const clearDebugPromptAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_DEBUG_PROMPT') {
+    model.debug.lastPrompt = null
+  }
+}
+
+export const setDebugModeAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_DEBUG_MODE') {
+    model.debug.enabled = proposal.payload.enabled
+  }
+}
+
+/**
  * Handoff Acceptors
  * For context handoff between threads
  */
@@ -2775,5 +2810,10 @@ export const acceptors = [
   updateGithubContributionsAcceptor,
   updateGithubSettingsAcceptor,
   updateGithubRateLimitAcceptor,
-  loadDeveloperProfileAcceptor
+  loadDeveloperProfileAcceptor,
+
+  // Debug
+  storeDebugPromptAcceptor,
+  clearDebugPromptAcceptor,
+  setDebugModeAcceptor
 ]

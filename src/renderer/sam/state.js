@@ -95,6 +95,12 @@ export function computeState(model) {
       recentOutputs: [],
       lastAction: null,
       timestamp: null
+    },
+
+    // Debug state
+    debug: model.debug || {
+      lastPrompt: null,
+      enabled: false
     }
   }
 }

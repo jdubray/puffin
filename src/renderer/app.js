@@ -34,6 +34,12 @@ import { DeveloperProfileComponent } from './components/developer-profile/develo
 import { StoryGenerationsComponent } from './components/story-generations/story-generations.js'
 import { GitPanelComponent } from './components/git-panel/git-panel.js'
 
+// Plugin system
+import { sidebarViewManager } from './plugins/sidebar-view-manager.js'
+import { pluginViewContainer } from './plugins/plugin-view-container.js'
+import { styleInjector } from './plugins/style-injector.js'
+import { pluginComponentLoader } from './plugins/plugin-component-loader.js'
+
 /**
  * Main application class
  */
@@ -49,6 +55,12 @@ class PuffinApp {
     this.modalManager = null
     this.statePersistence = null
     this.activityTracker = null
+
+    // Plugin system managers
+    this.sidebarViewManager = sidebarViewManager
+    this.pluginViewContainer = pluginViewContainer
+    this.styleInjector = styleInjector
+    this.pluginComponentLoader = pluginComponentLoader
 
     // Toast container reference
     this.toastContainer = null
@@ -200,6 +212,15 @@ class PuffinApp {
 
         // Load state from .puffin/ directory
         await this.loadState()
+
+        // Initialize plugin styles (load before views to prevent flash of unstyled content)
+        await this.initPluginStyles()
+
+        // Initialize plugin component loader (loads renderer components for active plugins)
+        await this.initPluginComponentLoader()
+
+        // Initialize plugin sidebar view manager
+        await this.initPluginSidebarManager()
       })
     } else {
       // Development mode without Electron
@@ -221,6 +242,12 @@ class PuffinApp {
       this.showToast.bind(this)
     )
     this.activityTracker = new ActivityTracker(this.intents, () => this.state)
+
+    // Initialize plugin view container
+    this.pluginViewContainer.init()
+
+    // Initialize style injector
+    this.styleInjector.init()
   }
 
   /**
@@ -241,6 +268,98 @@ class PuffinApp {
     } catch (error) {
       console.error('Error loading state:', error)
       this.showToast('Error loading project state', 'error')
+    }
+  }
+
+  /**
+   * Initialize the plugin sidebar view manager
+   * Sets up listeners for plugin views and integrates with built-in nav
+   */
+  async initPluginSidebarManager() {
+    try {
+      await this.sidebarViewManager.init({
+        onViewActivate: (viewId, view) => {
+          console.log('[PuffinApp] Plugin view activated:', viewId)
+          // Deactivate built-in nav buttons when plugin view is active
+          document.querySelectorAll('#main-nav .nav-btn').forEach(btn => {
+            btn.classList.remove('active')
+          })
+        }
+      })
+
+      // Integrate with built-in nav - when a built-in view is clicked,
+      // deactivate any active plugin view
+      document.querySelectorAll('#main-nav .nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.sidebarViewManager.showBuiltInView()
+        })
+      })
+
+      console.log('[PuffinApp] Plugin sidebar manager initialized')
+    } catch (error) {
+      console.error('[PuffinApp] Failed to initialize plugin sidebar manager:', error)
+    }
+  }
+
+  /**
+   * Initialize plugin style management
+   * Loads existing plugin styles and subscribes to plugin lifecycle events
+   */
+  async initPluginStyles() {
+    if (!window.puffin || !window.puffin.plugins) {
+      console.warn('[PuffinApp] puffin.plugins API not available for style injection')
+      return
+    }
+
+    try {
+      // Load styles for all currently active plugins
+      const result = await window.puffin.plugins.getAllStylePaths()
+      if (result.success && result.plugins) {
+        for (const pluginInfo of result.plugins) {
+          await this.styleInjector.injectPluginStyles(
+            pluginInfo.pluginName,
+            pluginInfo.styles,
+            pluginInfo.pluginDir
+          )
+        }
+        console.log(`[PuffinApp] Loaded styles for ${result.plugins.length} plugins`)
+      }
+
+      // Subscribe to plugin activated events to load styles
+      window.puffin.plugins.onPluginActivated(async (data) => {
+        console.log('[PuffinApp] Plugin activated, loading styles:', data.name)
+        const styleResult = await window.puffin.plugins.getStylePaths(data.name)
+        if (styleResult.success && styleResult.styles.length > 0) {
+          await this.styleInjector.injectPluginStyles(
+            data.name,
+            styleResult.styles,
+            styleResult.pluginDir
+          )
+        }
+      })
+
+      // Subscribe to plugin deactivated events to remove styles
+      window.puffin.plugins.onPluginDeactivated((data) => {
+        console.log('[PuffinApp] Plugin deactivated, removing styles:', data.name)
+        this.styleInjector.removePluginStyles(data.name)
+      })
+
+      console.log('[PuffinApp] Plugin style management initialized')
+    } catch (error) {
+      console.error('[PuffinApp] Failed to initialize plugin styles:', error)
+    }
+  }
+
+  /**
+   * Initialize plugin component loader
+   * Loads renderer components for active plugins and subscribes to lifecycle events
+   */
+  async initPluginComponentLoader() {
+    try {
+      await this.pluginComponentLoader.init()
+      console.log('[PuffinApp] Plugin component loader initialized')
+    } catch (error) {
+      console.error('[PuffinApp] Failed to initialize plugin component loader:', error)
     }
   }
 
@@ -280,7 +399,11 @@ class PuffinApp {
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'clearSprintError', 'toggleCriteriaCompletion',
       // Stuck detection actions
-      'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection'
+      'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection',
+      // Debug actions
+      'storeDebugPrompt', 'clearDebugPrompt', 'setDebugMode',
+      // Active implementation story
+      'clearActiveImplementationStory'
     ]
 
     const samResult = SAM({
@@ -409,7 +532,13 @@ class PuffinApp {
           // Stuck detection actions
           ['RECORD_ITERATION_OUTPUT', actions.recordIterationOutput],
           ['RESOLVE_STUCK_STATE', actions.resolveStuckState],
-          ['RESET_STUCK_DETECTION', actions.resetStuckDetection]
+          ['RESET_STUCK_DETECTION', actions.resetStuckDetection],
+          // Debug actions
+          ['STORE_DEBUG_PROMPT', actions.storeDebugPrompt],
+          ['CLEAR_DEBUG_PROMPT', actions.clearDebugPrompt],
+          ['SET_DEBUG_MODE', actions.setDebugMode],
+          // Active implementation story
+          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -556,6 +685,46 @@ class PuffinApp {
 
     // Auto-continue timer handlers
     this.setupAutoContinueTimerHandlers()
+
+    // Debug view handlers
+    this.setupDebugViewHandlers()
+  }
+
+  /**
+   * Setup debug view event handlers
+   */
+  setupDebugViewHandlers() {
+    const copyBtn = document.getElementById('debug-copy-btn')
+    const clearBtn = document.getElementById('debug-clear-btn')
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        const promptContent = document.getElementById('debug-prompt-content')
+        if (promptContent && promptContent.textContent) {
+          try {
+            await navigator.clipboard.writeText(promptContent.textContent)
+            this.showToast('Prompt copied to clipboard', 'success')
+          } catch (err) {
+            this.showToast('Failed to copy to clipboard', 'error')
+          }
+        }
+      })
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.intents.clearDebugPrompt()
+        const promptContent = document.getElementById('debug-prompt-content')
+        const timestampEl = document.getElementById('debug-timestamp')
+        const branchEl = document.getElementById('debug-branch')
+        const modelEl = document.getElementById('debug-model')
+
+        if (promptContent) promptContent.textContent = 'Submit a prompt to see what Puffin sends to Claude CLI...'
+        if (timestampEl) timestampEl.textContent = 'No prompt submitted yet'
+        if (branchEl) branchEl.textContent = ''
+        if (modelEl) modelEl.textContent = ''
+      })
+    }
   }
 
   /**
@@ -1469,6 +1638,12 @@ class PuffinApp {
       this._configLoaded = true
     }
 
+    // Update debug tab visibility based on config
+    this.updateDebugTabVisibility(state)
+
+    // Update debug view content
+    this.updateDebugView(state)
+
     this.updateNavigation(state)
     this.updateSidebar(state)
     this.updateViews(state)
@@ -2097,6 +2272,53 @@ class PuffinApp {
       }
     }
 
+  }
+
+  /**
+   * Update debug tab visibility based on config.debugMode
+   */
+  updateDebugTabVisibility(state) {
+    const debugNavBtn = document.getElementById('debug-nav-btn')
+    if (!debugNavBtn) return
+
+    const debugEnabled = state.config?.debugMode || false
+    if (debugEnabled) {
+      debugNavBtn.classList.remove('hidden')
+    } else {
+      debugNavBtn.classList.add('hidden')
+      // If debug view is active and debug mode is disabled, switch to prompt view
+      if (state.ui?.currentView === 'debug') {
+        this.intents.switchView('prompt')
+      }
+    }
+  }
+
+  /**
+   * Update debug view with last submitted prompt
+   */
+  updateDebugView(state) {
+    const promptContent = document.getElementById('debug-prompt-content')
+    const timestampEl = document.getElementById('debug-timestamp')
+    const branchEl = document.getElementById('debug-branch')
+    const modelEl = document.getElementById('debug-model')
+
+    if (!promptContent) return
+
+    const lastPrompt = state.debug?.lastPrompt
+    if (lastPrompt) {
+      promptContent.textContent = lastPrompt.content || ''
+
+      if (timestampEl) {
+        const date = new Date(lastPrompt.timestamp)
+        timestampEl.textContent = date.toLocaleString()
+      }
+      if (branchEl) {
+        branchEl.textContent = `Branch: ${lastPrompt.branch || 'unknown'}`
+      }
+      if (modelEl) {
+        modelEl.textContent = `Model: ${lastPrompt.model || 'default'}`
+      }
+    }
   }
 
   /**

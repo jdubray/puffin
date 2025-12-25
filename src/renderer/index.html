@@ -38,6 +38,7 @@
         <button class="nav-btn" data-view="architecture">Architecture</button>
         <button class="nav-btn" data-view="cli-output">CLI Output</button>
         <button class="nav-btn" data-view="git">Git</button>
+        <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn">Debug</button>
       </nav>
       <div class="header-right">
         <div id="git-status-indicator" class="git-indicator hidden" title="Git branch status"></div>
@@ -65,6 +66,10 @@
           <div id="history-tree" class="history-tree">
             <!-- Threads rendered dynamically -->
           </div>
+        </div>
+        <!-- Plugin Sidebar Views -->
+        <div id="plugin-sidebar-views" class="plugin-sidebar-views">
+          <!-- Plugin sidebar tabs rendered dynamically -->
         </div>
         <!-- Resizable splitter -->
         <div class="sidebar-resizer" id="sidebar-resizer">
@@ -291,6 +296,18 @@
                     <input type="number" id="sprint-auto-continue-delay" min="5" max="120" value="20">
                     <small class="form-hint">Seconds to wait before auto-continuing (default: 20)</small>
                   </div>
+                </div>
+              </fieldset>
+
+              <fieldset class="options-fieldset">
+                <legend>Developer Settings</legend>
+
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="debug-mode-checkbox">
+                    <span>Enable Debug Mode</span>
+                  </label>
+                  <small class="form-hint">Shows a Debug tab with the full prompt sent to Claude CLI</small>
                 </div>
               </fieldset>
 
@@ -683,12 +700,40 @@ Document your API endpoints..."></textarea>
           </div>
         </section>
 
+        <!-- Debug View -->
+        <section id="debug-view" class="view">
+          <div class="view-content debug-layout">
+            <div class="debug-header">
+              <h2>Debug: Last Submitted Prompt</h2>
+              <div class="debug-controls">
+                <button id="debug-copy-btn" class="btn small">Copy to Clipboard</button>
+                <button id="debug-clear-btn" class="btn small secondary">Clear</button>
+              </div>
+            </div>
+            <div class="debug-info">
+              <div class="debug-meta">
+                <span id="debug-timestamp" class="debug-meta-item">No prompt submitted yet</span>
+                <span id="debug-branch" class="debug-meta-item"></span>
+                <span id="debug-model" class="debug-meta-item"></span>
+              </div>
+            </div>
+            <div class="debug-content">
+              <pre id="debug-prompt-content" class="debug-prompt-output">Submit a prompt to see what Puffin sends to Claude CLI...</pre>
+            </div>
+          </div>
+        </section>
+
         <!-- Git Panel View -->
         <section id="git-view" class="view">
           <div id="git-panel-view" class="view-content">
             <!-- Git panel content will be rendered dynamically by the GitPanelComponent -->
           </div>
         </section>
+
+        <!-- Plugin View Container -->
+        <div id="plugin-view-container" class="plugin-view-container">
+          <!-- Plugin view panels rendered dynamically -->
+        </div>
       </div>
     </main>
 

@@ -1041,3 +1041,31 @@ export const commitMessageError = (error) => ({
     timestamp: Date.now()
   }
 })
+
+/**
+ * Debug Actions
+ */
+
+// Store the last prompt sent to Claude CLI for debugging
+export const storeDebugPrompt = (promptData) => ({
+  type: 'STORE_DEBUG_PROMPT',
+  payload: {
+    content: promptData.content,
+    branch: promptData.branch,
+    model: promptData.model,
+    sessionId: promptData.sessionId,
+    timestamp: Date.now()
+  }
+})
+
+// Clear the debug prompt
+export const clearDebugPrompt = () => ({
+  type: 'CLEAR_DEBUG_PROMPT',
+  payload: { timestamp: Date.now() }
+})
+
+// Update debug mode setting
+export const setDebugMode = (enabled) => ({
+  type: 'SET_DEBUG_MODE',
+  payload: { enabled }
+})

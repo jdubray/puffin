@@ -702,6 +702,8 @@ export class PromptEditorComponent {
       // Append design documents to prompt if selected
       const finalPrompt = docsContent ? content + docsContent : content
 
+      const selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+
       window.puffin.claude.submit({
         prompt: finalPrompt,
         branchId: state.history.activeBranch,
@@ -722,10 +724,20 @@ export class PromptEditorComponent {
         guiDescription: guiDescription,
         // Handoff context from another thread
         handoffContext: handoffContext,
-        model: this.modelSelect?.value || this.defaultModel || 'sonnet',
+        model: selectedModel,
         // Max turns from sprint execution config (defaults to 10)
         maxTurns: state.config?.sprintExecution?.maxIterations || 40
       })
+
+      // Store the debug prompt if debug mode is enabled
+      if (state.config?.debugMode) {
+        this.intents.storeDebugPrompt({
+          content: finalPrompt,
+          branch: state.history.activeBranch,
+          model: selectedModel,
+          sessionId: sessionId
+        })
+      }
 
       // Clear pending handoff after submission
       if (this.pendingHandoff) {
@@ -801,6 +813,8 @@ export class PromptEditorComponent {
 
       console.log('[CONTEXT-DEBUG] Submit mode: NEW thread (fresh conversation)')
 
+      const selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+
       window.puffin.claude.submit({
         prompt: content,
         branchId: state.history.activeBranch,
@@ -817,10 +831,20 @@ export class PromptEditorComponent {
         } : null,
         userStories: userStories,
         guiDescription: guiDescription,
-        model: this.modelSelect?.value || this.defaultModel || 'sonnet',
+        model: selectedModel,
         // Max turns from sprint execution config (defaults to 10)
         maxTurns: state.config?.sprintExecution?.maxIterations || 40
       })
+
+      // Store the debug prompt if debug mode is enabled
+      if (state.config?.debugMode) {
+        this.intents.storeDebugPrompt({
+          content: content,
+          branch: state.history.activeBranch,
+          model: selectedModel,
+          sessionId: null
+        })
+      }
 
       // Reset userChanged flag after submitting a new thread
       if (this.modelSelect) {

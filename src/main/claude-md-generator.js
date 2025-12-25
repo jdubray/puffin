@@ -82,6 +82,20 @@ class ClaudeMdGenerator {
       lines.push('')
     }
 
+    // File access restrictions
+    lines.push('## File Access Restrictions')
+    lines.push('')
+    lines.push('**IMPORTANT: You must ONLY access files within this project directory.**')
+    lines.push('')
+    lines.push('You are NOT allowed to:')
+    lines.push('- Read, write, or modify files outside this project')
+    lines.push('- Access parent directories or sibling projects')
+    lines.push('- Reference or use files from other projects on the system')
+    lines.push('- Execute commands that affect files outside the project root')
+    lines.push('')
+    lines.push('All file operations must be scoped to this project directory and its subdirectories.')
+    lines.push('')
+
     // Assumptions
     if (config.assumptions && config.assumptions.length > 0) {
       lines.push('## Assumptions')

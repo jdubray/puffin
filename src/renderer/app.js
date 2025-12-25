@@ -726,6 +726,15 @@ class PuffinApp {
     // If Claude didn't hit the turn limit, it completed naturally - no continuation needed
     if (!hitTurnLimit) {
       console.log('[AUTO-CONTINUE] Response completed naturally (< 10 turns), no continuation needed')
+      // Only show toast if turns > 0 (to avoid noise for non-prompt responses)
+      if (turnsUsed > 0) {
+        this.showToast({
+          type: 'info',
+          title: 'Response complete',
+          message: `Completed in ${turnsUsed} turns (no continuation needed)`,
+          duration: 3000
+        })
+      }
       return false
     }
 
@@ -848,7 +857,17 @@ class PuffinApp {
    * @param {string} promptId - The prompt ID to continue from
    */
   triggerAutoContinue(promptId) {
-    if (!this.autoContinueState?.enabled) return
+    console.log('[AUTO-CONTINUE] triggerAutoContinue called with promptId:', promptId)
+
+    if (!this.autoContinueState?.enabled) {
+      console.log('[AUTO-CONTINUE] Auto-continue is disabled, skipping')
+      return
+    }
+
+    if (!promptId) {
+      console.error('[AUTO-CONTINUE] No promptId provided, cannot continue')
+      return
+    }
 
     this.autoContinueState.lastPromptId = promptId
     this.autoContinueState.continuationCount++
@@ -857,6 +876,14 @@ class PuffinApp {
       promptId,
       count: this.autoContinueState.continuationCount,
       max: this.autoContinueState.maxContinuations
+    })
+
+    // Show toast to confirm auto-continue is triggered
+    this.showToast({
+      type: 'info',
+      title: 'Auto-continue triggered',
+      message: `Continuing in ${this.autoContinueState.timerSeconds} seconds...`,
+      duration: 5000
     })
 
     // Update UI to show continuation count
@@ -1259,8 +1286,22 @@ class PuffinApp {
 
     // Response complete
     const unsubComplete = window.puffin.claude.onComplete((response) => {
-      console.log('[SAM-DEBUG] app.js onComplete received')
-      console.log('[SAM-DEBUG] response.content length:', response?.content?.length || 0)
+      console.log('[SAM-DEBUG] app.js onComplete received:', {
+        contentLength: response?.content?.length || 0,
+        turns: response?.turns,
+        exitCode: response?.exitCode,
+        sessionId: response?.sessionId
+      })
+
+      // Debug toast to confirm response received (remove after debugging)
+      if (response?.turns >= 10) {
+        this.showToast({
+          type: 'warning',
+          title: 'Turn limit reached',
+          message: `Response used ${response.turns} turns - checking auto-continue...`,
+          duration: 3000
+        })
+      }
 
       const filesModified = this.activityTracker.getFilesModified()
       const toolsUsed = this.activityTracker.getToolsUsed?.() || []
@@ -1296,32 +1337,43 @@ class PuffinApp {
         // Don't auto-continue if stuck detection triggered
         if (isStuck) {
           console.log('[AUTO-CONTINUE] Stuck detection triggered, skipping auto-continue')
-        } else if (this.shouldAutoContinue(response)) {
-          // Trigger auto-continue with the current prompt ID
-          if (activePromptId) {
-            console.log('[AUTO-CONTINUE] Triggering with promptId:', activePromptId)
-            this.triggerAutoContinue(activePromptId)
-          } else {
-            // Fallback: try to get the last prompt from the active branch
-            console.log('[AUTO-CONTINUE] WARNING: No activePromptId in state, attempting fallback')
-            const branch = this.state?.history?.activeBranch
-            const rawBranch = this.state?.history?.raw?.branches?.[branch]
-            if (rawBranch?.prompts?.length > 0) {
-              const lastPrompt = rawBranch.prompts[rawBranch.prompts.length - 1]
-              if (lastPrompt?.id) {
-                console.log('[AUTO-CONTINUE] Using fallback promptId:', lastPrompt.id)
-                this.triggerAutoContinue(lastPrompt.id)
-              } else {
-                console.error('[AUTO-CONTINUE] ERROR: Fallback also failed - no prompt ID available')
-              }
-            } else {
-              console.error('[AUTO-CONTINUE] ERROR: No prompts in active branch')
-            }
-          }
         } else {
-          // Response is complete or waiting for input - reset state
-          console.log('[AUTO-CONTINUE] shouldAutoContinue returned false, resetting state')
-          this.resetAutoContinueState()
+          const shouldContinue = this.shouldAutoContinue(response)
+          console.log('[AUTO-CONTINUE] shouldAutoContinue result:', shouldContinue)
+
+          if (shouldContinue) {
+            // Trigger auto-continue with the current prompt ID
+            let promptIdToUse = activePromptId
+
+            if (!promptIdToUse) {
+              // Fallback: try to get the last prompt from the active branch
+              console.log('[AUTO-CONTINUE] WARNING: No activePromptId in state, attempting fallback')
+              const branch = this.state?.history?.activeBranch
+              const rawBranch = this.state?.history?.raw?.branches?.[branch]
+              if (rawBranch?.prompts?.length > 0) {
+                const lastPrompt = rawBranch.prompts[rawBranch.prompts.length - 1]
+                promptIdToUse = lastPrompt?.id
+                console.log('[AUTO-CONTINUE] Using fallback promptId:', promptIdToUse)
+              }
+            }
+
+            if (promptIdToUse) {
+              console.log('[AUTO-CONTINUE] Triggering with promptId:', promptIdToUse)
+              this.triggerAutoContinue(promptIdToUse)
+            } else {
+              console.error('[AUTO-CONTINUE] ERROR: No prompt ID available')
+              this.showToast({
+                type: 'error',
+                title: 'Auto-continue failed',
+                message: 'Could not find prompt ID to continue from',
+                duration: 5000
+              })
+            }
+          } else {
+            // Response is complete or waiting for input - reset state
+            console.log('[AUTO-CONTINUE] shouldAutoContinue returned false, resetting state')
+            this.resetAutoContinueState()
+          }
         }
       } catch (err) {
         console.error('[SAM-ERROR] Auto-continue check failed:', err)

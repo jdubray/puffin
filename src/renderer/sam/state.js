@@ -472,14 +472,7 @@ function computeSprintProgress(model) {
       storyStatus = 'in_progress'
     }
 
-    console.log('[SPRINT-PROGRESS-DEBUG] Story status check:', {
-      storyId: story.id,
-      storyTitle: story.title?.substring(0, 30),
-      progressStatus: progress.status,
-      backlogStatus: backlogStory?.status,
-      sprintStoryStatus: story.status,
-      finalStatus: storyStatus
-    })
+    console.log(`[SPRINT-PROGRESS-DEBUG] Story: "${story.title?.substring(0, 30)}" | progress.status: ${progress.status} | backlog.status: ${backlogStory?.status} | story.status: ${story.status} | FINAL: ${storyStatus}`)
 
     // Check for blocked state (has in_progress for too long without completion)
     const isBlocked = branchEntries.some(([, b]) => {

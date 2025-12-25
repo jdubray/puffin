@@ -991,13 +991,16 @@ class PuffinApp {
    * @param {Function} onComplete - Callback when timer completes
    */
   startAutoContinueTimer(seconds = 20, onComplete) {
-    // Clear any existing timer
-    this.cancelAutoContinueTimer()
+    // Clear any existing timer (use clearAutoContinueTimer, not cancel, to avoid showing toast)
+    this.clearAutoContinueTimer()
 
     const timerEl = document.getElementById('auto-continue-timer')
     const countdownEl = document.getElementById('timer-countdown')
 
-    if (!timerEl || !countdownEl) return
+    if (!timerEl || !countdownEl) {
+      console.error('[AUTO-CONTINUE] Timer elements not found in DOM')
+      return
+    }
 
     this.autoContinueCountdown = seconds
     this.autoContinueCallback = onComplete
@@ -1035,17 +1038,20 @@ class PuffinApp {
   }
 
   /**
-   * Cancel the auto-continue timer
+   * Cancel the auto-continue timer (user-initiated)
    */
   cancelAutoContinueTimer() {
-    console.log('[AUTO-CONTINUE] Timer cancelled by user')
-    this.clearAutoContinueTimer()
-    this.showToast({
-      type: 'info',
-      title: 'Auto-continue cancelled',
-      message: 'Manual control restored',
-      duration: 2000
-    })
+    // Only show toast if there's actually a timer running
+    if (this.autoContinueTimer) {
+      console.log('[AUTO-CONTINUE] Timer cancelled by user')
+      this.clearAutoContinueTimer()
+      this.showToast({
+        type: 'info',
+        title: 'Auto-continue cancelled',
+        message: 'Manual control restored',
+        duration: 2000
+      })
+    }
   }
 
   /**

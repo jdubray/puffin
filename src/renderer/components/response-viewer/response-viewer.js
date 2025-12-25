@@ -173,6 +173,13 @@ export class ResponseViewerComponent {
       metaParts.push(`${(response.duration / 1000).toFixed(1)}s`)
     }
 
+    // Check if max turns was reached and continuation is needed
+    const maxTurns = window.puffinState?.config?.sprintExecution?.maxIterations || 40
+    const continuationRequired = response.turns && response.turns >= maxTurns
+    if (continuationRequired) {
+      metaParts.push('<span class="continuation-warning">⚠️ Continuation required</span>')
+    }
+
     // Show files modified if available (from response data)
     let filesModifiedHtml = ''
     const filesModified = response.filesModified || []

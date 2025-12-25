@@ -4965,3 +4965,19 @@
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+
+/* Continuation Required Warning */
+.continuation-warning {
+  color: #f59e0b;
+  font-weight: 600;
+  background: rgba(245, 158, 11, 0.15);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  animation: warning-pulse 2s ease-in-out infinite;
+}
+
+@keyframes warning-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}

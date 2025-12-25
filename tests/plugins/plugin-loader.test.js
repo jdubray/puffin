@@ -51,6 +51,7 @@ describe('PluginLoader', () => {
       assert.strictEqual(plugin.version, '1.0.0')
       assert.strictEqual(plugin.displayName, 'Test Plugin')
       assert.strictEqual(plugin.state, 'discovered')
+      assert.strictEqual(plugin.lifecycleState, 'inactive')
       assert.strictEqual(plugin.mainPath, path.join('/path/to/plugin', 'index.js'))
       assert.deepStrictEqual(plugin.dependencies, { 'other-plugin': '^1.0.0' })
     })
@@ -70,7 +71,88 @@ describe('PluginLoader', () => {
       assert.strictEqual(json.name, 'test-plugin')
       assert.strictEqual(json.version, '1.0.0')
       assert.strictEqual(json.state, 'discovered')
+      assert.strictEqual(json.lifecycleState, 'inactive')
       assert.ok(json.manifest)
+    })
+
+    it('should track lifecycle state transitions', () => {
+      const manifest = {
+        name: 'test-plugin',
+        version: '1.0.0',
+        displayName: 'Test Plugin',
+        description: 'A test plugin',
+        main: 'index.js'
+      }
+
+      const plugin = new Plugin(manifest, '/path/to/plugin')
+
+      // Initial state
+      assert.strictEqual(plugin.lifecycleState, 'inactive')
+      assert.strictEqual(plugin.isActive(), false)
+
+      // Transition to activating
+      plugin.setLifecycleState('activating')
+      assert.strictEqual(plugin.lifecycleState, 'activating')
+
+      // Transition to active
+      plugin.setLifecycleState('active')
+      assert.strictEqual(plugin.lifecycleState, 'active')
+      assert.strictEqual(plugin.isActive(), true)
+      assert.ok(plugin.activatedAt)
+
+      // Transition to deactivating
+      plugin.setLifecycleState('deactivating')
+      assert.strictEqual(plugin.lifecycleState, 'deactivating')
+
+      // Transition to inactive
+      plugin.setLifecycleState('inactive')
+      assert.strictEqual(plugin.lifecycleState, 'inactive')
+      assert.strictEqual(plugin.isActive(), false)
+      assert.ok(plugin.deactivatedAt)
+    })
+
+    it('should record activation errors', () => {
+      const manifest = {
+        name: 'test-plugin',
+        version: '1.0.0',
+        displayName: 'Test Plugin',
+        description: 'A test plugin',
+        main: 'index.js'
+      }
+
+      const plugin = new Plugin(manifest, '/path/to/plugin')
+
+      plugin.setActivationError(new Error('Activation failed'))
+
+      assert.strictEqual(plugin.lifecycleState, 'activation-failed')
+      assert.strictEqual(plugin.activationError, 'Activation failed')
+    })
+
+    it('should check if plugin can be activated', () => {
+      const manifest = {
+        name: 'test-plugin',
+        version: '1.0.0',
+        displayName: 'Test Plugin',
+        description: 'A test plugin',
+        main: 'index.js'
+      }
+
+      const plugin = new Plugin(manifest, '/path/to/plugin')
+
+      // Cannot activate in discovered state
+      assert.strictEqual(plugin.canActivate(), false)
+
+      // Can activate when loaded
+      plugin.state = 'loaded'
+      assert.strictEqual(plugin.canActivate(), true)
+
+      // Cannot activate when already active
+      plugin.setLifecycleState('active')
+      assert.strictEqual(plugin.canActivate(), false)
+
+      // Can activate after failure
+      plugin.setActivationError('Failed')
+      assert.strictEqual(plugin.canActivate(), true)
     })
   })
 
@@ -419,5 +501,282 @@ describe('EventEmitter behavior', () => {
 
     // Cleanup
     await fs.rm(testDir, { recursive: true, force: true })
+  })
+})
+
+describe('Manifest Validation Error Handling', () => {
+  let testDir
+  let PluginLoader
+
+  before(async () => {
+    testDir = path.join(os.tmpdir(), `puffin-validation-test-${Date.now()}`)
+    await fs.mkdir(testDir, { recursive: true })
+    PluginLoader = require('../../src/main/plugins/plugin-loader').PluginLoader
+  })
+
+  after(async () => {
+    try {
+      await fs.rm(testDir, { recursive: true, force: true })
+    } catch {
+      // Ignore cleanup errors
+    }
+  })
+
+  beforeEach(async () => {
+    // Clean up test directory between tests
+    const entries = await fs.readdir(testDir).catch(() => [])
+    for (const entry of entries) {
+      await fs.rm(path.join(testDir, entry), { recursive: true, force: true })
+    }
+  })
+
+  it('should reject plugin with missing required fields', async () => {
+    const pluginDir = path.join(testDir, 'missing-fields')
+    await fs.mkdir(pluginDir, { recursive: true })
+    await fs.writeFile(
+      path.join(pluginDir, 'puffin-plugin.json'),
+      JSON.stringify({
+        name: 'missing-fields'
+        // Missing: version, displayName, description, main
+      })
+    )
+
+    const loader = new PluginLoader({ pluginsDir: testDir })
+    let validationEvent = null
+    loader.on('plugin:validation-failed', (event) => {
+      validationEvent = event
+    })
+
+    const result = await loader.loadPlugins()
+
+    assert.strictEqual(result.loaded.length, 0)
+    assert.strictEqual(result.failed.length, 1)
+    assert.ok(validationEvent)
+    assert.ok(validationEvent.errors.length > 0)
+
+    // Check that errors include field information
+    const versionError = validationEvent.errors.find(e =>
+      e.message.includes('version') || e.field === 'version'
+    )
+    assert.ok(versionError, 'Should have error about missing version')
+  })
+
+  it('should reject plugin with invalid name format', async () => {
+    const pluginDir = path.join(testDir, 'Invalid-Name')
+    await fs.mkdir(pluginDir, { recursive: true })
+    await fs.writeFile(
+      path.join(pluginDir, 'puffin-plugin.json'),
+      JSON.stringify({
+        name: 'Invalid-Name', // Should be lowercase
+        version: '1.0.0',
+        displayName: 'Invalid Name Plugin',
+        description: 'Has invalid name',
+        main: 'index.js'
+      })
+    )
+
+    const loader = new PluginLoader({ pluginsDir: testDir })
+    let validationEvent = null
+    loader.on('plugin:validation-failed', (event) => {
+      validationEvent = event
+    })
+
+    const result = await loader.loadPlugins()
+
+    assert.strictEqual(result.loaded.length, 0)
+    assert.strictEqual(result.failed.length, 1)
+    assert.ok(validationEvent)
+
+    // Check error includes field name and suggestion
+    const nameError = validationEvent.errors.find(e =>
+      e.field === 'name' || e.message.includes('name')
+    )
+    assert.ok(nameError, 'Should have error about invalid name')
+    assert.ok(nameError.suggestion, 'Should have a suggestion for fixing the error')
+  })
+
+  it('should reject plugin with invalid version format', async () => {
+    const pluginDir = path.join(testDir, 'bad-version')
+    await fs.mkdir(pluginDir, { recursive: true })
+    await fs.writeFile(
+      path.join(pluginDir, 'puffin-plugin.json'),
+      JSON.stringify({
+        name: 'bad-version',
+        version: 'not-semver', // Invalid version
+        displayName: 'Bad Version Plugin',
+        description: 'Has invalid version',
+        main: 'index.js'
+      })
+    )
+
+    const loader = new PluginLoader({ pluginsDir: testDir })
+    let validationEvent = null
+    loader.on('plugin:validation-failed', (event) => {
+      validationEvent = event
+    })
+
+    const result = await loader.loadPlugins()
+
+    assert.strictEqual(result.loaded.length, 0)
+    assert.strictEqual(result.failed.length, 1)
+    assert.ok(validationEvent)
+
+    const versionError = validationEvent.errors.find(e =>
+      e.field === 'version' || e.message.includes('version')
+    )
+    assert.ok(versionError, 'Should have error about invalid version')
+  })
+
+  it('should reject plugin with missing entry point file', async () => {
+    const pluginDir = path.join(testDir, 'missing-main')
+    await fs.mkdir(pluginDir, { recursive: true })
+    await fs.writeFile(
+      path.join(pluginDir, 'puffin-plugin.json'),
+      JSON.stringify({
+        name: 'missing-main',
+        version: '1.0.0',
+        displayName: 'Missing Main Plugin',
+        description: 'Entry point does not exist',
+        main: 'nonexistent.js' // File does not exist
+      })
+    )
+
+    const loader = new PluginLoader({ pluginsDir: testDir })
+    let validationEvent = null
+    loader.on('plugin:validation-failed', (event) => {
+      validationEvent = event
+    })
+
+    const result = await loader.loadPlugins()
+
+    assert.strictEqual(result.loaded.length, 0)
+    assert.strictEqual(result.failed.length, 1)
+    assert.ok(validationEvent)
+
+    const mainError = validationEvent.errors.find(e => e.field === 'main')
+    assert.ok(mainError, 'Should have error about missing entry point')
+    assert.ok(mainError.message.includes('Entry point not found'))
+    assert.ok(mainError.suggestion.includes('Create the file'))
+  })
+
+  it('should include validationErrors in plugin object', async () => {
+    const pluginDir = path.join(testDir, 'validation-errors-test')
+    await fs.mkdir(pluginDir, { recursive: true })
+    await fs.writeFile(
+      path.join(pluginDir, 'puffin-plugin.json'),
+      JSON.stringify({
+        name: 'validation-errors-test',
+        version: 'bad',
+        displayName: 'Test',
+        description: 'Test',
+        main: 'index.js'
+      })
+    )
+
+    const loader = new PluginLoader({ pluginsDir: testDir })
+    const result = await loader.loadPlugins()
+
+    assert.strictEqual(result.failed.length, 1)
+    const failedPlugin = result.failed[0]
+
+    assert.ok(failedPlugin.validationErrors, 'Plugin should have validationErrors array')
+    assert.ok(Array.isArray(failedPlugin.validationErrors))
+    assert.ok(failedPlugin.validationErrors.length > 0)
+
+    // Check error structure
+    const error = failedPlugin.validationErrors[0]
+    assert.ok(error.field !== undefined, 'Error should have field property')
+    assert.ok(error.message, 'Error should have message property')
+  })
+
+  it('should include validationErrors in getErrors() result', async () => {
+    const pluginDir = path.join(testDir, 'get-errors-test')
+    await fs.mkdir(pluginDir, { recursive: true })
+    await fs.writeFile(
+      path.join(pluginDir, 'puffin-plugin.json'),
+      JSON.stringify({
+        name: 'get-errors-test',
+        version: '1.0',  // Invalid semver
+        displayName: 'Test',
+        description: 'Test',
+        main: 'index.js'
+      })
+    )
+
+    const loader = new PluginLoader({ pluginsDir: testDir })
+    await loader.loadPlugins()
+
+    const errors = loader.getErrors()
+    assert.strictEqual(errors.length, 1)
+    assert.ok(errors[0].validationErrors, 'getErrors should include validationErrors')
+  })
+
+  it('should reject plugin with invalid type for field', async () => {
+    const pluginDir = path.join(testDir, 'wrong-type')
+    await fs.mkdir(pluginDir, { recursive: true })
+    await fs.writeFile(
+      path.join(pluginDir, 'puffin-plugin.json'),
+      JSON.stringify({
+        name: 'wrong-type',
+        version: '1.0.0',
+        displayName: 'Wrong Type Plugin',
+        description: 12345, // Should be string
+        main: 'index.js'
+      })
+    )
+
+    const loader = new PluginLoader({ pluginsDir: testDir })
+    let validationEvent = null
+    loader.on('plugin:validation-failed', (event) => {
+      validationEvent = event
+    })
+
+    const result = await loader.loadPlugins()
+
+    assert.strictEqual(result.loaded.length, 0)
+    assert.strictEqual(result.failed.length, 1)
+    assert.ok(validationEvent)
+
+    const typeError = validationEvent.errors.find(e =>
+      e.keyword === 'type' || e.message.includes('type')
+    )
+    assert.ok(typeError, 'Should have error about wrong type')
+  })
+
+  it('should allow valid plugins to proceed without issues', async () => {
+    const pluginDir = path.join(testDir, 'valid-plugin')
+    await fs.mkdir(pluginDir, { recursive: true })
+    await fs.writeFile(
+      path.join(pluginDir, 'puffin-plugin.json'),
+      JSON.stringify({
+        name: 'valid-plugin',
+        version: '1.0.0',
+        displayName: 'Valid Plugin',
+        description: 'A properly formatted plugin',
+        main: 'index.js',
+        author: 'Test Author',
+        keywords: ['test', 'valid'],
+        engines: {
+          puffin: '>=2.0.0'
+        }
+      })
+    )
+    await fs.writeFile(
+      path.join(pluginDir, 'index.js'),
+      'module.exports = { activate: async () => {}, deactivate: async () => {} }'
+    )
+
+    const loader = new PluginLoader({ pluginsDir: testDir })
+    let validatedEvent = null
+    loader.on('plugin:validated', (event) => {
+      validatedEvent = event
+    })
+
+    const result = await loader.loadPlugins()
+
+    assert.strictEqual(result.loaded.length, 1)
+    assert.strictEqual(result.failed.length, 0)
+    assert.ok(validatedEvent, 'Should emit validated event')
+    assert.strictEqual(validatedEvent.plugin.state, 'validated')
   })
 })

@@ -15,6 +15,18 @@ Puffin is an Electron-based GUI application that serves as a **management layer*
 
 **Important**: 3CLI remains in control of building the project. Puffin is an orchestration and tracking tool, not a replacement for the CLI's capabilities.
 
+## File Access Restrictions
+
+**IMPORTANT: You must ONLY access files within this project directory.**
+
+You are NOT allowed to:
+- Read, write, or modify files outside this project
+- Access parent directories or sibling projects
+- Reference or use files from other projects on the system
+- Execute commands that affect files outside the project root
+
+All file operations must be scoped to this project directory and its subdirectories.
+
 ## Coding Preferences
 
 - **Programming Style:** Hybrid (OOP + FP)

@@ -455,7 +455,87 @@ contextBridge.exposeInMainWorld('puffin', {
     getActions: () => ipcRenderer.invoke('plugins:getActions'),
 
     // Get all registered components
-    getComponents: () => ipcRenderer.invoke('plugins:getComponents')
+    getComponents: () => ipcRenderer.invoke('plugins:getComponents'),
+
+    // === View Registration API ===
+
+    // Register a view (for plugins to call)
+    registerView: (viewConfig) => ipcRenderer.invoke('plugin:register-view', viewConfig),
+
+    // Unregister a view
+    unregisterView: (viewId) => ipcRenderer.invoke('plugin:unregister-view', viewId),
+
+    // Unregister all views from a plugin
+    unregisterPluginViews: (pluginName) =>
+      ipcRenderer.invoke('plugin:unregister-plugin-views', pluginName),
+
+    // Get sidebar views (most common query)
+    getSidebarViews: () => ipcRenderer.invoke('plugin:get-sidebar-views'),
+
+    // Get views by location
+    getViewsByLocation: (location) =>
+      ipcRenderer.invoke('plugin:get-views-by-location', location),
+
+    // Get all registered views
+    getAllViews: () => ipcRenderer.invoke('plugin:get-all-views'),
+
+    // Get views from a specific plugin
+    getPluginViews: (pluginName) =>
+      ipcRenderer.invoke('plugin:get-plugin-views', pluginName),
+
+    // Get a specific view by ID
+    getView: (viewId) => ipcRenderer.invoke('plugin:get-view', viewId),
+
+    // Get view registry summary
+    getViewSummary: () => ipcRenderer.invoke('plugin:get-view-summary'),
+
+    // Subscribe to view registration events
+    onViewRegistered: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('plugin:view-registered', handler)
+      return () => ipcRenderer.removeListener('plugin:view-registered', handler)
+    },
+
+    // Subscribe to view unregistration events
+    onViewUnregistered: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('plugin:view-unregistered', handler)
+      return () => ipcRenderer.removeListener('plugin:view-unregistered', handler)
+    },
+
+    // Subscribe to views cleared events (when plugin is disabled)
+    onViewsCleared: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('plugin:views-cleared', handler)
+      return () => ipcRenderer.removeListener('plugin:views-cleared', handler)
+    },
+
+    // === Renderer Component Loading API ===
+
+    // Get renderer configuration for dynamic component loading
+    getRendererConfig: (pluginName) => ipcRenderer.invoke('plugin:get-renderer-config', pluginName),
+
+    // === Style Injection API ===
+
+    // Get CSS paths for a specific plugin
+    getStylePaths: (pluginName) => ipcRenderer.invoke('plugin:get-style-paths', pluginName),
+
+    // Get all active plugins with styles
+    getAllStylePaths: () => ipcRenderer.invoke('plugin:get-all-style-paths'),
+
+    // Subscribe to plugin activated events (for style loading)
+    onPluginActivated: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('plugin:activated', handler)
+      return () => ipcRenderer.removeListener('plugin:activated', handler)
+    },
+
+    // Subscribe to plugin deactivated events (for style removal)
+    onPluginDeactivated: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('plugin:deactivated', handler)
+      return () => ipcRenderer.removeListener('plugin:deactivated', handler)
+    }
   },
 
   /**

@@ -1460,8 +1460,31 @@ function setupPluginHandlers(ipcMain, pluginLoader) {
  * Plugin manager IPC handlers (full lifecycle management)
  * @param {IpcMain} ipcMain
  * @param {PluginManager} pluginManager
+ * @param {BrowserWindow} mainWindow - Main window for sending events to renderer
  */
-function setupPluginManagerHandlers(ipcMain, pluginManager) {
+function setupPluginManagerHandlers(ipcMain, pluginManager, mainWindow) {
+  /**
+   * Notify renderer of plugin lifecycle events
+   * @param {string} channel - IPC channel name
+   * @param {Object} data - Event data
+   */
+  function notifyRenderer(channel, data) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, data)
+    }
+  }
+
+  // Forward plugin lifecycle events to renderer
+  pluginManager.on('plugin:activated', (data) => {
+    console.log(`[IPC] Forwarding plugin:activated for ${data.name}`)
+    notifyRenderer('plugin:activated', { name: data.name })
+  })
+
+  pluginManager.on('plugin:deactivated', (data) => {
+    console.log(`[IPC] Forwarding plugin:deactivated for ${data.name}`)
+    notifyRenderer('plugin:deactivated', { name: data.name })
+  })
+
   // Enable a plugin
   ipcMain.handle('plugins:enable', async (event, name) => {
     try {
@@ -1570,4 +1593,250 @@ function setupPluginManagerHandlers(ipcMain, pluginManager) {
   })
 }
 
-module.exports = { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers }
+/**
+ * View registry IPC handlers
+ * @param {IpcMain} ipcMain
+ * @param {ViewRegistry} viewRegistry
+ * @param {BrowserWindow} mainWindow - Main window for sending events to renderer
+ */
+function setupViewRegistryHandlers(ipcMain, viewRegistry, mainWindow) {
+  /**
+   * Notify renderer of view registration events
+   * @param {string} channel - IPC channel name
+   * @param {Object} data - Event data
+   */
+  function notifyRenderer(channel, data) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, data)
+    }
+  }
+
+  // Forward registry events to renderer
+  viewRegistry.on('view:registered', (data) => {
+    console.log(`[IPC] Forwarding view:registered event for ${data.view.id}`)
+    notifyRenderer('plugin:view-registered', data)
+  })
+
+  viewRegistry.on('view:unregistered', (data) => {
+    console.log(`[IPC] Forwarding view:unregistered event for ${data.viewId}`)
+    notifyRenderer('plugin:view-unregistered', data)
+  })
+
+  viewRegistry.on('views:cleared', (data) => {
+    console.log(`[IPC] Forwarding views:cleared event for plugin ${data.pluginName}`)
+    notifyRenderer('plugin:views-cleared', data)
+  })
+
+  // Register a view from a plugin
+  ipcMain.handle('plugin:register-view', async (event, viewConfig) => {
+    try {
+      // Extract plugin name from sender or config
+      const pluginName = viewConfig.pluginName
+      if (!pluginName) {
+        return { success: false, error: 'pluginName is required' }
+      }
+
+      const result = viewRegistry.registerView(pluginName, viewConfig)
+      return result
+    } catch (error) {
+      console.error('[IPC] plugin:register-view error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Unregister a view
+  ipcMain.handle('plugin:unregister-view', async (event, viewId) => {
+    try {
+      const result = viewRegistry.unregisterView(viewId)
+      return result
+    } catch (error) {
+      console.error('[IPC] plugin:unregister-view error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Unregister all views from a plugin
+  ipcMain.handle('plugin:unregister-plugin-views', async (event, pluginName) => {
+    try {
+      const result = viewRegistry.unregisterPluginViews(pluginName)
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC] plugin:unregister-plugin-views error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get sidebar views (most common query)
+  ipcMain.handle('plugin:get-sidebar-views', async () => {
+    try {
+      const views = viewRegistry.getSidebarViews()
+      return { success: true, views }
+    } catch (error) {
+      console.error('[IPC] plugin:get-sidebar-views error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get views by location
+  ipcMain.handle('plugin:get-views-by-location', async (event, location) => {
+    try {
+      const views = viewRegistry.getViewsByLocation(location)
+      return { success: true, views }
+    } catch (error) {
+      console.error('[IPC] plugin:get-views-by-location error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get all registered views
+  ipcMain.handle('plugin:get-all-views', async () => {
+    try {
+      const views = viewRegistry.getAllViews()
+      return { success: true, views }
+    } catch (error) {
+      console.error('[IPC] plugin:get-all-views error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get views from a specific plugin
+  ipcMain.handle('plugin:get-plugin-views', async (event, pluginName) => {
+    try {
+      const views = viewRegistry.getPluginViews(pluginName)
+      return { success: true, views }
+    } catch (error) {
+      console.error('[IPC] plugin:get-plugin-views error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get a specific view by ID
+  ipcMain.handle('plugin:get-view', async (event, viewId) => {
+    try {
+      const view = viewRegistry.getView(viewId)
+      if (!view) {
+        return { success: false, error: `View not found: ${viewId}` }
+      }
+      return { success: true, view }
+    } catch (error) {
+      console.error('[IPC] plugin:get-view error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get view registry summary
+  ipcMain.handle('plugin:get-view-summary', async () => {
+    try {
+      const summary = viewRegistry.getSummary()
+      return { success: true, summary }
+    } catch (error) {
+      console.error('[IPC] plugin:get-view-summary error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+/**
+ * Plugin style and renderer IPC handlers
+ * @param {IpcMain} ipcMain
+ * @param {PluginManager} pluginManager
+ */
+function setupPluginStyleHandlers(ipcMain, pluginManager) {
+  // Get renderer configuration for a plugin (for dynamic component loading)
+  ipcMain.handle('plugin:get-renderer-config', async (event, pluginName) => {
+    try {
+      const loader = pluginManager.loader
+      const plugin = loader.getPlugin(pluginName)
+
+      if (!plugin) {
+        return { success: false, error: `Plugin not found: ${pluginName}` }
+      }
+
+      const rendererConfig = plugin.manifest?.renderer
+      if (!rendererConfig || !rendererConfig.entry) {
+        return {
+          success: true,
+          hasRenderer: false,
+          pluginName,
+          pluginDir: plugin.directory
+        }
+      }
+
+      // Return renderer configuration for dynamic loading
+      return {
+        success: true,
+        hasRenderer: true,
+        pluginName,
+        pluginDir: plugin.directory,
+        entry: rendererConfig.entry,
+        components: rendererConfig.components || [],
+        preload: rendererConfig.preload || false,
+        sandbox: rendererConfig.sandbox !== false // default true
+      }
+    } catch (error) {
+      console.error('[IPC] plugin:get-renderer-config error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get style paths for a plugin
+  ipcMain.handle('plugin:get-style-paths', async (event, pluginName) => {
+    try {
+      const loader = pluginManager.getLoader()
+      const plugin = loader.getPlugin(pluginName)
+
+      if (!plugin) {
+        return { success: false, error: `Plugin not found: ${pluginName}` }
+      }
+
+      // Get CSS paths from manifest renderer section
+      const styles = plugin.manifest?.renderer?.styles || []
+      const pluginDir = plugin.directory
+
+      console.log(`[IPC] plugin:get-style-paths for ${pluginName}:`, styles)
+
+      return {
+        success: true,
+        styles,
+        pluginDir
+      }
+    } catch (error) {
+      console.error('[IPC] plugin:get-style-paths error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get all active plugins with styles
+  ipcMain.handle('plugin:get-all-style-paths', async () => {
+    try {
+      const activePlugins = pluginManager.getActivePlugins()
+      const result = []
+
+      for (const [pluginName, { plugin }] of activePlugins) {
+        const styles = plugin.manifest?.renderer?.styles || []
+        if (styles.length > 0) {
+          result.push({
+            pluginName,
+            styles,
+            pluginDir: plugin.directory
+          })
+        }
+      }
+
+      console.log(`[IPC] plugin:get-all-style-paths: ${result.length} plugins with styles`)
+
+      return { success: true, plugins: result }
+    } catch (error) {
+      console.error('[IPC] plugin:get-all-style-paths error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+module.exports = {
+  setupIpcHandlers,
+  setupPluginHandlers,
+  setupPluginManagerHandlers,
+  setupViewRegistryHandlers,
+  setupPluginStyleHandlers
+}

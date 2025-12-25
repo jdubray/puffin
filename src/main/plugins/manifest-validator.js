@@ -146,11 +146,16 @@ class ManifestValidator {
       'extensionPoints.reactors': 'Use camelCase starting with a letter (e.g., "onDataChange")',
       'extensionPoints.components': 'Use kebab-case starting with a letter (e.g., "analytics-dashboard")',
       'extensionPoints.ipcHandlers': 'Use namespace:action format (e.g., "analytics:getData")',
-      keywords: 'Use alphanumeric characters and hyphens only'
+      keywords: 'Use alphanumeric characters and hyphens only',
+      // Renderer manifest suggestions
+      'renderer.entry': 'Use a relative path to a JavaScript/TypeScript file (e.g., "renderer/index.js")',
+      'renderer.components.name': 'Use PascalCase starting with uppercase (e.g., "AnalyticsDashboard")',
+      'renderer.components.export': 'Use a valid JavaScript identifier (e.g., "default" or "MyComponent")',
+      'renderer.styles': 'Use a relative path to a CSS/SCSS file (e.g., "renderer/styles.css")'
     }
 
-    // Check for array item paths like extensionPoints.actions.0
-    const basePath = fieldPath.replace(/\.\d+$/, '')
+    // Check for array item paths like extensionPoints.actions.0 or renderer.components.0.name
+    const basePath = fieldPath.replace(/\.\d+/g, '')
 
     return suggestions[fieldPath] || suggestions[basePath] || `Value must match pattern: ${pattern}`
   }
@@ -255,6 +260,8 @@ class ManifestValidator {
     const result = await this.validateFile(manifestPath)
 
     if (result.valid) {
+      const warnings = []
+
       // Additional validation: check that main entry point exists
       const mainPath = path.join(pluginDir, result.manifest.main)
       try {
@@ -269,7 +276,45 @@ class ManifestValidator {
           value: result.manifest.main
         }]
         delete result.manifest
+        return result
       }
+
+      // Validate renderer entry point if specified
+      if (result.manifest.renderer?.entry) {
+        const rendererEntryPath = path.join(pluginDir, result.manifest.renderer.entry)
+        try {
+          await fs.access(rendererEntryPath)
+        } catch {
+          warnings.push({
+            field: 'renderer.entry',
+            message: `Renderer entry point not found: ${result.manifest.renderer.entry}`,
+            suggestion: `Create the file "${result.manifest.renderer.entry}" or update the "renderer.entry" field`,
+            keyword: 'file',
+            value: result.manifest.renderer.entry
+          })
+        }
+      }
+
+      // Validate renderer style files if specified
+      if (result.manifest.renderer?.styles?.length > 0) {
+        for (const stylePath of result.manifest.renderer.styles) {
+          const fullStylePath = path.join(pluginDir, stylePath)
+          try {
+            await fs.access(fullStylePath)
+          } catch {
+            warnings.push({
+              field: 'renderer.styles',
+              message: `Style file not found: ${stylePath}`,
+              suggestion: `Create the file "${stylePath}" or remove it from the "renderer.styles" array`,
+              keyword: 'file',
+              value: stylePath
+            })
+          }
+        }
+      }
+
+      // Add warnings to result (but don't fail validation)
+      result.warnings = warnings
     }
 
     return result

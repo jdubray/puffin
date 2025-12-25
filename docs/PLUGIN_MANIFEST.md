@@ -48,6 +48,28 @@ Here's a minimal valid manifest:
   "dependencies": {
     "puffin-charts": "^1.0.0"
   },
+  "renderer": {
+    "entry": "renderer/index.js",
+    "components": [
+      {
+        "name": "AnalyticsDashboard",
+        "export": "AnalyticsDashboardComponent",
+        "type": "class",
+        "description": "Main analytics dashboard view"
+      },
+      {
+        "name": "MetricsPanel",
+        "export": "MetricsPanel",
+        "type": "function"
+      }
+    ],
+    "styles": [
+      "renderer/styles/analytics.css"
+    ],
+    "dependencies": {
+      "chart.js": "^4.0.0"
+    }
+  },
   "extensionPoints": {
     "actions": ["trackPrompt", "generateReport"],
     "acceptors": ["analyticsAcceptor"],
@@ -57,6 +79,15 @@ Here's a minimal valid manifest:
   },
   "activationEvents": ["onStartup"],
   "contributes": {
+    "views": [
+      {
+        "id": "analytics-dashboard",
+        "name": "Analytics",
+        "location": "sidebar",
+        "icon": "chart",
+        "component": "AnalyticsDashboard"
+      }
+    ],
     "commands": [
       {
         "id": "puffin-analytics.showDashboard",
@@ -338,6 +369,235 @@ If `true`, the plugin won't be published to the plugin registry.
 
 ---
 
+## Renderer Configuration
+
+The `renderer` object configures how your plugin's UI components are loaded in the renderer process.
+
+### `renderer.entry`
+
+**Type:** `string` (required if `renderer` is specified)
+**Pattern:** Must end with `.js`, `.mjs`, `.ts`, or `.tsx`
+
+Relative path to the renderer entry point file. This file should export all UI components.
+
+```json
+{
+  "renderer": {
+    "entry": "renderer/index.js"
+  }
+}
+```
+
+### `renderer.components`
+
+**Type:** `array` of component export objects
+
+Declares which components are exported from the entry point. Each component has:
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `name` | string | Yes | PascalCase component name (e.g., `"AnalyticsDashboard"`) |
+| `export` | string | Yes | Export name from entry module (e.g., `"default"` or named export) |
+| `type` | string | No | Component type: `"class"`, `"function"`, or `"factory"`. Default: `"class"` |
+| `description` | string | No | Brief description of the component |
+
+```json
+{
+  "renderer": {
+    "entry": "renderer/index.js",
+    "components": [
+      {
+        "name": "AnalyticsDashboard",
+        "export": "AnalyticsDashboardComponent",
+        "type": "class",
+        "description": "Main analytics dashboard view"
+      },
+      {
+        "name": "MetricsPanel",
+        "export": "MetricsPanel",
+        "type": "function"
+      }
+    ]
+  }
+}
+```
+
+### `renderer.styles`
+
+**Type:** `array` of strings
+**Max Items:** 20
+
+CSS/style files to load with this plugin. Supports `.css`, `.scss`, `.sass`, and `.less` files.
+
+```json
+{
+  "renderer": {
+    "entry": "renderer/index.js",
+    "styles": [
+      "renderer/styles/main.css",
+      "renderer/styles/dashboard.css"
+    ]
+  }
+}
+```
+
+### `renderer.dependencies`
+
+**Type:** `object`
+
+External npm packages required by renderer components. Puffin will ensure these are available.
+
+```json
+{
+  "renderer": {
+    "entry": "renderer/index.js",
+    "dependencies": {
+      "chart.js": "^4.0.0",
+      "d3": "^7.0.0"
+    }
+  }
+}
+```
+
+### `renderer.preload`
+
+**Type:** `boolean`
+**Default:** `false`
+
+If `true`, load renderer code immediately at startup rather than on-demand.
+
+```json
+{
+  "renderer": {
+    "entry": "renderer/index.js",
+    "preload": true
+  }
+}
+```
+
+### `renderer.sandbox`
+
+**Type:** `boolean`
+**Default:** `true`
+
+If `true`, renderer code runs in an isolated context. Recommended for security.
+
+```json
+{
+  "renderer": {
+    "entry": "renderer/index.js",
+    "sandbox": true
+  }
+}
+```
+
+### Full Renderer Example
+
+```json
+{
+  "name": "puffin-analytics",
+  "version": "1.0.0",
+  "displayName": "Analytics Dashboard",
+  "description": "Track prompt usage and response metrics",
+  "main": "src/index.js",
+  "renderer": {
+    "entry": "renderer/index.js",
+    "components": [
+      {
+        "name": "AnalyticsDashboard",
+        "export": "AnalyticsDashboardComponent",
+        "type": "class",
+        "description": "Main analytics dashboard view"
+      },
+      {
+        "name": "MetricsPanel",
+        "export": "MetricsPanel",
+        "type": "function",
+        "description": "Compact metrics display panel"
+      },
+      {
+        "name": "ChartWidget",
+        "export": "createChartWidget",
+        "type": "factory",
+        "description": "Factory for creating chart widgets"
+      }
+    ],
+    "styles": [
+      "renderer/styles/analytics.css",
+      "renderer/styles/charts.css"
+    ],
+    "dependencies": {
+      "chart.js": "^4.0.0"
+    },
+    "preload": false,
+    "sandbox": true
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "analytics-dashboard",
+        "name": "Analytics",
+        "location": "sidebar",
+        "icon": "chart",
+        "component": "AnalyticsDashboard"
+      }
+    ]
+  }
+}
+```
+
+### Renderer Entry Point Example
+
+The renderer entry point should export the declared components:
+
+```javascript
+// renderer/index.js
+
+// Class component
+export class AnalyticsDashboardComponent {
+  constructor(container, context) {
+    this.container = container
+    this.context = context
+  }
+
+  render() {
+    this.container.innerHTML = '<div class="analytics-dashboard">...</div>'
+  }
+
+  destroy() {
+    this.container.innerHTML = ''
+  }
+}
+
+// Functional component
+export function MetricsPanel(container, props) {
+  container.innerHTML = `<div class="metrics-panel">${props.value}</div>`
+  return {
+    update(newProps) {
+      container.innerHTML = `<div class="metrics-panel">${newProps.value}</div>`
+    },
+    destroy() {
+      container.innerHTML = ''
+    }
+  }
+}
+
+// Factory function
+export function createChartWidget(type) {
+  return class ChartWidget {
+    constructor(container, data) {
+      this.container = container
+      this.data = data
+      this.type = type
+    }
+    render() { /* ... */ }
+    destroy() { /* ... */ }
+  }
+}
+```
+
+---
+
 ## Extension Points
 
 The `extensionPoints` object declares what SAM pattern components and IPC handlers your plugin provides.
@@ -529,11 +789,35 @@ Unknown field "autor" in manifest
 Suggestion: Remove the "autor" field or check for typos
 ```
 
+### Invalid renderer entry path
+```
+Invalid format for "renderer.entry": "renderer/index" does not match required pattern
+Suggestion: Use a relative path to a JavaScript/TypeScript file (e.g., "renderer/index.js")
+```
+
+### Invalid component name
+```
+Invalid format for "renderer.components.name": "analytics-dashboard" does not match required pattern
+Suggestion: Use PascalCase starting with uppercase (e.g., "AnalyticsDashboard")
+```
+
+### Renderer entry not found (warning)
+```
+Renderer entry point not found: renderer/index.js
+Suggestion: Create the file "renderer/index.js" or update the "renderer.entry" field
+```
+
+### Style file not found (warning)
+```
+Style file not found: renderer/styles/main.css
+Suggestion: Create the file "renderer/styles/main.css" or remove it from the "renderer.styles" array
+```
+
 ---
 
 ## Directory Structure
 
-A typical plugin directory structure:
+A typical plugin directory structure with renderer components:
 
 ```
 my-plugin/
@@ -542,7 +826,14 @@ my-plugin/
 ├── src/
 │   ├── actions.js        # Action definitions
 │   ├── acceptors.js      # Acceptor definitions
-│   └── components/       # UI components
+│   └── handlers.js       # IPC handlers
+├── renderer/
+│   ├── index.js          # Renderer entry point (exports UI components)
+│   ├── components/
+│   │   ├── Dashboard.js  # Dashboard component
+│   │   └── Panel.js      # Panel component
+│   └── styles/
+│       └── main.css      # Plugin styles
 ├── package.json          # npm dependencies (optional)
 ├── README.md             # Documentation
 └── LICENSE               # License file
@@ -552,9 +843,12 @@ my-plugin/
 
 ## Schema Location
 
-The JSON Schema for validation is available at:
-- Local: `src/main/plugins/manifest-schema.json`
-- URL: `https://puffin.dev/schemas/plugin-manifest.json`
+The JSON Schemas for validation are available at:
+
+| Schema | Local Path | URL |
+|--------|------------|-----|
+| Full Manifest | `src/main/plugins/manifest-schema.json` | `https://puffin.dev/schemas/plugin-manifest.json` |
+| Renderer Section | `src/main/plugins/schemas/renderer-manifest.schema.json` | `https://puffin.dev/schemas/renderer-manifest.json` |
 
 You can use it in your editor for autocompletion:
 

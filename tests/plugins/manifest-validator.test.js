@@ -86,6 +86,35 @@ describe('Manifest Schema', () => {
   it('should not allow additional properties at root', () => {
     assert.strictEqual(schema.additionalProperties, false)
   })
+
+  it('should define renderer section', () => {
+    assert.ok(schema.properties.renderer, 'renderer property should exist')
+    assert.strictEqual(schema.properties.renderer.type, 'object')
+    assert.deepStrictEqual(schema.properties.renderer.required, ['entry'])
+  })
+
+  it('should define renderer.entry with correct pattern', () => {
+    const entry = schema.properties.renderer.properties.entry
+    assert.strictEqual(entry.type, 'string')
+    assert.ok(entry.pattern.includes('js|mjs|ts|tsx'))
+  })
+
+  it('should define renderer.components array', () => {
+    const components = schema.properties.renderer.properties.components
+    assert.strictEqual(components.type, 'array')
+    assert.ok(components.items)
+  })
+
+  it('should define renderer.styles array', () => {
+    const styles = schema.properties.renderer.properties.styles
+    assert.strictEqual(styles.type, 'array')
+    assert.ok(styles.items.pattern.includes('css|scss|sass|less'))
+  })
+
+  it('should define renderer.dependencies object', () => {
+    const dependencies = schema.properties.renderer.properties.dependencies
+    assert.strictEqual(dependencies.type, 'object')
+  })
 })
 
 describe('Manifest Validation Logic', () => {
@@ -144,6 +173,112 @@ describe('Manifest Validation Logic', () => {
   })
 })
 
+describe('Renderer Manifest Schema', () => {
+  let schema
+
+  before(async () => {
+    const schemaPath = path.join(__dirname, '../../src/main/plugins/schemas/renderer-manifest.schema.json')
+    const content = await fs.readFile(schemaPath, 'utf-8')
+    schema = JSON.parse(content)
+  })
+
+  it('should be valid JSON', () => {
+    assert.ok(schema, 'Renderer schema should be parseable')
+  })
+
+  it('should have correct $schema', () => {
+    assert.strictEqual(schema.$schema, 'http://json-schema.org/draft-07/schema#')
+  })
+
+  it('should require entry field', () => {
+    assert.deepStrictEqual(schema.required, ['entry'])
+  })
+
+  it('should define entry with correct pattern', () => {
+    assert.strictEqual(schema.properties.entry.type, 'string')
+    assert.ok(schema.properties.entry.pattern.includes('js|mjs|ts|tsx'))
+  })
+
+  it('should define components array', () => {
+    assert.strictEqual(schema.properties.components.type, 'array')
+    assert.ok(schema.properties.components.items)
+  })
+
+  it('should define styles array with CSS pattern', () => {
+    assert.strictEqual(schema.properties.styles.type, 'array')
+    assert.ok(schema.properties.styles.items.pattern.includes('css|scss|sass|less'))
+  })
+
+  it('should define dependencies object', () => {
+    assert.strictEqual(schema.properties.dependencies.type, 'object')
+  })
+
+  it('should define preload and sandbox booleans', () => {
+    assert.strictEqual(schema.properties.preload.type, 'boolean')
+    assert.strictEqual(schema.properties.sandbox.type, 'boolean')
+  })
+
+  it('should have componentExport definition', () => {
+    assert.ok(schema.definitions.componentExport)
+    assert.deepStrictEqual(schema.definitions.componentExport.required, ['name', 'export'])
+  })
+})
+
+describe('Renderer Validation Patterns', () => {
+  it('should validate renderer entry paths', () => {
+    const pattern = new RegExp('^[a-zA-Z0-9_./-]+\\.(js|mjs|ts|tsx)$')
+    assert.ok(pattern.test('renderer/index.js'))
+    assert.ok(pattern.test('src/renderer/main.tsx'))
+    assert.ok(pattern.test('dist/renderer.mjs'))
+    assert.ok(!pattern.test('renderer/index'))
+    assert.ok(!pattern.test('renderer/index.css'))
+    assert.ok(!pattern.test('../outside/index.js'))
+  })
+
+  it('should validate component names (PascalCase)', () => {
+    const pattern = new RegExp('^[A-Z][a-zA-Z0-9]*$')
+    assert.ok(pattern.test('AnalyticsDashboard'))
+    assert.ok(pattern.test('A'))
+    assert.ok(pattern.test('MyComponent123'))
+    assert.ok(!pattern.test('analyticsDashboard'))
+    assert.ok(!pattern.test('analytics-dashboard'))
+    assert.ok(!pattern.test('123Component'))
+  })
+
+  it('should validate export names', () => {
+    const pattern = new RegExp('^[a-zA-Z_$][a-zA-Z0-9_$]*$')
+    assert.ok(pattern.test('default'))
+    assert.ok(pattern.test('MyComponent'))
+    assert.ok(pattern.test('_privateExport'))
+    assert.ok(pattern.test('$special'))
+    assert.ok(!pattern.test('123export'))
+    assert.ok(!pattern.test('-export'))
+  })
+
+  it('should validate style file paths', () => {
+    const pattern = new RegExp('^[a-zA-Z0-9_./-]+\\.(css|scss|sass|less)$')
+    assert.ok(pattern.test('renderer/styles/main.css'))
+    assert.ok(pattern.test('styles/theme.scss'))
+    assert.ok(pattern.test('components/button.sass'))
+    assert.ok(pattern.test('dist/bundle.less'))
+    assert.ok(!pattern.test('styles/main'))
+    assert.ok(!pattern.test('styles/main.js'))
+  })
+
+  it('should validate dependency versions', () => {
+    const pattern = new RegExp('^(>=?|<=?|\\^|~)?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?$|^\\*$|^latest$')
+    assert.ok(pattern.test('1.0.0'))
+    assert.ok(pattern.test('^4.0.0'))
+    assert.ok(pattern.test('>=2.1.0'))
+    assert.ok(pattern.test('~1.5.0'))
+    assert.ok(pattern.test('1.0.0-beta.1'))
+    assert.ok(pattern.test('*'))
+    assert.ok(pattern.test('latest'))
+    assert.ok(!pattern.test('v1.0.0'))
+    assert.ok(!pattern.test('1.0'))
+  })
+})
+
 describe('Sample Manifests', () => {
   it('should have valid minimal manifest structure', () => {
     const minimal = {
@@ -194,5 +329,52 @@ describe('Sample Manifests', () => {
     assert.ok(typeof full.extensionPoints === 'object')
     assert.ok(Array.isArray(full.extensionPoints.actions))
     assert.ok(Array.isArray(full.extensionPoints.ipcHandlers))
+  })
+
+  it('should have valid manifest with renderer section', () => {
+    const withRenderer = {
+      name: 'puffin-dashboard',
+      version: '1.0.0',
+      displayName: 'Dashboard Plugin',
+      description: 'A plugin with renderer components',
+      main: 'src/index.js',
+      renderer: {
+        entry: 'renderer/index.js',
+        components: [
+          {
+            name: 'Dashboard',
+            export: 'DashboardComponent',
+            type: 'class',
+            description: 'Main dashboard view'
+          },
+          {
+            name: 'Panel',
+            export: 'Panel',
+            type: 'function'
+          }
+        ],
+        styles: [
+          'renderer/styles/main.css',
+          'renderer/styles/theme.css'
+        ],
+        dependencies: {
+          'chart.js': '^4.0.0'
+        },
+        preload: false,
+        sandbox: true
+      }
+    }
+
+    // Validate renderer structure
+    assert.ok(withRenderer.renderer)
+    assert.strictEqual(withRenderer.renderer.entry, 'renderer/index.js')
+    assert.ok(Array.isArray(withRenderer.renderer.components))
+    assert.strictEqual(withRenderer.renderer.components.length, 2)
+    assert.strictEqual(withRenderer.renderer.components[0].name, 'Dashboard')
+    assert.strictEqual(withRenderer.renderer.components[0].type, 'class')
+    assert.ok(Array.isArray(withRenderer.renderer.styles))
+    assert.ok(typeof withRenderer.renderer.dependencies === 'object')
+    assert.strictEqual(withRenderer.renderer.preload, false)
+    assert.strictEqual(withRenderer.renderer.sandbox, true)
   })
 })

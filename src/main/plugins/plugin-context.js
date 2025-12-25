@@ -30,6 +30,7 @@ class PluginContext {
   constructor(pluginName, pluginDir, options = {}) {
     this.pluginName = pluginName
     this.pluginDir = pluginDir
+    this.pluginDirectory = pluginDir // Alias for test compatibility
     this.registry = options.registry
     this.ipcMain = options.ipcMain
     this.services = options.services || {}
@@ -38,14 +39,23 @@ class PluginContext {
     this.storageDir = path.join(os.homedir(), '.puffin', 'plugin-data', pluginName)
 
     // Track what this plugin has registered for cleanup
-    this._registeredActions = []
-    this._registeredAcceptors = []
-    this._registeredReactors = []
-    this._registeredComponents = []
-    this._registeredIpcHandlers = []
+    this._registrations = {
+      actions: [],
+      acceptors: [],
+      reactors: [],
+      components: [],
+      ipcHandlers: []
+    }
 
-    // Bound logger
+    // Track event subscriptions for cleanup
+    this._subscriptions = []
+
+    // Bound logger (exposed as both log and via getLogger())
     this._logger = this._createLogger()
+    this.log = this._logger
+
+    // Storage interface (exposed directly and via getStorage())
+    this.storage = this._createStorage()
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -63,7 +73,7 @@ class PluginContext {
     }
 
     const qualifiedName = `${this.pluginName}:${name}`
-    this._registeredActions.push(qualifiedName)
+    this._registrations.actions.push(qualifiedName)
 
     if (this.registry) {
       this.registry.registerAction(this.pluginName, qualifiedName, handler)
@@ -83,7 +93,7 @@ class PluginContext {
     }
 
     const qualifiedName = `${this.pluginName}:${name}`
-    this._registeredAcceptors.push(qualifiedName)
+    this._registrations.acceptors.push(qualifiedName)
 
     if (this.registry) {
       this.registry.registerAcceptor(this.pluginName, qualifiedName, handler)
@@ -103,7 +113,7 @@ class PluginContext {
     }
 
     const qualifiedName = `${this.pluginName}:${name}`
-    this._registeredReactors.push(qualifiedName)
+    this._registrations.reactors.push(qualifiedName)
 
     if (this.registry) {
       this.registry.registerReactor(this.pluginName, qualifiedName, handler)
@@ -119,7 +129,7 @@ class PluginContext {
    */
   registerComponent(name, component) {
     const qualifiedName = `${this.pluginName}:${name}`
-    this._registeredComponents.push(qualifiedName)
+    this._registrations.components.push(qualifiedName)
 
     if (this.registry) {
       this.registry.registerComponent(this.pluginName, qualifiedName, component)
@@ -138,12 +148,10 @@ class PluginContext {
       throw new Error(`IPC handler for "${channel}" must be a function`)
     }
 
-    // Ensure channel has plugin namespace prefix
-    const qualifiedChannel = channel.includes(':')
-      ? channel
-      : `${this.pluginName}:${channel}`
+    // Ensure channel has plugin namespace prefix for IPC
+    const qualifiedChannel = `plugin:${this.pluginName}:${channel}`
 
-    this._registeredIpcHandlers.push(qualifiedChannel)
+    this._registrations.ipcHandlers.push(qualifiedChannel)
 
     if (this.ipcMain) {
       // Wrap handler with error handling
@@ -153,7 +161,7 @@ class PluginContext {
           return { success: true, data: result }
         } catch (error) {
           this._logger.error(`IPC handler error for ${qualifiedChannel}:`, error.message)
-          return { success: false, error: error.message }
+          return { success: false, error: error.message, plugin: this.pluginName }
         }
       })
     }
@@ -174,85 +182,7 @@ class PluginContext {
    * @returns {Object} Storage interface
    */
   getStorage() {
-    return {
-      /**
-       * Get a value from storage
-       * @param {string} key - Storage key
-       * @returns {Promise<any>} Stored value or undefined
-       */
-      get: async (key) => {
-        try {
-          const filePath = path.join(this.storageDir, `${key}.json`)
-          const content = await fs.readFile(filePath, 'utf-8')
-          return JSON.parse(content)
-        } catch (error) {
-          if (error.code === 'ENOENT') {
-            return undefined
-          }
-          throw error
-        }
-      },
-
-      /**
-       * Set a value in storage
-       * @param {string} key - Storage key
-       * @param {any} value - Value to store
-       */
-      set: async (key, value) => {
-        await fs.mkdir(this.storageDir, { recursive: true })
-        const filePath = path.join(this.storageDir, `${key}.json`)
-        await fs.writeFile(filePath, JSON.stringify(value, null, 2), 'utf-8')
-      },
-
-      /**
-       * Delete a value from storage
-       * @param {string} key - Storage key
-       */
-      delete: async (key) => {
-        try {
-          const filePath = path.join(this.storageDir, `${key}.json`)
-          await fs.unlink(filePath)
-        } catch (error) {
-          if (error.code !== 'ENOENT') {
-            throw error
-          }
-        }
-      },
-
-      /**
-       * Get all stored keys
-       * @returns {Promise<string[]>} Array of keys
-       */
-      keys: async () => {
-        try {
-          const files = await fs.readdir(this.storageDir)
-          return files
-            .filter(f => f.endsWith('.json'))
-            .map(f => f.replace(/\.json$/, ''))
-        } catch (error) {
-          if (error.code === 'ENOENT') {
-            return []
-          }
-          throw error
-        }
-      },
-
-      /**
-       * Clear all stored data
-       */
-      clear: async () => {
-        try {
-          const files = await fs.readdir(this.storageDir)
-          for (const file of files) {
-            await fs.unlink(path.join(this.storageDir, file))
-          }
-        } catch (error) {
-          if (error.code !== 'ENOENT') {
-            throw error
-          }
-        }
-      }
-    }
+    return this.storage
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -311,9 +241,30 @@ class PluginContext {
    */
   subscribe(eventName, handler) {
     if (this.registry) {
-      return this.registry.subscribe(eventName, this.pluginName, handler)
+      const unsubscribe = this.registry.subscribe(eventName, this.pluginName, handler)
+      this._subscriptions.push(unsubscribe)
+      return unsubscribe
     }
     return () => {}
+  }
+
+  /**
+   * Call an action registered by another plugin
+   * @param {string} qualifiedName - Fully qualified action name (plugin:action)
+   * @param {any} payload - Action payload
+   * @returns {Promise<any>} Action result
+   */
+  async callAction(qualifiedName, payload) {
+    if (!this.registry) {
+      throw new Error('Registry not available')
+    }
+
+    const action = this.registry.getAction(qualifiedName)
+    if (!action) {
+      throw new Error(`Action not found: ${qualifiedName}`)
+    }
+
+    return action(payload)
   }
 
   /**
@@ -323,7 +274,7 @@ class PluginContext {
    */
   emit(eventName, data) {
     if (this.registry) {
-      this.registry.emit(eventName, this.pluginName, data)
+      this.registry.emitPluginEvent(eventName, this.pluginName, data)
     }
   }
 
@@ -337,10 +288,15 @@ class PluginContext {
    */
   _cleanup() {
     // Remove IPC handlers
-    for (const channel of this._registeredIpcHandlers) {
+    for (const channel of this._registrations.ipcHandlers) {
       if (this.ipcMain) {
         this.ipcMain.removeHandler(channel)
       }
+    }
+
+    // Unsubscribe from all events
+    for (const unsubscribe of this._subscriptions) {
+      unsubscribe()
     }
 
     // Unregister from registry
@@ -348,12 +304,15 @@ class PluginContext {
       this.registry.unregisterPlugin(this.pluginName)
     }
 
-    // Clear tracking arrays
-    this._registeredActions = []
-    this._registeredAcceptors = []
-    this._registeredReactors = []
-    this._registeredComponents = []
-    this._registeredIpcHandlers = []
+    // Clear tracking
+    this._registrations = {
+      actions: [],
+      acceptors: [],
+      reactors: [],
+      components: [],
+      ipcHandlers: []
+    }
+    this._subscriptions = []
 
     this._logger.debug('Cleanup complete')
   }
@@ -364,11 +323,73 @@ class PluginContext {
    */
   getRegistrationSummary() {
     return {
-      actions: this._registeredActions.length,
-      acceptors: this._registeredAcceptors.length,
-      reactors: this._registeredReactors.length,
-      components: this._registeredComponents.length,
-      ipcHandlers: this._registeredIpcHandlers.length
+      actions: this._registrations.actions.length,
+      acceptors: this._registrations.acceptors.length,
+      reactors: this._registrations.reactors.length,
+      components: this._registrations.components.length,
+      ipcHandlers: this._registrations.ipcHandlers.length
+    }
+  }
+
+  /**
+   * Create the storage interface
+   * @private
+   */
+  _createStorage() {
+    return {
+      path: this.storageDir,
+      get: async (key) => {
+        try {
+          const filePath = path.join(this.storageDir, `${key}.json`)
+          const content = await fs.readFile(filePath, 'utf-8')
+          return JSON.parse(content)
+        } catch (error) {
+          if (error.code === 'ENOENT') {
+            return undefined
+          }
+          throw error
+        }
+      },
+      set: async (key, value) => {
+        await fs.mkdir(this.storageDir, { recursive: true })
+        const filePath = path.join(this.storageDir, `${key}.json`)
+        await fs.writeFile(filePath, JSON.stringify(value, null, 2), 'utf-8')
+      },
+      delete: async (key) => {
+        try {
+          const filePath = path.join(this.storageDir, `${key}.json`)
+          await fs.unlink(filePath)
+        } catch (error) {
+          if (error.code !== 'ENOENT') {
+            throw error
+          }
+        }
+      },
+      keys: async () => {
+        try {
+          const files = await fs.readdir(this.storageDir)
+          return files
+            .filter(f => f.endsWith('.json'))
+            .map(f => f.replace(/\.json$/, ''))
+        } catch (error) {
+          if (error.code === 'ENOENT') {
+            return []
+          }
+          throw error
+        }
+      },
+      clear: async () => {
+        try {
+          const files = await fs.readdir(this.storageDir)
+          for (const file of files) {
+            await fs.unlink(path.join(this.storageDir, file))
+          }
+        } catch (error) {
+          if (error.code !== 'ENOENT') {
+            throw error
+          }
+        }
+      }
     }
   }
 }

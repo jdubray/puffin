@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://puffin.dev/schemas/renderer-manifest.json",
+  "title": "Puffin Plugin Renderer Manifest",
+  "description": "Schema for the renderer section of puffin-plugin.json manifest files",
+  "type": "object",
+  "properties": {
+    "entry": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[a-zA-Z0-9_./-]+\\.(js|mjs|ts|tsx)$",
+      "description": "Relative path to the renderer entry point file (e.g., 'renderer/index.js')"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/componentExport"
+      },
+      "maxItems": 50,
+      "uniqueItems": true,
+      "description": "UI components exported from the renderer entry point"
+    },
+    "styles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[a-zA-Z0-9_./-]+\\.(css|scss|sass|less)$"
+      },
+      "maxItems": 20,
+      "uniqueItems": true,
+      "description": "CSS/style files to load with this plugin"
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(>=?|<=?|\\^|~)?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?$|^\\*$|^latest$"
+      },
+      "description": "External dependencies required by renderer components (npm package: version)"
+    },
+    "preload": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, load renderer code immediately at startup rather than on-demand"
+    },
+    "sandbox": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, renderer code runs in an isolated context (recommended for security)"
+    }
+  },
+  "required": ["entry"],
+  "additionalProperties": false,
+  "definitions": {
+    "componentExport": {
+      "type": "object",
+      "required": ["name", "export"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[A-Z][a-zA-Z0-9]*$",
+          "description": "Component name (PascalCase, e.g., 'AnalyticsDashboard')"
+        },
+        "export": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-zA-Z_$][a-zA-Z0-9_$]*$",
+          "description": "Export name from the entry module (e.g., 'AnalyticsDashboardComponent' or 'default')"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["class", "function", "factory"],
+          "default": "class",
+          "description": "Component type: 'class' (ES6 class), 'function' (functional component), 'factory' (factory function)"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Brief description of what this component renders"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "entry": "renderer/index.js",
+      "components": [
+        {
+          "name": "AnalyticsDashboard",
+          "export": "AnalyticsDashboardComponent",
+          "type": "class",
+          "description": "Main analytics dashboard view"
+        },
+        {
+          "name": "MetricsPanel",
+          "export": "MetricsPanel",
+          "type": "function"
+        }
+      ],
+      "styles": [
+        "renderer/styles/main.css",
+        "renderer/styles/dashboard.css"
+      ],
+      "dependencies": {
+        "chart.js": "^4.0.0"
+      }
+    }
+  ]
+}

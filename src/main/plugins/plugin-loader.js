@@ -11,6 +11,30 @@ const path = require('path')
 const os = require('os')
 
 const { ManifestValidator } = require('./manifest-validator')
+const { parseViewContributions, logContributionErrors } = require('./contribution-parser')
+
+/**
+ * Plugin load states
+ * @enum {string}
+ */
+const PluginLoadState = {
+  DISCOVERED: 'discovered',
+  VALIDATED: 'validated',
+  LOADED: 'loaded',
+  ERROR: 'error'
+}
+
+/**
+ * Plugin lifecycle states (activation)
+ * @enum {string}
+ */
+const PluginLifecycleState = {
+  INACTIVE: 'inactive',
+  ACTIVATING: 'activating',
+  ACTIVE: 'active',
+  DEACTIVATING: 'deactivating',
+  ACTIVATION_FAILED: 'activation-failed'
+}
 
 /**
  * Plugin state representation
@@ -25,10 +49,61 @@ class Plugin {
     this.manifest = manifest
     this.directory = directory
     this.mainPath = path.join(directory, manifest.main)
-    this.state = 'discovered' // discovered | validated | loaded | error
+    this.state = PluginLoadState.DISCOVERED // Load state: discovered | validated | loaded | error
+    this.lifecycleState = PluginLifecycleState.INACTIVE // Lifecycle state: inactive | activating | active | deactivating | activation-failed
     this.error = null
+    this.activationError = null // Error from activate() call
+    this.validationErrors = null // Array of detailed validation errors
     this.module = null
     this.dependencies = manifest.dependencies || {}
+    this.activatedAt = null
+    this.deactivatedAt = null
+
+    // View contributions parsed from manifest
+    this.viewContributions = []
+    this.contributionErrors = []
+    this.contributionWarnings = []
+  }
+
+  /**
+   * Set lifecycle state with timestamp tracking
+   * @param {string} state - New lifecycle state
+   */
+  setLifecycleState(state) {
+    this.lifecycleState = state
+    if (state === PluginLifecycleState.ACTIVE) {
+      this.activatedAt = new Date().toISOString()
+      this.activationError = null
+    } else if (state === PluginLifecycleState.INACTIVE) {
+      this.deactivatedAt = new Date().toISOString()
+    }
+  }
+
+  /**
+   * Record an activation error
+   * @param {Error|string} error - The error that occurred
+   */
+  setActivationError(error) {
+    this.activationError = error instanceof Error ? error.message : error
+    this.lifecycleState = PluginLifecycleState.ACTIVATION_FAILED
+  }
+
+  /**
+   * Check if plugin is currently active
+   * @returns {boolean}
+   */
+  isActive() {
+    return this.lifecycleState === PluginLifecycleState.ACTIVE
+  }
+
+  /**
+   * Check if plugin can be activated
+   * @returns {boolean}
+   */
+  canActivate() {
+    return this.state === PluginLoadState.LOADED &&
+           (this.lifecycleState === PluginLifecycleState.INACTIVE ||
+            this.lifecycleState === PluginLifecycleState.ACTIVATION_FAILED)
   }
 
   toJSON() {
@@ -39,10 +114,37 @@ class Plugin {
       description: this.description,
       directory: this.directory,
       state: this.state,
+      lifecycleState: this.lifecycleState,
       error: this.error,
+      activationError: this.activationError,
+      validationErrors: this.validationErrors,
       dependencies: this.dependencies,
-      manifest: this.manifest
+      manifest: this.manifest,
+      activatedAt: this.activatedAt,
+      deactivatedAt: this.deactivatedAt,
+      viewContributions: this.viewContributions,
+      contributionErrors: this.contributionErrors,
+      contributionWarnings: this.contributionWarnings
     }
+  }
+
+  /**
+   * Get views filtered by location
+   * @param {string} location - Location to filter by
+   * @returns {Array} Views at the specified location
+   */
+  getViewsByLocation(location) {
+    return this.viewContributions
+      .filter(view => view.location === location)
+      .sort((a, b) => (a.order || 100) - (b.order || 100))
+  }
+
+  /**
+   * Check if plugin has any view contributions
+   * @returns {boolean}
+   */
+  hasViews() {
+    return this.viewContributions.length > 0
   }
 }
 
@@ -171,31 +273,72 @@ class PluginLoader extends EventEmitter {
         // Additional validation: check main entry point exists
         try {
           await fs.access(plugin.mainPath)
+
+          // Parse view contributions from manifest
+          const contributions = parseViewContributions(plugin.manifest, plugin.name)
+          plugin.viewContributions = contributions.views
+          plugin.contributionErrors = contributions.errors
+          plugin.contributionWarnings = contributions.warnings
+
+          // Log contribution errors/warnings if any
+          if (contributions.errors.length > 0 || contributions.warnings.length > 0) {
+            logContributionErrors(contributions.errors, contributions.warnings)
+          }
+
           plugin.state = 'validated'
           valid.push(plugin)
           this.emit('plugin:validated', { plugin })
         } catch {
           plugin.state = 'error'
-          plugin.error = `Entry point not found: ${plugin.main}`
+          const error = {
+            field: 'main',
+            message: `Entry point not found: ${plugin.main}`,
+            suggestion: `Create the file "${plugin.main}" or update the "main" field`,
+            keyword: 'file',
+            value: plugin.main
+          }
+          plugin.error = error.message
+          plugin.validationErrors = [error]
           invalid.push(plugin)
-          this.emit('plugin:validation-failed', {
-            plugin,
-            errors: [{
-              field: 'main',
-              message: plugin.error,
-              suggestion: `Create the file "${plugin.main}" or update the "main" field`
-            }]
-          })
+          this.logValidationErrors(plugin.name, [error])
+          this.emit('plugin:validation-failed', { plugin, errors: [error] })
         }
       } else {
         plugin.state = 'error'
         plugin.error = result.errors.map(e => e.message).join('; ')
+        plugin.validationErrors = result.errors
         invalid.push(plugin)
+        this.logValidationErrors(plugin.name, result.errors)
         this.emit('plugin:validation-failed', { plugin, errors: result.errors })
       }
     }
 
     return { valid, invalid }
+  }
+
+  /**
+   * Log validation errors in a developer-friendly format
+   * @param {string} pluginName - Name of the plugin
+   * @param {Array} errors - Array of validation errors
+   * @private
+   */
+  logValidationErrors(pluginName, errors) {
+    console.error(`[PluginLoader] Manifest validation failed for "${pluginName}":`)
+    for (const error of errors) {
+      console.error(`  ✗ ${error.message}`)
+      if (error.field && error.field !== 'manifest') {
+        console.error(`    Field: ${error.field}`)
+      }
+      if (error.value !== undefined && error.value !== null) {
+        const displayValue = typeof error.value === 'string'
+          ? `"${error.value}"`
+          : JSON.stringify(error.value)
+        console.error(`    Got: ${displayValue}`)
+      }
+      if (error.suggestion) {
+        console.error(`    Suggestion: ${error.suggestion}`)
+      }
+    }
   }
 
   /**
@@ -431,7 +574,7 @@ class PluginLoader extends EventEmitter {
 
   /**
    * Get plugin load errors for display
-   * @returns {Array<{ name: string, error: string }>}
+   * @returns {Array<{ name: string, displayName: string, error: string, validationErrors: Array|null }>}
    */
   getErrors() {
     const errors = []
@@ -439,10 +582,27 @@ class PluginLoader extends EventEmitter {
       errors.push({
         name: plugin.name,
         displayName: plugin.displayName,
-        error: plugin.error
+        error: plugin.error,
+        validationErrors: plugin.validationErrors || null
       })
     }
     return errors
+  }
+
+  /**
+   * Get formatted error messages for a plugin
+   * @param {string} name - Plugin name
+   * @returns {string|null} Formatted error message or null if no errors
+   */
+  getFormattedErrors(name) {
+    const plugin = this.failedPlugins.get(name)
+    if (!plugin) return null
+
+    if (!plugin.validationErrors || plugin.validationErrors.length === 0) {
+      return plugin.error
+    }
+
+    return this.validator.formatErrorsForDisplay(plugin.validationErrors, { verbose: true })
   }
 
   /**
@@ -477,5 +637,7 @@ class PluginLoader extends EventEmitter {
 
 module.exports = {
   PluginLoader,
-  Plugin
+  Plugin,
+  PluginLoadState,
+  PluginLifecycleState
 }

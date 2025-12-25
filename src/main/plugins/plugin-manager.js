@@ -9,6 +9,8 @@ const { EventEmitter } = require('events')
 const { PluginContext } = require('./plugin-context')
 const { PluginRegistry } = require('./plugin-registry')
 const { PluginStateStore } = require('./plugin-state-store')
+const { PluginLifecycleState } = require('./plugin-loader')
+const { ViewRegistry } = require('./view-registry')
 
 /**
  * PluginManager - Manages plugin lifecycle
@@ -40,6 +42,7 @@ class PluginManager extends EventEmitter {
     // Core components
     this.registry = new PluginRegistry()
     this.stateStore = new PluginStateStore()
+    this.viewRegistry = new ViewRegistry()
 
     // Track active plugins and their contexts
     this.activePlugins = new Map() // name -> { plugin, context }
@@ -120,6 +123,8 @@ class PluginManager extends EventEmitter {
       throw new Error(`Plugin not loaded: ${name} (state: ${plugin.state})`)
     }
 
+    // Set lifecycle state to activating
+    plugin.setLifecycleState(PluginLifecycleState.ACTIVATING)
     this.emit('plugin:activating', { name })
 
     try {
@@ -135,6 +140,18 @@ class PluginManager extends EventEmitter {
         await plugin.module.activate(context)
       }
 
+      // Register view contributions from manifest
+      if (plugin.viewContributions && plugin.viewContributions.length > 0) {
+        const viewResult = this.viewRegistry.registerViews(name, plugin.viewContributions)
+        if (viewResult.errors.length > 0) {
+          console.warn(`[PluginManager] View registration warnings for ${name}:`, viewResult.errors)
+        }
+        console.log(`[PluginManager] Registered ${viewResult.registered.length} views for ${name}`)
+      }
+
+      // Set lifecycle state to active
+      plugin.setLifecycleState(PluginLifecycleState.ACTIVE)
+
       // Track as active
       this.activePlugins.set(name, { plugin, context })
       this.activationErrors.delete(name)
@@ -146,8 +163,11 @@ class PluginManager extends EventEmitter {
       console.log(`[PluginManager] Activated: ${name}`)
 
     } catch (error) {
+      // Set lifecycle state to failed and record error
+      plugin.setActivationError(error)
       this.activationErrors.set(name, error.message)
       this.emit('plugin:activation-failed', { name, error })
+      console.error(`[PluginManager] Activation failed for ${name}:`, error.message)
       throw error
     }
   }
@@ -166,6 +186,8 @@ class PluginManager extends EventEmitter {
 
     const { plugin, context } = active
 
+    // Set lifecycle state to deactivating
+    plugin.setLifecycleState(PluginLifecycleState.DEACTIVATING)
     this.emit('plugin:deactivating', { name })
 
     try {
@@ -177,6 +199,15 @@ class PluginManager extends EventEmitter {
       // Cleanup context (removes IPC handlers and registry entries)
       context._cleanup()
 
+      // Unregister view contributions
+      const viewResult = this.viewRegistry.unregisterPluginViews(name)
+      if (viewResult.unregistered.length > 0) {
+        console.log(`[PluginManager] Unregistered ${viewResult.unregistered.length} views for ${name}`)
+      }
+
+      // Set lifecycle state to inactive
+      plugin.setLifecycleState(PluginLifecycleState.INACTIVE)
+
       // Remove from active plugins
       this.activePlugins.delete(name)
 
@@ -184,11 +215,12 @@ class PluginManager extends EventEmitter {
       console.log(`[PluginManager] Deactivated: ${name}`)
 
     } catch (error) {
+      // Even on error, set to inactive and remove from active
+      plugin.setLifecycleState(PluginLifecycleState.INACTIVE)
+      this.activePlugins.delete(name)
+
       this.emit('plugin:deactivation-failed', { name, error })
       console.error(`[PluginManager] Error deactivating ${name}:`, error.message)
-
-      // Still remove from active even if deactivate fails
-      this.activePlugins.delete(name)
 
       throw error
     }
@@ -380,6 +412,14 @@ class PluginManager extends EventEmitter {
   }
 
   /**
+   * Get the view registry
+   * @returns {ViewRegistry}
+   */
+  getViewRegistry() {
+    return this.viewRegistry
+  }
+
+  /**
    * Get comprehensive plugin info
    * @param {string} name - Plugin name
    * @returns {Promise<Object|null>}
@@ -410,6 +450,7 @@ class PluginManager extends EventEmitter {
   async getSummary() {
     const loaderSummary = this.loader.getSummary()
     const registrySummary = this.registry.getSummary()
+    const viewRegistrySummary = this.viewRegistry.getSummary()
     const disabledPlugins = await this.stateStore.getDisabledPlugins()
 
     return {
@@ -418,6 +459,7 @@ class PluginManager extends EventEmitter {
       disabled: disabledPlugins.length,
       errors: this.activationErrors.size,
       registry: registrySummary,
+      views: viewRegistrySummary,
       initialized: this.initialized,
       shuttingDown: this.shuttingDown
     }

@@ -1,0 +1,65 @@
+/**
+ * Stats View Container Styles
+ */
+
+.stats-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  height: 100%;
+}
+
+.stats-view-header {
+  flex-shrink: 0;
+}
+
+.stats-view-title {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary, #333333);
+}
+
+.stats-view-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary, #666666);
+}
+
+.stats-view-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.stats-view-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--error-bg, #fff5f5);
+  border: 1px solid var(--error-border, #fed7d7);
+  border-radius: 6px;
+  color: var(--error-text, #c53030);
+  font-size: 14px;
+}
+
+.stats-view-error .error-icon {
+  font-size: 16px;
+}
+
+.stats-view-error .retry-button {
+  margin-left: auto;
+  padding: 6px 12px;
+  background: var(--button-bg, #ffffff);
+  border: 1px solid var(--error-border, #fed7d7);
+  border-radius: 4px;
+  color: var(--error-text, #c53030);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.stats-view-error .retry-button:hover {
+  background: var(--button-hover-bg, #fff5f5);
+}

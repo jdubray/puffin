@@ -1,0 +1,33 @@
+{
+  "name": "stats-plugin",
+  "version": "1.0.0",
+  "displayName": "Stats Dashboard",
+  "description": "Track and visualize usage statistics across branches",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["stats", "metrics", "dashboard", "analytics"],
+  "extensionPoints": {
+    "actions": ["getStats", "exportStats"],
+    "ipcHandlers": ["getWeeklyStats", "saveMarkdownExport"],
+    "components": ["stats-view"]
+  },
+  "contributions": {
+    "commands": [
+      {
+        "id": "stats.showDashboard",
+        "title": "Show Stats Dashboard",
+        "category": "Stats"
+      }
+    ],
+    "menus": [
+      {
+        "location": "tools",
+        "command": "stats.showDashboard"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

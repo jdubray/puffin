@@ -303,6 +303,9 @@ export class StatePersistence {
             ?.pop()
           const sessionId = lastPromptWithResponse?.response?.sessionId || null
 
+          // Note: Debug prompt is now captured via onFullPrompt callback from main process
+          // This ensures we get the complete prompt with all context
+
           // Submit to Claude
           await window.puffin.claude.submit({
             prompt: pendingSprintImpl.promptContent,

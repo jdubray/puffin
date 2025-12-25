@@ -289,7 +289,8 @@ class PuffinApp {
 
       // Integrate with built-in nav - when a built-in view is clicked,
       // deactivate any active plugin view
-      document.querySelectorAll('#main-nav .nav-btn').forEach(btn => {
+      // Exclude plugin nav buttons since they have their own click handlers
+      document.querySelectorAll('#main-nav .nav-btn:not(.plugin-nav-btn)').forEach(btn => {
         btn.addEventListener('click', () => {
           this.sidebarViewManager.showBuiltInView()
         })
@@ -1452,6 +1453,20 @@ class PuffinApp {
     })
     this.claudeListeners.push(unsubRaw)
 
+    // Full prompt (for Debug view) - captures the complete prompt with all context
+    const unsubFullPrompt = window.puffin.claude.onFullPrompt((fullPrompt) => {
+      console.log('[DEBUG-PROMPT] Received full prompt from main process, length:', fullPrompt?.length)
+      if (this.state?.config?.debugMode && this.intents?.storeDebugPrompt) {
+        this.intents.storeDebugPrompt({
+          content: fullPrompt,
+          branch: this.state?.history?.activeBranch || 'unknown',
+          model: 'default',
+          sessionId: null
+        })
+      }
+    })
+    this.claudeListeners.push(unsubFullPrompt)
+
     // Response streaming
     const unsubResponse = window.puffin.claude.onResponse((chunk) => {
       this.intents.receiveResponseChunk(chunk)
@@ -1811,7 +1826,7 @@ class PuffinApp {
    * Update view visibility
    */
   updateViews(state) {
-    const views = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'git', 'profile']
+    const views = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'git', 'profile', 'debug']
     views.forEach(viewName => {
       const view = document.getElementById(`${viewName}-view`)
       if (view) {
@@ -2517,7 +2532,7 @@ Keep it concise but informative. Use markdown formatting.`
       this.generatedHandoffSummary = {
         summary: response.response,
         sourceThreadId: activePromptId,
-        sourceThreadName: this.getThreadTitle(prompts),
+        sourceThreadName: this.getThreadTitle(threadPrompts),
         sourceBranch: activeBranch,
         createdAt: Date.now()
       }

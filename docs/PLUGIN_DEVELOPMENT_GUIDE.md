@@ -1,7 +1,3 @@
-I'll create a comprehensive Plugin Development Guide specification. Since this is documentation, I can produce it in this specifications thread.
-
----
-
 # Puffin Plugin Development Guide
 
 ## Specification Document
@@ -24,10 +20,41 @@ Puffin plugins extend the application's functionality through a well-defined API
 
 ## 2. Plugin Structure
 
+### Plugin Directory Locations
+
+Puffin loads plugins from different locations depending on the environment:
+
+**Development Mode** (default):
+- Location: `<project-root>/plugins/`
+- Purpose: Develop and test plugins bundled with the project
+- When: `NODE_ENV` is not set to `"production"`
+
+**Production Mode**:
+- Location: `~/.puffin/plugins/` (user home directory)
+- Purpose: User-installed plugins
+- When: `NODE_ENV === "production"`
+
+**Example:** When developing the stats-plugin:
+```bash
+# Plugin location (development mode - default)
+puffin/
+└── plugins/
+    └── stats-plugin/
+        ├── puffin-plugin.json
+        ├── index.js
+        └── renderer/
+            └── ...
+
+# To switch to production mode (loads from ~/.puffin/plugins/)
+NODE_ENV=production npm start
+```
+
 ### Directory Layout
 
 ```
-~/.puffin/plugins/
+~/.puffin/plugins/              # Production
+# OR
+<project-root>/plugins/         # Development (default)
 └── my-plugin/
     ├── puffin-plugin.json    # Required: Plugin manifest
     ├── index.js              # Required: Entry point (or as specified in manifest)
@@ -600,6 +627,34 @@ describe('Plugin Integration', () => {
 
 ## 9. Debugging
 
+### Verify Plugin Loading
+
+When starting Puffin, the console shows detailed plugin loading information:
+
+**Expected Output (Development Mode):**
+```
+[Plugins] Loading from: C:\Users\...\puffin\plugins
+[Plugins] Discovered: Stats Dashboard (stats-plugin@1.0.0)
+[Plugins] Validated: stats-plugin
+[Plugins] Loaded: stats-plugin
+[PluginManager] Activated: stats-plugin
+[Plugin:stats-plugin] Stats plugin activated
+[PluginManager] Initialization complete: 1 activated, 0 failed, 0 disabled
+```
+
+**Key Indicators:**
+- `[Plugins] Loading from:` - Shows which directory is being scanned
+- `[Plugins] Discovered:` - Plugin manifest was found
+- `[Plugins] Validated:` - Manifest passed schema validation
+- `[Plugins] Loaded:` - Plugin module loaded successfully
+- `[PluginManager] Activated:` - Plugin's activate() function completed
+
+**If Plugin Fails to Load:**
+- Not discovered: Check plugin is in correct directory and has `puffin-plugin.json`
+- Validation failed: Check error message for schema violations
+- Load failed: Check `main` entry point exists and has no syntax errors
+- Activation failed: Check activate() function for errors
+
 ### Enable Debug Logging
 
 Plugins can use the provided logger which automatically namespaces output:
@@ -636,11 +691,15 @@ const registry = await window.puffin.plugins.getRegistrySummary()
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
+| Plugin not discovered | Wrong directory | Development: `<project>/plugins/`, Production: `~/.puffin/plugins/` |
 | Plugin not discovered | Missing/invalid manifest | Check `puffin-plugin.json` exists and is valid JSON |
 | Validation failed | Schema mismatch | Check required fields: name, version, displayName, description, main |
+| Validation failed | IPC handlers format | Use `namespace:action` format (e.g., `"stats:getData"`) |
+| Validation failed | Components format | Must be object: `{ "name": "MyView", "export": "MyView" }` |
+| Validation failed | Menus format | Must be object: `{ "tools": [{ "command": "..." }] }` |
 | Load failed | Entry point error | Check `main` file exists and has no syntax errors |
 | Activation failed | Error in activate() | Check logs for stack trace, wrap in try-catch |
-| IPC not working | Wrong channel name | Use `plugin:pluginName:channel` format |
+| IPC not working | Wrong channel name | Registered as `plugin:pluginName:channel` automatically |
 
 ---
 
@@ -810,7 +869,3 @@ class AnalyticsPlugin {
 
 module.exports = new AnalyticsPlugin()
 ```
-
----
-
-This specification document provides comprehensive guidance for plugin developers. Implementation of example plugins and the `PLUGIN_DEVELOPMENT.md` documentation file should occur in an appropriate implementation branch.

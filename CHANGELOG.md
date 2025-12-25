@@ -5,6 +5,54 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2025-12-25
+
+### Added
+
+- **Plugin Architecture**: Extensible plugin system for adding new functionality
+  - Plugin manifest schema with validation
+  - Plugin loader and lifecycle management
+  - Sidebar view integration for plugin UIs
+  - Style injection for plugin CSS
+  - IPC handler registration for plugin-to-main communication
+  - Renderer component loading for dynamic plugin UIs
+  - Plugin contribution parsing for menus, commands, and views
+
+- **Stats Plugin**: Reference implementation demonstrating the plugin architecture
+  - Session statistics tracking (turns, cost, duration)
+  - Chart visualization with tooltips
+  - Markdown export functionality
+  - Custom notification system
+
+- **Debug Mode**: View the complete prompt sent to Claude CLI
+  - Enable in Config tab under Developer Settings
+  - Shows full prompt with all context (project info, branch context, handoff, user stories)
+  - Debug tab appears in navigation when enabled
+  - Copy and clear functionality for prompt inspection
+
+- **Handoff Summary Improvements**: Better context preservation between threads
+  - Linear thread path extraction for accurate summaries
+  - Only current thread content included, not entire branch
+
+### Fixed
+
+- **Config Persistence**: All config fields now properly saved and loaded
+  - Added missing fields: `defaultModel`, `uxStyle`, `sprintExecution`, `debugMode`
+  - Form populates only after config is fully loaded from disk
+
+- **Debug Checkbox**: Checkbox now stays checked when clicked
+  - Form no longer re-renders on every state change
+
+- **Handoff Summary Error**: Fixed `prompts is not defined` error when generating summaries
+
+- **Prompt Textarea Blocked**: Fixed issue where textarea was blocked on app startup
+  - Clears in-progress state when loading saved state
+
+### Changed
+
+- **Max Turns Default**: Changed from 10 to 40 for longer Claude sessions
+- **Continuation Warning**: Shows amber/red warning when max turns reached
+
 ## [2.2.0] - 2025-12-25
 
 ### Added

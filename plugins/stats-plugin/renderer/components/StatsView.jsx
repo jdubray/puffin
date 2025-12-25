@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import StatsChart from './StatsChart'
 import StatsTable from './StatsTable'
+import ExportButton from './ExportButton'
+import Notification from './Notification'
+import { generateMarkdown } from '../../src/utils/markdown-exporter'
 import '../styles/stats-view.css'
 
 /**
@@ -10,6 +14,11 @@ function StatsView() {
   const [weeklyStats, setWeeklyStats] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [notification, setNotification] = useState({
+    visible: false,
+    message: '',
+    type: 'info'
+  })
 
   useEffect(() => {
     fetchStats()
@@ -38,11 +47,52 @@ function StatsView() {
     }
   }
 
+  // Generate markdown content for export
+  const handleExport = useCallback(() => {
+    return generateMarkdown(weeklyStats, {
+      title: 'Stats Report',
+      includeTotals: true
+    })
+  }, [weeklyStats])
+
+  // Handle successful export
+  const handleExportSuccess = useCallback((filePath) => {
+    setNotification({
+      visible: true,
+      message: `Report saved successfully`,
+      type: 'success'
+    })
+  }, [])
+
+  // Handle export error
+  const handleExportError = useCallback((errorMessage) => {
+    setNotification({
+      visible: true,
+      message: `Export failed: ${errorMessage}`,
+      type: 'error'
+    })
+  }, [])
+
+  // Close notification
+  const handleCloseNotification = useCallback(() => {
+    setNotification(prev => ({ ...prev, visible: false }))
+  }, [])
+
   return (
     <div className="stats-view">
       <header className="stats-view-header">
-        <h2 className="stats-view-title">Usage Statistics</h2>
-        <p className="stats-view-subtitle">Last 26 weeks</p>
+        <div className="stats-view-header-text">
+          <h2 className="stats-view-title">Usage Statistics</h2>
+          <p className="stats-view-subtitle">Last 26 weeks</p>
+        </div>
+        <div className="stats-view-header-actions">
+          <ExportButton
+            onExport={handleExport}
+            onSuccess={handleExportSuccess}
+            onError={handleExportError}
+            disabled={loading || weeklyStats.length === 0}
+          />
+        </div>
       </header>
 
       {error && (
@@ -56,8 +106,17 @@ function StatsView() {
       )}
 
       <div className="stats-view-content">
+        <StatsChart data={weeklyStats} loading={loading} />
         <StatsTable data={weeklyStats} loading={loading} />
       </div>
+
+      <Notification
+        message={notification.message}
+        type={notification.type}
+        visible={notification.visible}
+        onClose={handleCloseNotification}
+        duration={4000}
+      />
     </div>
   )
 }

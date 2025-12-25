@@ -2527,7 +2527,7 @@ function truncateText(text, maxLength) {
 
 export const switchViewAcceptor = model => proposal => {
   if (proposal?.type === 'SWITCH_VIEW') {
-    const validViews = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'profile', 'git']
+    const validViews = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'profile', 'git', 'debug']
     if (validViews.includes(proposal.payload.view)) {
       model.currentView = proposal.payload.view
     }

@@ -1,7 +1,6 @@
 /**
  * Stats Plugin - Component Exports
+ * Vanilla JavaScript components (no JSX)
  */
 
-export { default as StatsView } from './StatsView'
-export { default as StatsTable } from './StatsTable'
-export { default as TotalsRow } from './TotalsRow'
+export { StatsView, default as default } from './StatsView.js'

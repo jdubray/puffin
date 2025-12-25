@@ -729,15 +729,8 @@ export class PromptEditorComponent {
         maxTurns: state.config?.sprintExecution?.maxIterations || 40
       })
 
-      // Store the debug prompt if debug mode is enabled
-      if (state.config?.debugMode) {
-        this.intents.storeDebugPrompt({
-          content: finalPrompt,
-          branch: state.history.activeBranch,
-          model: selectedModel,
-          sessionId: sessionId
-        })
-      }
+      // Note: Debug prompt is now captured via onFullPrompt callback from main process
+      // This ensures we get the complete prompt with all context
 
       // Clear pending handoff after submission
       if (this.pendingHandoff) {
@@ -836,15 +829,8 @@ export class PromptEditorComponent {
         maxTurns: state.config?.sprintExecution?.maxIterations || 40
       })
 
-      // Store the debug prompt if debug mode is enabled
-      if (state.config?.debugMode) {
-        this.intents.storeDebugPrompt({
-          content: content,
-          branch: state.history.activeBranch,
-          model: selectedModel,
-          sessionId: null
-        })
-      }
+      // Note: Debug prompt is now captured via onFullPrompt callback from main process
+      // This ensures we get the complete prompt with all context
 
       // Reset userChanged flag after submitting a new thread
       if (this.modelSelect) {

@@ -87,11 +87,17 @@ class ClaudeService {
    * @param {Function} onChunk - Callback for streaming output
    * @param {Function} onComplete - Callback when complete
    * @param {Function} onRaw - Callback for raw JSON lines (optional)
+   * @param {Function} onFullPrompt - Callback with the full built prompt (optional)
    */
-  async submit(data, onChunk, onComplete, onRaw = null) {
+  async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null) {
     return new Promise((resolve, reject) => {
       // Build the prompt with project context
       const prompt = this.buildPrompt(data)
+
+      // Emit the full built prompt for debugging
+      if (onFullPrompt) {
+        onFullPrompt(prompt)
+      }
 
       // Determine working directory
       const cwd = data.projectPath || this.projectPath || process.cwd()
@@ -359,7 +365,7 @@ class ClaudeService {
     args.push('--verbose')
 
     // Limit turns to prevent runaway processes
-    args.push('--max-turns', String(data.maxTurns || '10'))
+    args.push('--max-turns', String(data.maxTurns || '40'))
 
     // Auto-accept edits to avoid permission prompts
     args.push('--permission-mode', 'acceptEdits')
@@ -1361,7 +1367,7 @@ ${content}`
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
-        '--max-turns', String(maxTurns),
+        '--max-turns', String(maxTurns|| '40'),
         '--model', model,
         '--permission-mode', 'acceptEdits',
         '-'

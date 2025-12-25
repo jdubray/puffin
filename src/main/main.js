@@ -9,8 +9,8 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers } = require('./ipc-handlers')
-const { PluginLoader, PluginManager } = require('./plugins')
+const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState } = require('./ipc-handlers')
+const { PluginLoader, PluginManager, HistoryService } = require('./plugins')
 
 // Keep a global reference of the window object
 let mainWindow = null
@@ -21,6 +21,7 @@ let currentProjectPath = null
 // Plugin system instances
 let pluginLoader = null
 let pluginManager = null
+let historyService = null
 
 /**
  * Create the application menu
@@ -305,7 +306,15 @@ app.whenReady().then(async () => {
   setupIpcHandlers(ipcMain, currentProjectPath)
 
   // Initialize plugin loader
-  pluginLoader = new PluginLoader()
+  // In development, load plugins from the project's plugins/ directory
+  // In production, this will use ~/.puffin/plugins/
+  const isDevelopment = process.env.NODE_ENV !== 'production'
+  const pluginsDir = isDevelopment
+    ? path.join(__dirname, '..', '..', 'plugins')
+    : path.join(require('os').homedir(), '.puffin', 'plugins')
+
+  pluginLoader = new PluginLoader({ pluginsDir })
+  console.log(`[Plugins] Loading from: ${pluginsDir}`)
 
   // Setup plugin event logging
   pluginLoader.on('plugin:discovered', ({ plugin }) => {
@@ -336,12 +345,21 @@ app.whenReady().then(async () => {
   setupPluginHandlers(ipcMain, pluginLoader)
 
   // Load plugins (non-blocking, errors are logged but don't crash app)
+  // Create history service with lazy puffinState access
+  historyService = new HistoryService({
+    getPuffinState: getPuffinState
+  })
+
   pluginLoader.loadPlugins()
     .then(() => {
       // Initialize plugin manager after plugins are loaded
+      // Pass history service so plugins can access it
       pluginManager = new PluginManager({
         loader: pluginLoader,
-        ipcMain: ipcMain
+        ipcMain: ipcMain,
+        services: {
+          history: historyService
+        }
       })
 
       // Setup plugin manager event logging
@@ -366,7 +384,13 @@ app.whenReady().then(async () => {
       })
 
       // Setup plugin manager IPC handlers
-      setupPluginManagerHandlers(ipcMain, pluginManager)
+      setupPluginManagerHandlers(ipcMain, pluginManager, mainWindow)
+
+      // Setup view registry IPC handlers
+      setupViewRegistryHandlers(ipcMain, pluginManager.getViewRegistry(), mainWindow)
+
+      // Setup plugin style handlers
+      setupPluginStyleHandlers(ipcMain, pluginManager)
 
       // Initialize and activate enabled plugins
       return pluginManager.initialize()

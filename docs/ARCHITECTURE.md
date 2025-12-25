@@ -130,7 +130,7 @@ puffin/
 spawn('claude', [
   '--print',                    // Non-interactive mode
   '--output-format', 'stream-json',  // Structured output
-  '--max-turns', '10',          // Limit agentic loops
+  '--max-turns', '40',          // Limit agentic loops
   '--prompt', prompt
 ], {
   cwd: projectPath,             // Run in target project directory

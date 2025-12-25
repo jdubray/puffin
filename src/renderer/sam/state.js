@@ -125,13 +125,20 @@ function computeAppState(model) {
 function computeConfigState(model) {
   const config = model.config || {}
 
+  // Return the full config object to ensure all fields are persisted
   return {
     name: config.name || '',
     description: config.description || '',
     assumptions: config.assumptions || [],
     technicalArchitecture: config.technicalArchitecture || '',
     dataModel: config.dataModel || '',
-    options: config.options || {}
+    defaultModel: config.defaultModel || 'sonnet',
+    options: config.options || {},
+    uxStyle: config.uxStyle || {},
+    sprintExecution: config.sprintExecution || {},
+    debugMode: config.debugMode || false,
+    createdAt: config.createdAt,
+    updatedAt: config.updatedAt
   }
 }
 

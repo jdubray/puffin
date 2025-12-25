@@ -1,0 +1,102 @@
+/**
+ * Stats Chart Styles
+ */
+
+.stats-chart-container {
+  width: 100%;
+  background: var(--surface-color, #ffffff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* Loading and empty states */
+.stats-chart-loading,
+.stats-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--text-secondary, #666666);
+  font-size: 14px;
+}
+
+.stats-chart-loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Chart customization via CSS variables */
+.stats-chart-container {
+  --chart-color-turns: var(--color-primary, #6c63ff);
+  --chart-color-cost: var(--color-success, #48bb78);
+  --chart-color-duration: var(--color-warning, #ecc94b);
+  --chart-grid-color: #e8e8e8;
+  --chart-axis-text: #666666;
+  --chart-axis-line: #cccccc;
+  --chart-cursor-color: #6c63ff;
+}
+
+/* Legend styling */
+.stats-chart-container .recharts-legend-wrapper {
+  font-size: 12px;
+}
+
+.stats-chart-container .recharts-legend-item-text {
+  color: var(--text-primary, #333333) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .stats-chart-container {
+    padding: 12px 8px;
+  }
+
+  .stats-chart-loading,
+  .stats-chart-empty {
+    height: 200px;
+  }
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .stats-chart-container {
+    background: var(--surface-color-dark, #1a202c);
+    border-color: var(--border-color-dark, #2d3748);
+    --chart-grid-color: #4a5568;
+    --chart-axis-text: #a0aec0;
+    --chart-axis-line: #4a5568;
+  }
+
+  .stats-chart-container .recharts-legend-item-text {
+    color: var(--text-primary-dark, #e2e8f0) !important;
+  }
+
+  .stats-chart-loading,
+  .stats-chart-empty {
+    color: var(--text-secondary-dark, #a0aec0);
+  }
+}
+
+/* Focus styles for accessibility */
+.stats-chart-container:focus-within {
+  outline: 2px solid var(--color-primary, #6c63ff);
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .stats-chart-container {
+    border: 1px solid #ccc;
+    box-shadow: none;
+  }
+}

@@ -17,6 +17,7 @@ export class ProjectFormComponent {
     this.form = null
     this.assumptionsList = null
     this.assumptions = []
+    this._initialized = false // Track if form has been populated
   }
 
   /**
@@ -119,8 +120,16 @@ export class ProjectFormComponent {
   render(state) {
     if (!this.form) return
 
-    // Populate form with config data
-    this.populateForm(state.config)
+    // Only populate form when config has meaningful content
+    // This ensures we get the loaded config, not just an empty initial state
+    const hasLoadedConfig = state.config?.name || state.config?.description || state.config?.createdAt
+
+    // Only populate form on initial load to prevent overwriting user changes
+    if (!this._initialized && hasLoadedConfig) {
+      console.log('[PROJECT-FORM] Populating form with config:', state.config)
+      this.populateForm(state.config)
+      this._initialized = true
+    }
   }
 
   /**
@@ -257,7 +266,7 @@ export class ProjectFormComponent {
         }
       },
       sprintExecution: {
-        maxIterations: parseInt(document.getElementById('sprint-max-iterations')?.value || '40', 10),
+        maxIterations: parseInt(document.getElementById('sprint-max-iterations')?.value || '40', 40),
         autoContinueDelay: parseInt(document.getElementById('sprint-auto-continue-delay')?.value || '20', 10)
       },
       debugMode: document.getElementById('debug-mode-checkbox')?.checked || false
@@ -413,5 +422,6 @@ export class ProjectFormComponent {
    */
   destroy() {
     // Remove event listeners if needed
+    this._initialized = false
   }
 }

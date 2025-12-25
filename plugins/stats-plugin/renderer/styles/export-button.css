@@ -1,0 +1,113 @@
+/**
+ * Export Button Styles
+ */
+
+.export-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--button-bg, #ffffff);
+  border: 1px solid var(--button-border, #d0d0d0);
+  border-radius: 6px;
+  color: var(--button-text, #333333);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.export-button:hover:not(:disabled) {
+  background: var(--button-hover-bg, #f5f5f5);
+  border-color: var(--button-hover-border, #b0b0b0);
+}
+
+.export-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring-color, rgba(108, 99, 255, 0.3));
+}
+
+.export-button:active:not(:disabled) {
+  background: var(--button-active-bg, #ebebeb);
+  transform: translateY(1px);
+}
+
+.export-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.export-button--exporting {
+  background: var(--button-exporting-bg, #f0f4ff);
+  border-color: var(--color-primary, #6c63ff);
+}
+
+.export-button-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.export-button-text {
+  white-space: nowrap;
+}
+
+/* Primary variant */
+.export-button--primary {
+  background: var(--color-primary, #6c63ff);
+  border-color: var(--color-primary, #6c63ff);
+  color: #ffffff;
+}
+
+.export-button--primary:hover:not(:disabled) {
+  background: var(--color-primary-dark, #5a52d9);
+  border-color: var(--color-primary-dark, #5a52d9);
+}
+
+.export-button--primary:active:not(:disabled) {
+  background: var(--color-primary-darker, #4a44b3);
+}
+
+/* Exporting animation */
+.export-button--exporting .export-button-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .export-button {
+    background: var(--button-bg-dark, #2d3748);
+    border-color: var(--button-border-dark, #4a5568);
+    color: var(--button-text-dark, #e2e8f0);
+  }
+
+  .export-button:hover:not(:disabled) {
+    background: var(--button-hover-bg-dark, #3d4758);
+    border-color: var(--button-hover-border-dark, #5a6578);
+  }
+
+  .export-button--exporting {
+    background: var(--button-exporting-bg-dark, #2d3a5f);
+    border-color: var(--color-primary, #6c63ff);
+  }
+}
+
+/* Responsive sizing */
+@media (max-width: 480px) {
+  .export-button {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .export-button-icon {
+    font-size: 12px;
+  }
+}

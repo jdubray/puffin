@@ -1,7 +1,3 @@
-I'll create a comprehensive Plugin Development Guide specification. Since this is documentation, I can produce it in this specifications thread.
-
----
-
 # Puffin Plugin Development Guide
 
 ## Specification Document
@@ -810,7 +806,3 @@ class AnalyticsPlugin {
 
 module.exports = new AnalyticsPlugin()
 ```
-
----
-
-This specification document provides comprehensive guidance for plugin developers. Implementation of example plugins and the `PLUGIN_DEVELOPMENT.md` documentation file should occur in an appropriate implementation branch.

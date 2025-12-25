@@ -1,0 +1,108 @@
+/**
+ * Chart Tooltip Styles
+ * Custom tooltip styling for the stats chart
+ */
+
+.chart-tooltip {
+  background: var(--tooltip-bg, #ffffff);
+  border: 1px solid var(--tooltip-border, #e0e0e0);
+  border-radius: 6px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 140px;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.chart-tooltip-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tooltip-header-text, #1a5276);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--tooltip-divider, #eee);
+}
+
+.chart-tooltip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.chart-tooltip-label {
+  font-size: 12px;
+  color: var(--tooltip-label-text, #666666);
+}
+
+.chart-tooltip-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tooltip-value-text, #333333);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Indicator dot colors for multi-series charts */
+.chart-tooltip-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.chart-tooltip-indicator--turns {
+  background-color: var(--chart-color-turns, #6c63ff);
+}
+
+.chart-tooltip-indicator--cost {
+  background-color: var(--chart-color-cost, #48bb78);
+}
+
+.chart-tooltip-indicator--duration {
+  background-color: var(--chart-color-duration, #ecc94b);
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .chart-tooltip {
+    background: var(--tooltip-bg-dark, #2d3748);
+    border-color: var(--tooltip-border-dark, #4a5568);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .chart-tooltip-header {
+    color: var(--tooltip-header-text-dark, #90cdf4);
+    border-bottom-color: var(--tooltip-divider-dark, #4a5568);
+  }
+
+  .chart-tooltip-label {
+    color: var(--tooltip-label-text-dark, #a0aec0);
+  }
+
+  .chart-tooltip-value {
+    color: var(--tooltip-value-text-dark, #e2e8f0);
+  }
+}
+
+/* Animation for tooltip appearance */
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chart-tooltip {
+  animation: tooltipFadeIn 0.15s ease-out;
+}

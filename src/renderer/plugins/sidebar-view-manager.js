@@ -1,19 +1,20 @@
 /**
  * Sidebar View Manager
  *
- * Manages plugin sidebar tabs and view switching.
+ * Manages plugin sidebar tabs, nav tabs, and view switching.
  * Integrates with the ViewRegistry via IPC to dynamically add/remove plugin views.
  */
 
 import { pluginViewContainer } from './plugin-view-container.js'
 
 /**
- * SidebarViewManager - Manages plugin sidebar tabs
+ * SidebarViewManager - Manages plugin sidebar and navigation tabs
  */
 export class SidebarViewManager {
   constructor() {
     // Container elements
     this.sidebarContainer = null
+    this.navContainer = null
     this.viewContainer = null
 
     // Track registered views
@@ -39,11 +40,15 @@ export class SidebarViewManager {
 
     // Get or create container elements
     this.sidebarContainer = document.getElementById('plugin-sidebar-views')
+    this.navContainer = document.getElementById('main-nav')
     this.viewContainer = document.getElementById('plugin-view-container')
 
     if (!this.sidebarContainer) {
       console.warn('[SidebarViewManager] Plugin sidebar container not found')
-      return
+    }
+
+    if (!this.navContainer) {
+      console.warn('[SidebarViewManager] Main nav container not found')
     }
 
     // Subscribe to view registration events from main process
@@ -95,12 +100,22 @@ export class SidebarViewManager {
     }
 
     try {
-      const result = await window.puffin.plugins.getSidebarViews()
-      if (result.success && result.views) {
-        for (const view of result.views) {
+      // Load sidebar views
+      const sidebarResult = await window.puffin.plugins.getSidebarViews()
+      if (sidebarResult.success && sidebarResult.views) {
+        for (const view of sidebarResult.views) {
           this.addView(view)
         }
-        console.log(`[SidebarViewManager] Loaded ${result.views.length} existing views`)
+        console.log(`[SidebarViewManager] Loaded ${sidebarResult.views.length} sidebar views`)
+      }
+
+      // Load nav views
+      const navResult = await window.puffin.plugins.getViewsByLocation('nav')
+      if (navResult.success && navResult.views) {
+        for (const view of navResult.views) {
+          this.addView(view)
+        }
+        console.log(`[SidebarViewManager] Loaded ${navResult.views.length} nav views`)
       }
     } catch (error) {
       console.error('[SidebarViewManager] Failed to load existing views:', error)
@@ -108,7 +123,7 @@ export class SidebarViewManager {
   }
 
   /**
-   * Add a view to the sidebar
+   * Add a view to the appropriate location
    * @param {Object} view - View configuration from registry
    */
   addView(view) {
@@ -117,8 +132,13 @@ export class SidebarViewManager {
       return
     }
 
-    // Create sidebar tab
-    const tabElement = this.createSidebarTab(view)
+    // Create tab element based on location
+    let tabElement
+    if (view.location === 'nav') {
+      tabElement = this.createNavTab(view)
+    } else {
+      tabElement = this.createSidebarTab(view)
+    }
 
     // Create view container
     const viewElement = this.createViewContainer(view)
@@ -130,16 +150,28 @@ export class SidebarViewManager {
       viewElement
     })
 
-    // Add to DOM
-    if (this.sidebarContainer) {
-      this.sidebarContainer.appendChild(tabElement)
+    // Add to DOM based on location
+    if (view.location === 'nav') {
+      if (this.navContainer) {
+        // Insert before the hidden debug button if it exists
+        const debugBtn = this.navContainer.querySelector('#debug-nav-btn')
+        if (debugBtn) {
+          this.navContainer.insertBefore(tabElement, debugBtn)
+        } else {
+          this.navContainer.appendChild(tabElement)
+        }
+      }
+    } else {
+      if (this.sidebarContainer) {
+        this.sidebarContainer.appendChild(tabElement)
+      }
     }
 
     if (this.viewContainer) {
       this.viewContainer.appendChild(viewElement)
     }
 
-    console.log(`[SidebarViewManager] Added view: ${view.id}`)
+    console.log(`[SidebarViewManager] Added view: ${view.id} at location: ${view.location}`)
   }
 
   /**
@@ -179,6 +211,34 @@ export class SidebarViewManager {
     })
 
     return section
+  }
+
+  /**
+   * Create a nav tab element for a view (main navigation bar)
+   * @param {Object} view - View configuration
+   * @returns {HTMLElement}
+   */
+  createNavTab(view) {
+    const button = document.createElement('button')
+    button.className = 'nav-btn plugin-nav-btn'
+    button.dataset.viewId = view.id
+    button.dataset.pluginName = view.pluginName
+
+    // Use icon + name or just name
+    if (view.icon) {
+      button.textContent = `${this.getIconDisplay(view.icon)} ${view.name}`
+    } else {
+      button.textContent = view.name
+    }
+
+    // Click handler
+    button.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      this.activateView(view.id)
+    })
+
+    return button
   }
 
   /**
@@ -329,6 +389,11 @@ export class SidebarViewManager {
     // Hide built-in views
     this.hideBuiltInViews()
 
+    // Show the plugin view container
+    if (this.viewContainer) {
+      this.viewContainer.classList.add('has-active-view')
+    }
+
     // Track active view
     this.activePluginView = viewId
 
@@ -368,6 +433,11 @@ export class SidebarViewManager {
     }
 
     this.activePluginView = null
+
+    // Hide the plugin view container
+    if (this.viewContainer) {
+      this.viewContainer.classList.remove('has-active-view')
+    }
 
     // Trigger onDeactivate lifecycle hook
     await pluginViewContainer.deactivateView(previousViewId)

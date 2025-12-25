@@ -599,6 +599,10 @@ function setupClaudeHandlers(ipcMain) {
         // On raw JSON line (for CLI Output view)
         (jsonLine) => {
           event.sender.send('claude:raw', jsonLine)
+        },
+        // On full prompt built (for debug view)
+        (fullPrompt) => {
+          event.sender.send('claude:fullPrompt', fullPrompt)
         }
       )
     } catch (error) {
@@ -1809,10 +1813,14 @@ function setupPluginStyleHandlers(ipcMain, pluginManager) {
   // Get all active plugins with styles
   ipcMain.handle('plugin:get-all-style-paths', async () => {
     try {
-      const activePlugins = pluginManager.getActivePlugins()
+      const activePluginNames = pluginManager.getActivePlugins()
       const result = []
 
-      for (const [pluginName, { plugin }] of activePlugins) {
+      for (const pluginName of activePluginNames) {
+        // Get plugin from the loader via manager
+        const plugin = pluginManager.loader.getPlugin(pluginName)
+        if (!plugin) continue
+
         const styles = plugin.manifest?.renderer?.styles || []
         if (styles.length > 0) {
           result.push({
@@ -1833,10 +1841,20 @@ function setupPluginStyleHandlers(ipcMain, pluginManager) {
   })
 }
 
+/**
+ * Get the current PuffinState instance
+ * Used by services that need lazy access to state
+ * @returns {PuffinState|null}
+ */
+function getPuffinState() {
+  return puffinState
+}
+
 module.exports = {
   setupIpcHandlers,
   setupPluginHandlers,
   setupPluginManagerHandlers,
   setupViewRegistryHandlers,
-  setupPluginStyleHandlers
+  setupPluginStyleHandlers,
+  getPuffinState
 }

@@ -14,7 +14,8 @@ const VALID_VIEW_LOCATIONS = [
   'panel',      // Bottom panel area
   'statusbar',  // Status bar widgets
   'toolbar',    // Top toolbar area
-  'editor'      // Editor area views
+  'editor',     // Editor area views
+  'nav'         // Main navigation tabs (header)
 ]
 
 /**

@@ -161,6 +161,13 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('claude:raw', handler)
     },
 
+    // Subscribe to full prompt event (for Debug view)
+    onFullPrompt: (callback) => {
+      const handler = (event, fullPrompt) => callback(fullPrompt)
+      ipcRenderer.on('claude:fullPrompt', handler)
+      return () => ipcRenderer.removeListener('claude:fullPrompt', handler)
+    },
+
     // User Story Derivation Operations
     // Derive user stories from a prompt
     deriveStories: (data) => ipcRenderer.send('claude:deriveStories', data),
@@ -514,6 +521,24 @@ contextBridge.exposeInMainWorld('puffin', {
 
     // Get renderer configuration for dynamic component loading
     getRendererConfig: (pluginName) => ipcRenderer.invoke('plugin:get-renderer-config', pluginName),
+
+    // === Plugin IPC Invoke API ===
+
+    /**
+     * Invoke a plugin's IPC handler
+     * @param {string} pluginName - Plugin name
+     * @param {string} handler - Handler name (registered via context.registerIpcHandler)
+     * @param {*} args - Arguments to pass to the handler
+     * @returns {Promise<*>} Handler result
+     */
+    invoke: async (pluginName, handler, args) => {
+      const channel = `plugin:${pluginName}:${handler}`
+      const result = await ipcRenderer.invoke(channel, args)
+      if (result && result.success === false) {
+        throw new Error(result.error || 'Plugin IPC handler failed')
+      }
+      return result?.data ?? result
+    },
 
     // === Style Injection API ===
 

@@ -1,0 +1,23 @@
+{
+  "name": "stats-plugin",
+  "version": "1.0.0",
+  "description": "Stats dashboard plugin for Puffin - tracks and visualizes usage statistics",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "recharts": "^2.10.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "keywords": [
+    "puffin",
+    "plugin",
+    "stats",
+    "analytics",
+    "dashboard"
+  ]
+}

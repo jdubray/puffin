@@ -333,7 +333,7 @@
               },
               "location": {
                 "type": "string",
-                "enum": ["sidebar", "panel", "statusbar", "toolbar", "editor"],
+                "enum": ["sidebar", "panel", "statusbar", "toolbar", "editor", "nav"],
                 "description": "Where in the UI this view should appear"
               },
               "icon": {

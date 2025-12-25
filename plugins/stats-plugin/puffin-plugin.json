@@ -9,10 +9,20 @@
   "keywords": ["stats", "metrics", "dashboard", "analytics"],
   "extensionPoints": {
     "actions": ["getStats", "exportStats"],
-    "ipcHandlers": ["getWeeklyStats", "saveMarkdownExport"],
+    "ipcHandlers": ["stats:getWeeklyStats", "stats:saveMarkdownExport"],
     "components": ["stats-view"]
   },
-  "contributions": {
+  "contributes": {
+    "views": [
+      {
+        "id": "stats-view",
+        "name": "Stats",
+        "location": "nav",
+        "icon": "📊",
+        "order": 100,
+        "component": "StatsView"
+      }
+    ],
     "commands": [
       {
         "id": "stats.showDashboard",
@@ -20,14 +30,29 @@
         "category": "Stats"
       }
     ],
-    "menus": [
-      {
-        "location": "tools",
-        "command": "stats.showDashboard"
-      }
-    ]
+    "menus": {
+      "tools": [
+        {
+          "command": "stats.showDashboard"
+        }
+      ]
+    }
   },
   "activationEvents": [
     "onStartup"
-  ]
+  ],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "StatsView",
+        "export": "StatsView",
+        "type": "class",
+        "description": "Main statistics dashboard view"
+      }
+    ],
+    "styles": [
+      "renderer/styles/stats-view.css"
+    ]
+  }
 }

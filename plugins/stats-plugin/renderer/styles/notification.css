@@ -1,0 +1,129 @@
+/**
+ * Notification Toast Styles
+ */
+
+.notification {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--notification-bg, #ffffff);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+  max-width: 400px;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.notification-message {
+  flex: 1;
+  font-size: 14px;
+  color: var(--notification-text, #333333);
+  line-height: 1.4;
+}
+
+.notification-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--notification-close, #666666);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.notification-close:hover {
+  background: var(--notification-close-hover-bg, rgba(0, 0, 0, 0.05));
+}
+
+/* Success variant */
+.notification--success {
+  border-left: 4px solid var(--color-success, #48bb78);
+}
+
+.notification--success .notification-icon {
+  background: var(--color-success, #48bb78);
+  color: #ffffff;
+}
+
+/* Error variant */
+.notification--error {
+  border-left: 4px solid var(--color-error, #f56565);
+}
+
+.notification--error .notification-icon {
+  background: var(--color-error, #f56565);
+  color: #ffffff;
+}
+
+/* Info variant */
+.notification--info {
+  border-left: 4px solid var(--color-primary, #6c63ff);
+}
+
+.notification--info .notification-icon {
+  background: var(--color-primary, #6c63ff);
+  color: #ffffff;
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .notification {
+    background: var(--notification-bg-dark, #2d3748);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .notification-message {
+    color: var(--notification-text-dark, #e2e8f0);
+  }
+
+  .notification-close {
+    color: var(--notification-close-dark, #a0aec0);
+  }
+
+  .notification-close:hover {
+    background: var(--notification-close-hover-bg-dark, rgba(255, 255, 255, 0.1));
+  }
+}
+
+/* Responsive positioning */
+@media (max-width: 480px) {
+  .notification {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    max-width: none;
+  }
+}

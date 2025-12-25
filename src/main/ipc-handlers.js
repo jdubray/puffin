@@ -1337,7 +1337,7 @@ function setupShellHandlers(ipcMain) {
 }
 
 /**
- * Plugin system IPC handlers
+ * Plugin system IPC handlers (basic - loader only)
  * @param {IpcMain} ipcMain
  * @param {PluginLoader} pluginLoader
  */
@@ -1430,4 +1430,118 @@ function setupPluginHandlers(ipcMain, pluginLoader) {
   })
 }
 
-module.exports = { setupIpcHandlers, setupPluginHandlers }
+/**
+ * Plugin manager IPC handlers (full lifecycle management)
+ * @param {IpcMain} ipcMain
+ * @param {PluginManager} pluginManager
+ */
+function setupPluginManagerHandlers(ipcMain, pluginManager) {
+  // Enable a plugin
+  ipcMain.handle('plugins:enable', async (event, name) => {
+    try {
+      const success = await pluginManager.enablePlugin(name)
+      return { success }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Disable a plugin
+  ipcMain.handle('plugins:disable', async (event, name) => {
+    try {
+      const success = await pluginManager.disablePlugin(name)
+      return { success }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get active plugins
+  ipcMain.handle('plugins:listActive', async () => {
+    try {
+      const activeNames = pluginManager.getActivePlugins()
+      return { success: true, plugins: activeNames }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get plugin state (active/inactive/error)
+  ipcMain.handle('plugins:getState', async (event, name) => {
+    try {
+      const state = pluginManager.getPluginState(name)
+      const error = pluginManager.getActivationError(name)
+      return { success: true, state, error }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get full plugin info (with lifecycle state)
+  ipcMain.handle('plugins:getInfo', async (event, name) => {
+    try {
+      const info = await pluginManager.getPluginInfo(name)
+      if (!info) {
+        return { success: false, error: `Plugin not found: ${name}` }
+      }
+      return { success: true, info }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get full summary (includes manager state)
+  ipcMain.handle('plugins:getFullSummary', async () => {
+    try {
+      const summary = await pluginManager.getSummary()
+      return { success: true, summary }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Reload a specific plugin
+  ipcMain.handle('plugins:reloadPlugin', async (event, name) => {
+    try {
+      await pluginManager.reloadPlugin(name)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get registry summary
+  ipcMain.handle('plugins:getRegistrySummary', async () => {
+    try {
+      const registry = pluginManager.getRegistry()
+      const summary = registry.getSummary()
+      return { success: true, summary }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get all registered actions
+  ipcMain.handle('plugins:getActions', async () => {
+    try {
+      const registry = pluginManager.getRegistry()
+      const actions = registry.getAllActions()
+      return { success: true, actions }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get all registered components
+  ipcMain.handle('plugins:getComponents', async () => {
+    try {
+      const registry = pluginManager.getRegistry()
+      const components = registry.getAllComponents()
+      return { success: true, components }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+module.exports = { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers }

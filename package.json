@@ -22,7 +22,9 @@
     "sam-pattern": "^1.5.10",
     "sam-fsm": "^0.9.24",
     "marked": "^14.0.0",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
   },
   "devDependencies": {
     "electron": "^33.0.0",

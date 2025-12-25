@@ -393,6 +393,67 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * Plugin system operations
+   */
+  plugins: {
+    // Get list of all discovered plugins
+    list: () => ipcRenderer.invoke('plugins:list'),
+
+    // Get loaded plugins only
+    listLoaded: () => ipcRenderer.invoke('plugins:listLoaded'),
+
+    // Get failed plugins with errors
+    listFailed: () => ipcRenderer.invoke('plugins:listFailed'),
+
+    // Get a specific plugin by name
+    get: (name) => ipcRenderer.invoke('plugins:get', name),
+
+    // Get plugin load errors
+    getErrors: () => ipcRenderer.invoke('plugins:getErrors'),
+
+    // Get plugin summary (counts and status)
+    getSummary: () => ipcRenderer.invoke('plugins:getSummary'),
+
+    // Reload all plugins
+    reload: () => ipcRenderer.invoke('plugins:reload'),
+
+    // Get plugins directory path
+    getDirectory: () => ipcRenderer.invoke('plugins:getDirectory'),
+
+    // === Plugin Manager Operations ===
+
+    // Enable a plugin (activates and persists)
+    enable: (name) => ipcRenderer.invoke('plugins:enable', name),
+
+    // Disable a plugin (deactivates and persists)
+    disable: (name) => ipcRenderer.invoke('plugins:disable', name),
+
+    // Get list of active (running) plugins
+    listActive: () => ipcRenderer.invoke('plugins:listActive'),
+
+    // Get plugin state (active/inactive/error/not-found)
+    getState: (name) => ipcRenderer.invoke('plugins:getState', name),
+
+    // Get comprehensive plugin info (metadata + state + registrations)
+    getInfo: (name) => ipcRenderer.invoke('plugins:getInfo', name),
+
+    // Get full system summary (loader + manager + registry)
+    getFullSummary: () => ipcRenderer.invoke('plugins:getFullSummary'),
+
+    // Reload a specific plugin (deactivate + reload module + reactivate)
+    reloadPlugin: (name) => ipcRenderer.invoke('plugins:reloadPlugin', name),
+
+    // Get registry summary (counts of registered handlers)
+    getRegistrySummary: () => ipcRenderer.invoke('plugins:getRegistrySummary'),
+
+    // Get all registered actions
+    getActions: () => ipcRenderer.invoke('plugins:getActions'),
+
+    // Get all registered components
+    getComponents: () => ipcRenderer.invoke('plugins:getComponents')
+  },
+
+  /**
    * Platform info
    */
   platform: process.platform,

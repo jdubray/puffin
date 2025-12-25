@@ -433,6 +433,13 @@ function computeSprintProgress(model) {
   const storyProgress = sprint.storyProgress || {}
   const backlogStories = model.userStories || []
 
+  console.log('[SPRINT-PROGRESS-DEBUG] Computing sprint progress:', {
+    sprintId: sprint.id,
+    sprintStoriesCount: sprint.stories?.length,
+    backlogStoriesCount: backlogStories.length,
+    storyProgressKeys: Object.keys(storyProgress)
+  })
+
   // Compute per-story progress
   const storiesWithProgress = sprint.stories.map(story => {
     const progress = storyProgress[story.id] || { branches: {}, criteriaProgress: {} }
@@ -464,6 +471,15 @@ function computeSprintProgress(model) {
     } else if (inProgressBranches > 0 || completedBranches > 0) {
       storyStatus = 'in_progress'
     }
+
+    console.log('[SPRINT-PROGRESS-DEBUG] Story status check:', {
+      storyId: story.id,
+      storyTitle: story.title?.substring(0, 30),
+      progressStatus: progress.status,
+      backlogStatus: backlogStory?.status,
+      sprintStoryStatus: story.status,
+      finalStatus: storyStatus
+    })
 
     // Check for blocked state (has in_progress for too long without completion)
     const isBlocked = branchEntries.some(([, b]) => {

@@ -67,16 +67,11 @@ The following stories have been completed and are available for reference:
 
 ---
 
-## Branch Focus: Specifications
+## Branch Focus: Backend
 
-You are working on the **specifications thread**. Focus on:
-- Requirements gathering and clarification
-- Feature definitions and scope
-- User stories and acceptance criteria
-- Business logic and rules
-- Edge cases and constraints
-
-When deriving user stories, format them as:
-- Title: Brief descriptive name
-- Description: "As a [role], I want [feature] so that [benefit]"
-- Acceptance Criteria: Testable conditions for completion
+You are working on the **backend thread**. Focus on:
+- API design and implementation
+- Data persistence and database operations
+- Business logic and validation
+- Error handling and logging
+- Security and authentication

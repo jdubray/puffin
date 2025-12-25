@@ -1,0 +1,319 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://puffin.dev/schemas/plugin-manifest.json",
+  "title": "Puffin Plugin Manifest",
+  "description": "Schema for puffin-plugin.json manifest files",
+  "type": "object",
+  "required": ["name", "version", "displayName", "description", "main"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 1,
+      "maxLength": 214,
+      "description": "The plugin's unique identifier. Must be lowercase, start with a letter, and contain only letters, numbers, and hyphens."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?(\\+[a-zA-Z0-9.-]+)?$",
+      "description": "Semantic version string (e.g., '1.0.0', '2.1.0-beta.1')"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50,
+      "description": "Human-readable name displayed in the UI"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Brief description of the plugin's functionality"
+    },
+    "main": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Relative path to the plugin's main entry point (e.g., 'index.js' or 'src/main.js')"
+    },
+    "author": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Author name or 'Name <email>' format"
+        },
+        {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "email": {
+              "type": "string",
+              "format": "email"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "description": "Plugin author information"
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier (e.g., 'MIT', 'Apache-2.0')"
+    },
+    "repository": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "uri",
+          "description": "Repository URL"
+        },
+        {
+          "type": "object",
+          "required": ["type", "url"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["git", "svn", "mercurial"]
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "directory": {
+              "type": "string",
+              "description": "Path to the plugin within a monorepo"
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "description": "Source code repository"
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL to the plugin's homepage or documentation"
+    },
+    "bugs": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "email": {
+              "type": "string",
+              "format": "email"
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "description": "Issue tracker URL or contact"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50,
+        "pattern": "^[a-zA-Z0-9-]+$"
+      },
+      "maxItems": 20,
+      "uniqueItems": true,
+      "description": "Keywords for plugin discovery and categorization"
+    },
+    "engines": {
+      "type": "object",
+      "properties": {
+        "puffin": {
+          "type": "string",
+          "pattern": "^(>=?|<=?|\\^|~)?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?( \\|\\| (>=?|<=?|\\^|~)?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?)*$",
+          "description": "Required Puffin version range (e.g., '>=2.0.0', '^1.5.0')"
+        },
+        "node": {
+          "type": "string",
+          "description": "Required Node.js version range"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Runtime version requirements"
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(>=?|<=?|\\^|~)?\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?$"
+      },
+      "description": "Other plugins this plugin depends on (name: version)"
+    },
+    "extensionPoints": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "description": "SAM actions this plugin registers"
+        },
+        "acceptors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "description": "SAM acceptors this plugin registers"
+        },
+        "reactors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "description": "SAM reactors this plugin registers"
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9-]*$"
+          },
+          "uniqueItems": true,
+          "description": "UI components this plugin provides"
+        },
+        "ipcHandlers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*:[a-zA-Z][a-zA-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "description": "IPC handlers this plugin registers (format: 'namespace:action')"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Extension points this plugin provides"
+    },
+    "activationEvents": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "description": "Events that trigger plugin activation (e.g., 'onStartup', 'onCommand:myCommand')"
+    },
+    "contributes": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*\\.[a-zA-Z][a-zA-Z0-9_]*$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "type": "string"
+              },
+              "icon": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Commands contributed by this plugin"
+        },
+        "menus": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "group": {
+                  "type": "string"
+                },
+                "when": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "description": "Menu contributions"
+        },
+        "configuration": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "properties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["string", "number", "boolean", "array", "object"]
+                  },
+                  "default": {},
+                  "description": {
+                    "type": "string"
+                  },
+                  "enum": {
+                    "type": "array"
+                  }
+                }
+              }
+            }
+          },
+          "description": "Configuration schema for plugin settings"
+        }
+      },
+      "additionalProperties": true,
+      "description": "Contributions to Puffin's extension points"
+    },
+    "private": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, plugin won't be published to plugin registry"
+    }
+  },
+  "additionalProperties": false
+}

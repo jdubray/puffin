@@ -9,13 +9,18 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers } = require('./ipc-handlers')
+const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers } = require('./ipc-handlers')
+const { PluginLoader, PluginManager } = require('./plugins')
 
 // Keep a global reference of the window object
 let mainWindow = null
 
 // The directory Puffin is currently working with
 let currentProjectPath = null
+
+// Plugin system instances
+let pluginLoader = null
+let pluginManager = null
 
 /**
  * Create the application menu
@@ -299,6 +304,80 @@ app.whenReady().then(async () => {
   // Setup IPC handlers before creating window
   setupIpcHandlers(ipcMain, currentProjectPath)
 
+  // Initialize plugin loader
+  pluginLoader = new PluginLoader()
+
+  // Setup plugin event logging
+  pluginLoader.on('plugin:discovered', ({ plugin }) => {
+    console.log(`[Plugins] Discovered: ${plugin.displayName} (${plugin.name}@${plugin.version})`)
+  })
+
+  pluginLoader.on('plugin:validated', ({ plugin }) => {
+    console.log(`[Plugins] Validated: ${plugin.name}`)
+  })
+
+  pluginLoader.on('plugin:validation-failed', ({ plugin, errors }) => {
+    console.warn(`[Plugins] Validation failed for ${plugin.name}:`, errors.map(e => e.message).join('; '))
+  })
+
+  pluginLoader.on('plugin:loaded', ({ plugin }) => {
+    console.log(`[Plugins] Loaded: ${plugin.name}`)
+  })
+
+  pluginLoader.on('plugin:load-failed', ({ plugin, error }) => {
+    console.error(`[Plugins] Failed to load ${plugin.name}:`, error.message)
+  })
+
+  pluginLoader.on('plugins:complete', ({ loaded, failed }) => {
+    console.log(`[Plugins] Complete: ${loaded.length} loaded, ${failed.length} failed`)
+  })
+
+  // Setup plugin IPC handlers
+  setupPluginHandlers(ipcMain, pluginLoader)
+
+  // Load plugins (non-blocking, errors are logged but don't crash app)
+  pluginLoader.loadPlugins()
+    .then(() => {
+      // Initialize plugin manager after plugins are loaded
+      pluginManager = new PluginManager({
+        loader: pluginLoader,
+        ipcMain: ipcMain
+      })
+
+      // Setup plugin manager event logging
+      pluginManager.on('plugin:activated', ({ name }) => {
+        console.log(`[PluginManager] Activated: ${name}`)
+      })
+
+      pluginManager.on('plugin:activation-failed', ({ name, error }) => {
+        console.error(`[PluginManager] Activation failed for ${name}:`, error.message)
+      })
+
+      pluginManager.on('plugin:deactivated', ({ name }) => {
+        console.log(`[PluginManager] Deactivated: ${name}`)
+      })
+
+      pluginManager.on('plugin:enabled', ({ name }) => {
+        console.log(`[PluginManager] Enabled: ${name}`)
+      })
+
+      pluginManager.on('plugin:disabled', ({ name }) => {
+        console.log(`[PluginManager] Disabled: ${name}`)
+      })
+
+      // Setup plugin manager IPC handlers
+      setupPluginManagerHandlers(ipcMain, pluginManager)
+
+      // Initialize and activate enabled plugins
+      return pluginManager.initialize()
+    })
+    .then(({ activated, failed, disabled }) => {
+      console.log(`[PluginManager] Initialization complete: ${activated.length} activated, ${failed.length} failed, ${disabled.length} disabled`)
+    })
+    .catch(err => {
+      console.error('[Plugins] Error during plugin initialization:', err.message)
+    })
+
   // Create the application menu
   createMenu()
 
@@ -320,6 +399,19 @@ app.whenReady().then(async () => {
 // Quit when all windows closed (except macOS)
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})
+
+// Cleanup plugins before app exits
+app.on('before-quit', async (event) => {
+  if (pluginManager && !pluginManager.shuttingDown) {
+    event.preventDefault()
+    try {
+      await pluginManager.shutdown()
+    } catch (error) {
+      console.error('[App] Error during plugin shutdown:', error.message)
+    }
     app.quit()
   }
 })

@@ -20,6 +20,7 @@ const CONFIG_FILE = 'config.json'
 const HISTORY_FILE = 'history.json'
 const ARCHITECTURE_FILE = 'architecture.md'
 const USER_STORIES_FILE = 'user-stories.json'
+const ARCHIVED_STORIES_FILE = 'archived-stories.json'
 const ACTIVE_SPRINT_FILE = 'active-sprint.json'
 const STORY_GENERATIONS_FILE = 'story-generations.json'
 const GIT_OPERATIONS_FILE = 'git-operations.json'
@@ -36,6 +37,7 @@ class PuffinState {
     this.history = null
     this.architecture = null
     this.userStories = null
+    this.archivedStories = null
     this.storyGenerations = null
     this.uiGuidelines = null
     this.gitOperations = null
@@ -61,6 +63,7 @@ class PuffinState {
     this.history = await this.loadHistory()
     this.architecture = await this.loadArchitecture()
     this.userStories = await this.loadUserStories()
+    this.archivedStories = await this.loadArchivedStories()
     this.activeSprint = await this.loadActiveSprint()
     this.storyGenerations = await this.loadStoryGenerations()
     this.uiGuidelines = await this.loadUiGuidelines()
@@ -69,17 +72,21 @@ class PuffinState {
     // Auto-archive completed stories older than 2 weeks
     await this.autoArchiveOldStories()
 
+    // Migrate any archived stories from main file to archive file
+    await this.migrateArchivedStories()
+
     return this.getState()
   }
 
   /**
    * Auto-archive completed stories that are older than 2 weeks
+   * Moves them to the archived-stories.json file
    * @private
    */
   async autoArchiveOldStories() {
     const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000
     const now = Date.now()
-    let archiveCount = 0
+    const storiesToArchive = []
 
     for (const story of this.userStories) {
       if (story.status === 'completed' && story.updatedAt) {
@@ -87,14 +94,50 @@ class PuffinState {
         if (now - updatedAt > TWO_WEEKS_MS) {
           story.status = 'archived'
           story.archivedAt = new Date().toISOString()
-          archiveCount++
+          storiesToArchive.push(story)
         }
       }
     }
 
-    if (archiveCount > 0) {
-      console.log(`[PUFFIN-STATE] Auto-archived ${archiveCount} completed stories older than 2 weeks`)
+    if (storiesToArchive.length > 0) {
+      // Move stories to archive
+      for (const story of storiesToArchive) {
+        this.archivedStories.push(story)
+        const index = this.userStories.findIndex(s => s.id === story.id)
+        if (index !== -1) {
+          this.userStories.splice(index, 1)
+        }
+      }
+
+      console.log(`[PUFFIN-STATE] Auto-archived ${storiesToArchive.length} completed stories older than 2 weeks`)
       await this.saveUserStories()
+      await this.saveArchivedStories()
+    }
+  }
+
+  /**
+   * Migrate any existing archived stories from main file to archive file
+   * This handles the transition for existing projects
+   * @private
+   */
+  async migrateArchivedStories() {
+    const archivedInMain = this.userStories.filter(s => s.status === 'archived')
+
+    if (archivedInMain.length > 0) {
+      // Move archived stories to the archive file
+      for (const story of archivedInMain) {
+        // Check if already in archive (by ID)
+        if (!this.archivedStories.find(s => s.id === story.id)) {
+          this.archivedStories.push(story)
+        }
+      }
+
+      // Remove archived stories from main list
+      this.userStories = this.userStories.filter(s => s.status !== 'archived')
+
+      console.log(`[PUFFIN-STATE] Migrated ${archivedInMain.length} archived stories to separate file`)
+      await this.saveUserStories()
+      await this.saveArchivedStories()
     }
   }
 
@@ -109,6 +152,7 @@ class PuffinState {
       history: this.history,
       architecture: this.architecture,
       userStories: this.userStories,
+      archivedStoriesCount: this.archivedStories?.length || 0,
       activeSprint: this.activeSprint,
       storyGenerations: this.storyGenerations,
       uiGuidelines: this.uiGuidelines,
@@ -243,13 +287,50 @@ class PuffinState {
     const index = this.userStories.findIndex(s => s.id === storyId)
     if (index === -1) return null
 
-    this.userStories[index] = {
+    const updatedStory = {
       ...this.userStories[index],
       ...updates,
       updatedAt: new Date().toISOString()
     }
+
+    // If status changed to 'archived', move to archive file
+    if (updates.status === 'archived' && this.userStories[index].status !== 'archived') {
+      updatedStory.archivedAt = new Date().toISOString()
+      this.archivedStories.push(updatedStory)
+      this.userStories.splice(index, 1)
+      await this.saveUserStories()
+      await this.saveArchivedStories()
+      console.log(`[PUFFIN-STATE] Moved story to archive: ${storyId}`)
+      return updatedStory
+    }
+
+    this.userStories[index] = updatedStory
     await this.saveUserStories()
     return this.userStories[index]
+  }
+
+  /**
+   * Restore an archived story back to active stories
+   * @param {string} storyId - Story ID
+   * @param {string} newStatus - Status to restore to (default: 'pending')
+   */
+  async restoreArchivedStory(storyId, newStatus = 'pending') {
+    const index = this.archivedStories.findIndex(s => s.id === storyId)
+    if (index === -1) return null
+
+    const story = this.archivedStories[index]
+    story.status = newStatus
+    story.archivedAt = null
+    story.updatedAt = new Date().toISOString()
+
+    // Move back to active stories
+    this.userStories.push(story)
+    this.archivedStories.splice(index, 1)
+
+    await this.saveUserStories()
+    await this.saveArchivedStories()
+    console.log(`[PUFFIN-STATE] Restored story from archive: ${storyId}`)
+    return story
   }
 
   /**
@@ -1237,6 +1318,37 @@ Document your API endpoints...
   async saveUserStories(stories = this.userStories) {
     const storiesPath = path.join(this.puffinPath, USER_STORIES_FILE)
     await fs.writeFile(storiesPath, JSON.stringify(stories, null, 2), 'utf-8')
+  }
+
+  /**
+   * Load archived stories
+   * @private
+   */
+  async loadArchivedStories() {
+    const archivePath = path.join(this.puffinPath, ARCHIVED_STORIES_FILE)
+    try {
+      const content = await fs.readFile(archivePath, 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      // No archived stories file yet
+      return []
+    }
+  }
+
+  /**
+   * Save archived stories
+   * @private
+   */
+  async saveArchivedStories(stories = this.archivedStories) {
+    const archivePath = path.join(this.puffinPath, ARCHIVED_STORIES_FILE)
+    await fs.writeFile(archivePath, JSON.stringify(stories, null, 2), 'utf-8')
+  }
+
+  /**
+   * Get all archived stories
+   */
+  getArchivedStories() {
+    return this.archivedStories || []
   }
 
   /**

@@ -280,6 +280,32 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Get archived stories
+  ipcMain.handle('state:getArchivedStories', async () => {
+    try {
+      const stories = puffinState.getArchivedStories()
+      return { success: true, stories }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Restore an archived story
+  ipcMain.handle('state:restoreArchivedStory', async (event, { storyId, newStatus }) => {
+    try {
+      const story = await puffinState.restoreArchivedStory(storyId, newStatus)
+
+      // Regenerate CLAUDE.md base (stories are in base context)
+      const state = puffinState.getState()
+      const activeBranch = state.history?.activeBranch || 'specifications'
+      await claudeMdGenerator.updateBase(state, activeBranch)
+
+      return { success: true, story }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // ============ Sprint Operations ============
 
   ipcMain.handle('state:updateActiveSprint', async (event, sprint) => {

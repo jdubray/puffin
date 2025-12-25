@@ -722,7 +722,9 @@ export class PromptEditorComponent {
         guiDescription: guiDescription,
         // Handoff context from another thread
         handoffContext: handoffContext,
-        model: this.modelSelect?.value || this.defaultModel || 'sonnet'
+        model: this.modelSelect?.value || this.defaultModel || 'sonnet',
+        // Max turns from sprint execution config (defaults to 10)
+        maxTurns: state.config?.sprintExecution?.maxIterations || 10
       })
 
       // Clear pending handoff after submission
@@ -815,7 +817,9 @@ export class PromptEditorComponent {
         } : null,
         userStories: userStories,
         guiDescription: guiDescription,
-        model: this.modelSelect?.value || this.defaultModel || 'sonnet'
+        model: this.modelSelect?.value || this.defaultModel || 'sonnet',
+        // Max turns from sprint execution config (defaults to 10)
+        maxTurns: state.config?.sprintExecution?.maxIterations || 10
       })
 
       // Reset userChanged flag after submitting a new thread

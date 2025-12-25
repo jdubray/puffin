@@ -716,8 +716,8 @@ class PuffinApp {
       return false
     }
 
-    // Check if Claude hit the turn limit (10 turns indicates max turns reached)
-    const maxTurnsLimit = 10
+    // Check if Claude hit the turn limit (indicates max turns reached)
+    const maxTurnsLimit = this.state?.config?.sprintExecution?.maxIterations || 10
     const turnsUsed = response?.turns || 0
     const hitTurnLimit = turnsUsed >= maxTurnsLimit
 

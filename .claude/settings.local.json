@@ -11,6 +11,8 @@
       "Bash(find:*)",
       "Bash(node --check:*)",
       "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
       "Bash(git rm:*)"
     ]
   }

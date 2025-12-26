@@ -180,7 +180,7 @@ function computePromptState(model) {
  * History state computation
  */
 function computeHistoryState(model) {
-  const { branches, activeBranch, activePromptId, expandedThreads } = model.history
+  const { branches, activeBranch, activePromptId, expandedThreads, threadSearchQuery } = model.history
 
   console.log('[SAM-DEBUG] computeHistoryState - activeBranch:', activeBranch, 'activePromptId:', activePromptId)
 
@@ -274,6 +274,7 @@ function computeHistoryState(model) {
     activeBranch,
     activePromptId,
     expandedThreads: expandedThreads || {},
+    threadSearchQuery: threadSearchQuery || '',
     promptTree: visiblePrompts,
     selectedPrompt: selectedPrompt ? {
       id: selectedPrompt.id,

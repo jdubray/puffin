@@ -79,7 +79,8 @@ export const initialModel = {
     },
     activeBranch: 'specifications',
     activePromptId: null,
-    expandedThreads: {} // Track which threads are expanded: { promptId: true }
+    expandedThreads: {}, // Track which threads are expanded: { promptId: true }
+    threadSearchQuery: '' // Search query for filtering threads
   },
 
   // GUI Designer state
@@ -644,6 +645,13 @@ export const toggleThreadExpandedAcceptor = model => proposal => {
     }
     // Toggle the expanded state
     model.history.expandedThreads[promptId] = !model.history.expandedThreads[promptId]
+  }
+}
+
+export const updateThreadSearchQueryAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_THREAD_SEARCH_QUERY') {
+    const { query } = proposal.payload
+    model.history.threadSearchQuery = query || ''
   }
 }
 
@@ -2704,6 +2712,7 @@ export const acceptors = [
   deleteBranchAcceptor,
   selectPromptAcceptor,
   toggleThreadExpandedAcceptor,
+  updateThreadSearchQueryAcceptor,
   markThreadCompleteAcceptor,
   unmarkThreadCompleteAcceptor,
 

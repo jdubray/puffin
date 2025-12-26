@@ -376,7 +376,7 @@ class PuffinApp {
       'receiveResponseChunk', 'completeResponse', 'responseError', 'cancelPrompt',
       'rerunPrompt', 'clearRerunRequest',
       'selectBranch', 'createBranch', 'deleteBranch', 'selectPrompt',
-      'toggleThreadExpanded', 'markThreadComplete', 'unmarkThreadComplete',
+      'toggleThreadExpanded', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
       'addGuiElement', 'updateGuiElement', 'deleteGuiElement',
       'moveGuiElement', 'resizeGuiElement', 'selectGuiElement',
       'clearGuiCanvas', 'exportGuiDescription',
@@ -445,6 +445,7 @@ class PuffinApp {
 
           // Thread expansion/collapse actions
           ['TOGGLE_THREAD_EXPANDED', actions.toggleThreadExpanded],
+          ['UPDATE_THREAD_SEARCH_QUERY', actions.updateThreadSearchQuery],
           ['MARK_THREAD_COMPLETE', actions.markThreadComplete],
           ['UNMARK_THREAD_COMPLETE', actions.unmarkThreadComplete],
 

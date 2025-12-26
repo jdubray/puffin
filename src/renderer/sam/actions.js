@@ -1069,3 +1069,15 @@ export const setDebugMode = (enabled) => ({
   type: 'SET_DEBUG_MODE',
   payload: { enabled }
 })
+
+/**
+ * Thread Search Actions
+ */
+
+// Update thread search query
+export const updateThreadSearchQuery = (query) => ({
+  type: 'UPDATE_THREAD_SEARCH_QUERY',
+  payload: {
+    query
+  }
+})

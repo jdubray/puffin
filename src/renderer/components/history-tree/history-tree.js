@@ -10,6 +10,9 @@ export class HistoryTreeComponent {
     this.intents = intents
     this.branchList = null
     this.historyTree = null
+    this.searchInput = null
+    this.searchClearBtn = null
+    this.debounceTimer = null
   }
 
   /**
@@ -18,6 +21,8 @@ export class HistoryTreeComponent {
   init() {
     this.branchList = document.getElementById('branch-list')
     this.historyTree = document.getElementById('history-tree')
+    this.searchInput = document.getElementById('thread-search-input')
+    this.searchClearBtn = document.getElementById('thread-search-clear')
 
     this.bindEvents()
     this.subscribeToState()
@@ -31,6 +36,67 @@ export class HistoryTreeComponent {
     document.getElementById('add-branch-btn').addEventListener('click', () => {
       this.showAddBranchDialog()
     })
+
+    // Search input with debounce
+    if (this.searchInput) {
+      this.searchInput.addEventListener('input', (e) => {
+        this.handleSearchInput(e.target.value)
+      })
+
+      // Clear search on Escape key
+      this.searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this.clearSearch()
+        }
+      })
+    }
+
+    // Clear search button
+    if (this.searchClearBtn) {
+      this.searchClearBtn.addEventListener('click', () => {
+        this.clearSearch()
+      })
+    }
+  }
+
+  /**
+   * Handle search input with debounce
+   * @param {string} value - Search query
+   */
+  handleSearchInput(value) {
+    // Clear previous timer
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer)
+    }
+
+    // Debounce: wait 150ms before updating state
+    this.debounceTimer = setTimeout(() => {
+      this.intents.updateThreadSearchQuery(value)
+    }, 150)
+
+    // Update clear button visibility
+    this.updateClearButtonVisibility(value)
+  }
+
+  /**
+   * Clear the search input and state
+   */
+  clearSearch() {
+    if (this.searchInput) {
+      this.searchInput.value = ''
+    }
+    this.intents.updateThreadSearchQuery('')
+    this.updateClearButtonVisibility('')
+  }
+
+  /**
+   * Update the visibility of the clear button
+   * @param {string} value - Current search value
+   */
+  updateClearButtonVisibility(value) {
+    if (this.searchClearBtn) {
+      this.searchClearBtn.classList.toggle('visible', value.length > 0)
+    }
   }
 
   /**
@@ -48,7 +114,14 @@ export class HistoryTreeComponent {
    */
   render(historyState) {
     this.renderBranches(historyState.branches, historyState.activeBranch)
-    this.renderHistory(historyState.promptTree, historyState.activePromptId)
+    const searchQuery = historyState.threadSearchQuery || ''
+    this.renderHistory(historyState.promptTree, historyState.activePromptId, searchQuery)
+
+    // Sync search input with state (in case of external state changes)
+    if (this.searchInput && this.searchInput.value !== searchQuery) {
+      this.searchInput.value = searchQuery
+      this.updateClearButtonVisibility(searchQuery)
+    }
   }
 
   /**
@@ -86,8 +159,11 @@ export class HistoryTreeComponent {
 
   /**
    * Render history tree
+   * @param {Array} promptTree - Array of prompts to render
+   * @param {string} activePromptId - Currently selected prompt ID
+   * @param {string} searchQuery - Search query to filter threads
    */
-  renderHistory(promptTree, activePromptId) {
+  renderHistory(promptTree, activePromptId, searchQuery = '') {
     if (!promptTree || promptTree.length === 0) {
       this.historyTree.innerHTML = `
         <div class="history-empty">
@@ -97,9 +173,25 @@ export class HistoryTreeComponent {
       return
     }
 
+    // Filter prompts if search query is present
+    const filteredTree = searchQuery
+      ? this.filterPromptTree(promptTree, searchQuery)
+      : promptTree
+
+    // Show no results message if search returned nothing
+    if (searchQuery && filteredTree.length === 0) {
+      this.historyTree.innerHTML = `
+        <div class="history-empty history-no-results">
+          <span class="no-results-icon">🔍</span>
+          <span>No threads match "${this.escapeHtml(searchQuery)}"</span>
+        </div>
+      `
+      return
+    }
+
     this.historyTree.innerHTML = ''
 
-    promptTree.forEach(prompt => {
+    filteredTree.forEach(prompt => {
       const item = document.createElement('div')
 
       // Build class list based on prompt type and state
@@ -384,6 +476,47 @@ export class HistoryTreeComponent {
   }
 
   /**
+   * Filter prompt tree based on search query
+   * Matches against prompt preview text and story titles (case-insensitive)
+   * @param {Array} promptTree - Array of prompts to filter
+   * @param {string} query - Search query
+   * @returns {Array} Filtered array of prompts
+   */
+  filterPromptTree(promptTree, query) {
+    const normalizedQuery = query.toLowerCase().trim()
+
+    if (!normalizedQuery) {
+      return promptTree
+    }
+
+    return promptTree.filter(prompt => {
+      // Check preview text
+      const preview = (prompt.preview || '').toLowerCase()
+      if (preview.includes(normalizedQuery)) {
+        return true
+      }
+
+      // Check story title for story threads
+      if (prompt.storyTitle) {
+        const storyTitle = prompt.storyTitle.toLowerCase()
+        if (storyTitle.includes(normalizedQuery)) {
+          return true
+        }
+      }
+
+      // Check content if available
+      if (prompt.content) {
+        const content = prompt.content.toLowerCase()
+        if (content.includes(normalizedQuery)) {
+          return true
+        }
+      }
+
+      return false
+    })
+  }
+
+  /**
    * Escape HTML
    */
   escapeHtml(str) {
@@ -400,5 +533,8 @@ export class HistoryTreeComponent {
    */
   destroy() {
     // Remove event listeners if needed
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer)
+    }
   }
 }

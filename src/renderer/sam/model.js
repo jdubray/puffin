@@ -2447,22 +2447,63 @@ function findPromptById(model, promptId) {
  * Helper: Build implementation prompt for a story
  */
 function buildStoryImplementationPrompt(story, branchType, sprint, model) {
-  const branchDescriptions = {
-    'ui': 'UI/UX thread',
-    'backend': 'Backend thread',
-    'fullstack': 'Full Stack implementation'
+  // RICE FACT Framework: Role, Instruction, Context, Example, Format, Aim, Constraints, Tone
+  const branchRiceFact = {
+    'ui': {
+      role: 'You are a Senior UI/Frontend Developer specializing in user experience, accessibility, and modern frontend patterns.',
+      instruction: 'Implement the user interface components for this user story. Create clean, reusable components with proper styling and user interactions.',
+      context: 'This is the UI implementation thread. The backend may be implemented separately, so focus on the presentation layer and use mocks or stubs for data if needed.',
+      example: 'Follow existing component patterns in the codebase. Reference similar UI elements for consistency in styling and behavior.',
+      format: 'Provide complete component code with HTML structure, CSS/styling, and JavaScript interactions. Include accessibility attributes (ARIA labels, keyboard navigation).',
+      aim: 'Create an intuitive, responsive, and visually consistent user interface that provides excellent user experience.',
+      constraints: 'Follow existing design patterns and component architecture. Ensure accessibility (WCAG 2.1). Do not modify backend logic or data models.',
+      tone: 'User-focused and detail-oriented. Prioritize clarity, usability, and visual polish.'
+    },
+    'backend': {
+      role: 'You are a Senior Backend Developer specializing in API design, data modeling, and server-side architecture.',
+      instruction: 'Implement the backend components for this user story. Design and build APIs, data models, and business logic.',
+      context: 'This is the backend implementation thread. The UI may be implemented separately, so focus on providing clean, well-documented APIs.',
+      example: 'Follow existing API patterns and data model conventions in the codebase. Reference similar endpoints for consistency.',
+      format: 'Provide complete backend code including API endpoints, data models, validation, and error handling. Include JSDoc comments for public interfaces.',
+      aim: 'Create performant, secure, and maintainable backend code that provides reliable data operations and business logic.',
+      constraints: 'Follow existing architectural patterns. Implement proper error handling and validation. Do not modify UI components directly.',
+      tone: 'Technical and precise. Prioritize correctness, security, and performance.'
+    },
+    'fullstack': {
+      role: 'You are a Senior Full Stack Developer capable of implementing complete features across the entire application stack.',
+      instruction: 'Implement the complete end-to-end feature for this user story. Build both frontend and backend components with proper integration.',
+      context: 'This is the full stack implementation thread. You are responsible for the complete feature including UI, API, data models, and their integration.',
+      example: 'Follow existing patterns for both frontend components and backend services. Ensure consistent data flow between layers.',
+      format: 'Provide complete implementation across all layers. Include UI components, API endpoints, data models, and integration code. Document the data flow.',
+      aim: 'Create a seamless, fully functional feature that works cohesively across the frontend and backend.',
+      constraints: 'Maintain separation of concerns between layers. Ensure proper error handling propagates correctly through the stack. Follow existing patterns for both UI and backend.',
+      tone: 'Holistic and integration-focused. Balance user experience with technical correctness.'
+    }
   }
 
-  const branchFocus = {
-    'ui': 'Focus on: User interface design, user experience, component layout, styling, accessibility, and frontend implementation.\nConsider usability, responsiveness, and visual consistency.',
-    'backend': 'Focus on: API design, data models, business logic, database operations, and server-side implementation.\nConsider performance, security, and maintainability.',
-    'fullstack': 'Focus on: End-to-end implementation including both frontend and backend components.\nConsider integration points and data flow between layers.'
-  }
+  const riceFact = branchRiceFact[branchType] || branchRiceFact['fullstack']
 
   let prompt = `## Implementation Request
 
-[${branchDescriptions[branchType] || branchType}]
-${branchFocus[branchType] || ''}
+### RICE FACT Framework
+
+**Role:** ${riceFact.role}
+
+**Instruction:** ${riceFact.instruction}
+
+**Context:** ${riceFact.context}
+
+**Example:** ${riceFact.example}
+
+**Format:** ${riceFact.format}
+
+**Aim:** ${riceFact.aim}
+
+**Constraints:** ${riceFact.constraints}
+
+**Tone:** ${riceFact.tone}
+
+---
 
 ### User Story
 **${story.title}**

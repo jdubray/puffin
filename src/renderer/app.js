@@ -2200,8 +2200,6 @@ class PuffinApp {
     let hasCostData = false
     let hasDurationData = false
 
-    console.log('[STATS] Branch:', activeBranch, 'Thread prompts:', threadPrompts.length, 'of', allPrompts.length)
-
     threadPrompts.forEach(prompt => {
       if (prompt.response) {
         // Turns
@@ -2220,8 +2218,6 @@ class PuffinApp {
         }
       }
     })
-
-    console.log('[STATS] Totals - turns:', totalTurns, 'cost:', totalCost, 'duration:', totalDuration)
 
     // Update turns count
     if (turnsEl) {

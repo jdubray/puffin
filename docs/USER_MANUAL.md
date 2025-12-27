@@ -733,6 +733,35 @@ Monitor API usage and costs across all conversations.
 - **Branch Organization**: Separate expensive architectural discussions
 - **Response Monitoring**: Cancel long-running or expensive operations
 
+### Syncing Claude Code CLI Sessions with /puffin-sync
+
+While Puffin provides a structured environment for development, you may also use the Claude Code CLI directly alongside Puffin. This is common for:
+- Quick fixes and small improvements that are faster from the command line
+- Working on other projects where you discover improvements needed in Puffin
+- Exploratory work that doesn't need full Puffin context
+
+The challenge is that CLI work creates orphaned history—you lose track of what was done and can't easily continue the work when you return to Puffin.
+
+#### The /puffin-sync Command
+The `/puffin-sync` slash command bridges this gap by saving a summary of completed CLI work to Puffin's Improvements branch.
+
+**Usage:**
+Run the command in Claude Code CLI after completing a task:
+```
+/puffin-sync
+```
+
+Claude will generate a structured summary including:
+- **Title**: Brief description of the fix or improvement
+- **Content**: Summary of what was accomplished
+- **Files**: List of files that were modified
+
+#### Benefits
+- **Preserve CLI History**: Keep a record of work done outside Puffin
+- **Continuity**: Resume CLI work later from within Puffin's structured environment
+- **Knowledge Transfer**: Document decisions for future reference
+- **Progress Tracking**: Review all improvements in one place via the Improvements branch
+
 ---
 
 ## Troubleshooting

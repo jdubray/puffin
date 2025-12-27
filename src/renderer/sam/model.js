@@ -2054,7 +2054,7 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
     const branchMap = {
       'ui': 'ui',
       'backend': 'backend',
-      'fullstack': model.history.activeBranch || 'backend'
+      'fullstack': 'fullstack'
     }
     const targetBranch = branchMap[branchType] || branchType
 

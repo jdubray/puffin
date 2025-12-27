@@ -572,11 +572,19 @@ export const selectBranchAcceptor = model => proposal => {
     if (model.history.branches[newBranchId]) {
       model.history.activeBranch = newBranchId
 
-      // Reset activePromptId when switching branches
-      // Set to the most recent prompt in the new branch, or null if empty
+      // Also switch to prompt view when selecting a branch
+      model.currentView = 'prompt'
+
+      // Check if this branch has a remembered last selected prompt
+      const lastSelectedPromptId = model.history.lastSelectedPromptPerBranch?.[newBranchId]
       const newBranch = model.history.branches[newBranchId]
-      if (newBranch.prompts && newBranch.prompts.length > 0) {
-        // Select the most recent prompt in the new branch
+
+      if (lastSelectedPromptId && newBranch.prompts.some(p => p.id === lastSelectedPromptId)) {
+        // Restore the last selected prompt for this branch
+        model.history.activePromptId = lastSelectedPromptId
+        console.log('[SAM-DEBUG] selectBranchAcceptor: switched to branch', newBranchId, 'restored last selected prompt:', lastSelectedPromptId)
+      } else if (newBranch.prompts && newBranch.prompts.length > 0) {
+        // Fall back to the most recent prompt in the new branch
         const lastPrompt = newBranch.prompts[newBranch.prompts.length - 1]
         model.history.activePromptId = lastPrompt.id
         console.log('[SAM-DEBUG] selectBranchAcceptor: switched to branch', newBranchId, 'selected prompt:', lastPrompt.id)
@@ -605,7 +613,13 @@ export const createBranchAcceptor = model => proposal => {
       id: proposal.payload.id,
       name: proposal.payload.name,
       icon: proposal.payload.icon,
+      codeModificationAllowed: proposal.payload.codeModificationAllowed !== false,
       prompts: []
+    }
+
+    // Add to branchOrder if it exists
+    if (model.history.branchOrder) {
+      model.history.branchOrder.push(proposal.payload.id)
     }
   }
 }
@@ -614,12 +628,39 @@ export const deleteBranchAcceptor = model => proposal => {
   if (proposal?.type === 'DELETE_BRANCH') {
     const branchId = proposal.payload.branchId
     // Don't delete default branches
-    const defaultBranches = ['specifications', 'architecture', 'ui', 'backend', 'deployment', 'tmp']
+    const defaultBranches = ['specifications', 'architecture', 'ui', 'backend', 'deployment', 'improvements', 'tmp']
     if (!defaultBranches.includes(branchId) && model.history.branches[branchId]) {
       delete model.history.branches[branchId]
+
+      // Remove from branchOrder if it exists
+      if (model.history.branchOrder) {
+        model.history.branchOrder = model.history.branchOrder.filter(id => id !== branchId)
+      }
+
       if (model.history.activeBranch === branchId) {
         model.history.activeBranch = 'specifications'
       }
+    }
+  }
+}
+
+export const reorderBranchesAcceptor = model => proposal => {
+  if (proposal?.type === 'REORDER_BRANCHES') {
+    const { fromIndex, toIndex } = proposal.payload
+
+    // Get ordered branch IDs
+    if (!model.history.branchOrder) {
+      // Initialize branch order from current branches
+      model.history.branchOrder = Object.keys(model.history.branches)
+    }
+
+    const order = [...model.history.branchOrder]
+    if (fromIndex >= 0 && fromIndex < order.length && toIndex >= 0 && toIndex < order.length) {
+      // Remove the branch from its original position
+      const [movedBranch] = order.splice(fromIndex, 1)
+      // Insert it at the new position
+      order.splice(toIndex, 0, movedBranch)
+      model.history.branchOrder = order
     }
   }
 }
@@ -629,6 +670,15 @@ export const selectPromptAcceptor = model => proposal => {
     model.history.activePromptId = proposal.payload.promptId
     // Navigate to prompt view when selecting a prompt/thread
     model.currentView = 'prompt'
+
+    // Remember the selected prompt for this branch
+    const activeBranch = model.history.activeBranch
+    if (activeBranch) {
+      if (!model.history.lastSelectedPromptPerBranch) {
+        model.history.lastSelectedPromptPerBranch = {}
+      }
+      model.history.lastSelectedPromptPerBranch[activeBranch] = proposal.payload.promptId
+    }
   }
 }
 
@@ -2710,6 +2760,7 @@ export const acceptors = [
   selectBranchAcceptor,
   createBranchAcceptor,
   deleteBranchAcceptor,
+  reorderBranchesAcceptor,
   selectPromptAcceptor,
   toggleThreadExpandedAcceptor,
   updateThreadSearchQueryAcceptor,

@@ -485,7 +485,7 @@ class ClaudeService {
 
     // Branch tag is always useful - it reminds Claude of the focus area
     if (data.branchId) {
-      const branchContext = this.getBranchContext(data.branchId)
+      const branchContext = this.getBranchContext(data.branchId, data.codeModificationAllowed)
       if (branchContext) {
         prompt = branchContext + '\n\n' + prompt
       }
@@ -591,14 +591,17 @@ class ClaudeService {
 
   /**
    * Get context/guidance based on the branch type
+   * @param {string} branchId - The branch identifier
+   * @param {boolean} codeModificationAllowed - Whether code modifications are allowed
    * @private
    */
-  getBranchContext(branchId) {
+  getBranchContext(branchId, codeModificationAllowed = true) {
     const branchContexts = {
-      specifications: `[SPECIFICATIONS THREAD - PLANNING ONLY, NO CODE CHANGES]
+      specifications: `[SPECIFICATIONS THREAD - PLANNING & DOCUMENTATION, NO CODE CHANGES]
 Focus on: Requirements gathering, feature definitions, user stories, acceptance criteria, and functional specifications.
 Help clarify requirements, identify edge cases, and ensure completeness.
-CRITICAL: Do NOT write, modify, or delete any source code files. This thread is for planning and documentation only.
+You MAY create and modify documentation files (markdown, text, config files, etc.).
+CRITICAL: Do NOT write, modify, or delete source code files (.js, .ts, .py, .java, etc.). This thread is for planning and documentation only.
 If implementation is requested, advise the user to move to an appropriate implementation branch (UI, Backend, or feature branch).`,
 
       architecture: `[ARCHITECTURE THREAD]
@@ -620,10 +623,26 @@ Consider reliability, scalability, and operational concerns.`,
       tmp: `[TEMPORARY/SCRATCH THREAD]
 This is a scratch space for ad-hoc tasks and experiments.
 IMPORTANT: Always output your final results as text in your response, not just as file writes.
-When asked to create documents, lists, or summaries, include the full content in your response text.`
+When asked to create documents, lists, or summaries, include the full content in your response text.`,
+
+      improvements: `[IMPROVEMENTS THREAD - CLI SYNC LOG]
+This branch tracks fixes and improvements made via Claude Code CLI.
+Entries are synced automatically using the /puffin-sync command.
+Use this as a log of incremental changes and quick fixes.`
     }
 
-    return branchContexts[branchId] || null
+    // Check if branch has a predefined context
+    let context = branchContexts[branchId]
+
+    // For custom branches without predefined context, add restriction based on codeModificationAllowed
+    if (!context && !codeModificationAllowed) {
+      context = `[${branchId.toUpperCase()} THREAD - DOCUMENTATION ONLY, NO CODE CHANGES]
+You MAY create and modify documentation files (markdown, text, config files, etc.).
+CRITICAL: Do NOT write, modify, or delete source code files (.js, .ts, .py, .java, etc.). This thread is for documentation only.
+If implementation is requested, advise the user to move to an appropriate implementation branch.`
+    }
+
+    return context
   }
 
   /**

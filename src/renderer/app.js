@@ -375,7 +375,7 @@ class PuffinApp {
       'startCompose', 'updatePromptContent', 'submitPrompt',
       'receiveResponseChunk', 'completeResponse', 'responseError', 'cancelPrompt',
       'rerunPrompt', 'clearRerunRequest',
-      'selectBranch', 'createBranch', 'deleteBranch', 'selectPrompt',
+      'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'selectPrompt',
       'toggleThreadExpanded', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
       'addGuiElement', 'updateGuiElement', 'deleteGuiElement',
       'moveGuiElement', 'resizeGuiElement', 'selectGuiElement',
@@ -441,6 +441,7 @@ class PuffinApp {
           ['SELECT_BRANCH', actions.selectBranch],
           ['CREATE_BRANCH', actions.createBranch],
           ['DELETE_BRANCH', actions.deleteBranch],
+          ['REORDER_BRANCHES', actions.reorderBranches],
           ['SELECT_PROMPT', actions.selectPrompt],
 
           // Thread expansion/collapse actions
@@ -776,12 +777,21 @@ class PuffinApp {
   }
 
   /**
+   * Get project-specific localStorage key for handoff summary
+   */
+  getHandoffStorageKey() {
+    // Use project path to make the key unique per project
+    const projectId = this.projectPath ? btoa(this.projectPath).slice(0, 20) : 'default'
+    return `puffin-handoff-summary-${projectId}`
+  }
+
+  /**
    * Clear the generated handoff summary
    */
   clearHandoffSummary() {
     this.resetHandoffPanel()
-    // Also clear from localStorage
-    localStorage.removeItem('puffin-handoff-summary')
+    // Also clear from localStorage (project-specific)
+    localStorage.removeItem(this.getHandoffStorageKey())
     this.showToast('Handoff summary cleared', 'info')
   }
 
@@ -790,7 +800,8 @@ class PuffinApp {
    */
   restoreHandoffSummary() {
     try {
-      const saved = localStorage.getItem('puffin-handoff-summary')
+      const storageKey = this.getHandoffStorageKey()
+      const saved = localStorage.getItem(storageKey)
       if (!saved) return
 
       const data = JSON.parse(saved)
@@ -813,7 +824,7 @@ class PuffinApp {
       }
     } catch (error) {
       console.error('[HANDOFF] Error restoring handoff summary:', error)
-      localStorage.removeItem('puffin-handoff-summary')
+      localStorage.removeItem(this.getHandoffStorageKey())
     }
   }
 
@@ -2538,8 +2549,8 @@ Keep it concise but informative. Use markdown formatting.`
         createdAt: Date.now()
       }
 
-      // Persist to localStorage so it survives navigation
-      localStorage.setItem('puffin-handoff-summary', JSON.stringify(this.generatedHandoffSummary))
+      // Persist to localStorage so it survives navigation (project-specific key)
+      localStorage.setItem(this.getHandoffStorageKey(), JSON.stringify(this.generatedHandoffSummary))
 
       // Display the generated summary
       summaryDisplay.innerHTML = `<div class="handoff-summary-content">${this.renderMarkdown(response.response)}</div>`

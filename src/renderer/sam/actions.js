@@ -182,6 +182,15 @@ export const deleteBranch = (branchId) => ({
   }
 })
 
+// Reorder branches
+export const reorderBranches = (fromIndex, toIndex) => ({
+  type: 'REORDER_BRANCHES',
+  payload: {
+    fromIndex,
+    toIndex
+  }
+})
+
 // Select a prompt from history
 export const selectPrompt = (promptId) => ({
   type: 'SELECT_PROMPT',

@@ -130,23 +130,36 @@ export class HistoryTreeComponent {
   renderBranches(branches, activeBranch) {
     this.branchList.innerHTML = ''
 
-    branches.forEach(branch => {
+    branches.forEach((branch, index) => {
       const item = document.createElement('li')
       item.className = `branch-item ${branch.isActive ? 'active' : ''}`
       item.dataset.branchId = branch.id
+      item.dataset.index = index
+      item.draggable = true
       item.innerHTML = `
+        <span class="drag-handle">⋮</span>
         <span class="icon">${this.getBranchIcon(branch.icon)}</span>
         <span class="name">${this.escapeHtml(branch.name)}</span>
         <span class="count">${branch.promptCount}</span>
       `
 
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (e) => {
+        // Don't trigger click when dragging
+        if (e.target.classList.contains('drag-handle')) return
         this.intents.selectBranch(branch.id)
-        this.intents.switchView('prompt')
+        // View switch is now handled in selectBranchAcceptor
       })
 
+      // Drag and drop events
+      item.addEventListener('dragstart', (e) => this.handleDragStart(e, branch.id, index))
+      item.addEventListener('dragover', (e) => this.handleDragOver(e))
+      item.addEventListener('dragenter', (e) => this.handleDragEnter(e))
+      item.addEventListener('dragleave', (e) => this.handleDragLeave(e))
+      item.addEventListener('drop', (e) => this.handleDrop(e))
+      item.addEventListener('dragend', (e) => this.handleDragEnd(e))
+
       // Context menu for custom branches
-      if (!['specifications','architecture', 'ui', 'backend', 'deployment'].includes(branch.id)) {
+      if (!['specifications', 'architecture', 'ui', 'backend', 'deployment', 'improvements', 'tmp'].includes(branch.id)) {
         item.addEventListener('contextmenu', (e) => {
           e.preventDefault()
           this.showBranchContextMenu(e, branch)
@@ -155,6 +168,77 @@ export class HistoryTreeComponent {
 
       this.branchList.appendChild(item)
     })
+  }
+
+  /**
+   * Handle drag start
+   */
+  handleDragStart(e, branchId, index) {
+    this.draggedBranchId = branchId
+    this.draggedIndex = index
+    e.target.classList.add('dragging')
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', branchId)
+  }
+
+  /**
+   * Handle drag over
+   */
+  handleDragOver(e) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  /**
+   * Handle drag enter
+   */
+  handleDragEnter(e) {
+    e.preventDefault()
+    const item = e.target.closest('.branch-item')
+    if (item && item.dataset.branchId !== this.draggedBranchId) {
+      item.classList.add('drag-over')
+    }
+  }
+
+  /**
+   * Handle drag leave
+   */
+  handleDragLeave(e) {
+    const item = e.target.closest('.branch-item')
+    if (item) {
+      item.classList.remove('drag-over')
+    }
+  }
+
+  /**
+   * Handle drop
+   */
+  handleDrop(e) {
+    e.preventDefault()
+    const targetItem = e.target.closest('.branch-item')
+    if (!targetItem) return
+
+    const targetIndex = parseInt(targetItem.dataset.index, 10)
+    const sourceIndex = this.draggedIndex
+
+    if (sourceIndex !== targetIndex) {
+      this.intents.reorderBranches(sourceIndex, targetIndex)
+    }
+
+    targetItem.classList.remove('drag-over')
+  }
+
+  /**
+   * Handle drag end
+   */
+  handleDragEnd(e) {
+    e.target.classList.remove('dragging')
+    // Clean up any remaining drag-over classes
+    this.branchList.querySelectorAll('.drag-over').forEach(item => {
+      item.classList.remove('drag-over')
+    })
+    this.draggedBranchId = null
+    this.draggedIndex = null
   }
 
   /**
@@ -365,6 +449,13 @@ export class HistoryTreeComponent {
           <option value="server">⚙️ Server</option>
         </select>
       </div>
+      <div class="form-group checkbox-group">
+        <label>
+          <input type="checkbox" id="branch-code-allowed" checked>
+          Allow code modifications
+        </label>
+        <span class="form-hint">When unchecked, this branch can only modify documentation files</span>
+      </div>
     `
 
     modalActions.innerHTML = `
@@ -379,10 +470,11 @@ export class HistoryTreeComponent {
     document.getElementById('modal-confirm-btn').addEventListener('click', () => {
       const name = document.getElementById('branch-name-input').value.trim()
       const icon = document.getElementById('branch-icon-select').value
+      const codeModificationAllowed = document.getElementById('branch-code-allowed').checked
 
       if (name) {
         const id = name.toLowerCase().replace(/\s+/g, '-')
-        this.intents.createBranch({ id, name, icon })
+        this.intents.createBranch({ id, name, icon, codeModificationAllowed })
         this.intents.hideModal()
       }
     })

@@ -1189,12 +1189,13 @@ class PuffinState {
       // Create default history with standard branches
       const defaultHistory = {
         branches: {
-          specifications: { id: 'specifications', name: 'Specifications', prompts: [] },
-          architecture: { id: 'architecture', name: 'Architecture', prompts: [] },
-          ui: { id: 'ui', name: 'UI', prompts: [] },
-          backend: { id: 'backend', name: 'Backend', prompts: [] },
-          deployment: { id: 'deployment', name: 'Deployment', prompts: [] },
-          tmp: { id: 'tmp', name: 'Tmp', prompts: [] }
+          specifications: { id: 'specifications', name: 'Specifications', prompts: [], codeModificationAllowed: false },
+          architecture: { id: 'architecture', name: 'Architecture', prompts: [], codeModificationAllowed: true },
+          ui: { id: 'ui', name: 'UI', prompts: [], codeModificationAllowed: true },
+          backend: { id: 'backend', name: 'Backend', prompts: [], codeModificationAllowed: true },
+          deployment: { id: 'deployment', name: 'Deployment', prompts: [], codeModificationAllowed: true },
+          improvements: { id: 'improvements', name: 'Improvements', icon: 'code', prompts: [], codeModificationAllowed: true },
+          tmp: { id: 'tmp', name: 'Tmp', prompts: [], codeModificationAllowed: true }
         },
         activeBranch: 'specifications',
         activePromptId: null,

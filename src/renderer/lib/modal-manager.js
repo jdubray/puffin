@@ -45,8 +45,9 @@ export class ModalManager {
 
     // Skip clearing content for modals handled by their own components
     // These components subscribe to state changes and manage their own rendering
-    if (modal.type === 'user-story-review') {
-      // Handled by UserStoryReviewModalComponent which subscribes to state changes
+    const componentManagedModals = ['user-story-review', 'add-branch', 'gui-export']
+    if (componentManagedModals.includes(modal.type)) {
+      // Handled by their respective components which manage their own rendering
       return
     }
 

@@ -180,18 +180,32 @@ function computePromptState(model) {
  * History state computation
  */
 function computeHistoryState(model) {
-  const { branches, activeBranch, activePromptId, expandedThreads, threadSearchQuery } = model.history
+  const { branches, activeBranch, activePromptId, expandedThreads, threadSearchQuery, branchOrder, lastSelectedPromptPerBranch } = model.history
 
   console.log('[SAM-DEBUG] computeHistoryState - activeBranch:', activeBranch, 'activePromptId:', activePromptId)
 
-  // Build branch list with metadata
-  const branchList = Object.entries(branches).map(([id, branch]) => ({
-    id,
-    name: branch.name,
-    icon: branch.icon || 'folder',
-    promptCount: branch.prompts.length,
-    isActive: id === activeBranch
-  }))
+  // Get ordered branch IDs (use branchOrder if available, otherwise default order)
+  const orderedBranchIds = branchOrder && branchOrder.length > 0
+    ? branchOrder.filter(id => branches[id]) // Filter out any deleted branches
+    : Object.keys(branches)
+
+  // Add any new branches that aren't in the order yet
+  const allBranchIds = Object.keys(branches)
+  const missingBranches = allBranchIds.filter(id => !orderedBranchIds.includes(id))
+  const finalOrder = [...orderedBranchIds, ...missingBranches]
+
+  // Build branch list with metadata in the specified order
+  const branchList = finalOrder.map(id => {
+    const branch = branches[id]
+    if (!branch) return null
+    return {
+      id,
+      name: branch.name,
+      icon: branch.icon || 'folder',
+      promptCount: branch.prompts.length,
+      isActive: id === activeBranch
+    }
+  }).filter(Boolean)
 
   // Get active branch prompts as flat tree
   const activeBranchData = branches[activeBranch]
@@ -269,7 +283,9 @@ function computeHistoryState(model) {
     raw: {
       branches,
       activeBranch,
-      activePromptId
+      activePromptId,
+      branchOrder,
+      lastSelectedPromptPerBranch
     },
     activeBranch,
     activePromptId,

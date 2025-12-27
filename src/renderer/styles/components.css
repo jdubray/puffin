@@ -22,7 +22,8 @@
   background: var(--bg-hover);
 }
 
-.branch-item.active {
+.branch-item.active,
+.branch-item.active:hover {
   background: var(--accent-primary);
   color: white;
 }
@@ -46,6 +47,44 @@
 
 .branch-item.active .count {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* Branch drag handle */
+.branch-item .drag-handle {
+  opacity: 0.5;
+  cursor: grab;
+  font-size: 0.875rem;
+  padding: 0 0.25rem;
+  user-select: none;
+  color: var(--text-secondary);
+}
+
+.branch-item:hover .drag-handle {
+  opacity: 0.8;
+}
+
+.branch-item.active .drag-handle {
+  color: rgba(255, 255, 255, 0.7);
+  opacity: 0.7;
+}
+
+.branch-item .drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Branch drag states */
+.branch-item.dragging {
+  opacity: 0.5;
+  background: var(--bg-tertiary);
+}
+
+.branch-item.drag-over {
+  border-top: 2px solid var(--accent-primary);
+  margin-top: -2px;
+}
+
+.branch-item.drag-over.active {
+  border-top-color: white;
 }
 
 /* History Tree */
@@ -2304,6 +2343,29 @@
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.5rem;
+}
+
+.checkbox-group {
+  margin-top: 0.5rem;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+.checkbox-group .form-hint {
+  margin-top: 0.25rem;
+  margin-left: 1.5rem;
 }
 
 /* Dropdown */

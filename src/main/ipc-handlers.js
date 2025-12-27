@@ -580,10 +580,17 @@ function setupClaudeHandlers(ipcMain) {
   // Submit prompt to Claude CLI
   ipcMain.on('claude:submit', async (event, data) => {
     try {
+      // Get branch info for code modification permissions
+      const state = puffinState.getState()
+      const branchId = data.branchId
+      const branch = state.history?.branches?.[branchId]
+      const codeModificationAllowed = branch?.codeModificationAllowed !== false
+
       // Ensure we're using the correct project path
       const submitData = {
         ...data,
-        projectPath: projectPath
+        projectPath: projectPath,
+        codeModificationAllowed
       }
 
       await claudeService.submit(

@@ -78,9 +78,106 @@ export class ModalManager {
       case 'profile-edit':
         await this.renderProfileEdit(modalTitle, modalContent, modalActions, isStale)
         break
+      case 'sprint-close':
+        this.renderSprintClose(modalTitle, modalContent, modalActions, modal.data, state)
+        break
       default:
         console.log('Unknown modal type:', modal.type)
     }
+  }
+
+  /**
+   * Render sprint close modal - prompts for title and description
+   */
+  renderSprintClose(title, content, actions, data, state) {
+    title.textContent = 'Close Sprint'
+
+    const sprint = data?.sprint || state.activeSprint
+    const storyCount = sprint?.stories?.length || 0
+    const completedCount = Object.values(sprint?.storyProgress || {})
+      .filter(p => p.status === 'completed').length
+
+    // Generate default title from date
+    const now = new Date()
+    const defaultTitle = `Sprint ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+
+    content.innerHTML = `
+      <div class="sprint-close-content">
+        <div class="sprint-close-summary">
+          <span class="summary-stat">
+            <strong>${completedCount}</strong> of <strong>${storyCount}</strong> stories completed
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label for="sprint-close-title">Sprint Title <span class="required">*</span></label>
+          <input type="text"
+                 id="sprint-close-title"
+                 class="sprint-close-input"
+                 placeholder="e.g., Authentication Feature Sprint"
+                 value="${this.escapeHtml(defaultTitle)}"
+                 maxlength="100"
+                 required>
+          <small class="form-hint">A short, memorable name for this sprint</small>
+        </div>
+
+        <div class="form-group">
+          <label for="sprint-close-description">Description <span class="optional">(optional)</span></label>
+          <textarea id="sprint-close-description"
+                    class="sprint-close-textarea"
+                    placeholder="Brief summary of what was accomplished..."
+                    rows="3"
+                    maxlength="500"></textarea>
+          <small class="form-hint">Optional notes about the sprint outcome</small>
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="sprint-close-cancel-btn">Cancel</button>
+      <button class="btn primary" id="sprint-close-confirm-btn">Close Sprint</button>
+    `
+
+    // Event listeners
+    document.getElementById('sprint-close-cancel-btn').addEventListener('click', () => {
+      this.intents.hideModal()
+    })
+
+    document.getElementById('sprint-close-confirm-btn').addEventListener('click', () => {
+      const titleInput = document.getElementById('sprint-close-title')
+      const descriptionInput = document.getElementById('sprint-close-description')
+
+      const sprintTitle = titleInput?.value?.trim()
+      const sprintDescription = descriptionInput?.value?.trim() || ''
+
+      if (!sprintTitle) {
+        titleInput?.focus()
+        this.showToast('Please enter a sprint title', 'error')
+        return
+      }
+
+      // Call clearSprint with title and description
+      this.intents.clearSprintWithDetails(sprintTitle, sprintDescription)
+      this.intents.hideModal()
+      this.showToast('Sprint closed successfully', 'success')
+    })
+
+    // Focus the title input
+    setTimeout(() => {
+      const titleInput = document.getElementById('sprint-close-title')
+      if (titleInput) {
+        titleInput.focus()
+        titleInput.select()
+      }
+    }, 100)
+
+    // Handle Enter key in title input
+    document.getElementById('sprint-close-title')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        document.getElementById('sprint-close-confirm-btn')?.click()
+      }
+    })
   }
 
   /**

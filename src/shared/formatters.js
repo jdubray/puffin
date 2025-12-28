@@ -182,7 +182,8 @@ export function flattenPromptTree(branch) {
 
   function traverse(prompts, depth = 0, parentId = null) {
     const children = prompts
-      .filter(p => p.parentId === parentId)
+      // Use == to match both null and undefined as root-level prompts
+      .filter(p => parentId == null ? (p.parentId == null) : (p.parentId === parentId))
       // Sort by timestamp descending (newest first)
       .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
 

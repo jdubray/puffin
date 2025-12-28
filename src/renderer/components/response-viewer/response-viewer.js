@@ -35,6 +35,8 @@ export class ResponseViewerComponent {
   render(promptState, historyState, storyDerivationState, activityState) {
     // Store activity state for use in rendering
     this.activityState = activityState
+    // Store history state for continuation button
+    this.historyState = historyState
 
     // Priority: story derivation error > streaming response > selected prompt response > placeholder
     if (storyDerivationState?.error) {
@@ -177,7 +179,7 @@ export class ResponseViewerComponent {
     const maxTurns = window.puffinState?.config?.sprintExecution?.maxIterations || 40
     const continuationRequired = response.turns && response.turns >= maxTurns
     if (continuationRequired) {
-      metaParts.push('<span class="continuation-warning">⚠️ Continuation required</span>')
+      metaParts.push('<button class="continuation-btn" data-action="continue" title="Click to continue implementation">⚠️ Continue</button>')
     }
 
     // Show files modified if available (from response data)
@@ -487,6 +489,7 @@ export class ResponseViewerComponent {
   attachActionListeners() {
     const copyBtn = this.container.querySelector('[data-action="copy-md"]')
     const saveBtn = this.container.querySelector('[data-action="save-md"]')
+    const continueBtn = this.container.querySelector('[data-action="continue"]')
 
     if (copyBtn) {
       copyBtn.addEventListener('click', () => this.handleCopyMarkdown())
@@ -494,6 +497,10 @@ export class ResponseViewerComponent {
 
     if (saveBtn) {
       saveBtn.addEventListener('click', () => this.handleSaveMarkdown())
+    }
+
+    if (continueBtn) {
+      continueBtn.addEventListener('click', () => this.handleContinue())
     }
   }
 
@@ -533,6 +540,52 @@ export class ResponseViewerComponent {
       console.error('Failed to save markdown:', err)
       this.showToast('Failed to save markdown', 'error')
     }
+  }
+
+  /**
+   * Handle continue button click - sends continuation prompt
+   */
+  handleContinue() {
+    if (!this.historyState || !this.intents) {
+      console.error('[RESPONSE-VIEWER] Cannot continue: missing state or intents')
+      return
+    }
+
+    const activeBranch = this.historyState.activeBranch
+    const selectedPrompt = this.historyState.selectedPrompt
+
+    // Determine if this is a coding branch or not
+    // Non-coding branches: specifications (planning only)
+    const nonCodingBranches = ['specifications']
+    const isCodingBranch = !nonCodingBranches.includes(activeBranch)
+
+    // Build the continuation prompt based on branch type
+    const promptContent = isCodingBranch
+      ? 'Complete the implementation, when complete reply with [Complete]'
+      : 'Complete the task, when complete reply with [Complete]'
+
+    // Build submission data
+    const data = {
+      branchId: activeBranch,
+      parentId: selectedPrompt?.id || null,
+      content: promptContent
+    }
+
+    // Submit to SAM
+    this.intents.submitPrompt(data)
+
+    // Submit to Claude via IPC
+    if (window.puffin) {
+      // Get session ID to resume conversation
+      const sessionId = selectedPrompt?.response?.sessionId || null
+
+      window.puffin.claude.submit({
+        content: promptContent,
+        sessionId: sessionId
+      })
+    }
+
+    this.showToast('Continuation prompt sent', 'success')
   }
 
   /**

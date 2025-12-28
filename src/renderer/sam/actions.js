@@ -191,6 +191,16 @@ export const reorderBranches = (fromIndex, toIndex) => ({
   }
 })
 
+// Update branch settings (including plugin assignments)
+export const updateBranchSettings = (branchId, settings) => ({
+  type: 'UPDATE_BRANCH_SETTINGS',
+  payload: {
+    branchId,
+    settings,
+    timestamp: Date.now()
+  }
+})
+
 // Select a prompt from history
 export const selectPrompt = (promptId) => ({
   type: 'SELECT_PROMPT',
@@ -391,6 +401,28 @@ export const loadUserStories = (stories) => ({
   payload: {
     stories
   }
+})
+
+// Load sprint history from storage
+export const loadSprintHistory = (sprints) => ({
+  type: 'LOAD_SPRINT_HISTORY',
+  payload: {
+    sprints
+  }
+})
+
+// Set sprint filter to show only stories from a specific sprint
+export const setSprintFilter = (sprintId) => ({
+  type: 'SET_SPRINT_FILTER',
+  payload: {
+    sprintId
+  }
+})
+
+// Clear sprint filter to show all stories
+export const clearSprintFilter = () => ({
+  type: 'CLEAR_SPRINT_FILTER',
+  payload: {}
 })
 
 /**
@@ -925,6 +957,25 @@ export const clearSprint = () => ({
   type: 'CLEAR_SPRINT',
   payload: {
     timestamp: Date.now()
+  }
+})
+
+// Clear/close the active sprint with title and description
+export const clearSprintWithDetails = (title, description = '') => ({
+  type: 'CLEAR_SPRINT_WITH_DETAILS',
+  payload: {
+    title,
+    description,
+    timestamp: Date.now()
+  }
+})
+
+// Show sprint close modal
+export const showSprintCloseModal = () => ({
+  type: 'SHOW_MODAL',
+  payload: {
+    type: 'sprint-close',
+    data: {}
   }
 })
 

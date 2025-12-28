@@ -97,6 +97,11 @@ export function computeState(model) {
       timestamp: null
     },
 
+    // Sprint archival state (for CLEAR_SPRINT persistence)
+    _sprintToArchive: model._sprintToArchive || null,
+    _completedStoryIdsToSync: model._completedStoryIdsToSync || [],
+    _resetToPendingStoryIds: model._resetToPendingStoryIds || [],
+
     // Debug state
     debug: model.debug || {
       lastPrompt: null,

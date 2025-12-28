@@ -39,7 +39,7 @@ export class StatePersistence {
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
       'ADD_STORIES_TO_BACKLOG',
       // Sprint actions
-      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT',
+      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
       'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
       // Story generation tracking
@@ -161,7 +161,7 @@ export class StatePersistence {
       }
 
       // Persist sprint state changes (including criteria progress and story status)
-      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT',
+      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
            'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
         await window.puffin.state.updateActiveSprint(state.activeSprint)
@@ -184,18 +184,47 @@ export class StatePersistence {
           }
         }
 
-        // For CLEAR_SPRINT: persist any stories that were synced during clear
-        // The model stores _completedStoryIdsToSync before clearing activeSprint
-        if (normalizedType === 'CLEAR_SPRINT' && state._completedStoryIdsToSync?.length > 0) {
-          console.log('[PERSIST-DEBUG] Syncing completed stories on sprint clear:', state._completedStoryIdsToSync)
-          for (const storyId of state._completedStoryIdsToSync) {
-            const story = state.userStories?.find(s => s.id === storyId)
-            if (story) {
-              try {
-                await window.puffin.state.updateUserStory(storyId, story)
-                console.log('[PERSIST-DEBUG] Persisted completed story on clear:', storyId)
-              } catch (e) {
-                console.error('[PERSIST-DEBUG] Failed to persist story on clear:', storyId, e)
+        // For CLEAR_SPRINT or CLEAR_SPRINT_WITH_DETAILS: archive sprint and persist story status changes
+        if (normalizedType === 'CLEAR_SPRINT' || normalizedType === 'CLEAR_SPRINT_WITH_DETAILS') {
+          // Archive the sprint to history BEFORE clearing
+          if (state._sprintToArchive) {
+            console.log('[PERSIST-DEBUG] Archiving sprint to history:', state._sprintToArchive.id)
+            try {
+              await window.puffin.state.archiveSprintToHistory(state._sprintToArchive)
+              console.log('[PERSIST-DEBUG] Sprint archived successfully')
+            } catch (e) {
+              console.error('[PERSIST-DEBUG] Failed to archive sprint:', e)
+            }
+          }
+
+          // Persist completed stories
+          if (state._completedStoryIdsToSync?.length > 0) {
+            console.log('[PERSIST-DEBUG] Syncing completed stories on sprint clear:', state._completedStoryIdsToSync)
+            for (const storyId of state._completedStoryIdsToSync) {
+              const story = state.userStories?.find(s => s.id === storyId)
+              if (story) {
+                try {
+                  await window.puffin.state.updateUserStory(storyId, story)
+                  console.log('[PERSIST-DEBUG] Persisted completed story on clear:', storyId)
+                } catch (e) {
+                  console.error('[PERSIST-DEBUG] Failed to persist story on clear:', storyId, e)
+                }
+              }
+            }
+          }
+
+          // Persist reset-to-pending stories
+          if (state._resetToPendingStoryIds?.length > 0) {
+            console.log('[PERSIST-DEBUG] Resetting in-progress stories to pending:', state._resetToPendingStoryIds)
+            for (const storyId of state._resetToPendingStoryIds) {
+              const story = state.userStories?.find(s => s.id === storyId)
+              if (story) {
+                try {
+                  await window.puffin.state.updateUserStory(storyId, story)
+                  console.log('[PERSIST-DEBUG] Reset story to pending on clear:', storyId)
+                } catch (e) {
+                  console.error('[PERSIST-DEBUG] Failed to reset story on clear:', storyId, e)
+                }
               }
             }
           }

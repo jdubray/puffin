@@ -36,8 +36,9 @@ class ClaudeMdGenerator {
    * Generate all CLAUDE.md files based on current state
    * @param {Object} state - Full Puffin state
    * @param {string} activeBranch - Currently active branch
+   * @param {Function} [getSkillContent] - Optional function(branchId) => string to get plugin skill content
    */
-  async generateAll(state, activeBranch) {
+  async generateAll(state, activeBranch, getSkillContent = null) {
     if (!this.projectPath) {
       throw new Error('ClaudeMdGenerator not initialized with project path')
     }
@@ -48,7 +49,8 @@ class ClaudeMdGenerator {
     // Generate branch-specific files
     const branches = ['specifications', 'architecture', 'ui', 'backend', 'deployment']
     for (const branch of branches) {
-      await this.generateBranch(branch, state)
+      const skillContent = getSkillContent ? getSkillContent(branch) : ''
+      await this.generateBranch(branch, state, skillContent)
     }
 
     // Combine into active CLAUDE.md
@@ -158,8 +160,9 @@ class ClaudeMdGenerator {
    * Generate branch-specific CLAUDE_{branch}.md
    * @param {string} branch - Branch name
    * @param {Object} state - Puffin state
+   * @param {string} [skillContent=''] - Optional plugin skill content to append
    */
-  async generateBranch(branch, state) {
+  async generateBranch(branch, state, skillContent = '') {
     let content = ''
 
     switch (branch) {
@@ -180,6 +183,11 @@ class ClaudeMdGenerator {
         break
       default:
         content = this.generateGenericBranch(branch, state)
+    }
+
+    // Append assigned plugin skills if any are provided
+    if (skillContent) {
+      content += '\n' + skillContent + '\n'
     }
 
     await fs.writeFile(
@@ -506,9 +514,10 @@ class ClaudeMdGenerator {
    * @param {string} branch - Branch to update
    * @param {Object} state - Puffin state
    * @param {string} activeBranch - Current active branch
+   * @param {string} [skillContent=''] - Optional plugin skill content to append
    */
-  async updateBranch(branch, state, activeBranch) {
-    await this.generateBranch(branch, state)
+  async updateBranch(branch, state, activeBranch, skillContent = '') {
+    await this.generateBranch(branch, state, skillContent)
     if (branch === activeBranch) {
       await this.activateBranch(activeBranch)
     }

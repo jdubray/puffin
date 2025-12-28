@@ -22,12 +22,14 @@ const ARCHITECTURE_FILE = 'architecture.md'
 const USER_STORIES_FILE = 'user-stories.json'
 const ARCHIVED_STORIES_FILE = 'archived-stories.json'
 const ACTIVE_SPRINT_FILE = 'active-sprint.json'
+const SPRINT_HISTORY_FILE = 'sprint-history.json'
 const STORY_GENERATIONS_FILE = 'story-generations.json'
 const GIT_OPERATIONS_FILE = 'git-operations.json'
 const GUI_DESIGNS_DIR = 'gui-designs'
 const GUI_DEFINITIONS_DIR = 'gui-definitions'
 const UI_GUIDELINES_FILE = 'ui-guidelines.json'
 const STYLESHEETS_DIR = 'stylesheets'
+const CLAUDE_PLUGINS_DIR = 'plugins' // Claude Code skill plugins directory
 
 class PuffinState {
   constructor() {
@@ -38,9 +40,11 @@ class PuffinState {
     this.architecture = null
     this.userStories = null
     this.archivedStories = null
+    this.sprintHistory = null
     this.storyGenerations = null
     this.uiGuidelines = null
     this.gitOperations = null
+    this.claudePlugins = null // Claude Code skill plugins
   }
 
   /**
@@ -57,6 +61,7 @@ class PuffinState {
     await this.ensureDirectory(path.join(this.puffinPath, GUI_DESIGNS_DIR))
     await this.ensureDirectory(path.join(this.puffinPath, GUI_DEFINITIONS_DIR))
     await this.ensureDirectory(path.join(this.puffinPath, STYLESHEETS_DIR))
+    await this.ensureDirectory(path.join(this.puffinPath, CLAUDE_PLUGINS_DIR))
 
     // Load or initialize state
     this.config = await this.loadConfig()
@@ -65,9 +70,11 @@ class PuffinState {
     this.userStories = await this.loadUserStories()
     this.archivedStories = await this.loadArchivedStories()
     this.activeSprint = await this.loadActiveSprint()
+    this.sprintHistory = await this.loadSprintHistory()
     this.storyGenerations = await this.loadStoryGenerations()
     this.uiGuidelines = await this.loadUiGuidelines()
     this.gitOperations = await this.loadGitOperations()
+    this.claudePlugins = await this.loadClaudePlugins()
 
     // Auto-archive completed stories older than 2 weeks
     await this.autoArchiveOldStories()
@@ -156,7 +163,8 @@ class PuffinState {
       activeSprint: this.activeSprint,
       storyGenerations: this.storyGenerations,
       uiGuidelines: this.uiGuidelines,
-      gitOperations: this.gitOperations
+      gitOperations: this.gitOperations,
+      claudePlugins: this.claudePlugins
     }
   }
 
@@ -1086,6 +1094,303 @@ class PuffinState {
     return this.config.gitSettings || {}
   }
 
+  // ============ Claude Code Plugin Methods ============
+
+  /**
+   * Get all installed Claude Code plugins
+   * @returns {Array} Array of plugin objects with manifest and skill content
+   */
+  getClaudePlugins() {
+    return this.claudePlugins || []
+  }
+
+  /**
+   * Get a specific Claude Code plugin by ID
+   * @param {string} pluginId - Plugin ID (directory name)
+   * @returns {Object|null} Plugin object or null if not found
+   */
+  getClaudePlugin(pluginId) {
+    return this.claudePlugins?.find(p => p.id === pluginId) || null
+  }
+
+  /**
+   * Install a Claude Code plugin
+   * Creates plugin directory with manifest.json and skill.md
+   * @param {Object} pluginData - Plugin data
+   * @param {string} pluginData.id - Unique plugin ID (used as directory name)
+   * @param {string} pluginData.name - Human-readable plugin name
+   * @param {string} pluginData.description - Plugin description
+   * @param {string} pluginData.version - Plugin version
+   * @param {string} pluginData.skillContent - Markdown content for the skill
+   * @param {string} [pluginData.author] - Plugin author
+   * @param {string} [pluginData.source] - Source URL or path
+   * @returns {Promise<Object>} Installed plugin object
+   */
+  async installClaudePlugin(pluginData) {
+    const { id, name, description, version, skillContent, author, source } = pluginData
+
+    // Validate required fields
+    if (!id || typeof id !== 'string') {
+      throw new Error('Plugin ID is required and must be a string')
+    }
+    if (!name || typeof name !== 'string') {
+      throw new Error('Plugin name is required and must be a string')
+    }
+    if (!skillContent || typeof skillContent !== 'string') {
+      throw new Error('Plugin skill content is required and must be a string')
+    }
+
+    // Sanitize plugin ID for filesystem
+    const sanitizedId = this.sanitizeFilename(id)
+
+    // Check if plugin already exists
+    if (this.claudePlugins?.find(p => p.id === sanitizedId)) {
+      throw new Error(`Plugin with ID "${sanitizedId}" is already installed`)
+    }
+
+    // Create plugin directory
+    const pluginDir = path.join(this.puffinPath, CLAUDE_PLUGINS_DIR, sanitizedId)
+    await this.ensureDirectory(pluginDir)
+
+    // Create manifest
+    const manifest = {
+      id: sanitizedId,
+      name,
+      description: description || '',
+      version: version || '1.0.0',
+      author: author || '',
+      source: source || '',
+      installedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    // Write manifest.json
+    const manifestPath = path.join(pluginDir, 'manifest.json')
+    await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+
+    // Write skill.md
+    const skillPath = path.join(pluginDir, 'skill.md')
+    await fs.writeFile(skillPath, skillContent, 'utf-8')
+
+    // Add to in-memory cache
+    const plugin = {
+      ...manifest,
+      skillContent,
+      path: pluginDir
+    }
+
+    if (!this.claudePlugins) {
+      this.claudePlugins = []
+    }
+    this.claudePlugins.push(plugin)
+
+    console.log(`[PUFFIN-STATE] Installed Claude plugin: ${name} (${sanitizedId})`)
+    return plugin
+  }
+
+  /**
+   * Update a Claude Code plugin
+   * @param {string} pluginId - Plugin ID
+   * @param {Object} updates - Fields to update
+   * @returns {Promise<Object>} Updated plugin object
+   */
+  async updateClaudePlugin(pluginId, updates) {
+    const pluginIndex = this.claudePlugins?.findIndex(p => p.id === pluginId)
+    if (pluginIndex === -1 || pluginIndex === undefined) {
+      throw new Error(`Plugin "${pluginId}" not found`)
+    }
+
+    const plugin = this.claudePlugins[pluginIndex]
+    const pluginDir = path.join(this.puffinPath, CLAUDE_PLUGINS_DIR, pluginId)
+
+    // Update manifest fields
+    const updatedManifest = {
+      id: plugin.id,
+      name: updates.name || plugin.name,
+      description: updates.description !== undefined ? updates.description : plugin.description,
+      version: updates.version || plugin.version,
+      author: updates.author !== undefined ? updates.author : plugin.author,
+      source: updates.source !== undefined ? updates.source : plugin.source,
+      installedAt: plugin.installedAt,
+      updatedAt: new Date().toISOString()
+    }
+
+    // Write updated manifest
+    const manifestPath = path.join(pluginDir, 'manifest.json')
+    await fs.writeFile(manifestPath, JSON.stringify(updatedManifest, null, 2), 'utf-8')
+
+    // Update skill content if provided
+    let skillContent = plugin.skillContent
+    if (updates.skillContent !== undefined) {
+      skillContent = updates.skillContent
+      const skillPath = path.join(pluginDir, 'skill.md')
+      await fs.writeFile(skillPath, skillContent, 'utf-8')
+    }
+
+    // Update in-memory cache
+    const updatedPlugin = {
+      ...updatedManifest,
+      skillContent,
+      path: pluginDir
+    }
+    this.claudePlugins[pluginIndex] = updatedPlugin
+
+    console.log(`[PUFFIN-STATE] Updated Claude plugin: ${updatedPlugin.name} (${pluginId})`)
+    return updatedPlugin
+  }
+
+  /**
+   * Uninstall a Claude Code plugin
+   * Removes plugin directory and all contents
+   * @param {string} pluginId - Plugin ID
+   * @returns {Promise<boolean>} True if uninstalled successfully
+   */
+  async uninstallClaudePlugin(pluginId) {
+    const pluginIndex = this.claudePlugins?.findIndex(p => p.id === pluginId)
+    if (pluginIndex === -1 || pluginIndex === undefined) {
+      throw new Error(`Plugin "${pluginId}" not found`)
+    }
+
+    const plugin = this.claudePlugins[pluginIndex]
+    const pluginDir = path.join(this.puffinPath, CLAUDE_PLUGINS_DIR, pluginId)
+
+    // Remove plugin directory recursively
+    await fs.rm(pluginDir, { recursive: true, force: true })
+
+    // Remove from in-memory cache
+    this.claudePlugins.splice(pluginIndex, 1)
+
+    // Remove plugin from any branch assignments
+    await this.removePluginFromAllBranches(pluginId)
+
+    console.log(`[PUFFIN-STATE] Uninstalled Claude plugin: ${plugin.name} (${pluginId})`)
+    return true
+  }
+
+  /**
+   * Assign a plugin to a branch
+   * @param {string} pluginId - Plugin ID
+   * @param {string} branchId - Branch ID
+   * @returns {Promise<Object>} Updated branch object
+   */
+  async assignPluginToBranch(pluginId, branchId) {
+    // Verify plugin exists
+    const plugin = this.getClaudePlugin(pluginId)
+    if (!plugin) {
+      throw new Error(`Plugin "${pluginId}" not found`)
+    }
+
+    // Verify branch exists
+    const branch = this.history.branches[branchId]
+    if (!branch) {
+      throw new Error(`Branch "${branchId}" not found`)
+    }
+
+    // Initialize assignedPlugins array if not exists
+    if (!branch.assignedPlugins) {
+      branch.assignedPlugins = []
+    }
+
+    // Check if already assigned
+    if (branch.assignedPlugins.includes(pluginId)) {
+      return branch // Already assigned
+    }
+
+    // Add plugin to branch
+    branch.assignedPlugins.push(pluginId)
+    await this.saveHistory()
+
+    console.log(`[PUFFIN-STATE] Assigned plugin "${pluginId}" to branch "${branchId}"`)
+    return branch
+  }
+
+  /**
+   * Unassign a plugin from a branch
+   * @param {string} pluginId - Plugin ID
+   * @param {string} branchId - Branch ID
+   * @returns {Promise<Object>} Updated branch object
+   */
+  async unassignPluginFromBranch(pluginId, branchId) {
+    const branch = this.history.branches[branchId]
+    if (!branch) {
+      throw new Error(`Branch "${branchId}" not found`)
+    }
+
+    if (!branch.assignedPlugins) {
+      return branch // No plugins assigned
+    }
+
+    const index = branch.assignedPlugins.indexOf(pluginId)
+    if (index === -1) {
+      return branch // Plugin not assigned to this branch
+    }
+
+    branch.assignedPlugins.splice(index, 1)
+    await this.saveHistory()
+
+    console.log(`[PUFFIN-STATE] Unassigned plugin "${pluginId}" from branch "${branchId}"`)
+    return branch
+  }
+
+  /**
+   * Get plugins assigned to a branch
+   * @param {string} branchId - Branch ID
+   * @returns {Array} Array of plugin objects assigned to the branch
+   */
+  getBranchPlugins(branchId) {
+    const branch = this.history.branches[branchId]
+    if (!branch || !branch.assignedPlugins) {
+      return []
+    }
+
+    return branch.assignedPlugins
+      .map(pluginId => this.getClaudePlugin(pluginId))
+      .filter(plugin => plugin !== null)
+  }
+
+  /**
+   * Remove plugin from all branches (used during uninstall)
+   * @param {string} pluginId - Plugin ID
+   * @private
+   */
+  async removePluginFromAllBranches(pluginId) {
+    let modified = false
+
+    for (const branchId of Object.keys(this.history.branches)) {
+      const branch = this.history.branches[branchId]
+      if (branch.assignedPlugins) {
+        const index = branch.assignedPlugins.indexOf(pluginId)
+        if (index !== -1) {
+          branch.assignedPlugins.splice(index, 1)
+          modified = true
+        }
+      }
+    }
+
+    if (modified) {
+      await this.saveHistory()
+    }
+  }
+
+  /**
+   * Get combined skill content for a branch
+   * Combines all assigned plugin skills into a single markdown string
+   * @param {string} branchId - Branch ID
+   * @returns {string} Combined skill markdown content
+   */
+  getBranchSkillContent(branchId) {
+    const plugins = this.getBranchPlugins(branchId)
+    if (plugins.length === 0) {
+      return ''
+    }
+
+    const sections = plugins.map(plugin => {
+      return `## ${plugin.name}\n\n${plugin.skillContent}`
+    })
+
+    return `# Assigned Skills\n\n${sections.join('\n\n---\n\n')}`
+  }
+
   // ============ Private Methods ============
 
   /**
@@ -1393,6 +1698,96 @@ Document your API endpoints...
     this.activeSprint = sprint
     await this.saveActiveSprint(sprint)
     return { success: true }
+  }
+
+  /**
+   * Load sprint history or create default
+   * @private
+   */
+  async loadSprintHistory() {
+    const historyPath = path.join(this.puffinPath, SPRINT_HISTORY_FILE)
+    try {
+      const content = await fs.readFile(historyPath, 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      // Create default sprint history structure
+      const defaultHistory = {
+        sprints: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      return defaultHistory
+    }
+  }
+
+  /**
+   * Save sprint history
+   * @private
+   */
+  async saveSprintHistory(history = this.sprintHistory) {
+    history.updatedAt = new Date().toISOString()
+    const historyPath = path.join(this.puffinPath, SPRINT_HISTORY_FILE)
+    await fs.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf-8')
+  }
+
+  /**
+   * Archive a closed sprint to history
+   * @param {Object} sprint - Sprint object to archive
+   */
+  async archiveSprintToHistory(sprint) {
+    // Convert sprint to archival format with story references
+    const archivedSprint = {
+      id: sprint.id,
+      status: 'closed',
+      closedAt: sprint.closedAt || new Date().toISOString(),
+      createdAt: sprint.createdAt,
+      completedAt: sprint.completedAt,
+      planApprovedAt: sprint.planApprovedAt,
+      // Store story IDs as references, not full copies
+      storyIds: (sprint.stories || []).map(s => s.id),
+      // Preserve the implementation plan - KEY VALUE
+      plan: sprint.plan,
+      // Preserve story progress for historical reference
+      storyProgress: sprint.storyProgress,
+      promptId: sprint.promptId
+    }
+
+    this.sprintHistory.sprints.push(archivedSprint)
+    await this.saveSprintHistory()
+    return archivedSprint
+  }
+
+  /**
+   * Get sprint history with optional filters
+   * @param {Object} options - Filter options
+   */
+  getSprintHistory(options = {}) {
+    const { limit = 50 } = options
+    const sprints = [...this.sprintHistory.sprints]
+      .sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt))
+      .slice(0, limit)
+    return sprints
+  }
+
+  /**
+   * Get a specific archived sprint with resolved story data
+   * @param {string} sprintId - Sprint ID to retrieve
+   */
+  async getArchivedSprint(sprintId) {
+    const sprint = this.sprintHistory.sprints.find(s => s.id === sprintId)
+    if (!sprint) return null
+
+    // Resolve story references to actual story data
+    const resolvedStories = sprint.storyIds.map(storyId => {
+      const story = this.userStories.find(s => s.id === storyId) ||
+        this.archivedStories.find(s => s.id === storyId)
+      return story || { id: storyId, title: '[Deleted Story]', status: 'unknown' }
+    })
+
+    return {
+      ...sprint,
+      stories: resolvedStories
+    }
   }
 
   /**
@@ -1824,6 +2219,61 @@ Document your API endpoints...
     operations.updatedAt = new Date().toISOString()
     const operationsPath = path.join(this.puffinPath, GIT_OPERATIONS_FILE)
     await fs.writeFile(operationsPath, JSON.stringify(operations, null, 2), 'utf-8')
+  }
+
+  /**
+   * Load Claude Code plugins from the plugins directory
+   * Scans .puffin/plugins/ for subdirectories with manifest.json and skill.md
+   * @private
+   */
+  async loadClaudePlugins() {
+    const pluginsDir = path.join(this.puffinPath, CLAUDE_PLUGINS_DIR)
+    const plugins = []
+
+    try {
+      const entries = await fs.readdir(pluginsDir, { withFileTypes: true })
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+
+        const pluginDir = path.join(pluginsDir, entry.name)
+        const manifestPath = path.join(pluginDir, 'manifest.json')
+        const skillPath = path.join(pluginDir, 'skill.md')
+
+        try {
+          // Read manifest
+          const manifestContent = await fs.readFile(manifestPath, 'utf-8')
+          const manifest = JSON.parse(manifestContent)
+
+          // Read skill content
+          let skillContent = ''
+          try {
+            skillContent = await fs.readFile(skillPath, 'utf-8')
+          } catch {
+            console.warn(`[PUFFIN-STATE] Missing skill.md for plugin: ${entry.name}`)
+          }
+
+          plugins.push({
+            ...manifest,
+            id: manifest.id || entry.name,
+            skillContent,
+            path: pluginDir
+          })
+        } catch (err) {
+          console.warn(`[PUFFIN-STATE] Failed to load plugin "${entry.name}":`, err.message)
+        }
+      }
+
+      console.log(`[PUFFIN-STATE] Loaded ${plugins.length} Claude Code plugin(s)`)
+      return plugins
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        // Plugins directory doesn't exist yet
+        return []
+      }
+      console.error('[PUFFIN-STATE] Error loading Claude plugins:', err.message)
+      return []
+    }
   }
 
   /**

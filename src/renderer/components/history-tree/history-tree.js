@@ -487,10 +487,227 @@ export class HistoryTreeComponent {
    * Show branch context menu
    */
   showBranchContextMenu(e, branch) {
-    // Simple confirm dialog for delete
-    if (confirm(`Delete branch "${branch.name}"? This will delete all prompts in this branch.`)) {
-      this.intents.deleteBranch(branch.id)
+    // Remove any existing context menu
+    const existingMenu = document.querySelector('.branch-context-menu')
+    if (existingMenu) {
+      existingMenu.remove()
     }
+
+    // Create context menu
+    const menu = document.createElement('div')
+    menu.className = 'branch-context-menu'
+    menu.style.left = `${e.clientX}px`
+    menu.style.top = `${e.clientY}px`
+
+    // Build menu items
+    const menuItems = [
+      {
+        label: '⚙️ Settings',
+        action: () => this.showBranchSettingsModal(branch)
+      },
+      {
+        label: '🗑️ Delete Branch',
+        action: () => {
+          if (confirm(`Delete branch "${branch.name}"? This will delete all prompts in this branch.`)) {
+            this.intents.deleteBranch(branch.id)
+          }
+        },
+        className: 'danger'
+      }
+    ]
+
+    // Render menu items
+    menu.innerHTML = menuItems.map(item =>
+      `<button class="branch-context-menu-item ${item.className || ''}">${item.label}</button>`
+    ).join('')
+
+    // Add click handlers
+    const menuItemEls = menu.querySelectorAll('.branch-context-menu-item')
+    menuItemEls.forEach((el, i) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation()
+        menuItems[i].action()
+        menu.remove()
+      })
+    })
+
+    // Add to document
+    document.body.appendChild(menu)
+
+    // Close on click outside
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove()
+        document.removeEventListener('click', closeHandler)
+      }
+    }
+    setTimeout(() => document.addEventListener('click', closeHandler), 0)
+  }
+
+  /**
+   * Show branch settings modal
+   */
+  showBranchSettingsModal(branch) {
+    this.intents.showModal('branch-settings', { branch })
+    this.renderBranchSettingsModal(branch)
+  }
+
+  /**
+   * Render branch settings modal
+   */
+  async renderBranchSettingsModal(branch) {
+    const modalContent = document.getElementById('modal-content')
+    const modalTitle = document.getElementById('modal-title')
+    const modalActions = document.getElementById('modal-actions')
+
+    modalTitle.textContent = `Branch Settings: ${branch.name}`
+
+    // Load available plugins
+    let availablePlugins = []
+    try {
+      if (window.puffin?.plugins?.listClaudePlugins) {
+        const result = await window.puffin.plugins.listClaudePlugins()
+        if (result.success) {
+          availablePlugins = result.plugins || []
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load plugins:', error)
+    }
+
+    // Get currently assigned plugins for this branch
+    const assignedPlugins = branch.assignedPlugins || []
+
+    modalContent.innerHTML = `
+      <div class="branch-settings-modal">
+        <div class="form-group">
+          <label for="branch-settings-name">Branch Name</label>
+          <input type="text" id="branch-settings-name" value="${this.escapeHtml(branch.name)}"
+                 placeholder="Branch name">
+        </div>
+
+        <div class="form-group">
+          <label for="branch-settings-icon">Icon</label>
+          <select id="branch-settings-icon">
+            <option value="folder" ${branch.icon === 'folder' ? 'selected' : ''}>📁 Folder</option>
+            <option value="building" ${branch.icon === 'building' ? 'selected' : ''}>🏗️ Building</option>
+            <option value="layout" ${branch.icon === 'layout' ? 'selected' : ''}>🎨 Layout</option>
+            <option value="server" ${branch.icon === 'server' ? 'selected' : ''}>⚙️ Server</option>
+            <option value="cloud" ${branch.icon === 'cloud' ? 'selected' : ''}>☁️ Cloud</option>
+            <option value="code" ${branch.icon === 'code' ? 'selected' : ''}>💻 Code</option>
+            <option value="test" ${branch.icon === 'test' ? 'selected' : ''}>🧪 Testing</option>
+            <option value="docs" ${branch.icon === 'docs' ? 'selected' : ''}>📄 Docs</option>
+          </select>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" id="branch-settings-code-allowed"
+                   ${branch.codeModificationAllowed !== false ? 'checked' : ''}>
+            Allow code modifications
+          </label>
+          <small class="form-hint">When unchecked, this branch can only modify documentation files</small>
+        </div>
+
+        <fieldset class="branch-plugins-fieldset">
+          <legend>Assigned Plugins</legend>
+          <p class="fieldset-description">Select plugins to inject their context when working on this branch</p>
+
+          <div id="branch-plugins-list" class="branch-plugins-list">
+            ${availablePlugins.length === 0 ? `
+              <div class="no-plugins-message">
+                <span>No plugins available.</span>
+                <a href="#" id="go-to-plugins-link">Add plugins in Config tab</a>
+              </div>
+            ` : availablePlugins.map(plugin => `
+              <label class="plugin-checkbox-item">
+                <input type="checkbox"
+                       name="assigned-plugin"
+                       value="${plugin.id}"
+                       ${assignedPlugins.includes(plugin.id) ? 'checked' : ''}
+                       ${plugin.enabled === false ? 'disabled' : ''}>
+                <span class="plugin-checkbox-icon">${plugin.icon || '🔧'}</span>
+                <span class="plugin-checkbox-content">
+                  <span class="plugin-checkbox-name">${this.escapeHtml(plugin.name)}</span>
+                  <span class="plugin-checkbox-desc">${this.escapeHtml(plugin.description || '')}</span>
+                </span>
+                ${plugin.enabled === false ? '<span class="plugin-disabled-badge">Disabled</span>' : ''}
+              </label>
+            `).join('')}
+          </div>
+        </fieldset>
+      </div>
+    `
+
+    modalActions.innerHTML = `
+      <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
+      <button class="btn primary" id="modal-confirm-btn">Save Settings</button>
+    `
+
+    // Bind go-to-plugins link if present
+    const goToPluginsLink = document.getElementById('go-to-plugins-link')
+    if (goToPluginsLink) {
+      goToPluginsLink.addEventListener('click', (e) => {
+        e.preventDefault()
+        this.intents.hideModal()
+        this.intents.switchView('config')
+      })
+    }
+
+    // Bind modal buttons
+    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+      this.intents.hideModal()
+    })
+
+    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+      this.saveBranchSettings(branch.id)
+    })
+
+    // Bind checkbox item toggle for visual feedback
+    const pluginItems = document.querySelectorAll('.plugin-checkbox-item')
+    pluginItems.forEach(item => {
+      const checkbox = item.querySelector('input[type="checkbox"]')
+      if (checkbox && !checkbox.disabled) {
+        checkbox.addEventListener('change', () => {
+          item.classList.toggle('selected', checkbox.checked)
+        })
+        // Set initial selected state
+        if (checkbox.checked) {
+          item.classList.add('selected')
+        }
+      }
+    })
+
+    // Focus name input
+    document.getElementById('branch-settings-name').focus()
+  }
+
+  /**
+   * Save branch settings from modal
+   */
+  saveBranchSettings(branchId) {
+    const name = document.getElementById('branch-settings-name').value.trim()
+    const icon = document.getElementById('branch-settings-icon').value
+    const codeModificationAllowed = document.getElementById('branch-settings-code-allowed').checked
+
+    // Get assigned plugins
+    const pluginCheckboxes = document.querySelectorAll('input[name="assigned-plugin"]:checked')
+    const assignedPlugins = Array.from(pluginCheckboxes).map(cb => cb.value)
+
+    if (!name) {
+      alert('Branch name is required')
+      return
+    }
+
+    // Update branch settings
+    this.intents.updateBranchSettings(branchId, {
+      name,
+      icon,
+      codeModificationAllowed,
+      assignedPlugins
+    })
+
+    this.intents.hideModal()
   }
 
   /**

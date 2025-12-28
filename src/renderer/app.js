@@ -375,7 +375,7 @@ class PuffinApp {
       'startCompose', 'updatePromptContent', 'submitPrompt',
       'receiveResponseChunk', 'completeResponse', 'responseError', 'cancelPrompt',
       'rerunPrompt', 'clearRerunRequest',
-      'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'selectPrompt',
+      'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'updateBranchSettings', 'selectPrompt',
       'toggleThreadExpanded', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
       'addGuiElement', 'updateGuiElement', 'deleteGuiElement',
       'moveGuiElement', 'resizeGuiElement', 'selectGuiElement',
@@ -383,7 +383,8 @@ class PuffinApp {
       'saveGuiDefinition', 'loadGuiDefinition', 'listGuiDefinitions',
       'deleteGuiDefinition', 'showSaveGuiDefinitionDialog',
       'updateArchitecture', 'reviewArchitecture',
-      'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories',
+      'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories', 'loadSprintHistory',
+      'setSprintFilter', 'clearSprintFilter',
       'deriveUserStories', 'receiveDerivedStories', 'markStoryReady', 'unmarkStoryReady',
       'updateDerivedStory', 'deleteDerivedStory', 'requestStoryChanges',
       'addStoriesToBacklog', 'cancelStoryReview', 'storyDerivationError',
@@ -396,7 +397,8 @@ class PuffinApp {
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearPendingSprintPlanning',
+      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearSprintWithDetails',
+      'showSprintCloseModal', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'clearSprintError', 'toggleCriteriaCompletion',
       // Stuck detection actions
@@ -442,6 +444,7 @@ class PuffinApp {
           ['CREATE_BRANCH', actions.createBranch],
           ['DELETE_BRANCH', actions.deleteBranch],
           ['REORDER_BRANCHES', actions.reorderBranches],
+          ['UPDATE_BRANCH_SETTINGS', actions.updateBranchSettings],
           ['SELECT_PROMPT', actions.selectPrompt],
 
           // Thread expansion/collapse actions
@@ -476,6 +479,9 @@ class PuffinApp {
           ['UPDATE_USER_STORY', actions.updateUserStory],
           ['DELETE_USER_STORY', actions.deleteUserStory],
           ['LOAD_USER_STORIES', actions.loadUserStories],
+          ['LOAD_SPRINT_HISTORY', actions.loadSprintHistory],
+          ['SET_SPRINT_FILTER', actions.setSprintFilter],
+          ['CLEAR_SPRINT_FILTER', actions.clearSprintFilter],
 
           // Story derivation actions
           ['DERIVE_USER_STORIES', actions.deriveUserStories],
@@ -525,6 +531,7 @@ class PuffinApp {
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['APPROVE_PLAN', actions.approvePlan],
           ['CLEAR_SPRINT', actions.clearSprint],
+          ['CLEAR_SPRINT_WITH_DETAILS', actions.clearSprintWithDetails],
           ['CLEAR_PENDING_SPRINT_PLANNING', actions.clearPendingSprintPlanning],
           ['START_SPRINT_STORY_IMPLEMENTATION', actions.startSprintStoryImplementation],
           ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation],
@@ -2035,12 +2042,10 @@ class PuffinApp {
     if (!sprintContextPanel.dataset.bound) {
       sprintContextPanel.dataset.bound = 'true'
 
-      // Close button
+      // Close button - shows modal for title/description capture
       if (closeBtn) {
         closeBtn.addEventListener('click', () => {
-          if (confirm('Close this sprint? You can create a new one from the Backlog.')) {
-            this.intents.clearSprint()
-          }
+          this.intents.showModal('sprint-close', { sprint: this.state.activeSprint })
         })
       }
 

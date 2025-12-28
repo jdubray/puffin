@@ -72,6 +72,11 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.invoke('state:updateSprintStoryProgress', { storyId, branchType, progressUpdate }),
     getSprintProgress: () => ipcRenderer.invoke('state:getSprintProgress'),
 
+    // Sprint history operations
+    archiveSprintToHistory: (sprint) => ipcRenderer.invoke('state:archiveSprintToHistory', sprint),
+    getSprintHistory: (options) => ipcRenderer.invoke('state:getSprintHistory', options),
+    getArchivedSprint: (sprintId) => ipcRenderer.invoke('state:getArchivedSprint', sprintId),
+
     // Design document operations
     getDesignDocuments: () => ipcRenderer.invoke('state:getDesignDocuments'),
     loadDesignDocument: (filename) => ipcRenderer.invoke('state:loadDesignDocument', filename),
@@ -117,7 +122,39 @@ contextBridge.exposeInMainWorld('puffin', {
     generateClaudeMd: (options) => ipcRenderer.invoke('state:generateClaudeMd', options),
 
     // Activate branch - swaps CLAUDE.md to branch-specific content
-    activateBranch: (branchId) => ipcRenderer.invoke('state:activateBranch', branchId)
+    activateBranch: (branchId) => ipcRenderer.invoke('state:activateBranch', branchId),
+
+    // ============ Claude Code Plugin Operations ============
+
+    // Get all installed Claude Code plugins
+    getClaudePlugins: () => ipcRenderer.invoke('state:getClaudePlugins'),
+
+    // Get a specific Claude Code plugin by ID
+    getClaudePlugin: (pluginId) => ipcRenderer.invoke('state:getClaudePlugin', pluginId),
+
+    // Install a Claude Code plugin
+    installClaudePlugin: (pluginData) => ipcRenderer.invoke('state:installClaudePlugin', pluginData),
+
+    // Update a Claude Code plugin
+    updateClaudePlugin: (pluginId, updates) =>
+      ipcRenderer.invoke('state:updateClaudePlugin', { pluginId, updates }),
+
+    // Uninstall a Claude Code plugin
+    uninstallClaudePlugin: (pluginId) => ipcRenderer.invoke('state:uninstallClaudePlugin', pluginId),
+
+    // Assign a plugin to a branch
+    assignPluginToBranch: (pluginId, branchId) =>
+      ipcRenderer.invoke('state:assignPluginToBranch', { pluginId, branchId }),
+
+    // Unassign a plugin from a branch
+    unassignPluginFromBranch: (pluginId, branchId) =>
+      ipcRenderer.invoke('state:unassignPluginFromBranch', { pluginId, branchId }),
+
+    // Get plugins assigned to a branch
+    getBranchPlugins: (branchId) => ipcRenderer.invoke('state:getBranchPlugins', branchId),
+
+    // Get combined skill content for a branch
+    getBranchSkillContent: (branchId) => ipcRenderer.invoke('state:getBranchSkillContent', branchId)
   },
 
   /**

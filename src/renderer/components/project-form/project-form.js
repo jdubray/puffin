@@ -17,6 +17,8 @@ export class ProjectFormComponent {
     this.form = null
     this.assumptionsList = null
     this.assumptions = []
+    this.pluginsList = null
+    this.plugins = []
     this._initialized = false // Track if form has been populated
   }
 
@@ -26,6 +28,7 @@ export class ProjectFormComponent {
   init() {
     this.form = document.getElementById('config-form')
     this.assumptionsList = document.getElementById('assumptions-list')
+    this.pluginsList = document.getElementById('plugins-list')
 
     if (!this.form) {
       console.error('Config form not found')
@@ -34,6 +37,7 @@ export class ProjectFormComponent {
 
     this.bindEvents()
     this.subscribeToState()
+    this.loadPlugins()
   }
 
   /**
@@ -59,6 +63,14 @@ export class ProjectFormComponent {
     if (generateBtn) {
       generateBtn.addEventListener('click', () => {
         this.handleGenerateClaudeMd()
+      })
+    }
+
+    // Add plugin button
+    const addPluginBtn = document.getElementById('add-plugin-btn')
+    if (addPluginBtn) {
+      addPluginBtn.addEventListener('click', () => {
+        this.showAddPluginModal()
       })
     }
 
@@ -415,6 +427,504 @@ export class ProjectFormComponent {
   formatDate(timestamp) {
     const date = new Date(timestamp)
     return date.toLocaleDateString()
+  }
+
+  // ========================================
+  // Plugin Management Methods
+  // ========================================
+
+  /**
+   * Load plugins from backend
+   */
+  async loadPlugins() {
+    try {
+      if (window.puffin?.plugins?.listClaudePlugins) {
+        const result = await window.puffin.plugins.listClaudePlugins()
+        if (result.success) {
+          this.plugins = result.plugins || []
+          this.renderPlugins()
+        }
+      } else {
+        // Backend not ready yet, use empty list
+        this.plugins = []
+        this.renderPlugins()
+      }
+    } catch (error) {
+      console.error('Failed to load plugins:', error)
+      this.plugins = []
+      this.renderPlugins()
+    }
+  }
+
+  /**
+   * Render plugins list
+   */
+  renderPlugins() {
+    if (!this.pluginsList) return
+
+    // Clear existing content
+    this.pluginsList.innerHTML = ''
+
+    if (this.plugins.length === 0) {
+      // Show empty state
+      this.pluginsList.innerHTML = `
+        <div class="plugins-empty-state">
+          <span class="empty-icon">🔌</span>
+          <p>No plugins installed</p>
+          <p class="empty-hint">Add plugins to extend Claude's capabilities</p>
+        </div>
+      `
+      return
+    }
+
+    // Render each plugin
+    this.plugins.forEach(plugin => {
+      const item = document.createElement('div')
+      item.className = `plugin-item ${plugin.enabled === false ? 'disabled' : ''}`
+      item.dataset.pluginId = plugin.id
+
+      const icon = plugin.icon || '🔧'
+      const version = plugin.version || '1.0.0'
+      const description = plugin.description || 'No description available'
+
+      item.innerHTML = `
+        <div class="plugin-item-icon">${icon}</div>
+        <div class="plugin-item-content">
+          <div class="plugin-item-header">
+            <span class="plugin-item-name">${this.escapeHtml(plugin.name)}</span>
+            <span class="plugin-item-version">v${this.escapeHtml(version)}</span>
+          </div>
+          <p class="plugin-item-description">${this.escapeHtml(description)}</p>
+        </div>
+        <div class="plugin-item-actions">
+          <button class="plugin-toggle ${plugin.enabled !== false ? 'enabled' : ''}"
+                  data-plugin-id="${plugin.id}"
+                  title="${plugin.enabled !== false ? 'Disable plugin' : 'Enable plugin'}"
+                  aria-label="${plugin.enabled !== false ? 'Disable plugin' : 'Enable plugin'}">
+            <span class="plugin-toggle-knob"></span>
+          </button>
+          <button class="plugin-delete-btn"
+                  data-plugin-id="${plugin.id}"
+                  title="Remove plugin"
+                  aria-label="Remove plugin">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/>
+            </svg>
+          </button>
+        </div>
+      `
+
+      this.pluginsList.appendChild(item)
+    })
+
+    // Bind plugin action events
+    this.bindPluginEvents()
+  }
+
+  /**
+   * Bind events for plugin items
+   */
+  bindPluginEvents() {
+    // Toggle buttons
+    this.pluginsList.querySelectorAll('.plugin-toggle').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const pluginId = e.currentTarget.dataset.pluginId
+        this.togglePlugin(pluginId)
+      })
+    })
+
+    // Delete buttons
+    this.pluginsList.querySelectorAll('.plugin-delete-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const pluginId = e.currentTarget.dataset.pluginId
+        this.confirmDeletePlugin(pluginId)
+      })
+    })
+  }
+
+  /**
+   * Toggle plugin enabled/disabled state
+   */
+  async togglePlugin(pluginId) {
+    const plugin = this.plugins.find(p => p.id === pluginId)
+    if (!plugin) return
+
+    const newEnabled = plugin.enabled === false ? true : false
+
+    try {
+      if (window.puffin?.plugins?.updateClaudePlugin) {
+        const result = await window.puffin.plugins.updateClaudePlugin(pluginId, { enabled: newEnabled })
+        if (result.success) {
+          plugin.enabled = newEnabled
+          this.renderPlugins()
+          this.showSuccess(`Plugin ${newEnabled ? 'enabled' : 'disabled'}`)
+        } else {
+          this.showError(result.error || 'Failed to update plugin')
+        }
+      } else {
+        // Mock for UI development
+        plugin.enabled = newEnabled
+        this.renderPlugins()
+      }
+    } catch (error) {
+      this.showError(`Failed to update plugin: ${error.message}`)
+    }
+  }
+
+  /**
+   * Show confirmation dialog before deleting a plugin
+   */
+  confirmDeletePlugin(pluginId) {
+    const plugin = this.plugins.find(p => p.id === pluginId)
+    if (!plugin) return
+
+    if (confirm(`Are you sure you want to remove "${plugin.name}"? This cannot be undone.`)) {
+      this.deletePlugin(pluginId)
+    }
+  }
+
+  /**
+   * Delete a plugin
+   */
+  async deletePlugin(pluginId) {
+    try {
+      if (window.puffin?.plugins?.removeClaudePlugin) {
+        const result = await window.puffin.plugins.removeClaudePlugin(pluginId)
+        if (result.success) {
+          this.plugins = this.plugins.filter(p => p.id !== pluginId)
+          this.renderPlugins()
+          this.showSuccess('Plugin removed')
+        } else {
+          this.showError(result.error || 'Failed to remove plugin')
+        }
+      } else {
+        // Mock for UI development
+        this.plugins = this.plugins.filter(p => p.id !== pluginId)
+        this.renderPlugins()
+      }
+    } catch (error) {
+      this.showError(`Failed to remove plugin: ${error.message}`)
+    }
+  }
+
+  /**
+   * Show the Add Plugin modal
+   */
+  showAddPluginModal() {
+    this.intents.showModal('add-plugin', {})
+    this.renderAddPluginModal()
+  }
+
+  /**
+   * Render the Add Plugin modal content
+   */
+  renderAddPluginModal() {
+    const modalContent = document.getElementById('modal-content')
+    const modalTitle = document.getElementById('modal-title')
+    const modalActions = document.getElementById('modal-actions')
+
+    // Clear any existing validation timer
+    if (this._pluginValidationTimer) {
+      clearTimeout(this._pluginValidationTimer)
+    }
+
+    modalTitle.textContent = 'Add Plugin'
+
+    modalContent.innerHTML = `
+      <div class="add-plugin-modal-content">
+        <div class="add-plugin-tabs" role="tablist" aria-label="Plugin source type">
+          <button type="button" class="add-plugin-tab active" data-tab="url" role="tab" aria-selected="true" aria-controls="url-input-group">From URL</button>
+          <button type="button" class="add-plugin-tab" data-tab="local" role="tab" aria-selected="false" aria-controls="local-input-group">Local Path</button>
+        </div>
+
+        <div class="add-plugin-form" id="add-plugin-form">
+          <div class="form-group" id="url-input-group" role="tabpanel">
+            <label for="plugin-url-input">GitHub URL or Raw URL</label>
+            <input type="url" id="plugin-url-input" class="plugin-url-input"
+                   placeholder="https://github.com/user/repo/tree/main/plugins/my-plugin"
+                   aria-describedby="url-hint">
+            <small id="url-hint" class="form-hint">
+              Supported formats:
+              <br>• GitHub repo: <code>https://github.com/user/repo/tree/main/path</code>
+              <br>• Raw file: <code>https://raw.githubusercontent.com/...</code>
+            </small>
+          </div>
+
+          <div class="form-group hidden" id="local-input-group" role="tabpanel">
+            <label for="plugin-local-input">Local Directory Path</label>
+            <div class="input-with-button">
+              <input type="text" id="plugin-local-input" class="plugin-url-input"
+                     placeholder="C:\\plugins\\my-plugin or /home/user/plugins/my-plugin"
+                     aria-describedby="local-hint">
+              <button type="button" id="browse-local-btn" class="btn secondary btn-browse" title="Browse for directory">
+                📁
+              </button>
+            </div>
+            <small id="local-hint" class="form-hint">
+              Directory must contain a <code>manifest.json</code> file with plugin metadata
+            </small>
+          </div>
+
+          <div id="plugin-preview-container" class="hidden">
+            <label>Plugin Preview</label>
+            <div class="plugin-preview" id="plugin-preview" role="status" aria-live="polite">
+              <!-- Preview content will be rendered here -->
+            </div>
+          </div>
+        </div>
+      </div>
+    `
+
+    modalActions.innerHTML = `
+      <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
+      <button class="btn primary" id="modal-confirm-btn" disabled>Add Plugin</button>
+    `
+
+    // Bind tab switching
+    modalContent.querySelectorAll('.add-plugin-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        this.switchAddPluginTab(e.target.dataset.tab)
+      })
+    })
+
+    // Bind input validation with debounce
+    const urlInput = document.getElementById('plugin-url-input')
+    const localInput = document.getElementById('plugin-local-input')
+
+    urlInput.addEventListener('input', () => {
+      this.debouncedValidatePluginInput(urlInput.value, 'url')
+    })
+
+    localInput.addEventListener('input', () => {
+      this.debouncedValidatePluginInput(localInput.value, 'local')
+    })
+
+    // Keyboard support: Enter to submit when valid
+    const handleKeydown = (e) => {
+      if (e.key === 'Enter' && !document.getElementById('modal-confirm-btn').disabled) {
+        e.preventDefault()
+        this.handleAddPlugin()
+      }
+    }
+    urlInput.addEventListener('keydown', handleKeydown)
+    localInput.addEventListener('keydown', handleKeydown)
+
+    // Browse button for local path
+    document.getElementById('browse-local-btn').addEventListener('click', async () => {
+      await this.browseForPluginDirectory()
+    })
+
+    // Bind modal buttons
+    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+      this.intents.hideModal()
+    })
+
+    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+      this.handleAddPlugin()
+    })
+
+    // Focus input
+    urlInput.focus()
+  }
+
+  /**
+   * Browse for a local plugin directory
+   */
+  async browseForPluginDirectory() {
+    try {
+      if (window.puffin?.dialog?.selectDirectory) {
+        const result = await window.puffin.dialog.selectDirectory({
+          title: 'Select Plugin Directory',
+          buttonLabel: 'Select'
+        })
+        if (result && result.path) {
+          const localInput = document.getElementById('plugin-local-input')
+          localInput.value = result.path
+          this.debouncedValidatePluginInput(result.path, 'local')
+        }
+      } else {
+        // Fallback: show hint that browse is not available
+        this.showError('Directory browser not available. Please enter the path manually.')
+      }
+    } catch (error) {
+      console.error('Failed to open directory browser:', error)
+    }
+  }
+
+  /**
+   * Debounced plugin input validation
+   * @param {string} value - Input value
+   * @param {string} type - 'url' or 'local'
+   */
+  debouncedValidatePluginInput(value, type) {
+    // Clear previous timer
+    if (this._pluginValidationTimer) {
+      clearTimeout(this._pluginValidationTimer)
+    }
+
+    const previewContainer = document.getElementById('plugin-preview-container')
+    const preview = document.getElementById('plugin-preview')
+    const confirmBtn = document.getElementById('modal-confirm-btn')
+
+    // Quick validation for empty input
+    if (!value.trim()) {
+      previewContainer.classList.add('hidden')
+      confirmBtn.disabled = true
+      this._pendingPlugin = null
+      return
+    }
+
+    // Show pending state immediately
+    previewContainer.classList.remove('hidden')
+    preview.innerHTML = `
+      <div class="plugin-preview-loading">
+        <span class="loading-spinner">⏳</span>
+        <span>Waiting to validate...</span>
+      </div>
+    `
+
+    // Debounce: wait 500ms before actual validation
+    this._pluginValidationTimer = setTimeout(() => {
+      this.validatePluginInput(value, type)
+    }, 500)
+  }
+
+  /**
+   * Switch between URL and Local path tabs
+   */
+  switchAddPluginTab(tab) {
+    // Update tab buttons
+    document.querySelectorAll('.add-plugin-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === tab)
+    })
+
+    // Show/hide input groups
+    const urlGroup = document.getElementById('url-input-group')
+    const localGroup = document.getElementById('local-input-group')
+
+    if (tab === 'url') {
+      urlGroup.classList.remove('hidden')
+      localGroup.classList.add('hidden')
+      document.getElementById('plugin-url-input').focus()
+    } else {
+      urlGroup.classList.add('hidden')
+      localGroup.classList.remove('hidden')
+      document.getElementById('plugin-local-input').focus()
+    }
+
+    // Reset preview
+    document.getElementById('plugin-preview-container').classList.add('hidden')
+    document.getElementById('modal-confirm-btn').disabled = true
+  }
+
+  /**
+   * Validate plugin input and show preview
+   */
+  async validatePluginInput(value, type) {
+    const confirmBtn = document.getElementById('modal-confirm-btn')
+    const previewContainer = document.getElementById('plugin-preview-container')
+    const preview = document.getElementById('plugin-preview')
+
+    if (!value.trim()) {
+      previewContainer.classList.add('hidden')
+      confirmBtn.disabled = true
+      return
+    }
+
+    // Show loading state
+    previewContainer.classList.remove('hidden')
+    preview.innerHTML = `
+      <div class="plugin-preview-loading">
+        <span>⏳</span>
+        <span>Validating plugin...</span>
+      </div>
+    `
+
+    try {
+      let result
+      if (window.puffin?.plugins?.validateClaudePlugin) {
+        result = await window.puffin.plugins.validateClaudePlugin(value, type)
+      } else {
+        // Mock validation for UI development
+        await new Promise(resolve => setTimeout(resolve, 500))
+        result = {
+          success: true,
+          manifest: {
+            name: 'Example Plugin',
+            description: 'A sample plugin for demonstration',
+            version: '1.0.0',
+            icon: '🔧'
+          }
+        }
+      }
+
+      if (result.success && result.manifest) {
+        preview.innerHTML = `
+          <div class="plugin-preview-info">
+            <span class="plugin-preview-name">${result.manifest.icon || '🔧'} ${this.escapeHtml(result.manifest.name)}</span>
+            <span class="plugin-preview-desc">${this.escapeHtml(result.manifest.description || 'No description')}</span>
+          </div>
+        `
+        confirmBtn.disabled = false
+        // Store validated data for submission
+        this._pendingPlugin = { source: value, type, manifest: result.manifest }
+      } else {
+        preview.innerHTML = `
+          <div class="plugin-preview-error">
+            ⚠️ ${result.error || 'Invalid plugin format'}
+          </div>
+        `
+        confirmBtn.disabled = true
+        this._pendingPlugin = null
+      }
+    } catch (error) {
+      preview.innerHTML = `
+        <div class="plugin-preview-error">
+          ⚠️ ${error.message || 'Failed to validate plugin'}
+        </div>
+      `
+      confirmBtn.disabled = true
+      this._pendingPlugin = null
+    }
+  }
+
+  /**
+   * Handle adding a new plugin
+   */
+  async handleAddPlugin() {
+    if (!this._pendingPlugin) return
+
+    const { source, type } = this._pendingPlugin
+
+    try {
+      let result
+      if (window.puffin?.plugins?.addClaudePlugin) {
+        result = await window.puffin.plugins.addClaudePlugin(source, type)
+      } else {
+        // Mock for UI development
+        result = {
+          success: true,
+          plugin: {
+            id: `plugin-${Date.now()}`,
+            ...this._pendingPlugin.manifest,
+            enabled: true
+          }
+        }
+      }
+
+      if (result.success) {
+        this.plugins.push(result.plugin)
+        this.renderPlugins()
+        this.intents.hideModal()
+        this.showSuccess(`Plugin "${result.plugin.name}" added successfully`)
+      } else {
+        this.showError(result.error || 'Failed to add plugin')
+      }
+    } catch (error) {
+      this.showError(`Failed to add plugin: ${error.message}`)
+    }
+
+    this._pendingPlugin = null
   }
 
   /**

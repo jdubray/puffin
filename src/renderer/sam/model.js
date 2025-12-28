@@ -101,6 +101,12 @@ export const initialModel = {
   // Sprint statuses: 'created' | 'planning' | 'planned' | 'implementing'
   sprintError: null, // { type, message, details, timestamp } - for validation errors
 
+  // Sprint history - list of archived sprints for viewing in backlog
+  sprintHistory: [], // Array of { id, title, description, status, closedAt, storyIds, storyProgress }
+
+  // Sprint filter - selected sprint ID for filtering backlog stories
+  selectedSprintFilter: null, // Sprint ID or null for "all stories"
+
   // Active implementation story - tracks which story is currently being implemented
   // This enables story-scoped auto-continue (instead of sprint-scoped)
   activeImplementationStory: null, // { id, title, description, acceptanceCriteria, branchType, startedAt }
@@ -665,6 +671,32 @@ export const reorderBranchesAcceptor = model => proposal => {
   }
 }
 
+export const updateBranchSettingsAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_BRANCH_SETTINGS') {
+    const { branchId, settings } = proposal.payload
+
+    if (model.history.branches[branchId]) {
+      const branch = model.history.branches[branchId]
+
+      // Update branch properties from settings
+      if (settings.name !== undefined) {
+        branch.name = settings.name
+      }
+      if (settings.icon !== undefined) {
+        branch.icon = settings.icon
+      }
+      if (settings.codeModificationAllowed !== undefined) {
+        branch.codeModificationAllowed = settings.codeModificationAllowed
+      }
+      if (settings.assignedPlugins !== undefined) {
+        branch.assignedPlugins = settings.assignedPlugins
+      }
+
+      console.log('[BRANCH] Updated settings for branch:', branchId, settings)
+    }
+  }
+}
+
 export const selectPromptAcceptor = model => proposal => {
   if (proposal?.type === 'SELECT_PROMPT') {
     model.history.activePromptId = proposal.payload.promptId
@@ -946,6 +978,28 @@ export const deleteUserStoryAcceptor = model => proposal => {
 export const loadUserStoriesAcceptor = model => proposal => {
   if (proposal?.type === 'LOAD_USER_STORIES') {
     model.userStories = proposal.payload.stories || []
+  }
+}
+
+export const loadSprintHistoryAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_SPRINT_HISTORY') {
+    model.sprintHistory = proposal.payload.sprints || []
+  }
+}
+
+/**
+ * Sprint Filter Acceptors
+ */
+
+export const setSprintFilterAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_SPRINT_FILTER') {
+    model.selectedSprintFilter = proposal.payload.sprintId
+  }
+}
+
+export const clearSprintFilterAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_SPRINT_FILTER') {
+    model.selectedSprintFilter = null
   }
 }
 
@@ -1982,30 +2036,127 @@ Please provide a comprehensive plan that I can review before starting implementa
 // Clear the active sprint
 export const clearSprintAcceptor = model => proposal => {
   if (proposal?.type === 'CLEAR_SPRINT') {
-    // IMPORTANT: Sync completed story statuses to userStories BEFORE clearing
-    // This prevents "ghost" pending stories after sprint completion
-    if (model.activeSprint?.storyProgress) {
-      const storyProgress = model.activeSprint.storyProgress
-      const timestamp = Date.now()
+    const sprint = model.activeSprint
+    if (!sprint) return
 
-      for (const [storyId, progress] of Object.entries(storyProgress)) {
-        if (progress?.status === 'completed') {
-          // Find and update the corresponding user story
-          const userStory = model.userStories?.find(s => s.id === storyId)
-          if (userStory && userStory.status !== 'completed') {
-            userStory.status = 'completed'
-            userStory.updatedAt = timestamp
-            console.log('[SPRINT-CLEAR] Synced completed status for story:', storyId)
-          }
+    const timestamp = Date.now()
+    const storyProgress = sprint.storyProgress || {}
+    const completedStoryIds = []
+    const resetToPendingStoryIds = []
+
+    // Process stories in storyProgress
+    for (const [storyId, progress] of Object.entries(storyProgress)) {
+      const userStory = model.userStories?.find(s => s.id === storyId)
+      if (!userStory) continue
+
+      if (progress?.status === 'completed') {
+        // Completed - sync status to backlog
+        if (userStory.status !== 'completed') {
+          userStory.status = 'completed'
+          userStory.updatedAt = timestamp
+          console.log('[SPRINT-CLEAR] Synced completed status for story:', storyId)
+        }
+        completedStoryIds.push(storyId)
+      } else {
+        // Not completed - reset to pending so it can be reassigned
+        if (userStory.status === 'in-progress') {
+          userStory.status = 'pending'
+          userStory.updatedAt = timestamp
+          console.log('[SPRINT-CLEAR] Reset in-progress story to pending:', storyId)
+          resetToPendingStoryIds.push(storyId)
         }
       }
-
-      // Track which stories were synced so persistence can update them
-      model._completedStoryIdsToSync = Object.entries(storyProgress)
-        .filter(([_, progress]) => progress?.status === 'completed')
-        .map(([storyId, _]) => storyId)
     }
 
+    // Also reset stories not in storyProgress (never started)
+    for (const sprintStory of sprint.stories || []) {
+      if (!storyProgress[sprintStory.id]) {
+        const userStory = model.userStories?.find(s => s.id === sprintStory.id)
+        if (userStory?.status === 'in-progress') {
+          userStory.status = 'pending'
+          userStory.updatedAt = timestamp
+          console.log('[SPRINT-CLEAR] Reset never-started story to pending:', sprintStory.id)
+          resetToPendingStoryIds.push(sprintStory.id)
+        }
+      }
+    }
+
+    // Store sprint for archival before clearing (picked up by state-persistence.js)
+    model._sprintToArchive = {
+      ...sprint,
+      closedAt: timestamp
+    }
+
+    // Track which stories need to be synced for persistence
+    model._completedStoryIdsToSync = completedStoryIds
+    model._resetToPendingStoryIds = resetToPendingStoryIds
+
+    // Clear the active sprint
+    model.activeSprint = null
+
+    // Also clear the active implementation story when sprint is cleared
+    model.activeImplementationStory = null
+  }
+}
+
+// Clear the active sprint with title and description for history
+export const clearSprintWithDetailsAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_SPRINT_WITH_DETAILS') {
+    const sprint = model.activeSprint
+    if (!sprint) return
+
+    const { title, description, timestamp } = proposal.payload
+    const storyProgress = sprint.storyProgress || {}
+    const completedStoryIds = []
+    const resetToPendingStoryIds = []
+
+    // Process stories in storyProgress
+    for (const [storyId, progress] of Object.entries(storyProgress)) {
+      const userStory = model.userStories?.find(s => s.id === storyId)
+      if (!userStory) continue
+
+      if (progress?.status === 'completed') {
+        // Completed - sync status to backlog
+        if (userStory.status !== 'completed') {
+          userStory.status = 'completed'
+          userStory.updatedAt = timestamp
+        }
+        completedStoryIds.push(storyId)
+      } else {
+        // Not completed - reset to pending so it can be reassigned
+        if (userStory.status === 'in-progress') {
+          userStory.status = 'pending'
+          userStory.updatedAt = timestamp
+          resetToPendingStoryIds.push(storyId)
+        }
+      }
+    }
+
+    // Also reset stories not in storyProgress (never started)
+    for (const sprintStory of sprint.stories || []) {
+      if (!storyProgress[sprintStory.id]) {
+        const userStory = model.userStories?.find(s => s.id === sprintStory.id)
+        if (userStory?.status === 'in-progress') {
+          userStory.status = 'pending'
+          userStory.updatedAt = timestamp
+          resetToPendingStoryIds.push(sprintStory.id)
+        }
+      }
+    }
+
+    // Store sprint for archival with title and description
+    model._sprintToArchive = {
+      ...sprint,
+      title: title || `Sprint ${new Date(timestamp).toLocaleDateString()}`,
+      description: description || '',
+      closedAt: timestamp
+    }
+
+    // Track which stories need to be synced for persistence
+    model._completedStoryIdsToSync = completedStoryIds
+    model._resetToPendingStoryIds = resetToPendingStoryIds
+
+    // Clear the active sprint
     model.activeSprint = null
 
     // Also clear the active implementation story when sprint is cleared
@@ -2802,6 +2953,7 @@ export const acceptors = [
   createBranchAcceptor,
   deleteBranchAcceptor,
   reorderBranchesAcceptor,
+  updateBranchSettingsAcceptor,
   selectPromptAcceptor,
   toggleThreadExpandedAcceptor,
   updateThreadSearchQueryAcceptor,
@@ -2830,6 +2982,9 @@ export const acceptors = [
   updateUserStoryAcceptor,
   deleteUserStoryAcceptor,
   loadUserStoriesAcceptor,
+  loadSprintHistoryAcceptor,
+  setSprintFilterAcceptor,
+  clearSprintFilterAcceptor,
 
   // Story Derivation
   deriveUserStoriesAcceptor,
@@ -2872,6 +3027,7 @@ export const acceptors = [
   createSprintAcceptor,
   startSprintPlanningAcceptor,
   clearSprintAcceptor,
+  clearSprintWithDetailsAcceptor,
   approvePlanAcceptor,
   clearPendingSprintPlanningAcceptor,
   startSprintStoryImplementationAcceptor,

@@ -69,7 +69,10 @@ function setupStateHandlers(ipcMain) {
       // Initialize CLAUDE.md generator and generate initial files
       await claudeMdGenerator.initialize(projectPath)
       const activeBranch = state.history?.activeBranch || 'specifications'
-      await claudeMdGenerator.generateAll(state, activeBranch)
+
+      // Pass skill content getter to include assigned plugin skills in branch files
+      const getSkillContent = (branchId) => puffinState.getBranchSkillContent(branchId)
+      await claudeMdGenerator.generateAll(state, activeBranch, getSkillContent)
 
       return { success: true, state }
     } catch (error) {
@@ -141,9 +144,11 @@ function setupStateHandlers(ipcMain) {
       // Regenerate architecture branch CLAUDE.md
       const state = puffinState.getState()
       const activeBranch = state.history?.activeBranch || 'specifications'
-      await claudeMdGenerator.updateBranch('architecture', state, activeBranch)
+      const archSkillContent = puffinState.getBranchSkillContent('architecture')
+      await claudeMdGenerator.updateBranch('architecture', state, activeBranch, archSkillContent)
       // Also update backend branch (it extracts data model from architecture)
-      await claudeMdGenerator.updateBranch('backend', state, activeBranch)
+      const backendSkillContent = puffinState.getBranchSkillContent('backend')
+      await claudeMdGenerator.updateBranch('backend', state, activeBranch, backendSkillContent)
 
       return { success: true, architecture }
     } catch (error) {
@@ -337,6 +342,41 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // ============ Sprint History Operations ============
+
+  // Archive sprint to history
+  ipcMain.handle('state:archiveSprintToHistory', async (event, sprint) => {
+    try {
+      const archivedSprint = await puffinState.archiveSprintToHistory(sprint)
+      return { success: true, sprint: archivedSprint }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get sprint history
+  ipcMain.handle('state:getSprintHistory', async (event, options = {}) => {
+    try {
+      const sprints = puffinState.getSprintHistory(options)
+      return { success: true, sprints }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get specific archived sprint with resolved stories
+  ipcMain.handle('state:getArchivedSprint', async (event, sprintId) => {
+    try {
+      const sprint = await puffinState.getArchivedSprint(sprintId)
+      if (!sprint) {
+        return { success: false, error: 'Sprint not found' }
+      }
+      return { success: true, sprint }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // ============ Design Document Operations ============
 
   // Get list of available design documents from docs/ directory
@@ -441,7 +481,8 @@ function setupStateHandlers(ipcMain) {
   async function regenerateUiBranchContext() {
     const state = puffinState.getState()
     const activeBranch = state.history?.activeBranch || 'specifications'
-    await claudeMdGenerator.updateBranch('ui', state, activeBranch)
+    const skillContent = puffinState.getBranchSkillContent('ui')
+    await claudeMdGenerator.updateBranch('ui', state, activeBranch, skillContent)
   }
 
   // UI Guidelines operations
@@ -560,6 +601,115 @@ function setupStateHandlers(ipcMain) {
       const state = puffinState.getState()
       await claudeMdGenerator.activateBranch(branchId)
       return { success: true, branchId }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ============ Claude Code Plugin Handlers ============
+
+  // Get all installed Claude Code plugins
+  ipcMain.handle('state:getClaudePlugins', async () => {
+    try {
+      const plugins = puffinState.getClaudePlugins()
+      return { success: true, plugins }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get a specific Claude Code plugin by ID
+  ipcMain.handle('state:getClaudePlugin', async (event, pluginId) => {
+    try {
+      const plugin = puffinState.getClaudePlugin(pluginId)
+      if (!plugin) {
+        return { success: false, error: `Plugin "${pluginId}" not found` }
+      }
+      return { success: true, plugin }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Install a Claude Code plugin
+  ipcMain.handle('state:installClaudePlugin', async (event, pluginData) => {
+    try {
+      const plugin = await puffinState.installClaudePlugin(pluginData)
+      return { success: true, plugin }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Update a Claude Code plugin
+  ipcMain.handle('state:updateClaudePlugin', async (event, { pluginId, updates }) => {
+    try {
+      const plugin = await puffinState.updateClaudePlugin(pluginId, updates)
+      return { success: true, plugin }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Uninstall a Claude Code plugin
+  ipcMain.handle('state:uninstallClaudePlugin', async (event, pluginId) => {
+    try {
+      await puffinState.uninstallClaudePlugin(pluginId)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Assign a plugin to a branch
+  ipcMain.handle('state:assignPluginToBranch', async (event, { pluginId, branchId }) => {
+    try {
+      const branch = await puffinState.assignPluginToBranch(pluginId, branchId)
+
+      // Regenerate the branch CLAUDE.md with updated skill content
+      const state = puffinState.getState()
+      const activeBranch = state.history?.activeBranch || 'specifications'
+      const skillContent = puffinState.getBranchSkillContent(branchId)
+      await claudeMdGenerator.updateBranch(branchId, state, activeBranch, skillContent)
+
+      return { success: true, branch }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Unassign a plugin from a branch
+  ipcMain.handle('state:unassignPluginFromBranch', async (event, { pluginId, branchId }) => {
+    try {
+      const branch = await puffinState.unassignPluginFromBranch(pluginId, branchId)
+
+      // Regenerate the branch CLAUDE.md with updated skill content
+      const state = puffinState.getState()
+      const activeBranch = state.history?.activeBranch || 'specifications'
+      const skillContent = puffinState.getBranchSkillContent(branchId)
+      await claudeMdGenerator.updateBranch(branchId, state, activeBranch, skillContent)
+
+      return { success: true, branch }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get plugins assigned to a branch
+  ipcMain.handle('state:getBranchPlugins', async (event, branchId) => {
+    try {
+      const plugins = puffinState.getBranchPlugins(branchId)
+      return { success: true, plugins }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get combined skill content for a branch
+  ipcMain.handle('state:getBranchSkillContent', async (event, branchId) => {
+    try {
+      const content = puffinState.getBranchSkillContent(branchId)
+      return { success: true, content }
     } catch (error) {
       return { success: false, error: error.message }
     }

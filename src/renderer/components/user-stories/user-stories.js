@@ -3,11 +3,15 @@
  *
  * Manages user stories extracted from specification prompts.
  * Stories can be manually added or auto-extracted from specifications branch.
+ * Includes sprint history panel for viewing past sprints.
  */
 
 // Search configuration
 const SEARCH_MIN_CHARS = 3
 const SEARCH_DEBOUNCE_MS = 150
+
+// LocalStorage key for panel collapse state
+const SPRINT_PANEL_COLLAPSED_KEY = 'puffin-sprint-panel-collapsed'
 
 export class UserStoriesComponent {
   constructor(intents) {
@@ -25,6 +29,16 @@ export class UserStoriesComponent {
     this.stories = []
     this.branches = {}
     this.selectedStoryIds = new Set() // Track selected stories for batch operations
+
+    // Sprint history panel state
+    this.sprintHistoryPanel = null
+    this.sprintTilesList = null
+    this.sprintPanelCollapseBtn = null
+    this.sprintHistory = []
+    this.isPanelCollapsed = false
+
+    // Sprint filter state
+    this.selectedSprintFilter = null // Sprint ID or null for "all stories"
   }
 
   /**
@@ -37,14 +51,57 @@ export class UserStoriesComponent {
     this.filterBtns = this.container.querySelectorAll('.filter-btn')
     this.searchInput = document.getElementById('story-search-input')
 
+    // Sprint history panel elements
+    this.sprintHistoryPanel = document.getElementById('sprint-history-panel')
+    this.sprintTilesList = document.getElementById('sprint-tiles-list')
+    this.sprintPanelCollapseBtn = document.getElementById('sprint-panel-collapse-btn')
+
+    // Restore panel collapse state from localStorage
+    this.isPanelCollapsed = localStorage.getItem(SPRINT_PANEL_COLLAPSED_KEY) === 'true'
+    if (this.isPanelCollapsed) {
+      this.sprintHistoryPanel?.classList.add('collapsed')
+      this.sprintPanelCollapseBtn?.setAttribute('aria-expanded', 'false')
+    }
+
     this.bindEvents()
     this.subscribeToState()
+
+    // Load sprint history on init
+    this.loadSprintHistory()
+  }
+
+  /**
+   * Load sprint history from backend
+   */
+  async loadSprintHistory() {
+    if (!window.puffin?.state?.getSprintHistory) {
+      console.log('[UserStories] Sprint history API not available')
+      return
+    }
+
+    try {
+      const result = await window.puffin.state.getSprintHistory()
+      if (result.success && result.sprints) {
+        this.sprintHistory = result.sprints
+        this.intents.loadSprintHistory(result.sprints)
+        this.renderSprintHistory()
+      }
+    } catch (error) {
+      console.error('[UserStories] Failed to load sprint history:', error)
+    }
   }
 
   /**
    * Bind DOM events
    */
   bindEvents() {
+    // Sprint history panel collapse toggle
+    if (this.sprintPanelCollapseBtn) {
+      this.sprintPanelCollapseBtn.addEventListener('click', () => {
+        this.toggleSprintPanel()
+      })
+    }
+
     // Backlog/Insights tab switching
     this.container.querySelectorAll('.backlog-tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -70,6 +127,134 @@ export class UserStoriesComponent {
         this.handleSearchInput(e.target.value)
       })
     }
+  }
+
+  /**
+   * Toggle sprint history panel collapse state
+   */
+  toggleSprintPanel() {
+    this.isPanelCollapsed = !this.isPanelCollapsed
+    localStorage.setItem(SPRINT_PANEL_COLLAPSED_KEY, this.isPanelCollapsed)
+
+    if (this.isPanelCollapsed) {
+      this.sprintHistoryPanel?.classList.add('collapsed')
+      this.sprintPanelCollapseBtn?.setAttribute('aria-expanded', 'false')
+      this.sprintPanelCollapseBtn?.setAttribute('title', 'Expand')
+      this.sprintPanelCollapseBtn?.setAttribute('aria-label', 'Expand sprint history panel')
+    } else {
+      this.sprintHistoryPanel?.classList.remove('collapsed')
+      this.sprintPanelCollapseBtn?.setAttribute('aria-expanded', 'true')
+      this.sprintPanelCollapseBtn?.setAttribute('title', 'Collapse')
+      this.sprintPanelCollapseBtn?.setAttribute('aria-label', 'Collapse sprint history panel')
+    }
+  }
+
+  /**
+   * Render sprint history tiles
+   */
+  renderSprintHistory() {
+    if (!this.sprintTilesList) return
+
+    if (this.sprintHistory.length === 0) {
+      this.sprintTilesList.innerHTML = '<p class="placeholder">No past sprints yet.</p>'
+      return
+    }
+
+    const tilesHtml = this.sprintHistory.map(sprint => this.renderSprintTile(sprint)).join('')
+    this.sprintTilesList.innerHTML = tilesHtml
+
+    // Bind tile click events
+    this.bindSprintTileEvents()
+  }
+
+  /**
+   * Render a single sprint tile
+   * @param {Object} sprint - Sprint object
+   */
+  renderSprintTile(sprint) {
+    const storyCount = sprint.storyIds?.length || 0
+    const closedDate = sprint.closedAt ? this.formatDate(sprint.closedAt) : 'Unknown'
+    const title = sprint.title || `Sprint ${sprint.id.substring(0, 6)}`
+    const description = sprint.description || ''
+    const statusClass = this.computeSprintCompletionStatus(sprint)
+    const isSelected = this.selectedSprintFilter === sprint.id
+    const selectedClass = isSelected ? 'selected' : ''
+    const ariaPressed = isSelected ? 'true' : 'false'
+
+    return `
+      <div class="sprint-tile ${statusClass} ${selectedClass}" data-sprint-id="${sprint.id}" role="button" tabindex="0" aria-pressed="${ariaPressed}">
+        <div class="sprint-tile-header">
+          <span class="sprint-status-indicator" aria-label="${this.getStatusLabel(statusClass)}"></span>
+          <span class="sprint-tile-title">${this.escapeHtml(title)}</span>
+        </div>
+        ${description ? `<p class="sprint-tile-description">${this.escapeHtml(description)}</p>` : ''}
+        <div class="sprint-tile-footer">
+          <span class="sprint-tile-stories">${storyCount} ${storyCount === 1 ? 'story' : 'stories'}</span>
+          <span class="sprint-tile-date">${closedDate}</span>
+        </div>
+      </div>
+    `
+  }
+
+  /**
+   * Compute sprint completion status for color coding
+   * @param {Object} sprint - Sprint object
+   * @returns {string} Status class: 'completed', 'partial', or 'not-started'
+   */
+  computeSprintCompletionStatus(sprint) {
+    const storyProgress = sprint.storyProgress || {}
+    const storyIds = sprint.storyIds || []
+
+    if (storyIds.length === 0) return 'not-started'
+
+    const completedCount = storyIds.filter(id =>
+      storyProgress[id]?.status === 'completed'
+    ).length
+
+    if (completedCount === storyIds.length) return 'completed'
+    if (completedCount > 0) return 'partial'
+    return 'not-started'
+  }
+
+  /**
+   * Get human-readable status label
+   * @param {string} statusClass - Status class
+   * @returns {string} Status label
+   */
+  getStatusLabel(statusClass) {
+    const labels = {
+      'completed': 'Completed',
+      'partial': 'Partially completed',
+      'not-started': 'Not started'
+    }
+    return labels[statusClass] || 'Unknown'
+  }
+
+  /**
+   * Bind click events for sprint tiles
+   */
+  bindSprintTileEvents() {
+    this.sprintTilesList.querySelectorAll('.sprint-tile').forEach(tile => {
+      // Click handler - toggle filter by sprint
+      tile.addEventListener('click', () => {
+        const sprintId = tile.dataset.sprintId
+
+        // Toggle filter: if already selected, clear filter; otherwise set filter
+        if (this.selectedSprintFilter === sprintId) {
+          this.intents.clearSprintFilter()
+        } else {
+          this.intents.setSprintFilter(sprintId)
+        }
+      })
+
+      // Keyboard handler for accessibility
+      tile.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          tile.click()
+        }
+      })
+    })
   }
 
   /**
@@ -108,6 +293,21 @@ export class UserStoriesComponent {
       const { state } = e.detail
       this.stories = state.userStories || []
       this.branches = state.history?.raw?.branches || {}
+
+      // Update sprint history if it changed
+      const newSprintHistory = state.sprintHistory || []
+      if (JSON.stringify(newSprintHistory) !== JSON.stringify(this.sprintHistory)) {
+        this.sprintHistory = newSprintHistory
+        this.renderSprintHistory()
+      }
+
+      // Update sprint filter if it changed
+      const newSprintFilter = state.selectedSprintFilter || null
+      if (newSprintFilter !== this.selectedSprintFilter) {
+        this.selectedSprintFilter = newSprintFilter
+        this.renderSprintHistory() // Re-render to update selection state
+      }
+
       this.render()
     })
   }
@@ -132,10 +332,19 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Get filtered stories (by status, branch, and search query)
+   * Get filtered stories (by status, branch, sprint, and search query)
    */
   getFilteredStories() {
     let filtered = this.stories
+
+    // Filter by sprint (if a sprint is selected)
+    if (this.selectedSprintFilter) {
+      const selectedSprint = this.sprintHistory.find(s => s.id === this.selectedSprintFilter)
+      if (selectedSprint && selectedSprint.storyIds) {
+        const sprintStoryIds = new Set(selectedSprint.storyIds)
+        filtered = filtered.filter(s => sprintStoryIds.has(s.id))
+      }
+    }
 
     // Filter by branch
     if (this.currentBranch !== 'all') {
@@ -166,15 +375,19 @@ export class UserStoriesComponent {
     // Render branch filter dropdown
     this.renderBranchFilter()
 
+    // Render sprint filter indicator
+    this.renderSprintFilterIndicator()
+
     const filtered = this.getFilteredStories()
 
     if (filtered.length === 0) {
       const branchText = this.currentBranch !== 'all' ? ` in "${this.currentBranch}" branch` : ''
+      const sprintText = this.selectedSprintFilter ? ' in selected sprint' : ''
       this.listContainer.innerHTML = `
         <p class="placeholder">
           ${this.currentFilter === 'all'
-            ? `No user stories${branchText} yet. Use "Derive User Stories" checkbox when submitting a prompt, or click "+ Add Story".`
-            : `No ${this.currentFilter} stories${branchText}.`}
+            ? `No user stories${branchText}${sprintText} yet. Use "Derive User Stories" checkbox when submitting a prompt, or click "+ Add Story".`
+            : `No ${this.currentFilter} stories${branchText}${sprintText}.`}
         </p>
       `
       return
@@ -271,6 +484,68 @@ export class UserStoriesComponent {
     const select = branchFilterContainer.querySelector('#story-branch-filter')
     select.addEventListener('change', (e) => {
       this.setBranchFilter(e.target.value)
+    })
+  }
+
+  /**
+   * Render sprint filter indicator bar
+   * Shows when a sprint is selected, with clear button
+   */
+  renderSprintFilterIndicator() {
+    // Find or create sprint filter indicator container
+    let indicatorContainer = this.container.querySelector('.sprint-filter-indicator')
+
+    // If no sprint is selected, remove indicator if it exists
+    if (!this.selectedSprintFilter) {
+      if (indicatorContainer) {
+        indicatorContainer.remove()
+      }
+      return
+    }
+
+    // Get selected sprint details
+    const selectedSprint = this.sprintHistory.find(s => s.id === this.selectedSprintFilter)
+    if (!selectedSprint) {
+      if (indicatorContainer) {
+        indicatorContainer.remove()
+      }
+      return
+    }
+
+    const sprintTitle = selectedSprint.title || `Sprint ${selectedSprint.id.substring(0, 6)}`
+    const storyCount = selectedSprint.storyIds?.length || 0
+
+    // Create indicator if it doesn't exist
+    if (!indicatorContainer) {
+      indicatorContainer = document.createElement('div')
+      indicatorContainer.className = 'sprint-filter-indicator'
+      indicatorContainer.setAttribute('role', 'status')
+      indicatorContainer.setAttribute('aria-live', 'polite')
+
+      // Insert before the story list
+      const storiesList = this.container.querySelector('#user-stories-list')
+      if (storiesList) {
+        storiesList.parentNode.insertBefore(indicatorContainer, storiesList)
+      } else {
+        return
+      }
+    }
+
+    indicatorContainer.innerHTML = `
+      <span class="sprint-filter-icon" aria-hidden="true">⚡</span>
+      <span class="sprint-filter-text">
+        Showing <strong>${storyCount}</strong> ${storyCount === 1 ? 'story' : 'stories'} from
+        <strong>${this.escapeHtml(sprintTitle)}</strong>
+      </span>
+      <button class="sprint-filter-clear-btn" type="button" aria-label="Clear sprint filter">
+        <span aria-hidden="true">×</span> Clear Filter
+      </button>
+    `
+
+    // Bind clear button event
+    const clearBtn = indicatorContainer.querySelector('.sprint-filter-clear-btn')
+    clearBtn.addEventListener('click', () => {
+      this.intents.clearSprintFilter()
     })
   }
 

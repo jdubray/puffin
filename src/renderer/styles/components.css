@@ -3268,57 +3268,41 @@
   gap: 0;
 }
 
-/* Sprint History Left Panel */
+/* Sprint History Left Panel - Uses swimlane layout like prompt view */
 .sprint-history-panel {
-  flex: 0 0 280px;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
-  overflow: hidden;
   transition: flex-basis 0.2s ease, min-width 0.2s ease;
 }
 
 .sprint-history-panel.collapsed {
-  flex: 0 0 48px;
-  min-width: 48px;
+  flex: 0 0 48px !important;
+  min-width: 48px !important;
 }
 
-.sprint-history-panel.collapsed .sprint-history-header h3,
-.sprint-history-panel.collapsed .sprint-tiles-list {
+.sprint-history-panel.collapsed .sprint-panel-header .sprint-title,
+.sprint-history-panel.collapsed .sprint-stories-container {
   display: none;
 }
 
-.sprint-history-panel.collapsed .sprint-history-header {
-  justify-content: center;
+.sprint-history-panel.collapsed .sprint-panel-header {
   padding: 0.75rem 0.5rem;
 }
 
-.sprint-history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+.sprint-history-panel.collapsed .sprint-panel-header .sprint-title-row {
+  justify-content: center;
 }
 
-.sprint-history-header h3 {
-  margin: 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.panel-collapse-btn {
-  background: transparent;
+/* Sprint history collapse button styling */
+.sprint-history-panel .sprint-close-btn {
+  margin-left: auto;
+  background: none;
   border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
   cursor: pointer;
   padding: 0.25rem;
-  border-radius: var(--radius-xs);
-  color: var(--text-secondary);
-  transition: background 0.15s ease, color 0.15s ease;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3326,20 +3310,21 @@
   height: 24px;
 }
 
-.panel-collapse-btn:hover {
-  background: var(--bg-hover);
+.sprint-history-panel .sprint-close-btn:hover {
+  background: var(--bg-primary);
   color: var(--text-primary);
 }
 
-.panel-collapse-btn .collapse-icon::before {
+.sprint-history-panel .sprint-close-btn .collapse-icon::before {
   content: '\25C0'; /* Left arrow */
   font-size: 0.625rem;
 }
 
-.sprint-history-panel.collapsed .panel-collapse-btn .collapse-icon::before {
+.sprint-history-panel.collapsed .sprint-close-btn .collapse-icon::before {
   content: '\25B6'; /* Right arrow */
 }
 
+/* Sprint tiles list within swimlane structure */
 .sprint-tiles-list {
   flex: 1;
   overflow-y: auto;
@@ -3356,126 +3341,131 @@
   padding: 1rem;
 }
 
-/* Sprint Tile */
-.sprint-tile {
-  background: var(--bg-tertiary);
+/* Sprint History Card (matches sprint story card styling) */
+.sprint-history-card {
+  position: relative;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 0.75rem;
+  padding: 0.625rem;
+  border-left: 3px solid var(--text-muted);
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
-  border-left: 3px solid var(--text-muted);
 }
 
-.sprint-tile:hover {
+.sprint-history-card:hover {
   background: var(--bg-hover);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.sprint-tile:focus {
-  outline: 2px solid var(--accent-primary);
+.sprint-history-card:focus {
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
-/* Sprint status color coding */
-.sprint-tile.completed {
+/* Sprint history card status colors (match story card borders) */
+.sprint-history-card.story-completed {
   border-left-color: var(--color-success);
 }
 
-.sprint-tile.partial {
+.sprint-history-card.story-in-progress {
   border-left-color: var(--color-warning);
 }
 
-.sprint-tile.not-started {
-  border-left-color: var(--text-muted);
-}
-
-.sprint-tile-header {
+/* Sprint history card header */
+.sprint-card-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.25rem;
 }
 
-.sprint-status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.sprint-tile.completed .sprint-status-indicator {
-  background: var(--color-success);
-}
-
-.sprint-tile.partial .sprint-status-indicator {
-  background: var(--color-warning);
-}
-
-.sprint-tile.not-started .sprint-status-indicator {
-  background: var(--text-muted);
-}
-
-.sprint-tile-title {
-  font-size: 0.8125rem;
-  font-weight: 500;
+.sprint-card-header h4 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
 }
 
-.sprint-tile-description {
+.sprint-card-meta {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sprint-card-description {
   font-size: 0.75rem;
   color: var(--text-secondary);
   margin: 0.25rem 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.sprint-tile-footer {
+/* Sprint history card footer */
+.sprint-card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.6875rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
-  margin-top: 0.5rem;
+  margin-top: 0.375rem;
+  padding-top: 0.375rem;
+  border-top: 1px solid var(--border-color);
 }
 
-.sprint-tile-stories,
-.sprint-tile-date {
+.sprint-card-count,
+.sprint-card-status {
   white-space: nowrap;
 }
 
-/* Sprint Tile Selected State */
-.sprint-tile.selected {
+.sprint-card-status {
+  font-weight: 500;
+}
+
+.sprint-history-card.story-completed .sprint-card-status {
+  color: var(--color-success);
+}
+
+.sprint-history-card.story-in-progress .sprint-card-status {
+  color: var(--color-warning);
+}
+
+/* Sprint History Card Selected State */
+.sprint-history-card.selected {
   background: var(--color-primary);
+  border-color: var(--color-primary);
   border-left-color: var(--color-primary);
   box-shadow: 0 2px 8px rgba(108, 99, 255, 0.3);
 }
 
-.sprint-tile.selected .sprint-tile-title,
-.sprint-tile.selected .sprint-tile-description,
-.sprint-tile.selected .sprint-tile-footer {
+.sprint-history-card.selected .sprint-card-header h4,
+.sprint-history-card.selected .sprint-card-description {
   color: white;
 }
 
-.sprint-tile.selected .sprint-tile-stories,
-.sprint-tile.selected .sprint-tile-date {
-  color: rgba(255, 255, 255, 0.8);
+.sprint-history-card.selected .sprint-card-meta,
+.sprint-history-card.selected .sprint-card-count,
+.sprint-history-card.selected .sprint-card-status {
+  color: rgba(255, 255, 255, 0.85);
 }
 
-.sprint-tile.selected .sprint-status-indicator {
-  background: white;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+.sprint-history-card.selected .sprint-card-footer {
+  border-top-color: rgba(255, 255, 255, 0.2);
 }
 
-.sprint-tile.selected:hover {
+.sprint-history-card.selected:hover {
   background: var(--color-primary-dark, #5a52d5);
 }
 
-.sprint-tile.selected:focus {
+.sprint-history-card.selected:focus {
   outline-color: white;
 }
 

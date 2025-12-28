@@ -156,7 +156,12 @@ export class UserStoriesComponent {
     if (!this.sprintTilesList) return
 
     if (this.sprintHistory.length === 0) {
-      this.sprintTilesList.innerHTML = '<p class="placeholder">No past sprints yet.</p>'
+      this.sprintTilesList.innerHTML = `
+        <div class="sprint-empty-state">
+          <p class="text-muted">No past sprints</p>
+          <p class="text-small">Completed sprints will appear here</p>
+        </div>
+      `
       return
     }
 
@@ -168,7 +173,7 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Render a single sprint tile
+   * Render a single sprint tile (styled like sprint story cards)
    * @param {Object} sprint - Sprint object
    */
   renderSprintTile(sprint) {
@@ -181,16 +186,21 @@ export class UserStoriesComponent {
     const selectedClass = isSelected ? 'selected' : ''
     const ariaPressed = isSelected ? 'true' : 'false'
 
+    // Map status to story card border class
+    const borderClass = statusClass === 'completed' ? 'story-completed'
+      : statusClass === 'partial' ? 'story-in-progress'
+      : ''
+
     return `
-      <div class="sprint-tile ${statusClass} ${selectedClass}" data-sprint-id="${sprint.id}" role="button" tabindex="0" aria-pressed="${ariaPressed}">
-        <div class="sprint-tile-header">
-          <span class="sprint-status-indicator" aria-label="${this.getStatusLabel(statusClass)}"></span>
-          <span class="sprint-tile-title">${this.escapeHtml(title)}</span>
+      <div class="sprint-history-card ${borderClass} ${selectedClass}" data-sprint-id="${sprint.id}" role="button" tabindex="0" aria-pressed="${ariaPressed}">
+        <div class="sprint-card-header">
+          <h4>${this.escapeHtml(title)}</h4>
+          <span class="sprint-card-meta">${closedDate}</span>
         </div>
-        ${description ? `<p class="sprint-tile-description">${this.escapeHtml(description)}</p>` : ''}
-        <div class="sprint-tile-footer">
-          <span class="sprint-tile-stories">${storyCount} ${storyCount === 1 ? 'story' : 'stories'}</span>
-          <span class="sprint-tile-date">${closedDate}</span>
+        ${description ? `<p class="sprint-card-description">${this.escapeHtml(description)}</p>` : ''}
+        <div class="sprint-card-footer">
+          <span class="sprint-card-count">${storyCount} ${storyCount === 1 ? 'story' : 'stories'}</span>
+          <span class="sprint-card-status" aria-label="${this.getStatusLabel(statusClass)}">${this.getStatusLabel(statusClass)}</span>
         </div>
       </div>
     `
@@ -231,10 +241,10 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Bind click events for sprint tiles
+   * Bind click events for sprint history cards
    */
   bindSprintTileEvents() {
-    this.sprintTilesList.querySelectorAll('.sprint-tile').forEach(tile => {
+    this.sprintTilesList.querySelectorAll('.sprint-history-card').forEach(tile => {
       // Click handler - toggle filter by sprint
       tile.addEventListener('click', () => {
         const sprintId = tile.dataset.sprintId

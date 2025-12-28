@@ -601,18 +601,29 @@
 
         <!-- Backlog View (with Insights subtab) -->
         <section id="user-stories-view" class="view">
-          <div class="view-content user-stories-layout">
-            <!-- Sprint History Left Panel -->
-            <aside id="sprint-history-panel" class="sprint-history-panel" aria-label="Sprint History">
-              <div class="sprint-history-header">
-                <h3>Sprint History</h3>
-                <button id="sprint-panel-collapse-btn" class="panel-collapse-btn" aria-expanded="true" aria-label="Collapse sprint history panel" title="Collapse">
-                  <span class="collapse-icon"></span>
-                </button>
-              </div>
-              <div id="sprint-tiles-list" class="sprint-tiles-list">
-                <!-- Sprint tiles rendered dynamically -->
-                <p class="placeholder">No past sprints yet.</p>
+          <div class="view-content user-stories-layout swimlane-container">
+            <!-- Sprint History Left Panel (matches sprint context panel style) -->
+            <aside id="sprint-history-panel" class="swimlane swimlane-left sprint-history-panel" aria-label="Sprint History">
+              <div class="sprint-context-panel">
+                <!-- Sprint History Header -->
+                <div class="sprint-panel-header">
+                  <div class="sprint-title-row">
+                    <h3 class="sprint-title">Sprint History</h3>
+                    <button id="sprint-panel-collapse-btn" class="sprint-close-btn" aria-expanded="true" aria-label="Collapse sprint history panel" title="Collapse">
+                      <span class="collapse-icon"></span>
+                    </button>
+                  </div>
+                </div>
+                <!-- Sprint Tiles Container -->
+                <div class="sprint-stories-container">
+                  <div id="sprint-tiles-list" class="sprint-stories sprint-tiles-list">
+                    <!-- Sprint tiles rendered dynamically -->
+                    <div class="sprint-empty-state">
+                      <p class="text-muted">No past sprints</p>
+                      <p class="text-small">Completed sprints will appear here</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </aside>
 

@@ -375,6 +375,7 @@ class PuffinApp {
       'startCompose', 'updatePromptContent', 'submitPrompt',
       'receiveResponseChunk', 'completeResponse', 'responseError', 'cancelPrompt',
       'rerunPrompt', 'clearRerunRequest',
+      'requestContinue', 'clearContinueRequest',
       'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'updateBranchSettings', 'selectPrompt',
       'toggleThreadExpanded', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
       'addGuiElement', 'updateGuiElement', 'deleteGuiElement',
@@ -438,6 +439,10 @@ class PuffinApp {
           // Rerun prompt actions
           ['RERUN_PROMPT', actions.rerunPrompt],
           ['CLEAR_RERUN_REQUEST', actions.clearRerunRequest],
+
+          // Continue prompt actions
+          ['REQUEST_CONTINUE', actions.requestContinue],
+          ['CLEAR_CONTINUE_REQUEST', actions.clearContinueRequest],
 
           // Branch/History actions
           ['SELECT_BRANCH', actions.selectBranch],
@@ -1688,13 +1693,33 @@ class PuffinApp {
     this.handleSprintError(state)
     this.handleStuckDetection(state)
 
-    if (state.rerunRequest) {
+    // Handle rerun request - use guard to prevent re-entry since handler is async
+    if (state.rerunRequest && !this._handlingRerunRequest) {
+      this._handlingRerunRequest = true
       this.handleRerunRequest(state.rerunRequest, state)
+        .finally(() => {
+          this._handlingRerunRequest = false
+        })
+    }
+
+    // Handle continue request - submit continuation prompt to Claude
+    // Use guard to prevent re-entry since handler is async
+    if (state.continueRequest && !this._handlingContinueRequest) {
+      this._handlingContinueRequest = true
+      this.handleContinueRequest(state.continueRequest, state)
+        .finally(() => {
+          this._handlingContinueRequest = false
+        })
     }
 
     // Handle pending sprint planning - submit to Claude
-    if (state._pendingSprintPlanning) {
+    // Use a guard to prevent re-entry since handleSprintPlanning is async
+    if (state._pendingSprintPlanning && !this._handlingSprintPlanning) {
+      this._handlingSprintPlanning = true
       this.handleSprintPlanning(state._pendingSprintPlanning, state)
+        .finally(() => {
+          this._handlingSprintPlanning = false
+        })
     }
   }
 
@@ -2959,6 +2984,75 @@ Keep it concise but informative. Use markdown formatting.`
       sessionId: sessionId?.substring(0, 20)
     })
 
+    window.puffin.claude.submit({
+      prompt: content,
+      branchId,
+      sessionId,
+      project: state.config ? {
+        name: state.config.name,
+        description: state.config.description
+      } : null
+    })
+
+    this.intents.switchView('prompt')
+  }
+
+  /**
+   * Handle continue request from state (next-action pattern)
+   */
+  async handleContinueRequest(continueRequest, state) {
+    // Clear the request immediately to prevent re-execution
+    this.intents.clearContinueRequest()
+
+    const { branchId, content, parentId } = continueRequest
+    console.log('[CONTINUE] Processing continue request:', { branchId, contentPreview: content.substring(0, 50) })
+
+    // Check if a CLI process is already running
+    const isRunning = await window.puffin.claude.isRunning()
+    if (isRunning) {
+      console.error('[CONTINUE] Cannot continue: CLI process already running')
+      this.showToast({
+        type: 'error',
+        title: 'Process Already Running',
+        message: 'A Claude process is already running. Please wait for it to complete.',
+        duration: 5000
+      })
+      return
+    }
+
+    // Submit to SAM to add the prompt to history
+    this.intents.submitPrompt({
+      branchId,
+      content,
+      parentId
+    })
+
+    // Get the branch to find session ID
+    const branch = state.history.raw?.branches?.[branchId]
+
+    // Collect dead sessions (hit context limit)
+    const deadSessions = new Set()
+    if (branch?.prompts) {
+      for (const prompt of branch.prompts) {
+        if (prompt.response?.content === 'Prompt is too long' && prompt.response?.sessionId) {
+          deadSessions.add(prompt.response.sessionId)
+        }
+      }
+    }
+
+    // Find the last prompt with a valid (non-dead) session
+    const lastPromptWithResponse = branch?.prompts
+      ?.filter(p => p.response?.sessionId && !deadSessions.has(p.response.sessionId))
+      ?.pop()
+    const sessionId = lastPromptWithResponse?.response?.sessionId || null
+
+    console.log('[CONTINUE] Session lookup:', {
+      foundSession: !!sessionId,
+      deadSessions: deadSessions.size,
+      sessionId: sessionId?.substring(0, 20)
+    })
+
+    // Submit to Claude via IPC
     window.puffin.claude.submit({
       prompt: content,
       branchId,

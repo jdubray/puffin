@@ -156,6 +156,23 @@ export const clearRerunRequest = () => ({
   payload: {}
 })
 
+// Request continue - triggers a continuation prompt via next-action
+export const requestContinue = (branchId, promptContent, parentId = null) => ({
+  type: 'REQUEST_CONTINUE',
+  payload: {
+    branchId,
+    promptContent,
+    parentId,
+    timestamp: Date.now()
+  }
+})
+
+// Clear continue request (after it's been handled)
+export const clearContinueRequest = () => ({
+  type: 'CLEAR_CONTINUE_REQUEST',
+  payload: {}
+})
+
 // Select a branch
 export const selectBranch = (branchId) => ({
   type: 'SELECT_BRANCH',

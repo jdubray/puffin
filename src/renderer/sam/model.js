@@ -572,6 +572,26 @@ export const clearRerunRequestAcceptor = model => proposal => {
   }
 }
 
+export const requestContinueAcceptor = model => proposal => {
+  if (proposal?.type === 'REQUEST_CONTINUE') {
+    const { branchId, promptContent, parentId, timestamp } = proposal.payload
+
+    // Store the continue request for the app to handle via next-action
+    model.continueRequest = {
+      branchId,
+      content: promptContent,
+      parentId,
+      timestamp
+    }
+  }
+}
+
+export const clearContinueRequestAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_CONTINUE_REQUEST') {
+    model.continueRequest = null
+  }
+}
+
 export const selectBranchAcceptor = model => proposal => {
   if (proposal?.type === 'SELECT_BRANCH') {
     const newBranchId = proposal.payload.branchId
@@ -2949,6 +2969,8 @@ export const acceptors = [
   cancelPromptAcceptor,
   rerunPromptAcceptor,
   clearRerunRequestAcceptor,
+  requestContinueAcceptor,
+  clearContinueRequestAcceptor,
   selectBranchAcceptor,
   createBranchAcceptor,
   deleteBranchAcceptor,

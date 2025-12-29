@@ -1401,9 +1401,22 @@ class PuffinState {
    * @private
    */
   parseGitHubUrl(url) {
-    // Match GitHub URL patterns
-    const treeMatch = url.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)/)
-    const blobMatch = url.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)/)
+    // Clean and validate URL first - extract just the URL part
+    let cleanUrl = url.trim()
+
+    // If there's extra text after the URL, extract just the URL
+    // Match a valid GitHub URL pattern and ignore anything after
+    const urlExtract = cleanUrl.match(/(https:\/\/github\.com\/[^\s]+)/)
+    if (urlExtract) {
+      cleanUrl = urlExtract[1]
+    }
+
+    // Remove trailing slashes
+    cleanUrl = cleanUrl.replace(/\/+$/, '')
+
+    // Match GitHub URL patterns - use non-greedy matching for path
+    const treeMatch = cleanUrl.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/([^\s]+)/)
+    const blobMatch = cleanUrl.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/([^\s]+)/)
     const match = treeMatch || blobMatch
 
     if (!match) {
@@ -1413,6 +1426,8 @@ class PuffinState {
     const [, owner, repo, branch, pluginPath] = match
     const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pluginPath}`
 
+    console.log(`[PUFFIN-STATE] Parsed GitHub URL:`, { owner, repo, branch, pluginPath, rawBase })
+
     return { owner, repo, branch, pluginPath, rawBase }
   }
 
@@ -1420,42 +1435,62 @@ class PuffinState {
    * Validate a Claude Code plugin from a source URL
    * Fetches and parses the package.json to get plugin metadata
    * @param {string} source - Plugin source (GitHub URL or local path)
-   * @param {string} type - Source type ('github' or 'local')
+   * @param {string} type - Source type ('github', 'url', or 'local') - 'url' auto-detects
    * @returns {Promise<Object>} Validation result with success and manifest
    */
   async validateClaudePlugin(source, type = 'github') {
     try {
-      if (type === 'github') {
-        const { rawBase } = this.parseGitHubUrl(source)
+      // Clean the source URL - remove any extra text/whitespace
+      let cleanSource = source.trim()
+      const urlMatch = cleanSource.match(/(https:\/\/[^\s]+)/)
+      if (urlMatch) {
+        cleanSource = urlMatch[1]
+      }
+      console.log(`[PUFFIN-STATE] Validating plugin from: ${cleanSource} (type: ${type})`)
 
-        // Fetch package.json
-        const packageUrl = `${rawBase}/package.json`
-        console.log(`[PUFFIN-STATE] Fetching plugin metadata from: ${packageUrl}`)
+      // Auto-detect type from URL if type is 'url' or 'github'
+      let effectiveType = type
+      if (type === 'url' || type === 'github') {
+        if (cleanSource.includes('github.com')) {
+          effectiveType = 'github'
+        } else if (cleanSource.includes('raw.githubusercontent.com')) {
+          effectiveType = 'raw'
+        } else {
+          return { success: false, error: `Unable to detect source type from URL. Please use a GitHub URL.` }
+        }
+      }
 
-        const response = await fetch(packageUrl)
+      if (effectiveType === 'github') {
+        const { rawBase } = this.parseGitHubUrl(cleanSource)
+
+        // Claude Code plugins use .claude-plugin/plugin.json for metadata
+        const pluginJsonUrl = `${rawBase}/.claude-plugin/plugin.json`
+        console.log(`[PUFFIN-STATE] Fetching Claude plugin metadata from: ${pluginJsonUrl}`)
+
+        const response = await fetch(pluginJsonUrl)
         if (!response.ok) {
-          throw new Error(`Failed to fetch package.json: ${response.status} ${response.statusText}`)
+          throw new Error(`Failed to fetch plugin.json: ${response.status} ${response.statusText}`)
         }
 
-        const packageJson = await response.json()
+        const pluginJson = await response.json()
 
-        // Extract relevant fields
+        // Extract relevant fields from Claude plugin format
         const manifest = {
-          name: packageJson.name || 'Unknown Plugin',
-          description: packageJson.description || 'No description available',
-          version: packageJson.version || '1.0.0',
-          author: typeof packageJson.author === 'object'
-            ? packageJson.author.name
-            : packageJson.author || '',
+          name: pluginJson.name || 'Unknown Plugin',
+          description: pluginJson.description || 'No description available',
+          version: pluginJson.version || '1.0.0',
+          author: typeof pluginJson.author === 'object'
+            ? pluginJson.author.name
+            : pluginJson.author || '',
           icon: '🔌' // Default icon for Claude plugins
         }
 
-        return { success: true, manifest, source, type }
-      } else if (type === 'local') {
+        return { success: true, manifest, source: cleanSource, type: effectiveType }
+      } else if (effectiveType === 'local') {
         // TODO: Implement local path validation
         throw new Error('Local plugin installation not yet supported')
       } else {
-        throw new Error(`Unknown source type: ${type}`)
+        throw new Error(`Unknown source type: ${effectiveType}`)
       }
     } catch (error) {
       console.error('[PUFFIN-STATE] Plugin validation failed:', error.message)
@@ -1467,22 +1502,27 @@ class PuffinState {
    * Add a Claude Code plugin from a source URL
    * Validates, fetches skill content, and installs the plugin
    * @param {string} source - Plugin source (GitHub URL or local path)
-   * @param {string} type - Source type ('github' or 'local')
+   * @param {string} type - Source type ('github', 'url', or 'local') - 'url' auto-detects
    * @returns {Promise<Object>} Result with success and plugin object
    */
   async addClaudePlugin(source, type = 'github') {
     try {
-      // First validate to get metadata
+      // First validate to get metadata (this also resolves the effective type)
       const validation = await this.validateClaudePlugin(source, type)
       if (!validation.success) {
         return validation
       }
 
-      if (type === 'github') {
-        const { rawBase } = this.parseGitHubUrl(source)
+      // Use the resolved type and cleaned source from validation
+      const effectiveType = validation.type
+      const cleanSource = validation.source
 
-        // Fetch skill.md content
-        const skillUrl = `${rawBase}/skill.md`
+      if (effectiveType === 'github') {
+        const { rawBase } = this.parseGitHubUrl(cleanSource)
+
+        // Claude Code plugins store skills in skills/{name}/SKILL.md
+        const pluginName = validation.manifest.name
+        const skillUrl = `${rawBase}/skills/${pluginName}/SKILL.md`
         console.log(`[PUFFIN-STATE] Fetching skill content from: ${skillUrl}`)
 
         const skillResponse = await fetch(skillUrl)
@@ -1505,7 +1545,7 @@ class PuffinState {
           description: validation.manifest.description,
           version: validation.manifest.version,
           author: validation.manifest.author,
-          source: source,
+          source: cleanSource,
           skillContent: skillContent
         })
 

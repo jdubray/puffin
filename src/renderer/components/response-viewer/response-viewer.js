@@ -543,22 +543,12 @@ export class ResponseViewerComponent {
   }
 
   /**
-   * Handle continue button click - sends continuation prompt
+   * Handle continue button click - triggers continuation via SAM next-action
    */
-  async handleContinue() {
+  handleContinue() {
     if (!this.historyState || !this.intents) {
       console.error('[RESPONSE-VIEWER] Cannot continue: missing state or intents')
       return
-    }
-
-    // CRITICAL: Check if a CLI process is already running
-    if (window.puffin?.claude?.isRunning) {
-      const isRunning = await window.puffin.claude.isRunning()
-      if (isRunning) {
-        console.error('[RESPONSE-VIEWER] Cannot continue: CLI process already running')
-        this.showToast('A Claude process is already running. Please wait.', 'error')
-        return
-      }
     }
 
     const activeBranch = this.historyState.activeBranch
@@ -574,26 +564,8 @@ export class ResponseViewerComponent {
       ? 'Complete the implementation, when complete reply with [Complete]'
       : 'Complete the task, when complete reply with [Complete]'
 
-    // Build submission data
-    const data = {
-      branchId: activeBranch,
-      parentId: selectedPrompt?.id || null,
-      content: promptContent
-    }
-
-    // Submit to SAM
-    this.intents.submitPrompt(data)
-
-    // Submit to Claude via IPC
-    if (window.puffin) {
-      // Get session ID to resume conversation
-      const sessionId = selectedPrompt?.response?.sessionId || null
-
-      window.puffin.claude.submit({
-        content: promptContent,
-        sessionId: sessionId
-      })
-    }
+    // Use SAM action to request continue - the next-action will handle submission
+    this.intents.requestContinue(activeBranch, promptContent, selectedPrompt?.id || null)
 
     this.showToast('Continuation prompt sent', 'success')
   }

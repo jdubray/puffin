@@ -57,6 +57,9 @@ export function computeState(model) {
     // Rerun request (for triggering prompt resubmission)
     rerunRequest: model.rerunRequest || null,
 
+    // Continue request (for triggering continuation prompt via next-action)
+    continueRequest: model.continueRequest || null,
+
     // Activity tracking state
     activity: computeActivityState(model),
 

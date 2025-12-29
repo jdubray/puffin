@@ -170,6 +170,9 @@ contextBridge.exposeInMainWorld('puffin', {
     // Cancel the current request
     cancel: () => ipcRenderer.send('claude:cancel'),
 
+    // Check if a CLI process is currently running
+    isRunning: () => ipcRenderer.invoke('claude:isRunning'),
+
     // Subscribe to streaming response chunks
     onResponse: (callback) => {
       const handler = (event, chunk) => callback(chunk)

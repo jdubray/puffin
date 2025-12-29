@@ -323,6 +323,19 @@ export class StatePersistence {
         // Check if there's a pending story implementation from sprint
         const pendingSprintImpl = state._pendingStoryImplementation
         if (pendingSprintImpl) {
+          // CRITICAL: Check if a CLI process is already running
+          if (window.puffin?.claude?.isRunning) {
+            const isRunning = await window.puffin.claude.isRunning()
+            if (isRunning) {
+              console.error('[SPRINT-IMPLEMENT] Cannot start implementation: CLI process already running')
+              // Clear the pending flag to prevent retry loop
+              if (this.intents?.clearPendingStoryImplementation) {
+                this.intents.clearPendingStoryImplementation()
+              }
+              return
+            }
+          }
+
           console.log('[SPRINT-IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingSprintImpl.branchId)
 
           // Get session ID from last successful prompt in the target branch

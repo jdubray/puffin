@@ -71,6 +71,15 @@ class ClaudeService {
   constructor() {
     this.currentProcess = null
     this.projectPath = null
+    this._processLock = false // Prevents multiple CLI spawns
+  }
+
+  /**
+   * Check if a CLI process is currently running
+   * @returns {boolean}
+   */
+  isProcessRunning() {
+    return this._processLock || this.currentProcess !== null
   }
 
   /**
@@ -91,6 +100,18 @@ class ClaudeService {
    */
   async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null) {
     return new Promise((resolve, reject) => {
+      // CRITICAL: Prevent multiple CLI instances from being spawned
+      if (this.isProcessRunning()) {
+        console.error('[CLAUDE-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
+        const error = new Error('A Claude CLI process is already running. Please wait for it to complete or cancel it first.')
+        reject(error)
+        return
+      }
+
+      // Acquire the process lock immediately
+      this._processLock = true
+      console.log('[CLAUDE-GUARD] Process lock acquired')
+
       // Build the prompt with project context
       const prompt = this.buildPrompt(data)
 
@@ -246,6 +267,8 @@ class ClaudeService {
       // Handle process completion
       this.currentProcess.on('close', (code) => {
         this.currentProcess = null
+        this._processLock = false
+        console.log('[CLAUDE-GUARD] Process lock released (close)')
 
         console.log('[CLAUDE-DEBUG] Process closed with code:', code)
         console.log('[CLAUDE-DEBUG] buffer remaining:', buffer?.length || 0, 'chars')
@@ -344,6 +367,8 @@ class ClaudeService {
       // Handle process errors
       this.currentProcess.on('error', (error) => {
         this.currentProcess = null
+        this._processLock = false
+        console.log('[CLAUDE-GUARD] Process lock released (error)')
         console.error('Claude CLI spawn error:', error)
         reject(error)
       })
@@ -729,16 +754,22 @@ If implementation is requested, advise the user to move to an appropriate implem
    */
   cancel() {
     if (this.currentProcess) {
-      console.log('Killing Claude CLI process')
+      console.log('[CLAUDE-GUARD] Cancelling CLI process')
       this.currentProcess.kill('SIGTERM')
 
       // Force kill after 2 seconds if still running
       setTimeout(() => {
         if (this.currentProcess) {
+          console.log('[CLAUDE-GUARD] Force killing CLI process')
           this.currentProcess.kill('SIGKILL')
           this.currentProcess = null
+          this._processLock = false
+          console.log('[CLAUDE-GUARD] Process lock released (force kill)')
         }
       }, 2000)
+    } else {
+      // Ensure lock is released even if no process
+      this._processLock = false
     }
   }
 

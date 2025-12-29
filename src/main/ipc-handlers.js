@@ -727,14 +727,31 @@ function setupClaudeHandlers(ipcMain) {
     return { available, version }
   })
 
+  // Check if a CLI process is currently running
+  ipcMain.handle('claude:isRunning', () => {
+    return claudeService.isProcessRunning()
+  })
+
   // Submit prompt to Claude CLI
   ipcMain.on('claude:submit', async (event, data) => {
+    // Additional guard at IPC layer - log and reject if already running
+    if (claudeService.isProcessRunning()) {
+      console.error('[IPC-GUARD] Rejected submit: CLI process already running')
+      event.sender.send('claude:error', {
+        message: 'A Claude CLI process is already running. Please wait for it to complete.',
+        code: 'PROCESS_ALREADY_RUNNING'
+      })
+      return
+    }
+
     try {
       // Get branch info for code modification permissions
       const state = puffinState.getState()
       const branchId = data.branchId
       const branch = state.history?.branches?.[branchId]
       const codeModificationAllowed = branch?.codeModificationAllowed !== false
+
+      console.log('[IPC-GUARD] Starting CLI process for branch:', branchId)
 
       // Ensure we're using the correct project path
       const submitData = {

@@ -590,6 +590,21 @@ export class PromptEditorComponent {
     const state = window.puffinApp?.state
     if (!state) return
 
+    // CRITICAL: Check if a CLI process is already running
+    if (window.puffin?.claude?.isRunning) {
+      const isRunning = await window.puffin.claude.isRunning()
+      if (isRunning) {
+        console.error('[PROMPT-EDITOR] Cannot submit: CLI process already running')
+        window.puffinApp?.showToast?.({
+          type: 'error',
+          title: 'Process Already Running',
+          message: 'A Claude process is already running. Please wait for it to complete.',
+          duration: 5000
+        })
+        return
+      }
+    }
+
     // Check if we should derive user stories first
     if (this.deriveUserStories) {
       this.deriveStories(content, state)
@@ -772,6 +787,21 @@ export class PromptEditorComponent {
     // Get current state from window
     const state = window.puffinApp?.state
     if (!state) return
+
+    // CRITICAL: Check if a CLI process is already running
+    if (window.puffin?.claude?.isRunning) {
+      const isRunning = await window.puffin.claude.isRunning()
+      if (isRunning) {
+        console.error('[PROMPT-EDITOR] Cannot submit new thread: CLI process already running')
+        window.puffinApp?.showToast?.({
+          type: 'error',
+          title: 'Process Already Running',
+          message: 'A Claude process is already running. Please wait for it to complete.',
+          duration: 5000
+        })
+        return
+      }
+    }
 
     // Check if we should derive user stories first
     if (this.deriveUserStories) {

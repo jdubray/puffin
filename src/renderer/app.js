@@ -2633,24 +2633,35 @@ Keep it concise but informative. Use markdown formatting.`
   renderHandoffBranchButtons(container, currentBranch) {
     if (!container) return
 
-    const branches = [
-      { id: 'specifications', name: 'Specifications', icon: '📋' },
-      { id: 'architecture', name: 'Architecture', icon: '🏗️' },
-      { id: 'ui', name: 'UI', icon: '🎨' },
-      { id: 'backend', name: 'Backend', icon: '⚙️' },
-      { id: 'deployment', name: 'Deployment', icon: '🚀' },
-      { id: 'tmp', name: 'Tmp', icon: '📝' }
-    ]
+    // Get branches dynamically from state
+    const branches = this.state?.history?.branches || []
+
+    // Default icons for known branches
+    const defaultIcons = {
+      specifications: '📋',
+      architecture: '🏗️',
+      ui: '🪟',
+      backend: '⚙️',
+      deployment: '🚀',
+      tmp: '📝',
+      improvements: '✨',
+      fullstack: '🔄',
+      bugfixes: '🐛',
+      'bug-fixes': '🐛'
+    }
 
     // Filter out current branch
     const availableBranches = branches.filter(b => b.id !== currentBranch)
 
-    container.innerHTML = availableBranches.map(branch => `
-      <button class="handoff-branch-btn" data-branch="${branch.id}" data-branch-name="${branch.name}">
-        <span class="branch-icon">${branch.icon}</span>
-        <span class="branch-name">${branch.name}</span>
-      </button>
-    `).join('')
+    container.innerHTML = availableBranches.map(branch => {
+      const icon = defaultIcons[branch.id] || branch.icon || '📁'
+      return `
+        <button class="handoff-branch-btn" data-branch="${branch.id}" data-branch-name="${branch.name}">
+          <span class="branch-icon">${icon}</span>
+          <span class="branch-name">${branch.name}</span>
+        </button>
+      `
+    }).join('')
   }
 
   /**
@@ -2861,7 +2872,7 @@ Keep it concise but informative. Use markdown formatting.`
   /**
    * Handle sprint planning - submit planning prompt to Claude
    */
-  handleSprintPlanning(planningData, state) {
+  async handleSprintPlanning(planningData, state) {
     console.log('[SPRINT] Starting sprint planning:', planningData)
 
     // Clear the pending flag immediately to prevent re-submission
@@ -2871,6 +2882,19 @@ Keep it concise but informative. Use markdown formatting.`
 
     // Submit the planning prompt to Claude
     if (window.puffin?.claude) {
+      // Check if a CLI process is already running
+      const isRunning = await window.puffin.claude.isRunning()
+      if (isRunning) {
+        console.error('[SPRINT] Cannot start planning: CLI process already running')
+        this.showToast({
+          type: 'error',
+          title: 'Process Already Running',
+          message: 'A Claude process is already running. Please wait for it to complete.',
+          duration: 5000
+        })
+        return
+      }
+
       window.puffin.claude.submit({
         prompt: promptContent,
         branchId,
@@ -2886,11 +2910,24 @@ Keep it concise but informative. Use markdown formatting.`
   /**
    * Handle rerun request from state
    */
-  handleRerunRequest(rerunRequest, state) {
+  async handleRerunRequest(rerunRequest, state) {
     this.intents.clearRerunRequest()
 
     const { branchId, content } = rerunRequest
     console.log('Rerunning prompt:', { branchId, contentPreview: content.substring(0, 100) })
+
+    // Check if a CLI process is already running
+    const isRunning = await window.puffin.claude.isRunning()
+    if (isRunning) {
+      console.error('[RERUN] Cannot rerun: CLI process already running')
+      this.showToast({
+        type: 'error',
+        title: 'Process Already Running',
+        message: 'A Claude process is already running. Please wait for it to complete.',
+        duration: 5000
+      })
+      return
+    }
 
     this.intents.submitPrompt({
       branchId,

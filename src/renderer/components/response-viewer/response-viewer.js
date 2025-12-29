@@ -545,10 +545,20 @@ export class ResponseViewerComponent {
   /**
    * Handle continue button click - sends continuation prompt
    */
-  handleContinue() {
+  async handleContinue() {
     if (!this.historyState || !this.intents) {
       console.error('[RESPONSE-VIEWER] Cannot continue: missing state or intents')
       return
+    }
+
+    // CRITICAL: Check if a CLI process is already running
+    if (window.puffin?.claude?.isRunning) {
+      const isRunning = await window.puffin.claude.isRunning()
+      if (isRunning) {
+        console.error('[RESPONSE-VIEWER] Cannot continue: CLI process already running')
+        this.showToast('A Claude process is already running. Please wait.', 'error')
+        return
+      }
     }
 
     const activeBranch = this.historyState.activeBranch

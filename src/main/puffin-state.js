@@ -29,7 +29,7 @@ const GUI_DESIGNS_DIR = 'gui-designs'
 const GUI_DEFINITIONS_DIR = 'gui-definitions'
 const UI_GUIDELINES_FILE = 'ui-guidelines.json'
 const STYLESHEETS_DIR = 'stylesheets'
-const CLAUDE_PLUGINS_DIR = 'plugins' // Claude Code skill plugins directory
+const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directory
 
 class PuffinState {
   constructor() {
@@ -1391,6 +1391,134 @@ class PuffinState {
     return `# Assigned Skills\n\n${sections.join('\n\n---\n\n')}`
   }
 
+  /**
+   * Parse a GitHub URL to extract raw content URLs
+   * Supports formats like:
+   * - https://github.com/owner/repo/tree/branch/path
+   * - https://github.com/owner/repo/blob/branch/path
+   * @param {string} url - GitHub URL
+   * @returns {Object} Parsed URL info with rawBase for fetching files
+   * @private
+   */
+  parseGitHubUrl(url) {
+    // Match GitHub URL patterns
+    const treeMatch = url.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)/)
+    const blobMatch = url.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)/)
+    const match = treeMatch || blobMatch
+
+    if (!match) {
+      throw new Error('Invalid GitHub URL format. Expected: https://github.com/owner/repo/tree/branch/path')
+    }
+
+    const [, owner, repo, branch, pluginPath] = match
+    const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pluginPath}`
+
+    return { owner, repo, branch, pluginPath, rawBase }
+  }
+
+  /**
+   * Validate a Claude Code plugin from a source URL
+   * Fetches and parses the package.json to get plugin metadata
+   * @param {string} source - Plugin source (GitHub URL or local path)
+   * @param {string} type - Source type ('github' or 'local')
+   * @returns {Promise<Object>} Validation result with success and manifest
+   */
+  async validateClaudePlugin(source, type = 'github') {
+    try {
+      if (type === 'github') {
+        const { rawBase } = this.parseGitHubUrl(source)
+
+        // Fetch package.json
+        const packageUrl = `${rawBase}/package.json`
+        console.log(`[PUFFIN-STATE] Fetching plugin metadata from: ${packageUrl}`)
+
+        const response = await fetch(packageUrl)
+        if (!response.ok) {
+          throw new Error(`Failed to fetch package.json: ${response.status} ${response.statusText}`)
+        }
+
+        const packageJson = await response.json()
+
+        // Extract relevant fields
+        const manifest = {
+          name: packageJson.name || 'Unknown Plugin',
+          description: packageJson.description || 'No description available',
+          version: packageJson.version || '1.0.0',
+          author: typeof packageJson.author === 'object'
+            ? packageJson.author.name
+            : packageJson.author || '',
+          icon: '🔌' // Default icon for Claude plugins
+        }
+
+        return { success: true, manifest, source, type }
+      } else if (type === 'local') {
+        // TODO: Implement local path validation
+        throw new Error('Local plugin installation not yet supported')
+      } else {
+        throw new Error(`Unknown source type: ${type}`)
+      }
+    } catch (error) {
+      console.error('[PUFFIN-STATE] Plugin validation failed:', error.message)
+      return { success: false, error: error.message }
+    }
+  }
+
+  /**
+   * Add a Claude Code plugin from a source URL
+   * Validates, fetches skill content, and installs the plugin
+   * @param {string} source - Plugin source (GitHub URL or local path)
+   * @param {string} type - Source type ('github' or 'local')
+   * @returns {Promise<Object>} Result with success and plugin object
+   */
+  async addClaudePlugin(source, type = 'github') {
+    try {
+      // First validate to get metadata
+      const validation = await this.validateClaudePlugin(source, type)
+      if (!validation.success) {
+        return validation
+      }
+
+      if (type === 'github') {
+        const { rawBase } = this.parseGitHubUrl(source)
+
+        // Fetch skill.md content
+        const skillUrl = `${rawBase}/skill.md`
+        console.log(`[PUFFIN-STATE] Fetching skill content from: ${skillUrl}`)
+
+        const skillResponse = await fetch(skillUrl)
+        if (!skillResponse.ok) {
+          throw new Error(`Failed to fetch skill.md: ${skillResponse.status} ${skillResponse.statusText}`)
+        }
+
+        const skillContent = await skillResponse.text()
+
+        // Generate plugin ID from name
+        const pluginId = validation.manifest.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+
+        // Install the plugin
+        const plugin = await this.installClaudePlugin({
+          id: pluginId,
+          name: validation.manifest.name,
+          description: validation.manifest.description,
+          version: validation.manifest.version,
+          author: validation.manifest.author,
+          source: source,
+          skillContent: skillContent
+        })
+
+        return { success: true, plugin }
+      } else {
+        throw new Error(`Unknown source type: ${type}`)
+      }
+    } catch (error) {
+      console.error('[PUFFIN-STATE] Plugin installation failed:', error.message)
+      return { success: false, error: error.message }
+    }
+  }
+
   // ============ Private Methods ============
 
   /**
@@ -2222,8 +2350,8 @@ Document your API endpoints...
   }
 
   /**
-   * Load Claude Code plugins from the plugins directory
-   * Scans .puffin/plugins/ for subdirectories with manifest.json and skill.md
+   * Load Claude Code plugins from the claude-plugins directory
+   * Scans .puffin/claude-plugins/ for subdirectories with manifest.json and skill.md
    * @private
    */
   async loadClaudePlugins() {

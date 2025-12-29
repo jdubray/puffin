@@ -661,6 +661,26 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Validate a Claude plugin from source URL (fetches metadata without installing)
+  ipcMain.handle('state:validateClaudePlugin', async (event, { source, type }) => {
+    try {
+      const result = await puffinState.validateClaudePlugin(source, type)
+      return result
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Add a Claude plugin from source URL (validates, fetches, and installs)
+  ipcMain.handle('state:addClaudePlugin', async (event, { source, type }) => {
+    try {
+      const result = await puffinState.addClaudePlugin(source, type)
+      return result
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // Assign a plugin to a branch
   ipcMain.handle('state:assignPluginToBranch', async (event, { pluginId, branchId }) => {
     try {

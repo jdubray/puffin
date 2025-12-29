@@ -842,19 +842,15 @@ export class ProjectFormComponent {
 
     try {
       let result
-      if (window.puffin?.plugins?.validateClaudePlugin) {
-        result = await window.puffin.plugins.validateClaudePlugin(value, type)
+      if (window.puffin?.state?.validateClaudePlugin) {
+        result = await window.puffin.state.validateClaudePlugin(value, type)
       } else {
-        // Mock validation for UI development
+        // Mock validation for UI development (fallback if API not available)
+        console.warn('[PLUGIN] validateClaudePlugin not available, using mock')
         await new Promise(resolve => setTimeout(resolve, 500))
         result = {
-          success: true,
-          manifest: {
-            name: 'Example Plugin',
-            description: 'A sample plugin for demonstration',
-            version: '1.0.0',
-            icon: '🔧'
-          }
+          success: false,
+          error: 'Plugin validation API not available'
         }
       }
 
@@ -898,17 +894,14 @@ export class ProjectFormComponent {
 
     try {
       let result
-      if (window.puffin?.plugins?.addClaudePlugin) {
-        result = await window.puffin.plugins.addClaudePlugin(source, type)
+      if (window.puffin?.state?.addClaudePlugin) {
+        result = await window.puffin.state.addClaudePlugin(source, type)
       } else {
-        // Mock for UI development
+        // Fallback if API not available
+        console.warn('[PLUGIN] addClaudePlugin not available')
         result = {
-          success: true,
-          plugin: {
-            id: `plugin-${Date.now()}`,
-            ...this._pendingPlugin.manifest,
-            enabled: true
-          }
+          success: false,
+          error: 'Plugin installation API not available'
         }
       }
 

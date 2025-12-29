@@ -142,6 +142,14 @@ contextBridge.exposeInMainWorld('puffin', {
     // Uninstall a Claude Code plugin
     uninstallClaudePlugin: (pluginId) => ipcRenderer.invoke('state:uninstallClaudePlugin', pluginId),
 
+    // Validate a Claude plugin from source URL (fetches metadata without installing)
+    validateClaudePlugin: (source, type = 'github') =>
+      ipcRenderer.invoke('state:validateClaudePlugin', { source, type }),
+
+    // Add a Claude plugin from source URL (validates, fetches, and installs)
+    addClaudePlugin: (source, type = 'github') =>
+      ipcRenderer.invoke('state:addClaudePlugin', { source, type }),
+
     // Assign a plugin to a branch
     assignPluginToBranch: (pluginId, branchId) =>
       ipcRenderer.invoke('state:assignPluginToBranch', { pluginId, branchId }),

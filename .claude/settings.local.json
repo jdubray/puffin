@@ -14,7 +14,8 @@
       "Bash(git pull:*)",
       "Bash(git stash:*)",
       "Bash(git rm:*)",
-      "Bash(npx acorn:*)"
+      "Bash(npx acorn:*)",
+      "Bash(node:*)"
     ]
   }
 }

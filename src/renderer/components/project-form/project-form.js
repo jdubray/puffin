@@ -208,13 +208,6 @@ export class ProjectFormComponent {
     this.assumptions = config.assumptions || []
     this.renderAssumptions()
 
-    // Sprint Execution Settings
-    const sprintExecution = config.sprintExecution || {}
-    const maxIterations = document.getElementById('sprint-max-iterations')
-    const autoContinueDelay = document.getElementById('sprint-auto-continue-delay')
-    if (maxIterations) maxIterations.value = sprintExecution.maxIterations || 40
-    if (autoContinueDelay) autoContinueDelay.value = sprintExecution.autoContinueDelay || 20
-
     // Debug Mode
     const debugCheckbox = document.getElementById('debug-mode-checkbox')
     if (debugCheckbox) debugCheckbox.checked = config.debugMode || false
@@ -276,10 +269,6 @@ export class ProjectFormComponent {
           text: document.getElementById('ux-color-text').value,
           error: document.getElementById('ux-color-error').value
         }
-      },
-      sprintExecution: {
-        maxIterations: parseInt(document.getElementById('sprint-max-iterations')?.value || '40', 40),
-        autoContinueDelay: parseInt(document.getElementById('sprint-auto-continue-delay')?.value || '20', 10)
       },
       debugMode: document.getElementById('debug-mode-checkbox')?.checked || false
     }
@@ -438,8 +427,8 @@ export class ProjectFormComponent {
    */
   async loadPlugins() {
     try {
-      if (window.puffin?.plugins?.listClaudePlugins) {
-        const result = await window.puffin.plugins.listClaudePlugins()
+      if (window.puffin?.state?.getClaudePlugins) {
+        const result = await window.puffin.state.getClaudePlugins()
         if (result.success) {
           this.plugins = result.plugins || []
           this.renderPlugins()
@@ -552,8 +541,8 @@ export class ProjectFormComponent {
     const newEnabled = plugin.enabled === false ? true : false
 
     try {
-      if (window.puffin?.plugins?.updateClaudePlugin) {
-        const result = await window.puffin.plugins.updateClaudePlugin(pluginId, { enabled: newEnabled })
+      if (window.puffin?.state?.updateClaudePlugin) {
+        const result = await window.puffin.state.updateClaudePlugin(pluginId, { enabled: newEnabled })
         if (result.success) {
           plugin.enabled = newEnabled
           this.renderPlugins()
@@ -588,8 +577,8 @@ export class ProjectFormComponent {
    */
   async deletePlugin(pluginId) {
     try {
-      if (window.puffin?.plugins?.removeClaudePlugin) {
-        const result = await window.puffin.plugins.removeClaudePlugin(pluginId)
+      if (window.puffin?.state?.uninstallClaudePlugin) {
+        const result = await window.puffin.state.uninstallClaudePlugin(pluginId)
         if (result.success) {
           this.plugins = this.plugins.filter(p => p.id !== pluginId)
           this.renderPlugins()

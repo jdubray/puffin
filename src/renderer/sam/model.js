@@ -108,7 +108,6 @@ export const initialModel = {
   selectedSprintFilter: null, // Sprint ID or null for "all stories"
 
   // Active implementation story - tracks which story is currently being implemented
-  // This enables story-scoped auto-continue (instead of sprint-scoped)
   activeImplementationStory: null, // { id, title, description, acceptanceCriteria, branchType, startedAt }
 
   // Stuck detection state - tracks iteration outputs to detect loops
@@ -291,6 +290,7 @@ export const loadStateAcceptor = model => proposal => {
     model.architecture = state.architecture
     model.userStories = state.userStories || []
     model.activeSprint = state.activeSprint || null
+    model.sprintHistory = state.sprintHistory || []
     model.storyGenerations = state.storyGenerations || model.storyGenerations
     model.uiGuidelines = state.uiGuidelines || model.uiGuidelines
 
@@ -299,12 +299,23 @@ export const loadStateAcceptor = model => proposal => {
     model.pendingPromptId = null
     model.streamingResponse = ''
     model._pendingStoryImplementation = null
+    model._pendingSprintPlanning = null
     model.storyDerivation = {
       status: 'idle',
       pendingStories: [],
       error: null,
       originalPrompt: null,
       branchId: null
+    }
+
+    // Reset stuck detection state to prevent stale alerts
+    model.stuckDetection = {
+      isStuck: false,
+      consecutiveCount: 0,
+      threshold: 3,
+      recentOutputs: [],
+      lastAction: null,
+      timestamp: null
     }
 
     console.log('[LOAD_STATE] Cleared in-progress state to ensure prompt is enabled')
@@ -2254,7 +2265,7 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
       storyProgress: model.activeSprint.storyProgress
     }
 
-    // Set the active implementation story for story-scoped auto-continue
+    // Set the active implementation story for UI tracking
     model.activeImplementationStory = {
       id: story.id,
       title: story.title,
@@ -2590,7 +2601,7 @@ export const resetStuckDetectionAcceptor = model => proposal => {
   }
 }
 
-// Clear the active implementation story (for story-scoped auto-continue)
+// Clear the active implementation story
 export const clearActiveImplementationStoryAcceptor = model => proposal => {
   if (proposal?.type === 'CLEAR_ACTIVE_IMPLEMENTATION_STORY') {
     console.log('[MODEL] Clearing active implementation story')
@@ -3064,7 +3075,7 @@ export const acceptors = [
   resolveStuckStateAcceptor,
   resetStuckDetectionAcceptor,
 
-  // Active Implementation Story (story-scoped auto-continue)
+  // Active Implementation Story
   clearActiveImplementationStoryAcceptor,
 
   // Activity Tracking

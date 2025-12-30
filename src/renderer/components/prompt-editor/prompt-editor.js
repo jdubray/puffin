@@ -75,14 +75,6 @@ export class PromptEditorComponent {
     this.textarea.addEventListener('input', () => {
       const hasContent = this.textarea.value.trim().length > 0
       this.submitBtn.disabled = !hasContent
-
-      // Cancel auto-continue when user starts typing (Story 2: User Intercept)
-      this.cancelAutoContinueIfActive()
-    })
-
-    // Cancel auto-continue when user focuses the textarea (Story 2: User Intercept)
-    this.textarea.addEventListener('focus', () => {
-      this.cancelAutoContinueIfActive()
     })
 
     // Submit button
@@ -567,19 +559,6 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Cancel auto-continue timer if one is active
-   * Called when user interacts with the prompt input (focus or typing)
-   * This allows users to intercept the auto-continue process
-   */
-  cancelAutoContinueIfActive() {
-    // Check if there's an active auto-continue timer via the main app
-    if (window.puffinApp?.autoContinueTimer) {
-      console.log('[PROMPT-EDITOR] User interaction detected, cancelling auto-continue')
-      window.puffinApp.cancelAutoContinueTimer()
-    }
-  }
-
-  /**
    * Submit the prompt
    */
   async submit() {
@@ -740,8 +719,7 @@ export class PromptEditorComponent {
         // Handoff context from another thread
         handoffContext: handoffContext,
         model: selectedModel,
-        // Max turns from sprint execution config (defaults to 10)
-        maxTurns: state.config?.sprintExecution?.maxIterations || 40
+        maxTurns: 40 // Max turns per request
       })
 
       // Note: Debug prompt is now captured via onFullPrompt callback from main process
@@ -855,8 +833,7 @@ export class PromptEditorComponent {
         userStories: userStories,
         guiDescription: guiDescription,
         model: selectedModel,
-        // Max turns from sprint execution config (defaults to 10)
-        maxTurns: state.config?.sprintExecution?.maxIterations || 40
+        maxTurns: 40 // Max turns per request
       })
 
       // Note: Debug prompt is now captured via onFullPrompt callback from main process

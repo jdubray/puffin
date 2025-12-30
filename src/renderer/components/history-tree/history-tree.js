@@ -138,7 +138,7 @@ export class HistoryTreeComponent {
       item.draggable = true
       item.innerHTML = `
         <span class="drag-handle">⋮</span>
-        <span class="icon">${this.getBranchIcon(branch.icon)}</span>
+        <span class="icon">${this.getBranchIcon(branch.icon, branch.id)}</span>
         <span class="name">${this.escapeHtml(branch.name)}</span>
         <span class="count">${branch.promptCount}</span>
       `
@@ -158,13 +158,11 @@ export class HistoryTreeComponent {
       item.addEventListener('drop', (e) => this.handleDrop(e))
       item.addEventListener('dragend', (e) => this.handleDragEnd(e))
 
-      // Context menu for custom branches
-      if (!['specifications', 'architecture', 'ui', 'backend', 'deployment', 'improvements', 'tmp'].includes(branch.id)) {
-        item.addEventListener('contextmenu', (e) => {
-          e.preventDefault()
-          this.showBranchContextMenu(e, branch)
-        })
-      }
+      // Context menu for all branches (custom branches get full menu, built-in branches get limited menu)
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        this.showBranchContextMenu(e, branch)
+      })
 
       this.branchList.appendChild(item)
     })
@@ -399,9 +397,12 @@ export class HistoryTreeComponent {
   }
 
   /**
-   * Get icon for branch type
+   * Get icon for branch type or branch ID
+   * @param {string} icon - Icon name or branch ID
+   * @param {string} [branchId] - Optional branch ID for default branch icons
    */
-  getBranchIcon(icon) {
+  getBranchIcon(icon, branchId) {
+    // Icon name to emoji mapping
     const icons = {
       building: '🏗️',
       layout: '🎨',
@@ -412,7 +413,33 @@ export class HistoryTreeComponent {
       test: '🧪',
       docs: '📄'
     }
-    return icons[icon] || '📁'
+
+    // Default icons for known branch IDs (matches handoff panel)
+    const branchIcons = {
+      specifications: '📋',
+      architecture: '🏗️',
+      ui: '🪟',
+      backend: '⚙️',
+      deployment: '🚀',
+      tmp: '📝',
+      improvements: '✨',
+      fullstack: '🔄',
+      bugfixes: '🐛',
+      'bug-fixes': '🐛'
+    }
+
+    // First check if there's a specific icon for this branch ID
+    if (branchId && branchIcons[branchId]) {
+      return branchIcons[branchId]
+    }
+
+    // Then check icon name mapping
+    if (icons[icon]) {
+      return icons[icon]
+    }
+
+    // Fall back to folder
+    return '📁'
   }
 
   /**
@@ -499,6 +526,10 @@ export class HistoryTreeComponent {
     menu.style.left = `${e.clientX}px`
     menu.style.top = `${e.clientY}px`
 
+    // Built-in branches that cannot be deleted
+    const builtInBranches = ['specifications', 'architecture', 'ui', 'backend', 'deployment', 'improvements', 'tmp']
+    const isBuiltIn = builtInBranches.includes(branch.id)
+
     // Build menu items
     const menuItems = [
       {
@@ -506,6 +537,14 @@ export class HistoryTreeComponent {
         action: () => this.showBranchSettingsModal(branch)
       },
       {
+        label: '🔌 Manage Plugins',
+        action: () => this.showPluginAssignmentModal(branch)
+      }
+    ]
+
+    // Only add delete option for custom branches
+    if (!isBuiltIn) {
+      menuItems.push({
         label: '🗑️ Delete Branch',
         action: () => {
           if (confirm(`Delete branch "${branch.name}"? This will delete all prompts in this branch.`)) {
@@ -513,8 +552,8 @@ export class HistoryTreeComponent {
           }
         },
         className: 'danger'
-      }
-    ]
+      })
+    }
 
     // Render menu items
     menu.innerHTML = menuItems.map(item =>
@@ -565,8 +604,8 @@ export class HistoryTreeComponent {
     // Load available plugins
     let availablePlugins = []
     try {
-      if (window.puffin?.plugins?.listClaudePlugins) {
-        const result = await window.puffin.plugins.listClaudePlugins()
+      if (window.puffin?.state?.getClaudePlugins) {
+        const result = await window.puffin.state.getClaudePlugins()
         if (result.success) {
           availablePlugins = result.plugins || []
         }
@@ -708,6 +747,159 @@ export class HistoryTreeComponent {
     })
 
     this.intents.hideModal()
+  }
+
+  /**
+   * Show plugin assignment modal for a branch
+   */
+  showPluginAssignmentModal(branch) {
+    this.intents.showModal('plugin-assignment', { branch })
+    this.renderPluginAssignmentModal(branch)
+  }
+
+  /**
+   * Render plugin assignment modal with immediate toggle functionality
+   */
+  async renderPluginAssignmentModal(branch) {
+    const modalContent = document.getElementById('modal-content')
+    const modalTitle = document.getElementById('modal-title')
+    const modalActions = document.getElementById('modal-actions')
+
+    modalTitle.textContent = `Manage Plugins: ${branch.name}`
+
+    // Show loading state initially
+    modalContent.innerHTML = `
+      <div class="plugin-assignment-modal">
+        <p class="plugin-loading">Loading plugins...</p>
+      </div>
+    `
+
+    // Load available plugins
+    let availablePlugins = []
+    try {
+      if (window.puffin?.state?.getClaudePlugins) {
+        const result = await window.puffin.state.getClaudePlugins()
+        console.log('[PLUGIN-MODAL] getClaudePlugins result:', result)
+        if (result.success) {
+          availablePlugins = result.plugins || []
+        } else {
+          console.error('[PLUGIN-MODAL] getClaudePlugins failed:', result.error)
+        }
+      } else {
+        console.error('[PLUGIN-MODAL] window.puffin.state.getClaudePlugins not available')
+      }
+    } catch (error) {
+      console.error('Failed to load plugins:', error)
+    }
+
+    // Get currently assigned plugins for this branch
+    let assignedPlugins = []
+    try {
+      if (window.puffin?.state?.getBranchPlugins) {
+        const result = await window.puffin.state.getBranchPlugins(branch.id)
+        if (result.success) {
+          assignedPlugins = result.plugins || []
+        }
+      }
+    } catch (error) {
+      console.error('Failed to get branch plugins:', error)
+      // Fallback to branch object
+      assignedPlugins = branch.assignedPlugins || []
+    }
+
+    modalContent.innerHTML = `
+      <div class="plugin-assignment-modal">
+        <p class="plugin-assignment-description">
+          Toggle plugins to assign or unassign them from this branch.
+          Changes are saved immediately.
+        </p>
+
+        <div id="plugin-assignment-list" class="plugin-assignment-list">
+          ${availablePlugins.length === 0 ? `
+            <div class="no-plugins-message">
+              <span>No plugins available.</span>
+              <a href="#" id="go-to-plugins-link">Add plugins in Config tab</a>
+            </div>
+          ` : availablePlugins.map(plugin => {
+            const isAssigned = assignedPlugins.includes(plugin.id)
+            return `
+              <div class="plugin-assignment-item ${isAssigned ? 'assigned' : ''} ${plugin.enabled === false ? 'disabled' : ''}"
+                   data-plugin-id="${plugin.id}">
+                <div class="plugin-assignment-toggle">
+                  <button class="plugin-toggle-btn ${isAssigned ? 'active' : ''}"
+                          data-plugin-id="${plugin.id}"
+                          ${plugin.enabled === false ? 'disabled' : ''}
+                          aria-pressed="${isAssigned}">
+                    <span class="toggle-track">
+                      <span class="toggle-thumb"></span>
+                    </span>
+                  </button>
+                </div>
+                <div class="plugin-assignment-info">
+                  <span class="plugin-icon">${plugin.icon || '🔧'}</span>
+                  <div class="plugin-details">
+                    <span class="plugin-name">${this.escapeHtml(plugin.name)}</span>
+                    <span class="plugin-description">${this.escapeHtml(plugin.description || '')}</span>
+                  </div>
+                </div>
+                ${plugin.enabled === false ? '<span class="plugin-disabled-badge">Disabled</span>' : ''}
+              </div>
+            `
+          }).join('')}
+        </div>
+      </div>
+    `
+
+    modalActions.innerHTML = `
+      <button class="btn primary" id="modal-done-btn">Done</button>
+    `
+
+    // Bind go-to-plugins link if present
+    const goToPluginsLink = document.getElementById('go-to-plugins-link')
+    if (goToPluginsLink) {
+      goToPluginsLink.addEventListener('click', (e) => {
+        e.preventDefault()
+        this.intents.hideModal()
+        this.intents.switchView('config')
+      })
+    }
+
+    // Bind toggle buttons for immediate assignment/unassignment
+    const toggleBtns = document.querySelectorAll('.plugin-toggle-btn')
+    toggleBtns.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault()
+        const pluginId = btn.dataset.pluginId
+        const isCurrentlyAssigned = btn.classList.contains('active')
+        const itemEl = btn.closest('.plugin-assignment-item')
+
+        // Update UI immediately for responsiveness
+        btn.classList.toggle('active')
+        btn.setAttribute('aria-pressed', !isCurrentlyAssigned)
+        itemEl.classList.toggle('assigned')
+
+        try {
+          if (isCurrentlyAssigned) {
+            // Unassign plugin
+            await window.puffin.state.unassignPluginFromBranch(pluginId, branch.id)
+          } else {
+            // Assign plugin
+            await window.puffin.state.assignPluginToBranch(pluginId, branch.id)
+          }
+        } catch (error) {
+          console.error('Failed to toggle plugin assignment:', error)
+          // Revert UI on error
+          btn.classList.toggle('active')
+          btn.setAttribute('aria-pressed', isCurrentlyAssigned)
+          itemEl.classList.toggle('assigned')
+        }
+      })
+    })
+
+    // Bind done button
+    document.getElementById('modal-done-btn').addEventListener('click', () => {
+      this.intents.hideModal()
+    })
   }
 
   /**

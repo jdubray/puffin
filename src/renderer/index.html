@@ -287,24 +287,6 @@
               </fieldset>
 
               <fieldset class="options-fieldset">
-                <legend>Sprint Execution Settings</legend>
-
-                <div class="options-grid">
-                  <div class="form-group">
-                    <label for="sprint-max-iterations">Maximum Iterations</label>
-                    <input type="number" id="sprint-max-iterations" min="1" max="50" value="10">
-                    <small class="form-hint">Max number of Claude continuations per sprint (default: 10)</small>
-                  </div>
-
-                  <div class="form-group">
-                    <label for="sprint-auto-continue-delay">Auto-Continue Delay (seconds)</label>
-                    <input type="number" id="sprint-auto-continue-delay" min="5" max="120" value="20">
-                    <small class="form-hint">Seconds to wait before auto-continuing (default: 20)</small>
-                  </div>
-                </div>
-              </fieldset>
-
-              <fieldset class="options-fieldset">
                 <legend>Developer Settings</legend>
 
                 <div class="form-group">
@@ -463,17 +445,6 @@
                     <span id="iteration-current" class="iteration-value">0</span>
                     <span class="iteration-separator">/</span>
                     <span id="iteration-max" class="iteration-value">10</span>
-                  </div>
-                  <div class="continuation-stats">
-                    <span class="continuation-label">Continuations:</span>
-                    <span id="continuation-count" class="continuation-value">0</span>
-                  </div>
-                  <div id="auto-continue-timer" class="auto-continue-timer hidden">
-                    <span class="timer-label">Auto-continue in:</span>
-                    <span id="timer-countdown" class="timer-value">20</span>
-                    <span class="timer-unit">s</span>
-                    <button id="timer-skip-btn" class="btn small outline" title="Continue now">Skip</button>
-                    <button id="timer-cancel-btn" class="btn small secondary" title="Cancel auto-continue">Cancel</button>
                   </div>
                 </div>
               </div>

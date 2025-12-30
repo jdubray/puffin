@@ -72,7 +72,7 @@ export function computeState(model) {
     // Active Sprint state
     activeSprint: model.activeSprint || null,
 
-    // Active Implementation Story (story-scoped auto-continue)
+    // Active Implementation Story (tracks which story is being implemented)
     activeImplementationStory: model.activeImplementationStory || null,
 
     // Sprint error (validation errors like story limit exceeded)
@@ -104,6 +104,10 @@ export function computeState(model) {
     _sprintToArchive: model._sprintToArchive || null,
     _completedStoryIdsToSync: model._completedStoryIdsToSync || [],
     _resetToPendingStoryIds: model._resetToPendingStoryIds || [],
+
+    // Sprint history state
+    sprintHistory: model.sprintHistory || [],
+    selectedSprintFilter: model.selectedSprintFilter || null,
 
     // Debug state
     debug: model.debug || {
@@ -143,7 +147,6 @@ function computeConfigState(model) {
     defaultModel: config.defaultModel || 'sonnet',
     options: config.options || {},
     uxStyle: config.uxStyle || {},
-    sprintExecution: config.sprintExecution || {},
     debugMode: config.debugMode || false,
     createdAt: config.createdAt,
     updatedAt: config.updatedAt

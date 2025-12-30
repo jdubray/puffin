@@ -537,6 +537,7 @@ class PuffinApp {
           ['APPROVE_PLAN', actions.approvePlan],
           ['CLEAR_SPRINT', actions.clearSprint],
           ['CLEAR_SPRINT_WITH_DETAILS', actions.clearSprintWithDetails],
+          ['SHOW_SPRINT_CLOSE_MODAL', actions.showSprintCloseModal],
           ['CLEAR_PENDING_SPRINT_PLANNING', actions.clearPendingSprintPlanning],
           ['START_SPRINT_STORY_IMPLEMENTATION', actions.startSprintStoryImplementation],
           ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation],
@@ -698,9 +699,6 @@ class PuffinApp {
     // Handoff panel event handlers
     this.setupHandoffPanelHandlers()
 
-    // Auto-continue timer handlers
-    this.setupAutoContinueTimerHandlers()
-
     // Debug view handlers
     this.setupDebugViewHandlers()
   }
@@ -841,431 +839,6 @@ class PuffinApp {
   }
 
   /**
-   * Setup auto-continue timer handlers
-   */
-  setupAutoContinueTimerHandlers() {
-    const skipBtn = document.getElementById('timer-skip-btn')
-    const cancelBtn = document.getElementById('timer-cancel-btn')
-
-    if (skipBtn) {
-      skipBtn.addEventListener('click', () => {
-        this.skipAutoContinueTimer()
-      })
-    }
-
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => {
-        this.cancelAutoContinueTimer()
-      })
-    }
-
-    // Initialize timer state
-    this.autoContinueTimer = null
-    this.autoContinueCountdown = 0
-
-    // Initialize auto-continue state (values will be loaded from config in onStateChange)
-    this.autoContinueState = {
-      enabled: true,                    // Master switch for auto-continue
-      continuationCount: 0,             // Current continuation count for this thread
-      maxContinuations: 10,             // Maximum continuations before stopping (loaded from config)
-      timerSeconds: 20,                 // Delay before auto-continuing (loaded from config)
-      lastPromptId: null,               // Track which prompt we're continuing
-      completionKeyword: '[Complete]',  // Keyword that signals completion
-      continuationPrompt: 'Complete the implementation, if it is complete return [Complete]'
-    }
-  }
-
-  /**
-   * Load auto-continue settings from config
-   * Called when state changes to sync with persisted config
-   */
-  loadAutoContinueConfig() {
-    const sprintExecution = this.state?.config?.sprintExecution
-    if (sprintExecution) {
-      this.autoContinueState.maxContinuations = sprintExecution.maxIterations || 40
-      this.autoContinueState.timerSeconds = sprintExecution.autoContinueDelay || 20
-      console.log('[AUTO-CONTINUE] Loaded config:', {
-        maxContinuations: this.autoContinueState.maxContinuations,
-        timerSeconds: this.autoContinueState.timerSeconds
-      })
-    }
-  }
-
-  /**
-   * Check if a response needs continuation (not complete)
-   * @param {Object} response - The Claude response object
-   * @returns {boolean} - True if continuation is needed
-   */
-  shouldAutoContinue(response) {
-    console.log('[AUTO-CONTINUE] shouldAutoContinue called with response:', {
-      hasResponse: !!response,
-      turns: response?.turns,
-      exitCode: response?.exitCode,
-      contentLength: response?.content?.length || 0
-    })
-
-    // Don't continue if auto-continue is disabled
-    if (!this.autoContinueState?.enabled) {
-      console.log('[AUTO-CONTINUE] Disabled, skipping')
-      return false
-    }
-
-    // Check if Claude hit the turn limit (indicates max turns reached)
-    const maxTurnsLimit = this.state?.config?.sprintExecution?.maxIterations || 40
-    const turnsUsed = response?.turns || 0
-    const hitTurnLimit = turnsUsed >= maxTurnsLimit
-
-    console.log('[AUTO-CONTINUE] Turns check:', { turnsUsed, maxTurnsLimit, hitTurnLimit })
-
-    // If Claude didn't hit the turn limit, it completed naturally - no continuation needed
-    if (!hitTurnLimit) {
-      console.log('[AUTO-CONTINUE] Response completed naturally (< 10 turns), no continuation needed')
-      // Only show toast if turns > 0 (to avoid noise for non-prompt responses)
-      if (turnsUsed > 0) {
-        this.showToast({
-          type: 'info',
-          title: 'Response complete',
-          message: `Completed in ${turnsUsed} turns (no continuation needed)`,
-          duration: 3000
-        })
-      }
-      return false
-    }
-
-    // Check for active implementation story (optional - provides context for logging)
-    const activeStory = this.state?.activeImplementationStory
-    if (activeStory) {
-      console.log('[AUTO-CONTINUE] Active story:', activeStory.title)
-    }
-
-    // Don't continue if max continuations reached (safety limit)
-    if (this.autoContinueState.continuationCount >= this.autoContinueState.maxContinuations) {
-      console.log('[AUTO-CONTINUE] Max continuations reached:', this.autoContinueState.maxContinuations)
-      this.showToast({
-        type: 'warning',
-        title: 'Auto-continue limit reached',
-        message: `Stopped after ${this.autoContinueState.continuationCount} continuations. You can manually continue if needed.`,
-        duration: 6000
-      })
-      // Clear the active story if present
-      if (activeStory) {
-        this.intents.clearActiveImplementationStory()
-      }
-      return false
-    }
-
-    // Don't continue if there was an error (only check if exitCode is explicitly non-zero)
-    if (response?.exitCode != null && response.exitCode !== 0) {
-      console.log('[AUTO-CONTINUE] Response had error (exitCode:', response.exitCode, '), skipping')
-      return false
-    }
-
-    const content = response?.content || ''
-
-    // Check if response contains the completion keyword [Complete]
-    if (content.includes(this.autoContinueState.completionKeyword)) {
-      console.log('[AUTO-CONTINUE] Found completion keyword, stopping')
-      this.handleImplementationComplete()
-      this.resetAutoContinueState()
-      return false
-    }
-
-    // Check for explicit completion patterns
-    const completionPatterns = [
-      /implementation is complete/i,
-      /all.*criteria.*satisfied/i,
-      /successfully implemented/i,
-      /task.*completed/i,
-      /finished implementing/i
-    ]
-
-    for (const pattern of completionPatterns) {
-      if (pattern.test(content)) {
-        console.log('[AUTO-CONTINUE] Found completion pattern, stopping')
-        this.handleImplementationComplete()
-        this.resetAutoContinueState()
-        return false
-      }
-    }
-
-    // Check for patterns that indicate Claude is waiting for input
-    const waitingPatterns = [
-      /would you like me to/i,
-      /shall I proceed/i,
-      /do you want me to/i,
-      /please (confirm|let me know|specify)/i,
-      /what would you like/i,
-      /which.*would you prefer/i
-    ]
-
-    for (const pattern of waitingPatterns) {
-      if (pattern.test(content)) {
-        console.log('[AUTO-CONTINUE] Claude is asking for input, stopping auto-continue')
-        return false
-      }
-    }
-
-    // Claude hit the turn limit and didn't complete - needs continuation
-    console.log('[AUTO-CONTINUE] Response hit turn limit, needs continuation')
-    return true
-  }
-
-  /**
-   * Handle implementation completion - show notification to user
-   */
-  handleImplementationComplete() {
-    const activeStory = this.state?.activeImplementationStory
-    const storyTitle = activeStory?.title || 'Story'
-    const continuationCount = this.autoContinueState?.continuationCount || 0
-
-    console.log('[AUTO-CONTINUE] Implementation complete for:', storyTitle, 'after', continuationCount, 'continuations')
-
-    // Clear the active implementation story
-    this.intents.clearActiveImplementationStory()
-
-    this.showToast({
-      type: 'success',
-      title: 'Implementation Complete',
-      message: `"${storyTitle}" implementation finished after ${continuationCount} continuation${continuationCount !== 1 ? 's' : ''}. Test and mark complete when ready.`,
-      duration: 8000
-    })
-
-    // Update the metadata panel to show final continuation count
-    this.updateMetadataPanel(this.state)
-  }
-
-  /**
-   * Reset auto-continue state (e.g., when starting a new thread)
-   */
-  resetAutoContinueState() {
-    if (this.autoContinueState) {
-      this.autoContinueState.continuationCount = 0
-      this.autoContinueState.lastPromptId = null
-    }
-    this.clearAutoContinueTimer()
-    console.log('[AUTO-CONTINUE] State reset')
-  }
-
-  /**
-   * Trigger auto-continue for the current thread
-   * @param {string} promptId - The prompt ID to continue from
-   */
-  triggerAutoContinue(promptId) {
-    console.log('[AUTO-CONTINUE] triggerAutoContinue called with promptId:', promptId)
-
-    if (!this.autoContinueState?.enabled) {
-      console.log('[AUTO-CONTINUE] Auto-continue is disabled, skipping')
-      return
-    }
-
-    if (!promptId) {
-      console.error('[AUTO-CONTINUE] No promptId provided, cannot continue')
-      return
-    }
-
-    this.autoContinueState.lastPromptId = promptId
-    this.autoContinueState.continuationCount++
-
-    console.log('[AUTO-CONTINUE] Triggering continuation', {
-      promptId,
-      count: this.autoContinueState.continuationCount,
-      max: this.autoContinueState.maxContinuations
-    })
-
-    // Show toast to confirm auto-continue is triggered
-    this.showToast({
-      type: 'info',
-      title: 'Auto-continue triggered',
-      message: `Continuing in ${this.autoContinueState.timerSeconds} seconds...`,
-      duration: 5000
-    })
-
-    // Update UI to show continuation count
-    this.updateContinuationCount(this.autoContinueState.continuationCount)
-
-    // Start timer with callback to submit continuation
-    this.startAutoContinueTimer(this.autoContinueState.timerSeconds, () => {
-      this.submitContinuationPrompt(promptId)
-    })
-  }
-
-  /**
-   * Get the continuation prompt, including acceptance criteria from active story if available
-   * @returns {string} - The continuation prompt text
-   */
-  getContinuationPrompt() {
-    const activeStory = this.state?.activeImplementationStory
-    if (activeStory?.acceptanceCriteria?.length > 0) {
-      const criteria = activeStory.acceptanceCriteria
-        .map((c, i) => `${i + 1}. ${c}`)
-        .join('\n')
-      return `Continue the implementation. Review these acceptance criteria and respond with [Complete] when ALL are satisfied:\n\n${criteria}`
-    }
-    return this.autoContinueState.continuationPrompt
-  }
-
-  /**
-   * Submit a continuation prompt
-   * @param {string} parentPromptId - The prompt ID to continue from
-   */
-  async submitContinuationPrompt(parentPromptId) {
-    const state = this.state
-
-    if (!state?.history?.activeBranch) {
-      console.error('[AUTO-CONTINUE] No active branch')
-      return
-    }
-
-    const branchId = state.history.activeBranch
-    const branch = state.history.raw?.branches?.[branchId]
-
-    if (!branch) {
-      console.error('[AUTO-CONTINUE] Branch not found:', branchId)
-      return
-    }
-
-    // Find the parent prompt
-    const parentPrompt = branch.prompts?.find(p => p.id === parentPromptId)
-    if (!parentPrompt) {
-      console.error('[AUTO-CONTINUE] Parent prompt not found:', parentPromptId)
-      return
-    }
-
-    // Get session ID for continuity
-    const sessionId = parentPrompt.response?.sessionId || null
-
-    // Get the continuation prompt (includes acceptance criteria if active story exists)
-    const continuationPrompt = this.getContinuationPrompt()
-
-    console.log('[AUTO-CONTINUE] Submitting continuation prompt', {
-      branchId,
-      parentPromptId,
-      sessionId,
-      count: this.autoContinueState.continuationCount,
-      activeStory: state.activeImplementationStory?.title
-    })
-
-    // Show toast notification
-    this.showToast({
-      type: 'info',
-      title: 'Auto-continuing',
-      message: `Continuation ${this.autoContinueState.continuationCount}/${this.autoContinueState.maxContinuations}`,
-      duration: 3000
-    })
-
-    // Submit the continuation prompt through the normal flow
-    this.intents.submitPrompt({
-      branchId,
-      content: continuationPrompt,
-      parentId: parentPromptId
-    })
-
-    // The state-persistence layer will handle the actual submission to Claude
-  }
-
-  /**
-   * Toggle auto-continue enabled state
-   */
-  toggleAutoContinue() {
-    if (this.autoContinueState) {
-      this.autoContinueState.enabled = !this.autoContinueState.enabled
-      console.log('[AUTO-CONTINUE] Toggled to:', this.autoContinueState.enabled)
-      this.showToast({
-        type: 'info',
-        title: this.autoContinueState.enabled ? 'Auto-continue enabled' : 'Auto-continue disabled',
-        duration: 2000
-      })
-    }
-  }
-
-  /**
-   * Start the auto-continue countdown timer
-   *
-   * @param {number} seconds - Number of seconds to countdown
-   * @param {Function} onComplete - Callback when timer completes
-   */
-  startAutoContinueTimer(seconds = 20, onComplete) {
-    // Clear any existing timer (use clearAutoContinueTimer, not cancel, to avoid showing toast)
-    this.clearAutoContinueTimer()
-
-    const timerEl = document.getElementById('auto-continue-timer')
-    const countdownEl = document.getElementById('timer-countdown')
-
-    if (!timerEl || !countdownEl) {
-      console.error('[AUTO-CONTINUE] Timer elements not found in DOM')
-      return
-    }
-
-    this.autoContinueCountdown = seconds
-    this.autoContinueCallback = onComplete
-
-    // Show timer UI
-    timerEl.classList.remove('hidden')
-    countdownEl.textContent = this.autoContinueCountdown
-
-    // Start countdown
-    this.autoContinueTimer = setInterval(() => {
-      this.autoContinueCountdown--
-      countdownEl.textContent = this.autoContinueCountdown
-
-      if (this.autoContinueCountdown <= 0) {
-        this.clearAutoContinueTimer()
-        if (this.autoContinueCallback) {
-          this.autoContinueCallback()
-        }
-      }
-    }, 1000)
-
-    console.log('[AUTO-CONTINUE] Timer started:', seconds, 'seconds')
-  }
-
-  /**
-   * Skip the auto-continue timer and execute immediately
-   */
-  skipAutoContinueTimer() {
-    console.log('[AUTO-CONTINUE] Timer skipped by user')
-    const callback = this.autoContinueCallback
-    this.clearAutoContinueTimer()
-    if (callback) {
-      callback()
-    }
-  }
-
-  /**
-   * Cancel the auto-continue timer (user-initiated)
-   */
-  cancelAutoContinueTimer() {
-    // Only show toast if there's actually a timer running
-    if (this.autoContinueTimer) {
-      console.log('[AUTO-CONTINUE] Timer cancelled by user')
-      this.clearAutoContinueTimer()
-      this.showToast({
-        type: 'info',
-        title: 'Auto-continue cancelled',
-        message: 'Manual control restored',
-        duration: 2000
-      })
-    }
-  }
-
-  /**
-   * Clear the auto-continue timer without triggering callback
-   */
-  clearAutoContinueTimer() {
-    if (this.autoContinueTimer) {
-      clearInterval(this.autoContinueTimer)
-      this.autoContinueTimer = null
-    }
-    this.autoContinueCountdown = 0
-    this.autoContinueCallback = null
-
-    const timerEl = document.getElementById('auto-continue-timer')
-    if (timerEl) {
-      timerEl.classList.add('hidden')
-    }
-  }
-
-  /**
    * Update the iteration counter display
    *
    * @param {number} current - Current iteration number
@@ -1281,29 +854,6 @@ class PuffinApp {
       maxEl.textContent = max
       counterEl.classList.remove('hidden')
     }
-  }
-
-  /**
-   * Update the continuation count display
-   *
-   * @param {number} count - Number of continuations
-   */
-  updateContinuationCount(count) {
-    const countEl = document.getElementById('continuation-count')
-    if (countEl) {
-      countEl.textContent = count
-    }
-  }
-
-  /**
-   * Hide the iteration counter
-   */
-  hideIterationCounter() {
-    const counterEl = document.getElementById('iteration-counter')
-    if (counterEl) {
-      counterEl.classList.add('hidden')
-    }
-    this.clearAutoContinueTimer()
   }
 
   /**
@@ -1507,18 +1057,7 @@ class PuffinApp {
         sessionId: response?.sessionId
       })
 
-      // Debug toast to confirm response received (remove after debugging)
-      if (response?.turns >= 10) {
-        this.showToast({
-          type: 'warning',
-          title: 'Turn limit reached',
-          message: `Response used ${response.turns} turns - checking auto-continue...`,
-          duration: 3000
-        })
-      }
-
       const filesModified = this.activityTracker.getFilesModified()
-      const toolsUsed = this.activityTracker.getToolsUsed?.() || []
       console.log('[SAM-DEBUG] filesModified at completion:', filesModified.length, 'files')
 
       try {
@@ -1527,70 +1066,11 @@ class PuffinApp {
         console.error('[SAM-ERROR] completeResponse failed:', err)
       }
 
-      // Track iteration for stuck detection
+      // Reset stuck detection when response completes successfully
       try {
-        this.trackIterationForStuckDetection(response, filesModified, toolsUsed)
-        // Note: The stuck alert is shown via handleStuckDetection in onStateChange
+        this.intents.resetStuckDetection()
       } catch (err) {
-        console.error('[SAM-ERROR] trackIterationForStuckDetection failed:', err)
-      }
-
-      // Check for auto-continue
-      try {
-        const activePromptId = this.state?.history?.activePromptId
-        const isStuck = this.state?.stuckDetection?.isStuck
-
-        console.log('[AUTO-CONTINUE-DEBUG] Checking auto-continue:', {
-          activePromptId,
-          isStuck,
-          autoContinueEnabled: this.autoContinueState?.enabled,
-          responseTurns: response?.turns,
-          continuationCount: this.autoContinueState?.continuationCount
-        })
-
-        // Don't auto-continue if stuck detection triggered
-        if (isStuck) {
-          console.log('[AUTO-CONTINUE] Stuck detection triggered, skipping auto-continue')
-        } else {
-          const shouldContinue = this.shouldAutoContinue(response)
-          console.log('[AUTO-CONTINUE] shouldAutoContinue result:', shouldContinue)
-
-          if (shouldContinue) {
-            // Trigger auto-continue with the current prompt ID
-            let promptIdToUse = activePromptId
-
-            if (!promptIdToUse) {
-              // Fallback: try to get the last prompt from the active branch
-              console.log('[AUTO-CONTINUE] WARNING: No activePromptId in state, attempting fallback')
-              const branch = this.state?.history?.activeBranch
-              const rawBranch = this.state?.history?.raw?.branches?.[branch]
-              if (rawBranch?.prompts?.length > 0) {
-                const lastPrompt = rawBranch.prompts[rawBranch.prompts.length - 1]
-                promptIdToUse = lastPrompt?.id
-                console.log('[AUTO-CONTINUE] Using fallback promptId:', promptIdToUse)
-              }
-            }
-
-            if (promptIdToUse) {
-              console.log('[AUTO-CONTINUE] Triggering with promptId:', promptIdToUse)
-              this.triggerAutoContinue(promptIdToUse)
-            } else {
-              console.error('[AUTO-CONTINUE] ERROR: No prompt ID available')
-              this.showToast({
-                type: 'error',
-                title: 'Auto-continue failed',
-                message: 'Could not find prompt ID to continue from',
-                duration: 5000
-              })
-            }
-          } else {
-            // Response is complete or waiting for input - reset state
-            console.log('[AUTO-CONTINUE] shouldAutoContinue returned false, resetting state')
-            this.resetAutoContinueState()
-          }
-        }
-      } catch (err) {
-        console.error('[SAM-ERROR] Auto-continue check failed:', err)
+        console.error('[SAM-ERROR] resetStuckDetection failed:', err)
       }
 
       // Always clear activity and processing state, even if completeResponse fails
@@ -1671,12 +1151,6 @@ class PuffinApp {
    * Handle state changes
    */
   onStateChange({ state, changed }) {
-    // Load auto-continue config when config changes
-    if (changed?.includes('config') || !this._configLoaded) {
-      this.loadAutoContinueConfig()
-      this._configLoaded = true
-    }
-
     // Update debug tab visibility based on config
     this.updateDebugTabVisibility(state)
 
@@ -1762,28 +1236,14 @@ class PuffinApp {
 
   /**
    * Handle stuck detection alert
+   * Stub method - stuck detection is not used since the user controls
+   * continuation explicitly via the Continue button.
    */
   handleStuckDetection(state) {
-    const stuckState = state.stuckDetection
-
-    // Track shown alerts to avoid duplicates
-    if (!this._lastStuckAlertTimestamp) {
-      this._lastStuckAlertTimestamp = null
-    }
-
-    // Remove alert if not stuck anymore
-    if (!stuckState?.isStuck) {
-      const existingAlert = document.getElementById('stuck-alert')
-      if (existingAlert) {
-        existingAlert.remove()
-      }
-      this._lastStuckAlertTimestamp = null
-      return
-    }
-
-    if (stuckState.timestamp !== this._lastStuckAlertTimestamp) {
-      this._lastStuckAlertTimestamp = stuckState.timestamp
-      this.showStuckAlert(stuckState)
+    // Remove any existing stuck alert
+    const existingAlert = document.getElementById('stuck-alert')
+    if (existingAlert) {
+      existingAlert.remove()
     }
   }
 
@@ -2028,7 +1488,7 @@ class PuffinApp {
             ${showBranchButtons ? this.renderStoryBranchButtons(story, progress) : ''}
             ${isActiveImplementation ? `
               <div class="cancel-implementation-section">
-                <button class="cancel-implementation-btn" data-story-id="${story.id}" title="Cancel implementation and stop auto-continue">
+                <button class="cancel-implementation-btn" data-story-id="${story.id}" title="Cancel implementation">
                   <span class="cancel-icon">✕</span>
                   <span class="cancel-label">Cancel Implementation</span>
                 </button>
@@ -2140,13 +1600,10 @@ class PuffinApp {
           // Clear the active implementation story
           this.intents.clearActiveImplementationStory()
 
-          // Reset auto-continue state
-          this.resetAutoContinueState()
-
           this.showToast({
             type: 'info',
             title: 'Implementation Cancelled',
-            message: `Stopped auto-continue for "${storyTitle}". Manual control restored.`,
+            message: `"${storyTitle}" implementation cancelled.`,
             duration: 4000
           })
         }
@@ -2299,12 +1756,6 @@ class PuffinApp {
     if (defectsEl) {
       const defectCount = this.countThreadDefects(threadPrompts)
       defectsEl.textContent = defectCount.toString()
-    }
-
-    // Update continuations count (from auto-continue state)
-    const continuationsEl = document.getElementById('stat-continuations')
-    if (continuationsEl) {
-      continuationsEl.textContent = (this.autoContinueState?.continuationCount || 0).toString()
     }
 
     // Update handoff context section (incoming handoff)

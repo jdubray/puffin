@@ -176,7 +176,7 @@ export class ResponseViewerComponent {
     }
 
     // Check if max turns was reached and continuation is needed
-    const maxTurns = window.puffinState?.config?.sprintExecution?.maxIterations || 40
+    const maxTurns = 40 // Default max turns per request
     const continuationRequired = response.turns && response.turns >= maxTurns
     if (continuationRequired) {
       metaParts.push('<button class="continuation-btn" data-action="continue" title="Click to continue implementation">⚠️ Continue</button>')

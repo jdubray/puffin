@@ -192,6 +192,13 @@ export class StatePersistence {
             try {
               await window.puffin.state.archiveSprintToHistory(state._sprintToArchive)
               console.log('[PERSIST-DEBUG] Sprint archived successfully')
+
+              // Refresh sprint history in the renderer from the main process
+              const historyResult = await window.puffin.state.getSprintHistory()
+              if (historyResult.success && historyResult.sprints) {
+                this.intents.loadSprintHistory(historyResult.sprints)
+                console.log('[PERSIST-DEBUG] Sprint history refreshed:', historyResult.sprints.length, 'sprints')
+              }
             } catch (e) {
               console.error('[PERSIST-DEBUG] Failed to archive sprint:', e)
             }
@@ -227,6 +234,17 @@ export class StatePersistence {
                 }
               }
             }
+          }
+
+          // Refresh user stories from disk to ensure UI is in sync
+          try {
+            const storiesResult = await window.puffin.state.getUserStories()
+            if (storiesResult.success && storiesResult.stories) {
+              this.intents.loadUserStories(storiesResult.stories)
+              console.log('[PERSIST-DEBUG] User stories refreshed:', storiesResult.stories.length, 'stories')
+            }
+          } catch (e) {
+            console.error('[PERSIST-DEBUG] Failed to refresh user stories:', e)
           }
         }
 
@@ -281,7 +299,9 @@ export class StatePersistence {
 
       // Persist user story status changes when sprint is created (stories become in-progress)
       if (normalizedType === 'CREATE_SPRINT') {
-        const sprintStoryIds = action.payload?.stories?.map(s => s.id) || []
+        // Handle both proposal format (payload.stories) and lastAction format (args[0])
+        const stories = action.payload?.stories || action.args?.[0] || []
+        const sprintStoryIds = stories.map(s => s.id)
         console.log('[PERSIST-DEBUG] CREATE_SPRINT - syncing story statuses for:', sprintStoryIds.length, 'stories')
 
         for (const storyId of sprintStoryIds) {
@@ -289,7 +309,7 @@ export class StatePersistence {
           if (story) {
             try {
               await window.puffin.state.updateUserStory(storyId, story)
-              console.log('[PERSIST-DEBUG] Synced story status to in-progress:', storyId)
+              console.log('[PERSIST-DEBUG] Synced story status to in-progress:', storyId, 'status:', story.status)
             } catch (e) {
               console.error('[PERSIST-DEBUG] Failed to sync story status:', storyId, e)
             }
@@ -353,7 +373,7 @@ export class StatePersistence {
             prompt: pendingSprintImpl.promptContent,
             branchId: pendingSprintImpl.branchId,
             sessionId,
-            maxTurns: state.config?.sprintExecution?.maxIterations || 40,
+            maxTurns: 40, // Max turns per request
             project: state.config ? {
               name: state.config.name,
               description: state.config.description

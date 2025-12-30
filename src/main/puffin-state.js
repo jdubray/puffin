@@ -161,6 +161,7 @@ class PuffinState {
       userStories: this.userStories,
       archivedStoriesCount: this.archivedStories?.length || 0,
       activeSprint: this.activeSprint,
+      sprintHistory: this.sprintHistory?.sprints || [],
       storyGenerations: this.storyGenerations,
       uiGuidelines: this.uiGuidelines,
       gitOperations: this.gitOperations,
@@ -1143,9 +1144,24 @@ class PuffinState {
     // Sanitize plugin ID for filesystem
     const sanitizedId = this.sanitizeFilename(id)
 
-    // Check if plugin already exists
-    if (this.claudePlugins?.find(p => p.id === sanitizedId)) {
-      throw new Error(`Plugin with ID "${sanitizedId}" is already installed`)
+    // Check if plugin already exists in memory cache
+    const existingPluginIndex = this.claudePlugins?.findIndex(p => p.id === sanitizedId) ?? -1
+    if (existingPluginIndex !== -1) {
+      // Verify the plugin directory still exists on disk
+      const existingPluginDir = path.join(this.puffinPath, CLAUDE_PLUGINS_DIR, sanitizedId)
+      try {
+        await fs.access(existingPluginDir)
+        // Directory exists, plugin is truly installed
+        throw new Error(`Plugin with ID "${sanitizedId}" is already installed`)
+      } catch (accessError) {
+        if (accessError.code === 'ENOENT') {
+          // Directory was deleted externally, remove from cache
+          console.log(`[PUFFIN-STATE] Plugin "${sanitizedId}" was deleted externally, removing from cache`)
+          this.claudePlugins.splice(existingPluginIndex, 1)
+        } else {
+          throw accessError
+        }
+      }
     }
 
     // Create plugin directory
@@ -1574,10 +1590,6 @@ class PuffinState {
       if (!config.uxStyle) {
         config.uxStyle = this.getDefaultUxStyle()
       }
-      // Ensure sprintExecution exists for older configs
-      if (!config.sprintExecution) {
-        config.sprintExecution = this.getDefaultSprintExecution()
-      }
       return config
     } catch {
       // Create default config
@@ -1598,24 +1610,11 @@ class PuffinState {
           }
         },
         uxStyle: this.getDefaultUxStyle(),
-        sprintExecution: this.getDefaultSprintExecution(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
       await this.saveConfig(defaultConfig)
       return defaultConfig
-    }
-  }
-
-  /**
-   * Get default sprint execution configuration
-   * @private
-   */
-  getDefaultSprintExecution() {
-    return {
-      maxIterations: 40,
-      autoContinueDelay: 20,
-      stuckDetectionThreshold: 3
     }
   }
 
@@ -1755,6 +1754,12 @@ Document your API endpoints...
       const content = await fs.readFile(storiesPath, 'utf-8')
       const stories = JSON.parse(content)
 
+      // Validate that stories is an array
+      if (!Array.isArray(stories)) {
+        console.error('[PUFFIN-STATE] User stories file is not an array, returning empty array')
+        return []
+      }
+
       // Deduplicate stories by ID (cleanup for any existing duplicates)
       const seenIds = new Set()
       const uniqueStories = []
@@ -1777,20 +1782,49 @@ Document your API endpoints...
       }
 
       return uniqueStories
-    } catch {
-      // Create empty user stories array
-      const defaultStories = []
-      await this.saveUserStories(defaultStories)
-      return defaultStories
+    } catch (error) {
+      // Check if file doesn't exist (ENOENT) - that's okay, return empty array
+      if (error.code === 'ENOENT') {
+        console.log('[PUFFIN-STATE] No user stories file found, starting with empty array')
+        return []
+      }
+
+      // For other errors (parse errors, permission issues), log but don't wipe the file
+      console.error('[PUFFIN-STATE] Error loading user stories:', error.message)
+      console.error('[PUFFIN-STATE] SAFETY: Not overwriting file to prevent data loss')
+      return []
     }
   }
 
   /**
-   * Save user stories
+   * Save user stories with safety checks to prevent accidental data loss
    * @private
    */
   async saveUserStories(stories = this.userStories) {
     const storiesPath = path.join(this.puffinPath, USER_STORIES_FILE)
+
+    // Safety check: Don't write if stories is undefined or not an array
+    if (!Array.isArray(stories)) {
+      console.error('[PUFFIN-STATE] SAFETY: Refusing to save user stories - not an array:', typeof stories)
+      return
+    }
+
+    // Safety check: If writing empty array but file exists with stories, create backup first
+    if (stories.length === 0) {
+      try {
+        const existingContent = await fs.readFile(storiesPath, 'utf-8')
+        const existingStories = JSON.parse(existingContent)
+        if (Array.isArray(existingStories) && existingStories.length > 0) {
+          // Create backup before wiping
+          const backupPath = path.join(this.puffinPath, 'user-stories.backup.json')
+          await fs.writeFile(backupPath, existingContent, 'utf-8')
+          console.warn(`[PUFFIN-STATE] SAFETY: Creating backup before writing empty array. ${existingStories.length} stories backed up to user-stories.backup.json`)
+        }
+      } catch {
+        // File doesn't exist or can't be parsed, safe to proceed
+      }
+    }
+
     await fs.writeFile(storiesPath, JSON.stringify(stories, null, 2), 'utf-8')
   }
 

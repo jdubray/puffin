@@ -32,9 +32,6 @@ export function computeState(model) {
     prompt: computePromptState(model),
     history: computeHistoryState(model),
 
-    // GUI Designer state
-    designer: computeDesignerState(model),
-
     // Architecture state
     architecture: computeArchitectureState(model),
 
@@ -329,45 +326,6 @@ function computeHistoryState(model) {
 }
 
 /**
- * GUI Designer state computation
- */
-function computeDesignerState(model) {
-  const elements = model.guiElements || []
-  const selectedId = model.selectedGuiElement
-
-  // Build element tree (nested structure)
-  const rootElements = elements.filter(e => !e.parentId)
-  const buildTree = (parentId) => {
-    return elements
-      .filter(e => e.parentId === parentId)
-      .map(e => ({
-        ...e,
-        isSelected: e.id === selectedId,
-        children: buildTree(e.id)
-      }))
-  }
-
-  const elementTree = rootElements.map(e => ({
-    ...e,
-    isSelected: e.id === selectedId,
-    children: buildTree(e.id)
-  }))
-
-  // Get selected element details
-  const selectedElement = selectedId
-    ? elements.find(e => e.id === selectedId)
-    : null
-
-  return {
-    elements: elementTree,
-    flatElements: elements,
-    selectedElement,
-    hasElements: elements.length > 0,
-    elementCount: elements.length
-  }
-}
-
-/**
  * Architecture state computation
  */
 function computeArchitectureState(model) {
@@ -391,10 +349,9 @@ function computeUIState(model) {
     modal: model.modal,
     hasModal: !!model.modal,
 
-    // View visibility helpers
+    // View visibility helpers (plugins may contribute additional views like 'designer')
     showConfig: model.currentView === 'config',
     showPromptEditor: model.currentView === 'prompt',
-    showDesigner: model.currentView === 'designer',
     showUserStories: model.currentView === 'user-stories',
     showArchitecture: model.currentView === 'architecture',
     showCliOutput: model.currentView === 'cli-output',

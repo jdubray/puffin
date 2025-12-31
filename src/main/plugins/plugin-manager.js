@@ -31,6 +31,7 @@ class PluginManager extends EventEmitter {
    * @param {PluginLoader} options.loader - Plugin loader instance
    * @param {Object} options.ipcMain - Electron ipcMain
    * @param {Object} [options.services] - Shared services to expose to plugins
+   * @param {string} [options.projectPath] - Current project path (for .puffin/ context)
    */
   constructor(options = {}) {
     super()
@@ -38,6 +39,7 @@ class PluginManager extends EventEmitter {
     this.loader = options.loader
     this.ipcMain = options.ipcMain
     this.services = options.services || {}
+    this.projectPath = options.projectPath || null
 
     // Core components
     this.registry = new PluginRegistry()
@@ -132,7 +134,8 @@ class PluginManager extends EventEmitter {
       const context = new PluginContext(name, plugin.directory, {
         registry: this.registry,
         ipcMain: this.ipcMain,
-        services: this.services
+        services: this.services,
+        projectPath: this.projectPath
       })
 
       // Call plugin's activate function

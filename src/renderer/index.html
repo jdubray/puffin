@@ -33,12 +33,14 @@
       <nav id="main-nav">
         <button class="nav-btn" data-view="config">Config</button>
         <button class="nav-btn active" data-view="prompt">Prompt</button>
-        <button class="nav-btn" data-view="designer">Designer</button>
+        <!-- Designer is now provided by designer-plugin -->
         <button class="nav-btn" data-view="user-stories">Backlog</button>
         <button class="nav-btn" data-view="architecture">Architecture</button>
         <button class="nav-btn" data-view="cli-output">CLI Output</button>
         <button class="nav-btn" data-view="git">Git</button>
         <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn">Debug</button>
+        <!-- Plugin nav buttons are inserted here dynamically -->
+        <div id="plugin-nav-buttons"></div>
       </nav>
       <div class="header-right">
         <div id="git-status-indicator" class="git-indicator hidden" title="Git branch status"></div>
@@ -525,50 +527,8 @@
           </div>
         </section>
 
-        <!-- Designer View -->
-        <section id="designer-view" class="view">
-          <div class="view-content designer-layout">
-            <div class="designer-toolbar">
-              <div class="element-palette">
-                <button class="palette-item" data-type="container" title="Container">
-                  <span class="icon">□</span>
-                </button>
-                <button class="palette-item" data-type="text" title="Text">
-                  <span class="icon">T</span>
-                </button>
-                <button class="palette-item" data-type="input" title="Input">
-                  <span class="icon">⎕</span>
-                </button>
-                <button class="palette-item" data-type="button" title="Button">
-                  <span class="icon">▢</span>
-                </button>
-                <button class="palette-item" data-type="image" title="Image">
-                  <span class="icon">🖼</span>
-                </button>
-                <button class="palette-item" data-type="list" title="List">
-                  <span class="icon">≡</span>
-                </button>
-              </div>
-              <div class="toolbar-actions">
-                <button id="save-gui-btn" class="btn small">Save</button>
-                <button id="load-gui-btn" class="btn small">Load</button>
-                <button id="clear-canvas-btn" class="btn small">Clear</button>
-                <button id="export-gui-btn" class="btn small primary">Export</button>
-              </div>
-            </div>
-            <div class="designer-main">
-              <div id="designer-canvas" class="designer-canvas">
-                <!-- Canvas elements rendered dynamically -->
-              </div>
-              <div id="property-panel" class="property-panel">
-                <h3>Properties</h3>
-                <div id="property-content">
-                  <p class="placeholder">Select an element to edit properties</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <!-- Designer View is now provided by designer-plugin -->
+        <!-- Plugin views are rendered dynamically in #plugin-views-container -->
 
         <!-- Backlog View (with Insights subtab) -->
         <section id="user-stories-view" class="view">

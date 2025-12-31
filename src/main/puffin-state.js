@@ -25,8 +25,7 @@ const ACTIVE_SPRINT_FILE = 'active-sprint.json'
 const SPRINT_HISTORY_FILE = 'sprint-history.json'
 const STORY_GENERATIONS_FILE = 'story-generations.json'
 const GIT_OPERATIONS_FILE = 'git-operations.json'
-const GUI_DESIGNS_DIR = 'gui-designs'
-const GUI_DEFINITIONS_DIR = 'gui-definitions'
+const GUI_DESIGNS_DIR = 'gui-definitions'
 const UI_GUIDELINES_FILE = 'ui-guidelines.json'
 const STYLESHEETS_DIR = 'stylesheets'
 const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directory
@@ -59,7 +58,6 @@ class PuffinState {
     // Ensure .puffin directory exists
     await this.ensureDirectory(this.puffinPath)
     await this.ensureDirectory(path.join(this.puffinPath, GUI_DESIGNS_DIR))
-    await this.ensureDirectory(path.join(this.puffinPath, GUI_DEFINITIONS_DIR))
     await this.ensureDirectory(path.join(this.puffinPath, STYLESHEETS_DIR))
     await this.ensureDirectory(path.join(this.puffinPath, CLAUDE_PLUGINS_DIR))
 
@@ -510,13 +508,34 @@ class PuffinState {
   }
 
   /**
-   * List GUI designs
+   * List GUI designs with metadata
+   * @returns {Promise<Array<{filename: string, name: string, description: string, elementCount: number}>>}
    */
   async listGuiDesigns() {
     const dirPath = path.join(this.puffinPath, GUI_DESIGNS_DIR)
     try {
       const files = await fs.readdir(dirPath)
-      return files.filter(f => f.endsWith('.json'))
+      const jsonFiles = files.filter(f => f.endsWith('.json'))
+
+      const designs = await Promise.all(
+        jsonFiles.map(async (filename) => {
+          try {
+            const filepath = path.join(dirPath, filename)
+            const content = await fs.readFile(filepath, 'utf-8')
+            const design = JSON.parse(content)
+            return {
+              filename,
+              name: design.name || filename.replace('.json', ''),
+              description: design.description || '',
+              elementCount: Array.isArray(design.elements) ? design.elements.length : 0
+            }
+          } catch {
+            return null
+          }
+        })
+      )
+
+      return designs.filter(d => d !== null)
     } catch {
       return []
     }
@@ -531,107 +550,6 @@ class PuffinState {
     const filepath = path.join(this.puffinPath, GUI_DESIGNS_DIR, filename)
     const content = await fs.readFile(filepath, 'utf-8')
     return JSON.parse(content)
-  }
-
-  /**
-   * Save a GUI definition with metadata
-   * @param {string} name - Definition name
-   * @param {string} description - Optional description
-   * @param {Array} elements - GUI elements array
-   */
-  async saveGuiDefinition(name, description, elements) {
-    const definition = {
-      id: this.generateId(),
-      name,
-      description: description || '',
-      elements,
-      metadata: {
-        createdAt: new Date().toISOString(),
-        lastModified: new Date().toISOString(),
-        version: '1.0'
-      }
-    }
-
-    const filename = `${this.sanitizeFilename(name)}.json`
-    const filepath = path.join(this.puffinPath, GUI_DEFINITIONS_DIR, filename)
-    await fs.writeFile(filepath, JSON.stringify(definition, null, 2), 'utf-8')
-    return { filename, definition }
-  }
-
-  /**
-   * List GUI definitions with metadata
-   */
-  async listGuiDefinitions() {
-    const dirPath = path.join(this.puffinPath, GUI_DEFINITIONS_DIR)
-    try {
-      const files = await fs.readdir(dirPath)
-      const jsonFiles = files.filter(f => f.endsWith('.json'))
-
-      const definitions = await Promise.all(
-        jsonFiles.map(async (filename) => {
-          try {
-            const filepath = path.join(dirPath, filename)
-            const content = await fs.readFile(filepath, 'utf-8')
-            const definition = JSON.parse(content)
-            return {
-              filename,
-              ...definition
-            }
-          } catch (error) {
-            // Skip corrupted files
-            return null
-          }
-        })
-      )
-
-      return definitions.filter(def => def !== null)
-    } catch {
-      return []
-    }
-  }
-
-  /**
-   * Load a GUI definition
-   * @param {string} filename - Definition filename
-   */
-  async loadGuiDefinition(filename) {
-    this.validateFilename(filename)
-    const filepath = path.join(this.puffinPath, GUI_DEFINITIONS_DIR, filename)
-    const content = await fs.readFile(filepath, 'utf-8')
-    return JSON.parse(content)
-  }
-
-  /**
-   * Update a GUI definition
-   * @param {string} filename - Definition filename
-   * @param {Object} updates - Partial updates to apply
-   */
-  async updateGuiDefinition(filename, updates) {
-    this.validateFilename(filename)
-    const definition = await this.loadGuiDefinition(filename)
-    const updatedDefinition = {
-      ...definition,
-      ...updates,
-      metadata: {
-        ...definition.metadata,
-        lastModified: new Date().toISOString()
-      }
-    }
-
-    const filepath = path.join(this.puffinPath, GUI_DEFINITIONS_DIR, filename)
-    await fs.writeFile(filepath, JSON.stringify(updatedDefinition, null, 2), 'utf-8')
-    return updatedDefinition
-  }
-
-  /**
-   * Delete a GUI definition
-   * @param {string} filename - Definition filename
-   */
-  async deleteGuiDefinition(filename) {
-    this.validateFilename(filename)
-    const filepath = path.join(this.puffinPath, GUI_DEFINITIONS_DIR, filename)
-    await fs.unlink(filepath)
-    return true
   }
 
   /**

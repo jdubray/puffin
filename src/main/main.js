@@ -359,7 +359,8 @@ app.whenReady().then(async () => {
         ipcMain: ipcMain,
         services: {
           history: historyService
-        }
+        },
+        projectPath: currentProjectPath
       })
 
       // Setup plugin manager event logging

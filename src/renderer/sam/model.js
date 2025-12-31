@@ -83,10 +83,6 @@ export const initialModel = {
     threadSearchQuery: '' // Search query for filtering threads
   },
 
-  // GUI Designer state
-  guiElements: [],
-  selectedGuiElement: null,
-
   // Architecture state (from .puffin/architecture.md)
   architecture: {
     content: '',
@@ -148,7 +144,7 @@ export const initialModel = {
   },
 
   // UI state
-  currentView: 'prompt', // 'config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output'
+  currentView: 'prompt', // 'config', 'prompt', 'user-stories', 'architecture', 'cli-output' (plugins may add more views)
   sidebarVisible: true,
   modal: null,
 
@@ -836,106 +832,6 @@ export const unmarkThreadCompleteAcceptor = model => proposal => {
           })
         }
         break
-      }
-    }
-  }
-}
-
-/**
- * GUI Designer Acceptors
- */
-
-export const addGuiElementAcceptor = model => proposal => {
-  if (proposal?.type === 'ADD_GUI_ELEMENT') {
-    model.guiElements.push({
-      id: proposal.payload.id,
-      type: proposal.payload.type,
-      properties: proposal.payload.properties,
-      parentId: proposal.payload.parentId,
-      children: []
-    })
-    model.selectedGuiElement = proposal.payload.id
-  }
-}
-
-export const updateGuiElementAcceptor = model => proposal => {
-  if (proposal?.type === 'UPDATE_GUI_ELEMENT') {
-    const element = model.guiElements.find(e => e.id === proposal.payload.id)
-    if (element) {
-      element.properties = { ...element.properties, ...proposal.payload.properties }
-    }
-  }
-}
-
-export const deleteGuiElementAcceptor = model => proposal => {
-  if (proposal?.type === 'DELETE_GUI_ELEMENT') {
-    model.guiElements = model.guiElements.filter(e => e.id !== proposal.payload.id)
-    if (model.selectedGuiElement === proposal.payload.id) {
-      model.selectedGuiElement = null
-    }
-  }
-}
-
-export const moveGuiElementAcceptor = model => proposal => {
-  if (proposal?.type === 'MOVE_GUI_ELEMENT') {
-    const element = model.guiElements.find(e => e.id === proposal.payload.id)
-    if (element) {
-      element.properties.x = proposal.payload.x
-      element.properties.y = proposal.payload.y
-    }
-  }
-}
-
-export const resizeGuiElementAcceptor = model => proposal => {
-  if (proposal?.type === 'RESIZE_GUI_ELEMENT') {
-    const element = model.guiElements.find(e => e.id === proposal.payload.id)
-    if (element) {
-      element.properties.width = proposal.payload.width
-      element.properties.height = proposal.payload.height
-    }
-  }
-}
-
-export const selectGuiElementAcceptor = model => proposal => {
-  if (proposal?.type === 'SELECT_GUI_ELEMENT') {
-    model.selectedGuiElement = proposal.payload.elementId
-  }
-}
-
-export const clearGuiCanvasAcceptor = model => proposal => {
-  if (proposal?.type === 'CLEAR_GUI_CANVAS') {
-    model.guiElements = []
-    model.selectedGuiElement = null
-  }
-}
-
-/**
- * GUI Definition Acceptors
- */
-
-export const loadGuiDefinitionAcceptor = model => proposal => {
-  if (proposal?.type === 'LOAD_GUI_DEFINITION') {
-    const { definition } = proposal.payload
-    model.guiElements = definition.elements || []
-    model.selectedGuiElement = null
-  }
-}
-
-export const showGuiDefinitionDialogAcceptor = model => proposal => {
-  if (proposal?.type === 'SHOW_GUI_DEFINITION_DIALOG') {
-    model.modal = {
-      type: 'gui-definition-selector',
-      data: {}
-    }
-  }
-}
-
-export const showSaveGuiDefinitionDialogAcceptor = model => proposal => {
-  if (proposal?.type === 'SHOW_SAVE_GUI_DEFINITION_DIALOG') {
-    model.modal = {
-      type: 'save-gui-definition',
-      data: {
-        elements: [...model.guiElements]
       }
     }
   }
@@ -2819,7 +2715,8 @@ function truncateText(text, maxLength) {
 
 export const switchViewAcceptor = model => proposal => {
   if (proposal?.type === 'SWITCH_VIEW') {
-    const validViews = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'profile', 'git', 'debug']
+    // Core views plus plugin-contributed views (e.g., 'designer' from designer-plugin)
+    const validViews = ['config', 'prompt', 'user-stories', 'architecture', 'cli-output', 'profile', 'git', 'debug', 'designer']
     if (validViews.includes(proposal.payload.view)) {
       model.currentView = proposal.payload.view
     }
@@ -3003,19 +2900,6 @@ export const acceptors = [
   updateThreadSearchQueryAcceptor,
   markThreadCompleteAcceptor,
   unmarkThreadCompleteAcceptor,
-
-  // GUI Designer
-  addGuiElementAcceptor,
-  updateGuiElementAcceptor,
-  deleteGuiElementAcceptor,
-  moveGuiElementAcceptor,
-  resizeGuiElementAcceptor,
-  selectGuiElementAcceptor,
-  clearGuiCanvasAcceptor,
-
-  // GUI Definitions
-  loadGuiDefinitionAcceptor,
-  showSaveGuiDefinitionDialogAcceptor,
 
   // Architecture
   updateArchitectureAcceptor,

@@ -45,7 +45,7 @@ export class ModalManager {
 
     // Skip clearing content for modals handled by their own components
     // These components subscribe to state changes and manage their own rendering
-    const componentManagedModals = ['user-story-review', 'add-branch', 'gui-export', 'add-plugin', 'branch-settings', 'plugin-assignment']
+    const componentManagedModals = ['user-story-review', 'add-branch', 'add-plugin', 'branch-settings', 'plugin-assignment']
     if (componentManagedModals.includes(modal.type)) {
       // Handled by their respective components which manage their own rendering
       return
@@ -57,15 +57,6 @@ export class ModalManager {
     modalActions.innerHTML = ''
 
     switch (modal.type) {
-      case 'save-gui-definition':
-        this.renderSaveGuiDefinition(modalTitle, modalContent, modalActions, modal.data, state)
-        break
-      case 'load-gui-definition':
-        await this.renderLoadGuiDefinition(modalTitle, modalContent, modalActions)
-        break
-      case 'gui-export':
-        // Handled by gui-designer component
-        break
       case 'handoff-review':
         this.renderHandoffReview(modalTitle, modalContent, modalActions, modal.data, state)
         break
@@ -178,148 +169,6 @@ export class ModalManager {
         document.getElementById('sprint-close-confirm-btn')?.click()
       }
     })
-  }
-
-  /**
-   * Render load GUI definition modal
-   */
-  async renderLoadGuiDefinition(title, content, actions) {
-    title.textContent = 'Load GUI Definition'
-    content.innerHTML = '<p>Loading definitions...</p>'
-
-    let definitions = []
-    try {
-      const result = await window.puffin.state.listGuiDefinitions()
-      if (result.success) {
-        definitions = result.definitions || []
-      }
-    } catch (error) {
-      console.error('Failed to load GUI definitions:', error)
-    }
-
-    if (definitions.length === 0) {
-      content.innerHTML = '<p class="no-definitions">No saved definitions yet. Create one by designing a layout and clicking Save.</p>'
-      actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Close</button>'
-      document.getElementById('modal-cancel-btn').addEventListener('click', () => {
-        this.intents.hideModal()
-      })
-      return
-    }
-
-    content.innerHTML = `
-      <div class="gui-definition-list">
-        ${definitions.map(def => `
-          <div class="gui-definition-item" data-filename="${this.escapeHtml(def.filename)}">
-            <div class="definition-icon">📋</div>
-            <div class="definition-info">
-              <span class="definition-name">${this.escapeHtml(def.name)}</span>
-              <span class="definition-meta">${def.description || `${def.elements?.length || 0} elements`}</span>
-            </div>
-            <button class="definition-delete" data-filename="${this.escapeHtml(def.filename)}" title="Delete">×</button>
-          </div>
-        `).join('')}
-      </div>
-    `
-
-    actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Cancel</button>'
-
-    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
-      this.intents.hideModal()
-    })
-
-    // Handle definition clicks
-    content.querySelectorAll('.gui-definition-item[data-filename]').forEach(item => {
-      item.addEventListener('click', async (e) => {
-        if (e.target.classList.contains('definition-delete')) return
-
-        const filename = item.dataset.filename
-        try {
-          const result = await window.puffin.state.loadGuiDefinition(filename)
-          if (result.success) {
-            this.intents.loadGuiDefinition(filename, result.definition)
-            this.intents.hideModal()
-            this.showToast(`Loaded: ${result.definition.name}`, 'success')
-          }
-        } catch (error) {
-          console.error('Failed to load definition:', error)
-          this.showToast('Failed to load definition', 'error')
-        }
-      })
-    })
-
-    // Handle delete buttons
-    content.querySelectorAll('.definition-delete').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation()
-        const filename = btn.dataset.filename
-        if (confirm('Delete this GUI definition?')) {
-          try {
-            await window.puffin.state.deleteGuiDefinition(filename)
-            this.showToast('Definition deleted', 'success')
-            await this.renderLoadGuiDefinition(title, content, actions)
-          } catch (error) {
-            console.error('Failed to delete definition:', error)
-            this.showToast('Failed to delete definition', 'error')
-          }
-        }
-      })
-    })
-  }
-
-  /**
-   * Render save GUI definition modal
-   */
-  renderSaveGuiDefinition(title, content, actions, data, state) {
-    title.textContent = 'Save GUI Definition'
-
-    content.innerHTML = `
-      <div class="form-group">
-        <label for="definition-name">Name</label>
-        <input type="text" id="definition-name" placeholder="My UI Layout" required>
-      </div>
-      <div class="form-group">
-        <label for="definition-description">Description (optional)</label>
-        <textarea id="definition-description" rows="3" placeholder="Brief description of this UI layout..."></textarea>
-      </div>
-      <p class="form-hint">Saving ${data?.elements?.length || 0} elements from current design.</p>
-    `
-
-    actions.innerHTML = `
-      <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
-      <button class="btn primary" id="save-definition-btn">Save Definition</button>
-    `
-
-    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
-      this.intents.hideModal()
-    })
-
-    document.getElementById('save-definition-btn').addEventListener('click', async () => {
-      const name = document.getElementById('definition-name').value.trim()
-      const description = document.getElementById('definition-description').value.trim()
-
-      if (!name) {
-        alert('Please enter a name for the definition')
-        return
-      }
-
-      try {
-        const elements = data?.elements || state?.designer?.flatElements || []
-        const result = await window.puffin.state.saveGuiDefinition(name, description, elements)
-        if (result.success) {
-          this.showToast('GUI definition saved!', 'success')
-          this.intents.hideModal()
-        } else {
-          throw new Error(result.error)
-        }
-      } catch (error) {
-        console.error('Failed to save definition:', error)
-        alert('Failed to save definition: ' + error.message)
-      }
-    })
-
-    setTimeout(() => {
-      document.getElementById('definition-name')?.focus()
-    }, 100)
   }
 
   /**

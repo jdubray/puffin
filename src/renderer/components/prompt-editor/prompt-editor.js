@@ -15,7 +15,8 @@ export class PromptEditorComponent {
     this.includeGuiDropdown = null
     this.includeGuiMenu = null
     this.includeGui = false
-    this.selectedGuiDefinition = null
+    this.selectedGuiDefinitions = [] // Array of selected GUI definitions (multi-select)
+    this.useCurrentDesign = false // Track if current design is selected
     this.deriveStoriesCheckbox = null
     this.deriveUserStories = false
     this.modelSelect = null
@@ -664,17 +665,8 @@ export class PromptEditorComponent {
         console.log('[CONTEXT-DEBUG] Handoff present - forcing NEW conversation to include handoff context')
       }
 
-      // Get GUI description if included
-      let guiDescription = null
-      if (this.includeGui) {
-        if (this.selectedGuiDefinition) {
-          // Use the selected saved definition
-          guiDescription = this.buildGuiDescription(this.selectedGuiDefinition.elements)
-        } else if (state.designer.hasElements) {
-          // Fallback to current designer elements
-          guiDescription = this.buildGuiDescription(state.designer.elements)
-        }
-      }
+      // Get GUI description if included (supports multiple definitions)
+      const guiDescription = this.buildCombinedGuiDescription(state)
 
       // Get design documents content if any selected
       const docsContent = await this.getSelectedDocumentsContent()
@@ -799,15 +791,8 @@ export class PromptEditorComponent {
 
     // Submit to Claude via IPC - no session resume for new thread
     if (window.puffin) {
-      // Get GUI description if included
-      let guiDescription = null
-      if (this.includeGui) {
-        if (this.selectedGuiDefinition) {
-          guiDescription = this.buildGuiDescription(this.selectedGuiDefinition.elements)
-        } else if (state.designer.hasElements) {
-          guiDescription = this.buildGuiDescription(state.designer.elements)
-        }
-      }
+      // Get GUI description if included (supports multiple definitions)
+      const guiDescription = this.buildCombinedGuiDescription(state)
 
       // Get relevant user stories for this branch
       const userStories = this.getRelevantUserStories(state)
@@ -869,69 +854,45 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Open the dropdown and populate with options
+   * Open the dropdown and populate with options (multi-select)
+   * Reads GUI definitions directly from .puffin/gui-definitions/ on each click
    */
   async openDropdown() {
-    // Fetch saved definitions
+    // Close docs dropdown if open
+    this.closeDocsDropdown()
+
+    // Show loading state immediately
+    this.includeGuiMenu.innerHTML = `<div class="dropdown-item disabled">
+      <span class="item-icon">⏳</span>
+      <span class="item-label">Loading designs...</span>
+    </div>`
+    this.includeGuiDropdown.classList.add('open')
+
+    // Read GUI definitions directly from filesystem
     let definitions = []
     try {
-      const result = await window.puffin.state.listGuiDefinitions()
-      if (result.success) {
-        definitions = result.definitions || []
-      }
-    } catch (error) {
-      console.error('Failed to load GUI definitions:', error)
+      const result = await window.puffin.state.listGuiDesigns()
+      definitions = result?.designs || []
+    } catch (err) {
+      console.error('[PromptEditor] Failed to list GUI designs:', err)
     }
-
-    // Check if current designer has elements
-    const state = window.puffinApp?.state
-    const hasCurrentDesign = state?.designer?.hasElements
 
     // Build menu HTML
     let menuHtml = ''
 
-    // Clear selection option (if something is selected)
-    if (this.includeGui) {
-      menuHtml += `<div class="dropdown-item clear-selection" data-action="clear">
-        <span class="item-icon">✕</span>
-        <span class="item-label">Clear Selection</span>
-      </div>
-      <div class="dropdown-divider"></div>`
-    }
-
-    // Current design option
-    if (hasCurrentDesign) {
-      const isSelected = this.includeGui && !this.selectedGuiDefinition?.filename
-      menuHtml += `<div class="dropdown-item ${isSelected ? 'selected' : ''}" data-action="current">
-        <span class="item-icon">📐</span>
-        <span class="item-label">Use Current Design</span>
-        <span class="item-meta">${state.designer.elementCount} elements</span>
-      </div>`
-    }
-
-    // Saved definitions
     if (definitions.length > 0) {
-      if (hasCurrentDesign) {
-        menuHtml += '<div class="dropdown-divider"></div>'
-      }
       definitions.forEach(def => {
-        const isSelected = this.selectedGuiDefinition?.filename === def.filename
-        menuHtml += `<div class="dropdown-item ${isSelected ? 'selected' : ''}" data-action="load" data-filename="${this.escapeHtml(def.filename)}">
-          <span class="item-icon">📋</span>
+        const isSelected = this.selectedGuiDefinitions.some(d => d.filename === def.filename)
+        menuHtml += `<div class="dropdown-item ${isSelected ? 'selected' : ''}" data-action="toggle" data-filename="${this.escapeHtml(def.filename)}" data-name="${this.escapeHtml(def.name)}">
+          <span class="item-checkbox">${isSelected ? '☑' : '☐'}</span>
           <span class="item-label">${this.escapeHtml(def.name)}</span>
         </div>`
       })
-    }
-
-    // Empty state
-    if (!hasCurrentDesign && definitions.length === 0) {
-      menuHtml = `<div class="dropdown-item disabled">
-        <span class="item-label">No designs available</span>
-      </div>`
+    } else {
+      menuHtml = `<div class="dropdown-item disabled">No designs found</div>`
     }
 
     this.includeGuiMenu.innerHTML = menuHtml
-    this.includeGuiDropdown.classList.add('open')
 
     // Bind click events
     this.includeGuiMenu.querySelectorAll('.dropdown-item:not(.disabled)').forEach(item => {
@@ -947,7 +908,7 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Handle dropdown item selection
+   * Handle dropdown item selection (multi-select)
    */
   async handleDropdownSelect(e, item) {
     e.stopPropagation()
@@ -956,59 +917,89 @@ export class PromptEditorComponent {
     switch (action) {
       case 'clear':
         this.clearGuiSelection()
+        this.closeDropdown()
         break
-      case 'current':
-        const state = window.puffinApp?.state
-        this.setSelectedGuiDefinition({
-          elements: state.designer.flatElements
-        })
+      case 'toggle-current':
+        this.toggleCurrentDesign()
+        // Re-render dropdown to show updated checkboxes
+        await this.openDropdown()
         break
-      case 'load':
+      case 'toggle':
         const filename = item.dataset.filename
-        try {
-          const result = await window.puffin.state.loadGuiDefinition(filename)
-          if (result.success) {
-            this.setSelectedGuiDefinition({
-              ...result.definition,
-              filename: filename
-            })
-          }
-        } catch (error) {
-          console.error('Failed to load definition:', error)
-        }
+        const name = item.dataset.name
+        await this.toggleGuiDefinitionSelection(filename, name)
+        // Re-render dropdown to show updated checkboxes
+        await this.openDropdown()
         break
     }
-
-    this.closeDropdown()
   }
 
   /**
-   * Set the selected GUI definition for inclusion in prompts
+   * Toggle current design selection
    */
-  setSelectedGuiDefinition(definition) {
-    this.selectedGuiDefinition = definition
-    this.includeGui = true
-    this.includeGuiBtn.classList.add('active')
+  toggleCurrentDesign() {
+    this.useCurrentDesign = !this.useCurrentDesign
+    this.updateGuiSelectionState()
+  }
+
+  /**
+   * Toggle a GUI definition's selection state
+   */
+  async toggleGuiDefinitionSelection(filename, name) {
+    const index = this.selectedGuiDefinitions.findIndex(d => d.filename === filename)
+    if (index === -1) {
+      // Load full definition (with elements) from .puffin/gui-definitions/
+      try {
+        const result = await window.puffin.state.loadGuiDesign(filename)
+        const definition = result?.design
+        if (definition) {
+          this.selectedGuiDefinitions.push({
+            ...definition,
+            filename: filename,
+            name: name || definition.name
+          })
+        }
+      } catch (error) {
+        console.error('Failed to load definition:', error)
+      }
+    } else {
+      // Remove from selection
+      this.selectedGuiDefinitions.splice(index, 1)
+    }
+    this.updateGuiSelectionState()
+  }
+
+  /**
+   * Update the overall GUI selection state based on current selections
+   */
+  updateGuiSelectionState() {
+    this.includeGui = this.useCurrentDesign || this.selectedGuiDefinitions.length > 0
+    if (this.includeGui) {
+      this.includeGuiBtn.classList.add('active')
+    } else {
+      this.includeGuiBtn.classList.remove('active')
+    }
     this.updateButtonLabel()
   }
 
   /**
-   * Clear GUI selection
+   * Clear all GUI selections
    */
   clearGuiSelection() {
     this.includeGui = false
-    this.selectedGuiDefinition = null
+    this.useCurrentDesign = false
+    this.selectedGuiDefinitions = []
     this.includeGuiBtn.classList.remove('active')
     this.updateButtonLabel()
   }
 
   /**
-   * Update button label to show selection
+   * Update button label to show selection count
    */
   updateButtonLabel() {
-    if (this.includeGui && this.selectedGuiDefinition) {
-      const name = this.selectedGuiDefinition.name || 'Current Design'
-      this.includeGuiBtn.textContent = `GUI: ${name} ▾`
+    const count = this.selectedGuiDefinitions.length + (this.useCurrentDesign ? 1 : 0)
+    if (count > 0) {
+      this.includeGuiBtn.textContent = `GUI (${count}) ▾`
     } else {
       this.includeGuiBtn.textContent = 'Include GUI ▾'
     }
@@ -1348,12 +1339,20 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Build GUI description from elements
+   * Build GUI description from elements for a single definition
+   * @param {Array} elements - GUI elements
+   * @param {string} [name] - Optional name for the design
+   * @returns {string} Formatted description
    */
-  buildGuiDescription(elements) {
+  buildGuiDescription(elements, name = null) {
     if (!elements || elements.length === 0) return null
 
-    const lines = ['## UI Layout\n']
+    const lines = []
+    if (name) {
+      lines.push(`### ${name}\n`)
+    } else {
+      lines.push('## UI Layout\n')
+    }
 
     const describeElement = (element, indent = 0) => {
       const prefix = '  '.repeat(indent)
@@ -1380,6 +1379,51 @@ export class PromptEditorComponent {
     elements.forEach(el => describeElement(el))
 
     return lines.join('\n')
+  }
+
+  /**
+   * Build combined GUI description from all selected definitions
+   * Combines current design and saved definitions into a single context
+   * @param {Object} state - Current app state
+   * @returns {string|null} Combined GUI description or null if nothing selected
+   */
+  buildCombinedGuiDescription(state) {
+    if (!this.includeGui) return null
+
+    const descriptions = []
+
+    // Add current design if selected
+    if (this.useCurrentDesign && state?.designer?.hasElements) {
+      const currentDesc = this.buildGuiDescription(
+        state.designer.flatElements || state.designer.elements,
+        'Current Design'
+      )
+      if (currentDesc) {
+        descriptions.push(currentDesc)
+      }
+    }
+
+    // Add saved definitions
+    for (const definition of this.selectedGuiDefinitions) {
+      if (definition.elements && definition.elements.length > 0) {
+        const defDesc = this.buildGuiDescription(
+          definition.elements,
+          definition.name || definition.filename
+        )
+        if (defDesc) {
+          descriptions.push(defDesc)
+        }
+      }
+    }
+
+    if (descriptions.length === 0) return null
+
+    // Combine with header
+    if (descriptions.length === 1) {
+      return descriptions[0]
+    }
+
+    return `## GUI Designs\n\nThe following UI designs should guide your implementation:\n\n${descriptions.join('\n\n---\n\n')}`
   }
 
   /**

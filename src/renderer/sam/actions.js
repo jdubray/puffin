@@ -227,135 +227,6 @@ export const selectPrompt = (promptId) => ({
 })
 
 /**
- * GUI Designer Actions
- */
-
-// Add element to canvas
-export const addGuiElement = (element) => ({
-  type: 'ADD_GUI_ELEMENT',
-  payload: {
-    id: generateId(),
-    type: element.type,
-    properties: element.properties || {},
-    parentId: element.parentId || null
-  }
-})
-
-// Update element properties
-export const updateGuiElement = (elementId, properties) => ({
-  type: 'UPDATE_GUI_ELEMENT',
-  payload: {
-    id: elementId,
-    properties
-  }
-})
-
-// Delete element
-export const deleteGuiElement = (elementId) => ({
-  type: 'DELETE_GUI_ELEMENT',
-  payload: {
-    id: elementId
-  }
-})
-
-// Move element
-export const moveGuiElement = (elementId, x, y) => ({
-  type: 'MOVE_GUI_ELEMENT',
-  payload: {
-    id: elementId,
-    x,
-    y
-  }
-})
-
-// Resize element
-export const resizeGuiElement = (elementId, width, height) => ({
-  type: 'RESIZE_GUI_ELEMENT',
-  payload: {
-    id: elementId,
-    width,
-    height
-  }
-})
-
-// Select element
-export const selectGuiElement = (elementId) => ({
-  type: 'SELECT_GUI_ELEMENT',
-  payload: {
-    elementId
-  }
-})
-
-// Clear canvas
-export const clearGuiCanvas = () => ({
-  type: 'CLEAR_GUI_CANVAS',
-  payload: {}
-})
-
-// Export GUI to description
-export const exportGuiDescription = () => ({
-  type: 'EXPORT_GUI_DESCRIPTION',
-  payload: {}
-})
-
-/**
- * GUI Definition Actions
- */
-
-// Save current GUI as a named definition
-export const saveGuiDefinition = (name, description) => ({
-  type: 'SAVE_GUI_DEFINITION',
-  payload: {
-    name,
-    description,
-    timestamp: Date.now()
-  }
-})
-
-// Load a GUI definition into the designer
-export const loadGuiDefinition = (filename, definition) => ({
-  type: 'LOAD_GUI_DEFINITION',
-  payload: {
-    filename,
-    definition,
-    timestamp: Date.now()
-  }
-})
-
-// List all available GUI definitions
-export const listGuiDefinitions = () => ({
-  type: 'LIST_GUI_DEFINITIONS',
-  payload: {
-    timestamp: Date.now()
-  }
-})
-
-// Delete a GUI definition
-export const deleteGuiDefinition = (filename) => ({
-  type: 'DELETE_GUI_DEFINITION',
-  payload: {
-    filename,
-    timestamp: Date.now()
-  }
-})
-
-// Show GUI definition selection dialog
-export const showGuiDefinitionDialog = () => ({
-  type: 'SHOW_GUI_DEFINITION_DIALOG',
-  payload: {
-    timestamp: Date.now()
-  }
-})
-
-// Show save GUI definition dialog
-export const showSaveGuiDefinitionDialog = () => ({
-  type: 'SHOW_SAVE_GUI_DEFINITION_DIALOG',
-  payload: {
-    timestamp: Date.now()
-  }
-})
-
-/**
  * Architecture Document Actions
  */
 
@@ -634,7 +505,7 @@ export const completeImplementationJourney = (journeyId, status, outcome_notes =
 export const switchView = (view) => ({
   type: 'SWITCH_VIEW',
   payload: {
-    view // 'config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output'
+    view // 'config', 'prompt', 'user-stories', 'architecture', 'cli-output' (plugins may add more views)
   }
 })
 

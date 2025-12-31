@@ -43,15 +43,6 @@ contextBridge.exposeInMainWorld('puffin', {
     listGuiDesigns: () => ipcRenderer.invoke('state:listGuiDesigns'),
     loadGuiDesign: (filename) => ipcRenderer.invoke('state:loadGuiDesign', filename),
 
-    // GUI definition operations
-    saveGuiDefinition: (name, description, elements) =>
-      ipcRenderer.invoke('state:saveGuiDefinition', { name, description, elements }),
-    listGuiDefinitions: () => ipcRenderer.invoke('state:listGuiDefinitions'),
-    loadGuiDefinition: (filename) => ipcRenderer.invoke('state:loadGuiDefinition', filename),
-    updateGuiDefinition: (filename, updates) =>
-      ipcRenderer.invoke('state:updateGuiDefinition', { filename, updates }),
-    deleteGuiDefinition: (filename) => ipcRenderer.invoke('state:deleteGuiDefinition', filename),
-
     // User story operations
     getUserStories: () => ipcRenderer.invoke('state:getUserStories'),
     addUserStory: (story) => ipcRenderer.invoke('state:addUserStory', story),

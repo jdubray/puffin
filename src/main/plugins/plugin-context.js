@@ -26,6 +26,7 @@ class PluginContext {
    * @param {Object} options.registry - Plugin registry for tracking registrations
    * @param {Object} options.ipcMain - Electron ipcMain for registering handlers
    * @param {Object} options.services - Shared services (optional)
+   * @param {string} options.projectPath - Current project path (where .puffin/ lives)
    */
   constructor(pluginName, pluginDir, options = {}) {
     this.pluginName = pluginName
@@ -34,6 +35,7 @@ class PluginContext {
     this.registry = options.registry
     this.ipcMain = options.ipcMain
     this.services = options.services || {}
+    this.projectPath = options.projectPath || null // Project root (contains .puffin/)
 
     // Storage directory for this plugin
     this.storageDir = path.join(os.homedir(), '.puffin', 'plugin-data', pluginName)

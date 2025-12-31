@@ -24,7 +24,6 @@ import { ProjectFormComponent } from './components/project-form/project-form.js'
 import { HistoryTreeComponent } from './components/history-tree/history-tree.js'
 import { PromptEditorComponent } from './components/prompt-editor/prompt-editor.js'
 import { ResponseViewerComponent } from './components/response-viewer/response-viewer.js'
-import { GuiDesignerComponent } from './components/gui-designer/gui-designer.js'
 import { ArchitectureComponent } from './components/architecture/architecture.js'
 import { DebuggerComponent } from './components/debugger/debugger.js'
 import { CliOutputComponent } from './components/cli-output/cli-output.js'
@@ -378,11 +377,6 @@ class PuffinApp {
       'requestContinue', 'clearContinueRequest',
       'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'updateBranchSettings', 'selectPrompt',
       'toggleThreadExpanded', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
-      'addGuiElement', 'updateGuiElement', 'deleteGuiElement',
-      'moveGuiElement', 'resizeGuiElement', 'selectGuiElement',
-      'clearGuiCanvas', 'exportGuiDescription',
-      'saveGuiDefinition', 'loadGuiDefinition', 'listGuiDefinitions',
-      'deleteGuiDefinition', 'showSaveGuiDefinitionDialog',
       'updateArchitecture', 'reviewArchitecture',
       'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories', 'loadSprintHistory',
       'setSprintFilter', 'clearSprintFilter',
@@ -457,23 +451,6 @@ class PuffinApp {
           ['UPDATE_THREAD_SEARCH_QUERY', actions.updateThreadSearchQuery],
           ['MARK_THREAD_COMPLETE', actions.markThreadComplete],
           ['UNMARK_THREAD_COMPLETE', actions.unmarkThreadComplete],
-
-          // GUI Designer actions
-          ['ADD_GUI_ELEMENT', actions.addGuiElement],
-          ['UPDATE_GUI_ELEMENT', actions.updateGuiElement],
-          ['DELETE_GUI_ELEMENT', actions.deleteGuiElement],
-          ['MOVE_GUI_ELEMENT', actions.moveGuiElement],
-          ['RESIZE_GUI_ELEMENT', actions.resizeGuiElement],
-          ['SELECT_GUI_ELEMENT', actions.selectGuiElement],
-          ['CLEAR_GUI_CANVAS', actions.clearGuiCanvas],
-          ['EXPORT_GUI_DESCRIPTION', actions.exportGuiDescription],
-
-          // GUI Definition actions
-          ['SAVE_GUI_DEFINITION', actions.saveGuiDefinition],
-          ['LOAD_GUI_DEFINITION', actions.loadGuiDefinition],
-          ['LIST_GUI_DEFINITIONS', actions.listGuiDefinitions],
-          ['DELETE_GUI_DEFINITION', actions.deleteGuiDefinition],
-          ['SHOW_SAVE_GUI_DEFINITION_DIALOG', actions.showSaveGuiDefinitionDialog],
 
           // Architecture actions
           ['UPDATE_ARCHITECTURE', actions.updateArchitecture],
@@ -632,7 +609,6 @@ class PuffinApp {
       historyTree: new HistoryTreeComponent(this.intents),
       promptEditor: new PromptEditorComponent(this.intents),
       responseViewer: new ResponseViewerComponent(this.intents),
-      guiDesigner: new GuiDesignerComponent(this.intents),
       architecture: new ArchitectureComponent(this.intents),
       debugger: new DebuggerComponent(this.intents),
       cliOutput: new CliOutputComponent(this.intents),
@@ -1330,7 +1306,8 @@ class PuffinApp {
    * Update view visibility
    */
   updateViews(state) {
-    const views = ['config', 'prompt', 'designer', 'user-stories', 'architecture', 'cli-output', 'git', 'profile', 'debug']
+    // Core views - plugins may contribute additional views (e.g., designer-plugin)
+    const views = ['config', 'prompt', 'user-stories', 'architecture', 'cli-output', 'git', 'profile', 'debug']
     views.forEach(viewName => {
       const view = document.getElementById(`${viewName}-view`)
       if (view) {

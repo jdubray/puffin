@@ -234,8 +234,14 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:getUserStories', async () => {
     try {
       const stories = puffinState.getUserStories()
+      // SAFETY: Ensure we always return an array, never null/undefined
+      if (!Array.isArray(stories)) {
+        console.error('[IPC:getUserStories] SAFETY: stories is not an array, returning empty array')
+        return { success: true, stories: [] }
+      }
       return { success: true, stories }
     } catch (error) {
+      console.error('[IPC:getUserStories] Error:', error.message)
       return { success: false, error: error.message }
     }
   })

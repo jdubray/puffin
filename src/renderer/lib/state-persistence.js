@@ -237,11 +237,29 @@ export class StatePersistence {
           }
 
           // Refresh user stories from disk to ensure UI is in sync
+          // SAFETY: Only refresh if the result has stories - never wipe with empty array
           try {
             const storiesResult = await window.puffin.state.getUserStories()
-            if (storiesResult.success && storiesResult.stories) {
-              this.intents.loadUserStories(storiesResult.stories)
-              console.log('[PERSIST-DEBUG] User stories refreshed:', storiesResult.stories.length, 'stories')
+            if (storiesResult.success && Array.isArray(storiesResult.stories)) {
+              const currentStoryCount = state.userStories?.length || 0
+              const newStoryCount = storiesResult.stories.length
+
+              // CRITICAL SAFETY CHECK: Prevent data loss by refusing to load fewer stories
+              // This protects against race conditions, file corruption, or timing issues
+              if (newStoryCount === 0 && currentStoryCount > 0) {
+                console.error('[PERSIST-DEBUG] SAFETY: Refusing to load empty stories array when', currentStoryCount, 'stories exist in memory')
+                console.error('[PERSIST-DEBUG] This may indicate file corruption or a race condition - stories preserved')
+              } else if (newStoryCount < currentStoryCount * 0.5 && currentStoryCount > 3) {
+                // Significant loss (more than 50%) - log warning but still load (user might have deleted)
+                console.warn('[PERSIST-DEBUG] WARNING: Story count dropping from', currentStoryCount, 'to', newStoryCount, '- potential data loss')
+                this.intents.loadUserStories(storiesResult.stories)
+                console.log('[PERSIST-DEBUG] User stories refreshed with warning:', newStoryCount, 'stories')
+              } else {
+                this.intents.loadUserStories(storiesResult.stories)
+                console.log('[PERSIST-DEBUG] User stories refreshed:', newStoryCount, 'stories')
+              }
+            } else {
+              console.warn('[PERSIST-DEBUG] getUserStories returned invalid data, keeping current stories')
             }
           } catch (e) {
             console.error('[PERSIST-DEBUG] Failed to refresh user stories:', e)

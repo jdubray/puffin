@@ -1008,7 +1008,18 @@ export const deleteUserStoryAcceptor = model => proposal => {
 
 export const loadUserStoriesAcceptor = model => proposal => {
   if (proposal?.type === 'LOAD_USER_STORIES') {
-    model.userStories = proposal.payload.stories || []
+    const newStories = proposal.payload.stories || []
+    const currentStories = model.userStories || []
+
+    // SAFETY: Never wipe stories if we have existing stories and receiving empty
+    // This is a defense-in-depth check - the caller should also prevent this
+    if (newStories.length === 0 && currentStories.length > 0) {
+      console.error('[LOAD_USER_STORIES] BLOCKED: Refusing to wipe', currentStories.length, 'stories with empty array')
+      console.error('[LOAD_USER_STORIES] This may indicate a bug in the caller - stories preserved')
+      return // Keep existing stories
+    }
+
+    model.userStories = newStories
   }
 }
 

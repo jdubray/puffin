@@ -1746,17 +1746,30 @@ Document your API endpoints...
 
   /**
    * Load user stories or create empty array
+   * Enhanced with backup recovery for data protection
    * @private
    */
   async loadUserStories() {
     const storiesPath = path.join(this.puffinPath, USER_STORIES_FILE)
+    const backupPath = path.join(this.puffinPath, 'user-stories.backup.json')
+
     try {
       const content = await fs.readFile(storiesPath, 'utf-8')
       const stories = JSON.parse(content)
 
       // Validate that stories is an array
       if (!Array.isArray(stories)) {
-        console.error('[PUFFIN-STATE] User stories file is not an array, returning empty array')
+        console.error('[PUFFIN-STATE] User stories file is not an array, attempting backup recovery')
+        return await this._recoverFromBackup(backupPath)
+      }
+
+      // If main file is empty but backup exists with stories, recover
+      if (stories.length === 0) {
+        const recoveredStories = await this._recoverFromBackup(backupPath)
+        if (recoveredStories.length > 0) {
+          console.log(`[PUFFIN-STATE] RECOVERY: Restored ${recoveredStories.length} stories from backup`)
+          return recoveredStories
+        }
         return []
       }
 
@@ -1781,18 +1794,65 @@ Document your API endpoints...
         await this.saveUserStories(uniqueStories)
       }
 
+      // Create a backup of valid stories for recovery purposes
+      if (uniqueStories.length > 0) {
+        await this._createBackup(backupPath, uniqueStories)
+      }
+
       return uniqueStories
     } catch (error) {
-      // Check if file doesn't exist (ENOENT) - that's okay, return empty array
+      // Check if file doesn't exist (ENOENT) - try backup first
       if (error.code === 'ENOENT') {
-        console.log('[PUFFIN-STATE] No user stories file found, starting with empty array')
+        console.log('[PUFFIN-STATE] No user stories file found, checking for backup')
+        const recoveredStories = await this._recoverFromBackup(backupPath)
+        if (recoveredStories.length > 0) {
+          console.log(`[PUFFIN-STATE] RECOVERY: Restored ${recoveredStories.length} stories from backup (main file missing)`)
+          // Save recovered stories to main file
+          await this.saveUserStories(recoveredStories)
+          return recoveredStories
+        }
         return []
       }
 
-      // For other errors (parse errors, permission issues), log but don't wipe the file
+      // For other errors (parse errors, permission issues), try backup
       console.error('[PUFFIN-STATE] Error loading user stories:', error.message)
-      console.error('[PUFFIN-STATE] SAFETY: Not overwriting file to prevent data loss')
+      const recoveredStories = await this._recoverFromBackup(backupPath)
+      if (recoveredStories.length > 0) {
+        console.log(`[PUFFIN-STATE] RECOVERY: Restored ${recoveredStories.length} stories from backup after error`)
+        return recoveredStories
+      }
+      console.error('[PUFFIN-STATE] SAFETY: No backup available, returning empty array')
       return []
+    }
+  }
+
+  /**
+   * Attempt to recover stories from backup file
+   * @private
+   */
+  async _recoverFromBackup(backupPath) {
+    try {
+      const content = await fs.readFile(backupPath, 'utf-8')
+      const stories = JSON.parse(content)
+      if (Array.isArray(stories) && stories.length > 0) {
+        return stories
+      }
+    } catch {
+      // No backup available or backup is invalid
+    }
+    return []
+  }
+
+  /**
+   * Create a backup of stories
+   * @private
+   */
+  async _createBackup(backupPath, stories) {
+    try {
+      await fs.writeFile(backupPath, JSON.stringify(stories, null, 2), 'utf-8')
+      console.log(`[PUFFIN-STATE] Backup created with ${stories.length} stories`)
+    } catch (error) {
+      console.error('[PUFFIN-STATE] Failed to create backup:', error.message)
     }
   }
 

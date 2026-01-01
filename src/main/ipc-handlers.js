@@ -136,26 +136,6 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
-  // Update architecture
-  ipcMain.handle('state:updateArchitecture', async (event, content) => {
-    try {
-      const architecture = await puffinState.updateArchitecture(content)
-
-      // Regenerate architecture branch CLAUDE.md
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      const archSkillContent = puffinState.getBranchSkillContent('architecture')
-      await claudeMdGenerator.updateBranch('architecture', state, activeBranch, archSkillContent)
-      // Also update backend branch (it extracts data model from architecture)
-      const backendSkillContent = puffinState.getBranchSkillContent('backend')
-      await claudeMdGenerator.updateBranch('backend', state, activeBranch, backendSkillContent)
-
-      return { success: true, architecture }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
   // GUI design operations
   ipcMain.handle('state:saveGuiDesign', async (event, { name, design }) => {
     try {

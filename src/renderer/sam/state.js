@@ -32,9 +32,6 @@ export function computeState(model) {
     prompt: computePromptState(model),
     history: computeHistoryState(model),
 
-    // Architecture state
-    architecture: computeArchitectureState(model),
-
     // User Stories state
     userStories: model.userStories || [],
 
@@ -326,20 +323,6 @@ function computeHistoryState(model) {
 }
 
 /**
- * Architecture state computation
- */
-function computeArchitectureState(model) {
-  const arch = model.architecture || {}
-  return {
-    content: arch.content || '',
-    updatedAt: arch.updatedAt,
-    lastReviewAt: arch.lastReviewAt,
-    hasContent: (arch.content || '').length > 0,
-    wordCount: (arch.content || '').split(/\s+/).filter(w => w).length
-  }
-}
-
-/**
  * UI state computation
  */
 function computeUIState(model) {
@@ -353,7 +336,6 @@ function computeUIState(model) {
     showConfig: model.currentView === 'config',
     showPromptEditor: model.currentView === 'prompt',
     showUserStories: model.currentView === 'user-stories',
-    showArchitecture: model.currentView === 'architecture',
     showCliOutput: model.currentView === 'cli-output',
 
     // Navigation state

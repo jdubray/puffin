@@ -33,7 +33,6 @@ export class StatePersistence {
       'UPDATE_CONFIG', 'UPDATE_OPTIONS',
       'SUBMIT_PROMPT', 'COMPLETE_RESPONSE',
       'SELECT_BRANCH', 'SELECT_PROMPT', 'CREATE_BRANCH', 'DELETE_BRANCH', 'REORDER_BRANCHES',
-      'UPDATE_ARCHITECTURE',
       'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
       'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
@@ -117,10 +116,6 @@ export class StatePersistence {
         // Use the explicit "Derive User Stories" checkbox instead, which provides
         // better control and a review modal before adding stories.
         // The old auto-extraction was creating too many false positives.
-      }
-
-      if (normalizedType === 'UPDATE_ARCHITECTURE') {
-        await window.puffin.state.updateArchitecture(state.architecture.content)
       }
 
       // Persist individual user story updates (status changes, edits)

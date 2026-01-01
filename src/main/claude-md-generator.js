@@ -170,7 +170,7 @@ class ClaudeMdGenerator {
         content = this.generateSpecificationsBranch(state)
         break
       case 'architecture':
-        content = this.generateArchitectureBranch(state)
+        content = await this.generateArchitectureBranch(state)
         break
       case 'ui':
         content = this.generateUiBranch(state)
@@ -241,8 +241,9 @@ class ClaudeMdGenerator {
 
   /**
    * Generate architecture branch context
+   * Reads architecture content directly from .puffin/architecture.md
    */
-  generateArchitectureBranch(state) {
+  async generateArchitectureBranch(state) {
     const lines = []
     lines.push('---')
     lines.push('')
@@ -256,12 +257,19 @@ class ClaudeMdGenerator {
     lines.push('- Scalability and maintainability')
     lines.push('')
 
-    // Include architecture document if available
-    if (state.architecture?.content) {
-      lines.push('### Current Architecture')
-      lines.push('')
-      lines.push(state.architecture.content)
-      lines.push('')
+    // Include architecture document from .puffin/architecture.md if available
+    try {
+      const puffinDir = path.join(this.projectPath, '.puffin')
+      const archPath = path.join(puffinDir, 'architecture.md')
+      const content = await fs.readFile(archPath, 'utf-8')
+      if (content && content.trim()) {
+        lines.push('### Current Architecture')
+        lines.push('')
+        lines.push(content)
+        lines.push('')
+      }
+    } catch (err) {
+      // File doesn't exist or can't be read - that's okay, just skip it
     }
 
     return lines.join('\n')

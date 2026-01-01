@@ -83,12 +83,6 @@ export const initialModel = {
     threadSearchQuery: '' // Search query for filtering threads
   },
 
-  // Architecture state (from .puffin/architecture.md)
-  architecture: {
-    content: '',
-    updatedAt: null
-  },
-
   // User stories state (from .puffin/user-stories.json)
   userStories: [],
 
@@ -283,7 +277,6 @@ export const loadStateAcceptor = model => proposal => {
     model.projectName = state.projectName
     model.config = state.config
     model.history = state.history
-    model.architecture = state.architecture
     model.userStories = state.userStories || []
     model.activeSprint = state.activeSprint || null
     model.sprintHistory = state.sprintHistory || []
@@ -834,23 +827,6 @@ export const unmarkThreadCompleteAcceptor = model => proposal => {
         break
       }
     }
-  }
-}
-
-/**
- * Architecture Acceptors
- */
-
-export const updateArchitectureAcceptor = model => proposal => {
-  if (proposal?.type === 'UPDATE_ARCHITECTURE') {
-    model.architecture.content = proposal.payload.content
-    model.architecture.updatedAt = new Date().toISOString()
-  }
-}
-
-export const reviewArchitectureAcceptor = model => proposal => {
-  if (proposal?.type === 'REVIEW_ARCHITECTURE') {
-    model.architecture.lastReviewAt = proposal.payload.timestamp
   }
 }
 
@@ -2716,7 +2692,7 @@ function truncateText(text, maxLength) {
 export const switchViewAcceptor = model => proposal => {
   if (proposal?.type === 'SWITCH_VIEW') {
     // Core views plus plugin-contributed views (e.g., 'designer' from designer-plugin)
-    const validViews = ['config', 'prompt', 'user-stories', 'architecture', 'cli-output', 'profile', 'git', 'debug', 'designer']
+    const validViews = ['config', 'prompt', 'user-stories', 'cli-output', 'profile', 'git', 'debug', 'designer']
     if (validViews.includes(proposal.payload.view)) {
       model.currentView = proposal.payload.view
     }
@@ -2900,10 +2876,6 @@ export const acceptors = [
   updateThreadSearchQueryAcceptor,
   markThreadCompleteAcceptor,
   unmarkThreadCompleteAcceptor,
-
-  // Architecture
-  updateArchitectureAcceptor,
-  reviewArchitectureAcceptor,
 
   // User Stories
   addUserStoryAcceptor,

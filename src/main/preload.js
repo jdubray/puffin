@@ -35,9 +35,6 @@ contextBridge.exposeInMainWorld('puffin', {
     updatePromptResponse: (branchId, promptId, response) =>
       ipcRenderer.invoke('state:updatePromptResponse', { branchId, promptId, response }),
 
-    // Update architecture document
-    updateArchitecture: (content) => ipcRenderer.invoke('state:updateArchitecture', content),
-
     // GUI design operations (legacy)
     saveGuiDesign: (name, design) => ipcRenderer.invoke('state:saveGuiDesign', { name, design }),
     listGuiDesigns: () => ipcRenderer.invoke('state:listGuiDesigns'),
@@ -599,6 +596,24 @@ contextBridge.exposeInMainWorld('puffin', {
       const handler = (event, data) => callback(data)
       ipcRenderer.on('plugin:deactivated', handler)
       return () => ipcRenderer.removeListener('plugin:deactivated', handler)
+    },
+
+    // === Named Plugin APIs ===
+    // Convenience wrappers for common plugins
+
+    /**
+     * Claude Config Plugin API
+     * Provides access to CLAUDE.md configuration management
+     */
+    claudeConfig: {
+      getConfig: (options) =>
+        ipcRenderer.invoke('plugin:claude-config-plugin:getConfig', options),
+      getConfigWithContext: (options) =>
+        ipcRenderer.invoke('plugin:claude-config-plugin:getConfigWithContext', options),
+      updateConfig: (content, options) =>
+        ipcRenderer.invoke('plugin:claude-config-plugin:updateConfig', { content, options }),
+      getMetadata: () =>
+        ipcRenderer.invoke('plugin:claude-config-plugin:getMetadata')
     }
   },
 

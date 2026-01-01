@@ -36,7 +36,6 @@ class PuffinState {
     this.puffinPath = null
     this.config = null
     this.history = null
-    this.architecture = null
     this.userStories = null
     this.archivedStories = null
     this.sprintHistory = null
@@ -64,7 +63,6 @@ class PuffinState {
     // Load or initialize state
     this.config = await this.loadConfig()
     this.history = await this.loadHistory()
-    this.architecture = await this.loadArchitecture()
     this.userStories = await this.loadUserStories()
     this.archivedStories = await this.loadArchivedStories()
     this.activeSprint = await this.loadActiveSprint()
@@ -155,7 +153,6 @@ class PuffinState {
       projectName: path.basename(this.projectPath),
       config: this.config,
       history: this.history,
-      architecture: this.architecture,
       userStories: this.userStories,
       archivedStoriesCount: this.archivedStories?.length || 0,
       activeSprint: this.activeSprint,
@@ -240,19 +237,6 @@ class PuffinState {
     this.history.updatedAt = new Date().toISOString()
     await this.saveHistory()
     return this.history
-  }
-
-  /**
-   * Update architecture document
-   * @param {string} content - Markdown content
-   */
-  async updateArchitecture(content) {
-    this.architecture = {
-      content,
-      updatedAt: new Date().toISOString()
-    }
-    await this.saveArchitecture()
-    return this.architecture
   }
 
   /**
@@ -1604,62 +1588,6 @@ class PuffinState {
   async saveHistory(history = this.history) {
     const historyPath = path.join(this.puffinPath, HISTORY_FILE)
     await fs.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf-8')
-  }
-
-  /**
-   * Load architecture or create default
-   * @private
-   */
-  async loadArchitecture() {
-    const archPath = path.join(this.puffinPath, ARCHITECTURE_FILE)
-    try {
-      const content = await fs.readFile(archPath, 'utf-8')
-      return {
-        content,
-        updatedAt: (await fs.stat(archPath)).mtime.toISOString()
-      }
-    } catch {
-      // Create default architecture template
-      const defaultContent = `# ${path.basename(this.projectPath)} Architecture
-
-## Overview
-
-Describe the overall system architecture...
-
-## Components
-
-List and describe the main components...
-
-## Data Flow
-
-Explain how data flows through the system...
-
-## APIs
-
-Document your API endpoints...
-
-## Technology Stack
-
-- Frontend:
-- Backend:
-- Database:
-- Infrastructure:
-`
-      await this.saveArchitecture({ content: defaultContent })
-      return {
-        content: defaultContent,
-        updatedAt: new Date().toISOString()
-      }
-    }
-  }
-
-  /**
-   * Save architecture
-   * @private
-   */
-  async saveArchitecture(arch = this.architecture) {
-    const archPath = path.join(this.puffinPath, ARCHITECTURE_FILE)
-    await fs.writeFile(archPath, arch.content, 'utf-8')
   }
 
   /**

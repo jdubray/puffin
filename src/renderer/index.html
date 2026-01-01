@@ -35,7 +35,6 @@
         <button class="nav-btn active" data-view="prompt">Prompt</button>
         <!-- Designer is now provided by designer-plugin -->
         <button class="nav-btn" data-view="user-stories">Backlog</button>
-        <button class="nav-btn" data-view="architecture">Architecture</button>
         <button class="nav-btn" data-view="cli-output">CLI Output</button>
         <button class="nav-btn" data-view="git">Git</button>
         <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn">Debug</button>
@@ -89,7 +88,13 @@
         <!-- Config View (replaces Project Form View) -->
         <section id="config-view" class="view">
           <div class="view-content">
-            <h2>Project Configuration</h2>
+            <div class="view-header-with-actions">
+              <h2>Project Configuration</h2>
+              <button id="view-claude-config-btn" class="btn secondary small" title="View CLAUDE.md configuration file">
+                <span class="btn-icon">📄</span>
+                <span class="btn-text">View CLAUDE.md</span>
+              </button>
+            </div>
             <form id="config-form" class="project-form">
               <div class="form-group">
                 <label for="project-name-input">Project Name</label>
@@ -610,31 +615,6 @@
                 </div>
               </div>
             </main>
-          </div>
-        </section>
-
-        <!-- Architecture View -->
-        <section id="architecture-view" class="view">
-          <div class="view-content architecture-layout">
-            <div class="architecture-editor">
-              <textarea id="architecture-content" placeholder="Document your architecture here...
-
-## Overview
-Describe the overall system architecture...
-
-## Components
-List and describe the main components...
-
-## Data Flow
-Explain how data flows through the system...
-
-## APIs
-Document your API endpoints..."></textarea>
-            </div>
-            <div class="architecture-actions">
-              <span id="architecture-info" class="info-text"></span>
-              <button id="review-architecture-btn" class="btn primary">Review with Claude</button>
-            </div>
           </div>
         </section>
 

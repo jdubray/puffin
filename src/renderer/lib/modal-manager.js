@@ -72,8 +72,18 @@ export class ModalManager {
       case 'sprint-close':
         this.renderSprintClose(modalTitle, modalContent, modalActions, modal.data, state)
         break
+      case 'claude-config-view':
+        await this.renderClaudeConfigView(modalTitle, modalContent, modalActions, isStale)
+        break
       default:
-        console.log('Unknown modal type:', modal.type)
+        console.warn('Unknown modal type:', modal.type)
+        // Provide a way to close unknown modals
+        modalTitle.textContent = 'Unknown Modal'
+        modalContent.innerHTML = `<p>Modal type "${modal.type}" is not recognized.</p>`
+        modalActions.innerHTML = `<button class="btn secondary" id="modal-cancel-btn">Close</button>`
+        document.getElementById('modal-cancel-btn')?.addEventListener('click', () => {
+          this.intents.hideModal()
+        })
     }
   }
 
@@ -812,6 +822,150 @@ export class ModalManager {
       console.error('GitHub disconnect error:', error)
       this.showToast('Failed to disconnect GitHub: ' + error.message, 'error')
     }
+  }
+
+  /**
+   * Render CLAUDE.md viewer modal
+   */
+  async renderClaudeConfigView(title, content, actions, isStale = () => false) {
+    title.textContent = 'CLAUDE.md Configuration'
+    content.innerHTML = '<p class="loading-text">Loading configuration...</p>'
+
+    try {
+      // Check if the claude-config plugin API is available
+      if (!window.puffin?.plugins?.claudeConfig?.getConfigWithContext) {
+        throw new Error('Claude Config plugin is not installed or not activated')
+      }
+
+      // Call the claude-config plugin via IPC
+      const result = await window.puffin.plugins.claudeConfig.getConfigWithContext()
+
+      if (isStale()) {
+        console.log('Claude config view render cancelled - stale')
+        return
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load configuration')
+      }
+
+      const config = result.data
+      const branchDisplay = config.branch || 'Not a Git repository'
+      const sourceLabel = config.isBranchSpecific ? 'Branch-specific' : 'Project default'
+      const sourceClass = config.isBranchSpecific ? 'branch-specific' : 'project-default'
+
+      if (!config.exists) {
+        content.innerHTML = `
+          <div class="claude-config-view">
+            <div class="claude-config-header">
+              <div class="config-branch-info">
+                <span class="branch-icon">⎇</span>
+                <span class="branch-name">${this.escapeHtml(branchDisplay)}</span>
+              </div>
+            </div>
+            <div class="claude-config-empty">
+              <p>No CLAUDE.md file found in this project.</p>
+              <p class="hint">CLAUDE.md files provide context to Claude Code about your project.</p>
+            </div>
+          </div>
+        `
+      } else {
+        const renderedContent = this.renderMarkdown(config.content)
+
+        content.innerHTML = `
+          <div class="claude-config-view">
+            <div class="claude-config-header">
+              <div class="config-branch-info">
+                <span class="branch-icon">⎇</span>
+                <span class="branch-name">${this.escapeHtml(branchDisplay)}</span>
+              </div>
+              <div class="config-source ${sourceClass}">
+                <span class="source-indicator"></span>
+                <span class="source-label">${sourceLabel}</span>
+              </div>
+            </div>
+            <div class="claude-config-content markdown-body">
+              ${renderedContent}
+            </div>
+            <div class="claude-config-footer">
+              <span class="config-path" title="${this.escapeHtml(config.path)}">
+                ${this.escapeHtml(config.path.split(/[\\/]/).slice(-2).join('/'))}
+              </span>
+            </div>
+          </div>
+        `
+      }
+
+      actions.innerHTML = `
+        <button class="btn secondary" id="modal-cancel-btn">Close</button>
+      `
+
+      document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+        this.intents.hideModal()
+      })
+
+    } catch (error) {
+      console.error('Failed to load CLAUDE.md:', error)
+
+      if (isStale()) return
+
+      content.innerHTML = `
+        <div class="claude-config-error">
+          <p class="error-message">Failed to load CLAUDE.md configuration</p>
+          <p class="error-detail">${this.escapeHtml(error.message)}</p>
+        </div>
+      `
+
+      actions.innerHTML = `
+        <button class="btn secondary" id="modal-cancel-btn">Close</button>
+      `
+
+      document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+        this.intents.hideModal()
+      })
+    }
+  }
+
+  /**
+   * Simple markdown renderer for modal content
+   * Reuses patterns from handoff summary rendering
+   */
+  renderMarkdown(text) {
+    if (!text) return ''
+
+    return text
+      // Headers
+      .replace(/^#### (.+)$/gm, '<h5>$1</h5>')
+      .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+      .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+      // Bold
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Italic
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Code blocks
+      .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
+      // Inline code
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      // Horizontal rules
+      .replace(/^---+$/gm, '<hr>')
+      // Unordered lists
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+      // Ordered lists
+      .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+      // Paragraphs (simple - just preserve line breaks)
+      .replace(/\n\n/g, '</p><p>')
+      // Clean up
+      .replace(/<p><\/p>/g, '')
+      .replace(/<p>(<h[2345]>)/g, '$1')
+      .replace(/(<\/h[2345]>)<\/p>/g, '$1')
+      .replace(/<p>(<ul>)/g, '$1')
+      .replace(/(<\/ul>)<\/p>/g, '$1')
+      .replace(/<p>(<pre>)/g, '$1')
+      .replace(/(<\/pre>)<\/p>/g, '$1')
+      .replace(/<p>(<hr>)/g, '$1')
+      .replace(/(<hr>)<\/p>/g, '$1')
   }
 
   /**

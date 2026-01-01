@@ -227,27 +227,6 @@ export const selectPrompt = (promptId) => ({
 })
 
 /**
- * Architecture Document Actions
- */
-
-// Update architecture content
-export const updateArchitecture = (content) => ({
-  type: 'UPDATE_ARCHITECTURE',
-  payload: {
-    content,
-    updatedAt: Date.now()
-  }
-})
-
-// Request Claude review of architecture
-export const reviewArchitecture = () => ({
-  type: 'REVIEW_ARCHITECTURE',
-  payload: {
-    timestamp: Date.now()
-  }
-})
-
-/**
  * User Story Actions
  */
 

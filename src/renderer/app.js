@@ -24,7 +24,6 @@ import { ProjectFormComponent } from './components/project-form/project-form.js'
 import { HistoryTreeComponent } from './components/history-tree/history-tree.js'
 import { PromptEditorComponent } from './components/prompt-editor/prompt-editor.js'
 import { ResponseViewerComponent } from './components/response-viewer/response-viewer.js'
-import { ArchitectureComponent } from './components/architecture/architecture.js'
 import { DebuggerComponent } from './components/debugger/debugger.js'
 import { CliOutputComponent } from './components/cli-output/cli-output.js'
 import { UserStoriesComponent } from './components/user-stories/user-stories.js'
@@ -377,7 +376,6 @@ class PuffinApp {
       'requestContinue', 'clearContinueRequest',
       'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'updateBranchSettings', 'selectPrompt',
       'toggleThreadExpanded', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
-      'updateArchitecture', 'reviewArchitecture',
       'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories', 'loadSprintHistory',
       'setSprintFilter', 'clearSprintFilter',
       'deriveUserStories', 'receiveDerivedStories', 'markStoryReady', 'unmarkStoryReady',
@@ -451,10 +449,6 @@ class PuffinApp {
           ['UPDATE_THREAD_SEARCH_QUERY', actions.updateThreadSearchQuery],
           ['MARK_THREAD_COMPLETE', actions.markThreadComplete],
           ['UNMARK_THREAD_COMPLETE', actions.unmarkThreadComplete],
-
-          // Architecture actions
-          ['UPDATE_ARCHITECTURE', actions.updateArchitecture],
-          ['REVIEW_ARCHITECTURE', actions.reviewArchitecture],
 
           // User Story actions
           ['ADD_USER_STORY', actions.addUserStory],
@@ -609,7 +603,6 @@ class PuffinApp {
       historyTree: new HistoryTreeComponent(this.intents),
       promptEditor: new PromptEditorComponent(this.intents),
       responseViewer: new ResponseViewerComponent(this.intents),
-      architecture: new ArchitectureComponent(this.intents),
       debugger: new DebuggerComponent(this.intents),
       cliOutput: new CliOutputComponent(this.intents),
       userStories: new UserStoriesComponent(this.intents),
@@ -654,6 +647,11 @@ class PuffinApp {
     // Debugger toggle
     document.getElementById('debugger-toggle')?.addEventListener('click', () => {
       this.components.debugger.toggle()
+    })
+
+    // CLAUDE.md viewer button
+    document.getElementById('view-claude-config-btn')?.addEventListener('click', () => {
+      this.intents.showModal('claude-config-view', {})
     })
 
     // Listen for state changes
@@ -1307,7 +1305,7 @@ class PuffinApp {
    */
   updateViews(state) {
     // Core views - plugins may contribute additional views (e.g., designer-plugin)
-    const views = ['config', 'prompt', 'user-stories', 'architecture', 'cli-output', 'git', 'profile', 'debug']
+    const views = ['config', 'prompt', 'user-stories', 'cli-output', 'git', 'profile', 'debug']
     views.forEach(viewName => {
       const view = document.getElementById(`${viewName}-view`)
       if (view) {

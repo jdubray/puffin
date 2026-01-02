@@ -168,10 +168,14 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:getUserStories', async () => {
     try {
       const stories = puffinState.getUserStories()
+      console.log('[IPC:getUserStories] Returning', stories?.length || 0, 'stories from database')
       // SAFETY: Ensure we always return an array, never null/undefined
       if (!Array.isArray(stories)) {
         console.error('[IPC:getUserStories] SAFETY: stories is not an array, returning empty array')
         return { success: true, stories: [] }
+      }
+      if (stories.length === 0) {
+        console.warn('[IPC:getUserStories] WARNING: Database returned 0 stories')
       }
       return { success: true, stories }
     } catch (error) {
@@ -277,6 +281,29 @@ function setupStateHandlers(ipcMain) {
     try {
       const progress = puffinState.getSprintProgress()
       return { success: true, progress }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Atomically sync story status between sprint and backlog
+  // This updates both in a single transaction - no manual refresh needed
+  ipcMain.handle('state:syncStoryStatus', async (event, { storyId, status }) => {
+    try {
+      const result = await puffinState.syncStoryStatus(storyId, status)
+
+      // Emit event for UI refresh (no polling needed)
+      if (result.success) {
+        event.sender.send('story-status-synced', {
+          storyId,
+          status,
+          sprint: result.sprint,
+          story: result.story,
+          allStoriesCompleted: result.allStoriesCompleted
+        })
+      }
+
+      return result
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -1984,11 +2011,23 @@ function getPuffinState() {
   return puffinState
 }
 
+/**
+ * Set the plugin manager on the Claude service
+ * Called after plugin manager is initialized to enable plugin-based branch focus
+ * @param {PluginManager} pluginManager - The plugin manager instance
+ */
+function setClaudeServicePluginManager(pluginManager) {
+  if (claudeService) {
+    claudeService.setPluginManager(pluginManager)
+  }
+}
+
 module.exports = {
   setupIpcHandlers,
   setupPluginHandlers,
   setupPluginManagerHandlers,
   setupViewRegistryHandlers,
   setupPluginStyleHandlers,
-  getPuffinState
+  getPuffinState,
+  setClaudeServicePluginManager
 }

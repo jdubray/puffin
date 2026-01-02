@@ -52,6 +52,25 @@ npm install
 npm start
 ```
 
+#### Important: Windows/WSL Users
+
+Puffin uses native Node.js modules (like `better-sqlite3`) that must be compiled for the correct platform. Since Puffin runs as a Windows Electron app, you **must run `npm install` from Windows** (PowerShell or CMD), not from WSL.
+
+| Environment | Compiles For | Works with Electron? |
+|-------------|--------------|---------------------|
+| WSL `npm install` | Linux x64 | No |
+| Windows `npm install` | Windows x64 | Yes |
+
+If you accidentally ran `npm install` in WSL:
+```powershell
+# From Windows PowerShell or CMD
+cd C:\Users\yourname\code\puffin
+rm -r node_modules
+npm install
+```
+
+The `postinstall` script will automatically run `electron-rebuild` to compile native modules for Electron.
+
 ### First Launch
 1. Open Puffin
 2. Select your target project directory
@@ -767,6 +786,30 @@ Claude will generate a structured summary including:
 ## Troubleshooting
 
 ### Common Issues
+
+#### Native Module Error: "Not a valid Win32 application"
+**Problem**: Database fails to initialize with error message like:
+```
+better_sqlite3.node is not a valid Win32 application
+```
+
+**Cause**: Native modules were compiled for the wrong platform (usually Linux via WSL instead of Windows).
+
+**Solution**:
+1. Close Puffin
+2. Open Windows PowerShell or CMD (not WSL)
+3. Navigate to your Puffin directory:
+   ```powershell
+   cd C:\Users\yourname\code\puffin
+   ```
+4. Delete node_modules and reinstall:
+   ```powershell
+   rm -r node_modules
+   npm install
+   ```
+5. Restart Puffin
+
+**Prevention**: Always run `npm install` from Windows, not WSL. See the [Installation](#installation) section for details.
 
 #### Claude Code CLI Not Found
 **Problem**: Puffin can't locate the Claude Code CLI executable.

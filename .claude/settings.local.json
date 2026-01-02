@@ -15,7 +15,12 @@
       "Bash(git stash:*)",
       "Bash(git rm:*)",
       "Bash(npx acorn:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git merge:*)",
+      "Bash(git branch:*)",
+      "Bash(ls:*)",
+      "Bash(sqlite3:*)",
+      "Bash(python3:*)"
     ]
   }
 }

@@ -883,15 +883,19 @@ export const loadUserStoriesAcceptor = model => proposal => {
     const newStories = proposal.payload.stories || []
     const currentStories = model.userStories || []
 
+    console.log('[LOAD_USER_STORIES] Received:', newStories.length, 'stories, current:', currentStories.length, 'stories')
+
     // SAFETY: Never wipe stories if we have existing stories and receiving empty
     // This is a defense-in-depth check - the caller should also prevent this
     if (newStories.length === 0 && currentStories.length > 0) {
       console.error('[LOAD_USER_STORIES] BLOCKED: Refusing to wipe', currentStories.length, 'stories with empty array')
       console.error('[LOAD_USER_STORIES] This may indicate a bug in the caller - stories preserved')
+      console.error('[LOAD_USER_STORIES] Stack trace:', new Error().stack)
       return // Keep existing stories
     }
 
     model.userStories = newStories
+    console.log('[LOAD_USER_STORIES] Updated model.userStories to', model.userStories.length, 'stories')
   }
 }
 
@@ -1777,9 +1781,6 @@ export const clearBranchHandoffContextAcceptor = model => proposal => {
  * Handle sprint creation, planning, and management
  */
 
-// Maximum stories allowed per sprint (to avoid token limits)
-const MAX_SPRINT_STORIES = 4
-
 // Create a sprint from selected stories
 export const createSprintAcceptor = model => proposal => {
   if (proposal?.type === 'CREATE_SPRINT') {
@@ -1803,21 +1804,6 @@ export const createSprintAcceptor = model => proposal => {
     // Log if duplicates were found
     if (uniqueStories.length !== stories.length) {
       console.warn(`[SPRINT] Removed ${stories.length - uniqueStories.length} duplicate stories. Original: ${stories.length}, Unique: ${uniqueStories.length}`)
-    }
-
-    // Validate story count limit
-    if (uniqueStories.length > MAX_SPRINT_STORIES) {
-      console.warn(`[SPRINT] Too many stories selected: ${uniqueStories.length}. Maximum allowed: ${MAX_SPRINT_STORIES}`)
-      model.sprintError = {
-        type: 'STORY_LIMIT_EXCEEDED',
-        message: `Sprint cannot have more than ${MAX_SPRINT_STORIES} stories to avoid exceeding token limits during execution.`,
-        details: {
-          selected: uniqueStories.length,
-          maximum: MAX_SPRINT_STORIES
-        },
-        timestamp
-      }
-      return // Don't create the sprint
     }
 
     // Clear any previous sprint error
@@ -2019,6 +2005,9 @@ export const clearSprintWithDetailsAcceptor = model => proposal => {
     const sprint = model.activeSprint
     if (!sprint) return
 
+    console.log('[CLEAR_SPRINT] Starting sprint close. model.userStories count:', model.userStories?.length || 0)
+    console.log('[CLEAR_SPRINT] Sprint stories:', sprint.stories?.length || 0, 'Story IDs:', sprint.stories?.map(s => s.id))
+
     const { title, description, timestamp } = proposal.payload
     const storyProgress = sprint.storyProgress || {}
     const completedStoryIds = []
@@ -2075,6 +2064,9 @@ export const clearSprintWithDetailsAcceptor = model => proposal => {
 
     // Also clear the active implementation story when sprint is cleared
     model.activeImplementationStory = null
+
+    console.log('[CLEAR_SPRINT] Sprint close complete. model.userStories count:', model.userStories?.length || 0)
+    console.log('[CLEAR_SPRINT] Completed stories:', completedStoryIds.length, 'Reset to pending:', resetToPendingStoryIds.length)
   }
 }
 

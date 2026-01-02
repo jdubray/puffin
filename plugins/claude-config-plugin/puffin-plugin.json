@@ -1,0 +1,86 @@
+{
+  "name": "claude-config-plugin",
+  "version": "1.0.0",
+  "displayName": "Claude Context",
+  "description": "Manages CLAUDE.md configuration files for branch-specific Claude Code context",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["claude", "config", "markdown", "context", "branch"],
+  "extensionPoints": {
+    "actions": [
+      "getConfig",
+      "getConfigWithContext",
+      "updateConfig",
+      "getMetadata",
+      "listSections",
+      "proposeChange",
+      "applyProposedChange"
+    ],
+    "ipcHandlers": [
+      "claude-config:getConfig",
+      "claude-config:getConfigWithContext",
+      "claude-config:updateConfig",
+      "claude-config:getMetadata",
+      "claude-config:listSections",
+      "claude-config:getSection",
+      "claude-config:updateSection",
+      "claude-config:proposeChange",
+      "claude-config:applyProposedChange"
+    ],
+    "components": ["claude-config-view"]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "claude-config-view",
+        "name": "Context",
+        "location": "nav",
+        "icon": "📄",
+        "order": 60,
+        "component": "ClaudeConfigView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "claude-config.viewConfig",
+        "title": "View CLAUDE.md",
+        "category": "Claude Config"
+      },
+      {
+        "id": "claude-config.editConfig",
+        "title": "Edit CLAUDE.md",
+        "category": "Claude Config"
+      },
+      {
+        "id": "claude-config.proposeChange",
+        "title": "Propose Changes to CLAUDE.md",
+        "category": "Claude Config"
+      }
+    ],
+    "menus": {
+      "tools": [
+        {
+          "command": "claude-config.viewConfig"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "ClaudeConfigView",
+        "export": "ClaudeConfigView",
+        "type": "class",
+        "description": "CLAUDE.md configuration viewer and editor"
+      }
+    ],
+    "styles": [
+      "renderer/styles/claude-config-view.css"
+    ]
+  }
+}

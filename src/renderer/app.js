@@ -548,7 +548,7 @@ class PuffinApp {
         console.log('[SAM-RENDER] actionType:', actionType, 'model.__actionName:', model?.__actionName)
 
         this.lastAction = null
-        render(this.state, previousState)
+        render(this.state, previousState, actionType)
 
         // Auto-persist state changes to .puffin/
         if (this.statePersistence) {
@@ -1119,6 +1119,37 @@ class PuffinApp {
       console.log('[DERIVATION-PROGRESS]', data.message)
     })
     this.claudeListeners.push(unsubProgress)
+
+    // Story status sync - automatic UI refresh when status changes atomically
+    // This listener handles the event emitted after atomic sprint/backlog sync
+    if (window.puffin.state.onStoryStatusSynced) {
+      const unsubStatusSync = window.puffin.state.onStoryStatusSynced((data) => {
+        console.log('[STATUS-SYNC] Story status synced:', data.storyId, '->', data.status)
+
+        // Update the local state with the synced data
+        if (data.sprint && this.state.activeSprint) {
+          // Update active sprint in state
+          this.intents.loadActiveSprint(data.sprint)
+        }
+
+        if (data.story) {
+          // Update the specific story in userStories
+          const storyIndex = this.state.userStories?.findIndex(s => s.id === data.storyId)
+          if (storyIndex !== -1) {
+            this.intents.updateUserStory(data.storyId, data.story)
+          }
+        }
+
+        // Show toast for user feedback
+        const statusLabel = data.status === 'completed' ? 'complete' : 'in progress'
+        this.showToast({
+          type: 'success',
+          message: `Story marked as ${statusLabel}`,
+          duration: 2000
+        })
+      })
+      this.claudeListeners.push(unsubStatusSync)
+    }
   }
 
   /**

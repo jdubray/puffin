@@ -40,17 +40,22 @@ All file operations must be scoped to this project directory and its subdirector
 
 The following stories have been completed and are available for reference:
 
-- **Git Repository Detection**: As a user, I want Puffin to detect when my project is in a Git repository so that Git integration features are available when applicable
-- **Create New Feature Branch**: As a user, I want to create a new feature branch from the current branch so that I can isolate my work for a new feature implementation
-- **Stage and Commit Changes**: As a user, I want to stage and commit my implemented code changes so that I can save my work with a meaningful commit message
-- **Merge Feature Branch to Main**: As a user, I want to merge my feature branch into the main branch so that my completed work is integrated into the primary codebase
-- **Post-Merge Branch Workflow**: As a user, I want Puffin to help me prepare for the next feature after a successful merge so that I can maintain a clean workflow
-- **Git Operation History Log**: As a user, I want to see a log of Git operations performed through Puffin so that I can track what actions have been taken
-- **Handoff Persistence Without Expiration**: As a user, I want handoffs to persist indefinitely until I explicitly delete them so that I don't lose context due to automatic expiration
-- **Handoff Summary Updates**: As a user, I want handoff summaries to be updated as I refine my work so that code changes and bug fixes are reflected in the handoff context
-- **Handoff Ready Button in Prompt Area**: As a user, I want a 'Handoff Ready' button to appear below the prompt input so that I can initiate a handoff when I decide the work is ready
-- **Handoff Review Modal**: As a user, I want to review the handoff summary in a modal before completing the handoff so that I can verify the context being passed to the new thread
-- **User-Controlled Handoff Timing**: As a user, I want to control when a handoff occurs regardless of Claude's completion assessment so that I can fix bugs and refine features before handing off
+- **Design Document Directory Scanning**: As a user, I want Puffin to automatically scan the docs/ directory so that available design documents are discovered without manual configuration
+- **Design Document Dropdown Selection**: As a user, I want a dropdown menu populated with design documents from the docs/ directory so that I can easily select and include relevant documentation in my conversation
+- **Design Document Content Inclusion**: As a user, I want to include a selected design document in my prompt context so that Claude has access to relevant specifications during our discussion
+- **Sprint Story Completion Button**: As a user, I want a completion checkmark button on each sprint story card so that I can manually mark stories as complete and sync with the backlog
+- **Sprint Progress Based on Story Completion**: As a user, I want the sprint progress bar to reflect the percentage of completed stories so that I can see overall sprint progress regardless of branch work
+- **Acceptance Criteria Checklist Display**: As a user, I want to see acceptance criteria as a checklist in the sprint story cards so that I can track granular progress within each story
+- **Three-Column Swimlane Layout**: As a user, I want the prompt view to be organized into three vertical swimlanes so that I can see sprint context, conversation, and metadata simultaneously
+- **Left Swimlane - Sprint Context Panel**: As a user, I want the left swimlane to display sprint information and user stories so that I can see the current work context while prompting
+- **Left Swimlane - Story Completion Indicators**: As a user, I want to see completion indicators for each user story so that I can track progress at a glance
+- **Middle Swimlane - Conversation View**: As a user, I want the middle swimlane to contain the existing prompt controls and conversation so that my primary workflow remains unchanged
+- **Right Swimlane - Handoff Summary Display**: As a user, I want the right swimlane to display handoff summaries so that I can see context passed from other threads
+- **Right Swimlane - Thread Statistics**: As a user, I want to see thread statistics in the right swimlane so that I can monitor resource usage and conversation metrics
+- **Default Maximum Iterations Configuration**: As a user, I want the system to default to 10 maximum iterations so that sprint execution has a sensible limit without manual configuration
+- **Auto-Continue Delay Configuration**: As a user, I want a 20 second delay between auto-continues so that I have time to review output before the next iteration begins
+- **Stuck Detection Threshold**: As a user, I want the system to detect when execution is stuck after 3 similar iterations so that I am alerted to potential issues
+- **Sprint Story Limit Enforcement**: As a user, I want the system to reject sprints with more than 4 stories so that I avoid exceeding token limits during execution
 - **Sprint Creation from Selected User Stories**: As a user, I want to select one or more user stories from the Backlog and create a sprint so that I can group related work for implementation
 - **Sprint Header Display in Prompt Window**: As a user, I want to see the selected user stories displayed in a header section at the top of the prompt window so that I have constant visibility of what I'm working on
 - **Sprint Planning Phase with Plan Button**: As a user, I want a 'Plan' button available in the sprint view so that I can initiate the planning phase for the selected user stories
@@ -60,19 +65,14 @@ The following stories have been completed and are available for reference:
 - **Sprint State Persistence**: As a user, I want the sprint state to persist so that I can return to a sprint and continue work where I left off
 - **Sprint Progress Tracking per Story**: As a user, I want to see the implementation progress for each user story within the sprint so that I know what work remains
 - **Existing Prompt View Compatibility**: As a user, I want the existing prompt view to continue working as before so that I can still use free-form prompting without creating a sprint
-- **Default Maximum Iterations Configuration**: As a user, I want the system to default to 10 maximum iterations so that sprint execution has a sensible limit without manual configuration
-- **Auto-Continue Delay Configuration**: As a user, I want a 20 second delay between auto-continues so that I have time to review output before the next iteration begins
-- **Stuck Detection Threshold**: As a user, I want the system to detect when execution is stuck after 3 similar iterations so that I am alerted to potential issues
-- **Sprint Story Limit Enforcement**: As a user, I want the system to reject sprints with more than 4 stories so that I avoid exceeding token limits during execution
-- **Three-Column Swimlane Layout**: As a user, I want the prompt view to be organized into three vertical swimlanes so that I can see sprint context, conversation, and metadata simultaneously
-- **Left Swimlane - Sprint Context Panel**: As a user, I want the left swimlane to display sprint information and user stories so that I can see the current work context while prompting
-- **Left Swimlane - Story Completion Indicators**: As a user, I want to see completion indicators for each user story so that I can track progress at a glance
-- **Middle Swimlane - Conversation View**: As a user, I want the middle swimlane to contain the existing prompt controls and conversation so that my primary workflow remains unchanged
-- **Right Swimlane - Handoff Summary Display**: As a user, I want the right swimlane to display handoff summaries so that I can see context passed from other threads
-- **Right Swimlane - Thread Statistics**: As a user, I want to see thread statistics in the right swimlane so that I can monitor resource usage and conversation metrics
-- **Sprint Story Completion Button**: As a user, I want a completion checkmark button on each sprint story card so that I can manually mark stories as complete and sync with the backlog
-- **Sprint Progress Based on Story Completion**: As a user, I want the sprint progress bar to reflect the percentage of completed stories so that I can see overall sprint progress regardless of branch work
-- **Acceptance Criteria Checklist Display**: As a user, I want to see acceptance criteria as a checklist in the sprint story cards so that I can track granular progress within each story
-- **Design Document Directory Scanning**: As a user, I want Puffin to automatically scan the docs/ directory so that available design documents are discovered without manual configuration
-- **Design Document Dropdown Selection**: As a user, I want a dropdown menu populated with design documents from the docs/ directory so that I can easily select and include relevant documentation in my conversation
-- **Design Document Content Inclusion**: As a user, I want to include a selected design document in my prompt context so that Claude has access to relevant specifications during our discussion
+- **Handoff Persistence Without Expiration**: As a user, I want handoffs to persist indefinitely until I explicitly delete them so that I don't lose context due to automatic expiration
+- **Handoff Summary Updates**: As a user, I want handoff summaries to be updated as I refine my work so that code changes and bug fixes are reflected in the handoff context
+- **Handoff Ready Button in Prompt Area**: As a user, I want a 'Handoff Ready' button to appear below the prompt input so that I can initiate a handoff when I decide the work is ready
+- **Handoff Review Modal**: As a user, I want to review the handoff summary in a modal before completing the handoff so that I can verify the context being passed to the new thread
+- **User-Controlled Handoff Timing**: As a user, I want to control when a handoff occurs regardless of Claude's completion assessment so that I can fix bugs and refine features before handing off
+- **Git Repository Detection**: As a user, I want Puffin to detect when my project is in a Git repository so that Git integration features are available when applicable
+- **Create New Feature Branch**: As a user, I want to create a new feature branch from the current branch so that I can isolate my work for a new feature implementation
+- **Stage and Commit Changes**: As a user, I want to stage and commit my implemented code changes so that I can save my work with a meaningful commit message
+- **Merge Feature Branch to Main**: As a user, I want to merge my feature branch into the main branch so that my completed work is integrated into the primary codebase
+- **Post-Merge Branch Workflow**: As a user, I want Puffin to help me prepare for the next feature after a successful merge so that I can maintain a clean workflow
+- **Git Operation History Log**: As a user, I want to see a log of Git operations performed through Puffin so that I can track what actions have been taken

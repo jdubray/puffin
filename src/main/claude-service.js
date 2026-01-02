@@ -67,11 +67,17 @@ function getToolEmoji(toolName) {
   return TOOL_EMOJIS[toolName] || TOOL_EMOJIS.default
 }
 
+// Import branch defaults as fallback when plugin is unavailable
+const { getDefaultBranchFocus, getCustomBranchFallback } = require('../../plugins/claude-config-plugin/branch-defaults')
+
 class ClaudeService {
   constructor() {
     this.currentProcess = null
     this.projectPath = null
     this._processLock = false // Prevents multiple CLI spawns
+    this._pluginManager = null // Reference to plugin manager for branch focus retrieval
+    this._pendingContextUpdate = null // Queued branch focus update to include in next prompt
+    this._currentBranchId = null // Track current branch for context updates
   }
 
   /**
@@ -91,6 +97,44 @@ class ClaudeService {
   }
 
   /**
+   * Set the plugin manager reference for accessing plugin actions
+   * @param {PluginManager} pluginManager - The plugin manager instance
+   */
+  setPluginManager(pluginManager) {
+    this._pluginManager = pluginManager
+
+    // Subscribe to branch focus updates from the plugin
+    if (pluginManager) {
+      const registry = pluginManager.getRegistry()
+      if (registry) {
+        registry.on('plugin-event', (eventName, pluginName, data) => {
+          if (eventName === 'branch-focus-updated') {
+            this.handleBranchFocusUpdate(data)
+          }
+        })
+      }
+    }
+  }
+
+  /**
+   * Handle branch focus update from plugin
+   * Queues the update to be included in the next prompt
+   * @param {Object} data - Update data from plugin event
+   * @private
+   */
+  handleBranchFocusUpdate(data) {
+    // Only queue if the update is for the current branch
+    if (data.branchId && data.branchId === this._currentBranchId) {
+      console.log(`[ClaudeService] Branch focus updated for ${data.branchId}, queuing for next prompt`)
+      this._pendingContextUpdate = {
+        branchId: data.branchId,
+        timestamp: Date.now(),
+        source: data.source || 'unknown'
+      }
+    }
+  }
+
+  /**
    * Submit a prompt to Claude Code CLI
    * @param {Object} data - Request data
    * @param {Function} onChunk - Callback for streaming output
@@ -99,26 +143,25 @@ class ClaudeService {
    * @param {Function} onFullPrompt - Callback with the full built prompt (optional)
    */
   async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null) {
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    if (this.isProcessRunning()) {
+      console.error('[CLAUDE-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
+      throw new Error('A Claude CLI process is already running. Please wait for it to complete or cancel it first.')
+    }
+
+    // Acquire the process lock immediately
+    this._processLock = true
+    console.log('[CLAUDE-GUARD] Process lock acquired')
+
+    // Build the prompt with project context (async for plugin-based branch context)
+    const prompt = await this.buildPrompt(data)
+
+    // Emit the full built prompt for debugging
+    if (onFullPrompt) {
+      onFullPrompt(prompt)
+    }
+
     return new Promise((resolve, reject) => {
-      // CRITICAL: Prevent multiple CLI instances from being spawned
-      if (this.isProcessRunning()) {
-        console.error('[CLAUDE-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
-        const error = new Error('A Claude CLI process is already running. Please wait for it to complete or cancel it first.')
-        reject(error)
-        return
-      }
-
-      // Acquire the process lock immediately
-      this._processLock = true
-      console.log('[CLAUDE-GUARD] Process lock acquired')
-
-      // Build the prompt with project context
-      const prompt = this.buildPrompt(data)
-
-      // Emit the full built prompt for debugging
-      if (onFullPrompt) {
-        onFullPrompt(prompt)
-      }
 
       // Determine working directory
       const cwd = data.projectPath || this.projectPath || process.cwd()
@@ -504,13 +547,39 @@ class ClaudeService {
    *
    * @private
    */
-  buildPrompt(data) {
+  async buildPrompt(data) {
     let prompt = data.prompt
     const isResumingSession = !!data.sessionId
 
-    // Branch tag is always useful - it reminds Claude of the focus area
+    // Track current branch for context update notifications
     if (data.branchId) {
-      const branchContext = this.getBranchContext(data.branchId, data.codeModificationAllowed)
+      this._currentBranchId = data.branchId
+    }
+
+    // Check for pending context update (from plugin edits during conversation)
+    const hasPendingUpdate = this._pendingContextUpdate &&
+      this._pendingContextUpdate.branchId === data.branchId
+
+    if (hasPendingUpdate) {
+      // Fetch the updated branch context and notify Claude of the change
+      const updatedContext = await this.getBranchContext(data.branchId, data.codeModificationAllowed)
+      if (updatedContext) {
+        const updateNotice = `<context-update>
+The branch focus instructions have been updated. Please acknowledge and apply these updated instructions:
+
+${updatedContext}
+</context-update>
+
+`
+        prompt = updateNotice + prompt
+        console.log(`[ClaudeService] Included pending context update for ${data.branchId}`)
+      }
+
+      // Clear the pending update
+      this._pendingContextUpdate = null
+    } else if (data.branchId) {
+      // Normal branch context - include on first message or as reminder
+      const branchContext = await this.getBranchContext(data.branchId, data.codeModificationAllowed)
       if (branchContext) {
         prompt = branchContext + '\n\n' + prompt
       }
@@ -554,6 +623,7 @@ class ClaudeService {
       hasGuiDescription: !!data.guiDescription,
       hasBranchContext: !!data.branchId,
       hasHandoffContext: !!data.handoffContext && !isResumingSession,
+      hasPendingContextUpdate: hasPendingUpdate,
       promptLength: prompt.length
     })
 
@@ -616,58 +686,41 @@ class ClaudeService {
 
   /**
    * Get context/guidance based on the branch type
+   * Retrieves from Claude Config plugin if available, falls back to defaults
    * @param {string} branchId - The branch identifier
    * @param {boolean} codeModificationAllowed - Whether code modifications are allowed
+   * @returns {Promise<string|null>} Branch focus content
    * @private
    */
-  getBranchContext(branchId, codeModificationAllowed = true) {
-    const branchContexts = {
-      specifications: `[SPECIFICATIONS THREAD - PLANNING & DOCUMENTATION, NO CODE CHANGES]
-Focus on: Requirements gathering, feature definitions, user stories, acceptance criteria, and functional specifications.
-Help clarify requirements, identify edge cases, and ensure completeness.
-You MAY create and modify documentation files (markdown, text, config files, etc.).
-CRITICAL: Do NOT write, modify, or delete source code files (.js, .ts, .py, .java, etc.). This thread is for planning and documentation only.
-If implementation is requested, advise the user to move to an appropriate implementation branch (UI, Backend, or feature branch).`,
+  async getBranchContext(branchId, codeModificationAllowed = true) {
+    if (!branchId) return null
 
-      architecture: `[ARCHITECTURE THREAD]
-Focus on: System design, component structure, data flow, API design, technology choices, and architectural patterns.
-Consider scalability, maintainability, and best practices.`,
+    // Try to get branch focus from plugin
+    if (this._pluginManager) {
+      try {
+        const registry = this._pluginManager.getRegistry()
+        const getBranchFocusAction = registry.getAction('claude-config:getBranchFocus')
 
-      ui: `[UI/UX THREAD]
-Focus on: User interface design, user experience, component layout, styling, accessibility, and frontend implementation.
-Consider usability, responsiveness, and visual consistency.`,
-
-      backend: `[BACKEND THREAD]
-Focus on: Server-side logic, APIs, database operations, business logic, and backend services.
-Consider performance, security, and data integrity.`,
-
-      deployment: `[DEPLOYMENT THREAD]
-Focus on: CI/CD, infrastructure, containerization, hosting, monitoring, and DevOps practices.
-Consider reliability, scalability, and operational concerns.`,
-
-      tmp: `[TEMPORARY/SCRATCH THREAD]
-This is a scratch space for ad-hoc tasks and experiments.
-IMPORTANT: Always output your final results as text in your response, not just as file writes.
-When asked to create documents, lists, or summaries, include the full content in your response text.`,
-
-      improvements: `[IMPROVEMENTS THREAD - CLI SYNC LOG]
-This branch tracks fixes and improvements made via Claude Code CLI.
-Entries are synced automatically using the /puffin-sync command.
-Use this as a log of incremental changes and quick fixes.`
+        if (getBranchFocusAction) {
+          const result = await getBranchFocusAction(branchId, { codeModificationAllowed })
+          if (result && result.focus) {
+            return result.focus
+          }
+        }
+      } catch (err) {
+        // Plugin unavailable or error - fall back to defaults
+        console.warn(`Failed to get branch focus from plugin: ${err.message}`)
+      }
     }
 
-    // Check if branch has a predefined context
-    let context = branchContexts[branchId]
-
-    // For custom branches without predefined context, add restriction based on codeModificationAllowed
-    if (!context && !codeModificationAllowed) {
-      context = `[${branchId.toUpperCase()} THREAD - DOCUMENTATION ONLY, NO CODE CHANGES]
-You MAY create and modify documentation files (markdown, text, config files, etc.).
-CRITICAL: Do NOT write, modify, or delete source code files (.js, .ts, .py, .java, etc.). This thread is for documentation only.
-If implementation is requested, advise the user to move to an appropriate implementation branch.`
+    // Fallback to defaults when plugin is unavailable
+    const defaultFocus = getDefaultBranchFocus(branchId)
+    if (defaultFocus) {
+      return defaultFocus
     }
 
-    return context
+    // Custom branch fallback
+    return getCustomBranchFallback(branchId, codeModificationAllowed)
   }
 
   /**
@@ -1406,18 +1459,20 @@ ${content}`
    * @param {string} options.model - Model to use (default: 'haiku')
    * @param {number} options.maxTokens - Max tokens in response (informational only)
    * @param {number} options.maxTurns - Max turns (default: 1)
+   * @param {number} options.timeout - Timeout in ms (default: 60000)
    * @returns {Promise<{success: boolean, response?: string, error?: string}>}
    */
   async sendPrompt(prompt, options = {}) {
     return new Promise((resolve) => {
       const model = options.model || 'haiku'
       const maxTurns = options.maxTurns || 1
+      const timeout = options.timeout || 60000 // Default 60 seconds
 
       const args = [
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
-        '--max-turns', String(maxTurns|| '40'),
+        '--max-turns', String(maxTurns),
         '--model', model,
         '--permission-mode', 'acceptEdits',
         '-'
@@ -1427,24 +1482,35 @@ ${content}`
       const spawnOptions = this.getSpawnOptions(cwd)
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
 
-      console.log('[sendPrompt] Sending prompt with model:', model)
+      console.log('[sendPrompt] Sending prompt with model:', model, 'timeout:', timeout)
+      console.log('[sendPrompt] Prompt length:', prompt.length, 'chars')
 
       const proc = spawn('claude', args, spawnOptions)
 
       if (!proc.pid) {
+        console.error('[sendPrompt] Failed to spawn process - no PID')
         resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
         return
       }
 
+      console.log('[sendPrompt] Process spawned with PID:', proc.pid)
+
       let buffer = ''
       let resultText = ''
       let errorOutput = ''
+      let resolved = false
+      let dataReceived = false
 
       // Write prompt to stdin and close
       proc.stdin.write(prompt)
       proc.stdin.end()
+      console.log('[sendPrompt] Prompt written to stdin')
 
       proc.stdout.on('data', (chunk) => {
+        if (!dataReceived) {
+          dataReceived = true
+          console.log('[sendPrompt] First stdout data received')
+        }
         buffer += chunk.toString()
         const lines = buffer.split('\n')
         buffer = lines.pop()
@@ -1453,32 +1519,50 @@ ${content}`
           if (!line.trim()) continue
           try {
             const json = JSON.parse(line)
+            console.log('[sendPrompt] Received JSON type:', json.type)
 
             // Extract text from assistant messages
             if (json.type === 'assistant' && json.message?.content) {
               for (const block of json.message.content) {
                 if (block.type === 'text') {
                   resultText += block.text
+                  console.log('[sendPrompt] Accumulated text, total length:', resultText.length)
                 }
               }
             }
 
             // Also check for result type
-            if (json.type === 'result' && json.result) {
-              resultText = json.result
+            if (json.type === 'result') {
+              console.log('[sendPrompt] Received result message, result length:', json.result?.length || 0)
+              if (json.result) {
+                resultText = json.result
+              }
             }
           } catch (e) {
             // Non-JSON line, accumulate as plain text
+            console.log('[sendPrompt] Non-JSON line:', line.substring(0, 100))
             resultText += line + '\n'
           }
         }
       })
 
       proc.stderr.on('data', (chunk) => {
-        errorOutput += chunk.toString()
+        const text = chunk.toString()
+        errorOutput += text
+        console.log('[sendPrompt] stderr:', text.substring(0, 200))
       })
 
       proc.on('close', (code) => {
+        console.log('[sendPrompt] Process closed with code:', code)
+        console.log('[sendPrompt] Data received:', dataReceived)
+        console.log('[sendPrompt] Result text length:', resultText.length)
+
+        if (resolved) {
+          console.log('[sendPrompt] Already resolved, skipping close handler')
+          return
+        }
+        resolved = true
+
         // Process remaining buffer
         if (buffer.trim()) {
           try {
@@ -1492,11 +1576,13 @@ ${content}`
         }
 
         if (code === 0 || resultText.length > 0) {
+          console.log('[sendPrompt] Success, response length:', resultText.trim().length)
           resolve({
             success: true,
             response: resultText.trim()
           })
         } else {
+          console.log('[sendPrompt] Failed, error:', errorOutput || `exit code ${code}`)
           resolve({
             success: false,
             error: errorOutput || `Process exited with code ${code}`
@@ -1505,18 +1591,26 @@ ${content}`
       })
 
       proc.on('error', (error) => {
+        console.error('[sendPrompt] Process error:', error.message)
+        if (resolved) return
+        resolved = true
         resolve({ success: false, error: error.message })
       })
 
-      // Timeout after 30 seconds
+      // Timeout
       setTimeout(() => {
+        if (resolved) return
+        console.log('[sendPrompt] Timeout after', timeout, 'ms')
+        console.log('[sendPrompt] Data received before timeout:', dataReceived)
+        console.log('[sendPrompt] Result text length before timeout:', resultText.length)
         proc.kill()
+        resolved = true
         if (resultText.length > 0) {
           resolve({ success: true, response: resultText.trim() })
         } else {
           resolve({ success: false, error: 'Request timed out' })
         }
-      }, 30000)
+      }, timeout)
     })
   }
 

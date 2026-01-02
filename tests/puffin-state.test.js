@@ -323,4 +323,156 @@ describe('PuffinState', () => {
       assert.strictEqual(result, false)
     })
   })
+
+  describe('Cache Independence', () => {
+    beforeEach(async () => {
+      await puffinState.open(testDir)
+    })
+
+    it('should have invalidateCache method', () => {
+      assert.strictEqual(typeof puffinState.invalidateCache, 'function')
+    })
+
+    it('should invalidate specific cache types', () => {
+      // Set some cache values
+      puffinState.userStories = [{ id: 'test' }]
+      puffinState.archivedStories = [{ id: 'archived' }]
+      puffinState.activeSprint = { id: 'sprint' }
+
+      // Invalidate only userStories
+      puffinState.invalidateCache(['userStories'])
+
+      assert.strictEqual(puffinState.userStories, null)
+      assert.notStrictEqual(puffinState.archivedStories, null)
+      assert.notStrictEqual(puffinState.activeSprint, null)
+    })
+
+    it('should invalidate all caches when no types specified', () => {
+      // Set some cache values
+      puffinState.userStories = [{ id: 'test' }]
+      puffinState.archivedStories = [{ id: 'archived' }]
+      puffinState.activeSprint = { id: 'sprint' }
+
+      // Invalidate all
+      puffinState.invalidateCache()
+
+      assert.strictEqual(puffinState.userStories, null)
+      assert.strictEqual(puffinState.archivedStories, null)
+      assert.strictEqual(puffinState.activeSprint, null)
+    })
+
+    it('should query SQLite on getUserStories even if cache is null', async () => {
+      // Add a story to SQLite
+      await puffinState.addUserStory({ title: 'SQLite Story' })
+
+      // Clear the cache
+      puffinState.invalidateCache(['userStories'])
+      assert.strictEqual(puffinState.userStories, null)
+
+      // getUserStories should still return the story from SQLite
+      const stories = puffinState.getUserStories()
+      assert.ok(Array.isArray(stories))
+      assert.strictEqual(stories.length, 1)
+      assert.strictEqual(stories[0].title, 'SQLite Story')
+
+      // Cache should now be populated
+      assert.notStrictEqual(puffinState.userStories, null)
+    })
+
+    it('should query SQLite on getArchivedStories even if cache is null', async () => {
+      // Add and archive a story
+      const story = await puffinState.addUserStory({ title: 'To Archive' })
+      await puffinState.updateUserStory(story.id, { status: 'archived' })
+
+      // Clear the cache
+      puffinState.invalidateCache(['archivedStories'])
+      assert.strictEqual(puffinState.archivedStories, null)
+
+      // getArchivedStories should still return from SQLite
+      const archived = puffinState.getArchivedStories()
+      assert.ok(Array.isArray(archived))
+      assert.strictEqual(archived.length, 1)
+      assert.strictEqual(archived[0].title, 'To Archive')
+    })
+
+    it('should work correctly after cache invalidation on add', async () => {
+      // Add first story
+      const story1 = await puffinState.addUserStory({ title: 'Story 1' })
+
+      // Cache is invalidated by addUserStory, verify we can still read
+      const stories = puffinState.getUserStories()
+      assert.strictEqual(stories.length, 1)
+
+      // Add second story
+      await puffinState.addUserStory({ title: 'Story 2' })
+
+      // Should see both stories
+      const allStories = puffinState.getUserStories()
+      assert.strictEqual(allStories.length, 2)
+    })
+
+    it('should work correctly after cache invalidation on update', async () => {
+      const story = await puffinState.addUserStory({ title: 'Original' })
+
+      // Update the story (this invalidates cache)
+      await puffinState.updateUserStory(story.id, { title: 'Updated' })
+
+      // Should see the updated title
+      const stories = puffinState.getUserStories()
+      assert.strictEqual(stories[0].title, 'Updated')
+    })
+
+    it('should work correctly after cache invalidation on delete', async () => {
+      await puffinState.addUserStory({ title: 'Story 1' })
+      const story2 = await puffinState.addUserStory({ title: 'Story 2' })
+
+      // Delete one story (this invalidates cache)
+      await puffinState.deleteUserStory(story2.id)
+
+      // Should see only one story
+      const stories = puffinState.getUserStories()
+      assert.strictEqual(stories.length, 1)
+      assert.strictEqual(stories[0].title, 'Story 1')
+    })
+
+    it('should populate cache from SQLite reads', async () => {
+      // Add a story
+      await puffinState.addUserStory({ title: 'Test' })
+
+      // Clear cache completely
+      puffinState.invalidateCache()
+      assert.strictEqual(puffinState.userStories, null)
+
+      // Read should populate cache
+      const stories = puffinState.getUserStories()
+      assert.strictEqual(stories.length, 1)
+
+      // Cache should now be set
+      assert.ok(puffinState.userStories !== null)
+      assert.strictEqual(puffinState.userStories.length, 1)
+    })
+
+    it('should return empty array on getUserStories with null cache and no SQLite data', () => {
+      // Fresh state with no stories
+      puffinState.invalidateCache(['userStories'])
+
+      const stories = puffinState.getUserStories()
+      assert.ok(Array.isArray(stories))
+      assert.strictEqual(stories.length, 0)
+    })
+
+    it('getState should use SQLite-first accessors', async () => {
+      // Add a story
+      await puffinState.addUserStory({ title: 'State Test' })
+
+      // Invalidate cache
+      puffinState.invalidateCache()
+
+      // getState should still return the story
+      const state = puffinState.getState()
+      assert.ok(Array.isArray(state.userStories))
+      assert.strictEqual(state.userStories.length, 1)
+      assert.strictEqual(state.userStories[0].title, 'State Test')
+    })
+  })
 })

@@ -50,6 +50,11 @@ export const NAMING_CONVENTIONS = {
   PASCAL: 'PascalCase'
 }
 
+// UI Layout constants
+export const LAYOUT_BREAKPOINTS = {
+  KANBAN_MIN_WIDTH: 1200 // Minimum width in pixels to show kanban view
+}
+
 // GUI Designer element types
 export const GUI_ELEMENT_TYPES = {
   CONTAINER: 'container',
@@ -72,7 +77,6 @@ export const IPC_CHANNELS = {
   STATE_UPDATE_CONFIG: 'state:updateConfig',
   STATE_UPDATE_HISTORY: 'state:updateHistory',
   STATE_ADD_PROMPT: 'state:addPrompt',
-  STATE_UPDATE_ARCHITECTURE: 'state:updateArchitecture',
 
   // Claude operations
   CLAUDE_CHECK: 'claude:check',

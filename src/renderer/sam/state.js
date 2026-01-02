@@ -590,12 +590,13 @@ export const reactors = [
  * Render function - called after each state transition
  * This is the entry point for updating the UI
  */
-export function render(state, previousState = null) {
+export function render(state, previousState = null, actionType = null) {
   // Dispatch custom event for components to listen to
   const event = new CustomEvent('puffin-state-change', {
     detail: {
       state,
       previousState,
+      actionType,
       changed: getChangedPaths(state, previousState)
     }
   })

@@ -7,7 +7,8 @@
     "start": "electron .",
     "dev": "electron . --enable-logging",
     "test": "node --test tests/",
-    "package": "electron-builder"
+    "package": "electron-builder",
+    "postinstall": "electron-rebuild"
   },
   "keywords": [
     "claude",
@@ -24,11 +25,13 @@
     "marked": "^14.0.0",
     "uuid": "^10.0.0",
     "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1"
+    "ajv-formats": "^3.0.1",
+    "better-sqlite3": "^11.6.0"
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "@electron/rebuild": "^3.6.0"
   },
   "build": {
     "appId": "com.puffin.app",

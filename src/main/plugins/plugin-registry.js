@@ -227,16 +227,20 @@ class PluginRegistry extends EventEmitter {
    * @param {any} data - Event data
    */
   emitPluginEvent(eventName, sourcePlugin, data) {
+    // Notify registered plugin subscribers
     const subs = this.subscriptions.get(eventName)
-    if (!subs) return
-
-    for (const { pluginName, handler } of subs) {
-      try {
-        handler({ source: sourcePlugin, data })
-      } catch (error) {
-        console.error(`[PluginRegistry] Error in event handler for "${eventName}" in plugin "${pluginName}":`, error.message)
+    if (subs) {
+      for (const { pluginName, handler } of subs) {
+        try {
+          handler({ source: sourcePlugin, data })
+        } catch (error) {
+          console.error(`[PluginRegistry] Error in event handler for "${eventName}" in plugin "${pluginName}":`, error.message)
+        }
       }
     }
+
+    // Also emit as EventEmitter event for external listeners (e.g., ClaudeService)
+    this.emit('plugin-event', eventName, sourcePlugin, data)
   }
 
   // ═══════════════════════════════════════════════════════════════

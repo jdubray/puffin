@@ -9,7 +9,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState } = require('./ipc-handlers')
+const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService } = require('./plugins')
 
 // Keep a global reference of the window object
@@ -392,6 +392,9 @@ app.whenReady().then(async () => {
 
       // Setup plugin style handlers
       setupPluginStyleHandlers(ipcMain, pluginManager)
+
+      // Connect plugin manager to Claude service for branch focus retrieval
+      setClaudeServicePluginManager(pluginManager)
 
       // Initialize and activate enabled plugins
       return pluginManager.initialize()

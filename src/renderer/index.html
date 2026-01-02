@@ -537,17 +537,27 @@
 
         <!-- Backlog View (with Insights subtab) -->
         <section id="user-stories-view" class="view">
-          <div class="view-content user-stories-layout swimlane-container">
-            <!-- Sprint History Left Panel (matches sprint context panel style) -->
+          <div class="view-content user-stories-layout">
+            <!-- Sprint History Panel (Left Sidebar) -->
             <aside id="sprint-history-panel" class="swimlane swimlane-left sprint-history-panel" aria-label="Sprint History">
               <div class="sprint-context-panel">
                 <!-- Sprint History Header -->
                 <div class="sprint-panel-header">
                   <div class="sprint-title-row">
                     <h3 class="sprint-title">Sprint History</h3>
-                    <button id="sprint-panel-collapse-btn" class="sprint-close-btn" aria-expanded="true" aria-label="Collapse sprint history panel" title="Collapse">
-                      <span class="collapse-icon"></span>
-                    </button>
+                    <div class="sprint-header-buttons">
+                      <button id="sprint-history-refresh-btn" class="sprint-refresh-btn" aria-label="Refresh sprint history" title="Refresh">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M21 2v6h-6"></path>
+                          <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                          <path d="M3 22v-6h6"></path>
+                          <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                        </svg>
+                      </button>
+                      <button id="sprint-panel-collapse-btn" class="sprint-close-btn" aria-expanded="true" aria-label="Collapse sprint history panel" title="Collapse">
+                        <span class="collapse-icon"></span>
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <!-- Sprint Tiles Container -->
@@ -581,9 +591,9 @@
                            placeholder="Search stories...">
                   </div>
                   <div class="filter-group">
-                    <button class="filter-btn" data-status="all">All</button>
+                    <button class="filter-btn active" data-status="all">All</button>
                     <button class="filter-btn" data-status="pending">Pending</button>
-                    <button class="filter-btn active" data-status="in-progress">In Progress</button>
+                    <button class="filter-btn" data-status="in-progress">In Progress</button>
                     <button class="filter-btn" data-status="completed">Completed</button>
                   </div>
                   <button id="add-story-btn" class="btn small">+ Add Story</button>

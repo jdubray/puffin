@@ -9,9 +9,19 @@
 // Search configuration
 const SEARCH_MIN_CHARS = 3
 const SEARCH_DEBOUNCE_MS = 150
+const RESIZE_DEBOUNCE_MS = 150
 
 // LocalStorage key for panel collapse state
 const SPRINT_PANEL_COLLAPSED_KEY = 'puffin-sprint-panel-collapsed'
+
+// View modes for the backlog
+const VIEW_MODES = {
+  LIST: 'list',
+  KANBAN: 'kanban'
+}
+
+// Responsive breakpoint - show kanban when container is at least this wide
+const KANBAN_MIN_WIDTH = 1200
 
 export class UserStoriesComponent {
   constructor(intents) {
@@ -22,13 +32,23 @@ export class UserStoriesComponent {
     this.listContainer = null
     this.branchSelect = null
     this.searchInput = null
-    this.currentFilter = 'in-progress'
+    this.currentFilter = 'all'
     this.currentBranch = 'all' // Filter by branch
+    this.currentView = VIEW_MODES.LIST // Will be set by responsive detection
+    this.autoResponsive = true // Enable automatic view switching based on width
     this.searchQuery = ''
     this.searchDebounceTimer = null
+    this.resizeDebounceTimer = null
+    this.resizeObserver = null
     this.stories = []
     this.branches = {}
     this.selectedStoryIds = new Set() // Track selected stories for batch operations
+    // Drag and drop state
+    this.draggedStoryId = null
+    this.draggedStoryStatus = null
+    // View transition state
+    this.isTransitioning = false
+    this.prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     // Sprint history panel state
     this.sprintHistoryPanel = null
@@ -55,6 +75,7 @@ export class UserStoriesComponent {
     this.sprintHistoryPanel = document.getElementById('sprint-history-panel')
     this.sprintTilesList = document.getElementById('sprint-tiles-list')
     this.sprintPanelCollapseBtn = document.getElementById('sprint-panel-collapse-btn')
+    this.sprintRefreshBtn = document.getElementById('sprint-history-refresh-btn')
 
     // Restore panel collapse state from localStorage
     this.isPanelCollapsed = localStorage.getItem(SPRINT_PANEL_COLLAPSED_KEY) === 'true'
@@ -65,6 +86,10 @@ export class UserStoriesComponent {
 
     this.bindEvents()
     this.subscribeToState()
+    this.setupResizeObserver()
+
+    // Set initial view based on current container width
+    this.updateViewForWidth()
 
     // Load sprint history on init
     this.loadSprintHistory()
@@ -75,7 +100,6 @@ export class UserStoriesComponent {
    */
   async loadSprintHistory() {
     if (!window.puffin?.state?.getSprintHistory) {
-      console.log('[UserStories] Sprint history API not available')
       return
     }
 
@@ -92,6 +116,97 @@ export class UserStoriesComponent {
   }
 
   /**
+   * Set up ResizeObserver for responsive layout switching
+   */
+  setupResizeObserver() {
+    if (!this.container) return
+
+    this.resizeObserver = new ResizeObserver((entries) => {
+      // Debounce resize events for performance
+      clearTimeout(this.resizeDebounceTimer)
+      this.resizeDebounceTimer = setTimeout(() => {
+        this.updateViewForWidth()
+      }, RESIZE_DEBOUNCE_MS)
+    })
+
+    this.resizeObserver.observe(this.container)
+  }
+
+  /**
+   * Update view mode based on container width
+   */
+  updateViewForWidth() {
+    if (!this.container || !this.autoResponsive) return
+
+    const containerWidth = this.container.offsetWidth
+    const shouldBeKanban = containerWidth >= KANBAN_MIN_WIDTH
+    const newView = shouldBeKanban ? VIEW_MODES.KANBAN : VIEW_MODES.LIST
+
+    if (this.currentView !== newView) {
+      this.transitionToView(newView)
+    }
+  }
+
+  /**
+   * Perform animated transition between views
+   * @param {string} newView - The view mode to transition to
+   */
+  transitionToView(newView) {
+    // Skip animation if already transitioning or user prefers reduced motion
+    if (this.isTransitioning) return
+
+    // For initial render or reduced motion, skip animation
+    if (!this.listContainer.children.length || this.prefersReducedMotion) {
+      this.currentView = newView
+      this.render()
+      this.pulseLayoutIndicator()
+      return
+    }
+
+    this.isTransitioning = true
+
+    // Phase 1: Fade out current view
+    this.listContainer.classList.add('view-transitioning', 'view-fade-out')
+
+    // Wait for fade out animation (125ms)
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        // Phase 2: Switch view and render new content
+        this.currentView = newView
+        this.listContainer.classList.remove('view-fade-out')
+
+        // Render the new view
+        this.render()
+
+        // Phase 3: Fade in new view
+        requestAnimationFrame(() => {
+          this.listContainer.classList.add('view-fade-in')
+          this.pulseLayoutIndicator()
+
+          // Clean up after animation completes (250ms for card animations)
+          setTimeout(() => {
+            this.listContainer.classList.remove('view-transitioning', 'view-fade-in')
+            this.isTransitioning = false
+          }, 250)
+        })
+      }, 125)
+    })
+  }
+
+  /**
+   * Pulse the layout indicator to draw attention to view change
+   */
+  pulseLayoutIndicator() {
+    const indicator = this.container.querySelector('.layout-indicator')
+    if (indicator) {
+      indicator.classList.add('view-changed')
+      setTimeout(() => {
+        indicator.classList.remove('view-changed')
+      }, 300)
+    }
+  }
+
+  /**
    * Bind DOM events
    */
   bindEvents() {
@@ -99,6 +214,13 @@ export class UserStoriesComponent {
     if (this.sprintPanelCollapseBtn) {
       this.sprintPanelCollapseBtn.addEventListener('click', () => {
         this.toggleSprintPanel()
+      })
+    }
+
+    // Sprint history refresh button
+    if (this.sprintRefreshBtn) {
+      this.sprintRefreshBtn.addEventListener('click', () => {
+        this.loadSprintHistory()
       })
     }
 
@@ -150,6 +272,67 @@ export class UserStoriesComponent {
   }
 
   /**
+   * Handle search input with debouncing
+   * @param {string} value - The search input value
+   */
+  handleSearchInput(value) {
+    clearTimeout(this.searchDebounceTimer)
+    this.searchDebounceTimer = setTimeout(() => {
+      this.searchQuery = value
+      this.render()
+    }, SEARCH_DEBOUNCE_MS)
+  }
+
+  /**
+   * Switch between Backlog and Insights tabs
+   */
+  switchTab(tabName) {
+    // Update tab buttons
+    this.container.querySelectorAll('.backlog-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.tab === tabName)
+    })
+
+    // Update tab content
+    this.container.querySelectorAll('.backlog-tab-content').forEach(content => {
+      const isActive = content.id === `backlog-${tabName}-tab`
+      content.classList.toggle('active', isActive)
+    })
+  }
+
+  /**
+   * Subscribe to state changes
+   */
+  subscribeToState() {
+    document.addEventListener('puffin-state-change', (e) => {
+      const { state, actionType } = e.detail
+      const previousCount = this.stories?.length || 0
+      this.stories = state.userStories || []
+      this.branches = state.history?.raw?.branches || {}
+
+      // Debug logging for story count changes
+      if (this.stories.length !== previousCount) {
+        console.log('[USER-STORIES-COMPONENT] Story count changed:', previousCount, '->', this.stories.length, 'action:', actionType)
+        if (this.stories.length === 0 && previousCount > 0) {
+          console.error('[USER-STORIES-COMPONENT] WARNING: All stories disappeared! Action:', actionType)
+          console.error('[USER-STORIES-COMPONENT] state.userStories:', state.userStories)
+        }
+      }
+
+      // Reload sprint history after state is loaded (database is now ready)
+      if (actionType === 'LOAD_STATE' && this.sprintHistory.length === 0) {
+        this.loadSprintHistory()
+      }
+
+      // Reload sprint history when Backlog view comes into focus
+      if (actionType === 'SWITCH_VIEW' && state.currentView === 'user-stories') {
+        this.loadSprintHistory()
+      }
+
+      this.render()
+    })
+  }
+
+  /**
    * Render sprint history tiles
    */
   renderSprintHistory() {
@@ -178,9 +361,10 @@ export class UserStoriesComponent {
    */
   renderSprintTile(sprint) {
     const storyCount = sprint.storyIds?.length || 0
-    const closedDate = sprint.closedAt ? this.formatDate(sprint.closedAt) : 'Unknown'
+    // Handle various date formats (timestamp, ISO string, or Date object)
+    const closedDate = this.formatSprintDate(sprint.closedAt || sprint.createdAt)
+    // Use title if available, otherwise use a short sprint ID
     const title = sprint.title || `Sprint ${sprint.id.substring(0, 6)}`
-    const description = sprint.description || ''
     const statusClass = this.computeSprintCompletionStatus(sprint)
     const isSelected = this.selectedSprintFilter === sprint.id
     const selectedClass = isSelected ? 'selected' : ''
@@ -195,15 +379,45 @@ export class UserStoriesComponent {
       <div class="sprint-history-card ${borderClass} ${selectedClass}" data-sprint-id="${sprint.id}" role="button" tabindex="0" aria-pressed="${ariaPressed}">
         <div class="sprint-card-header">
           <h4>${this.escapeHtml(title)}</h4>
-          <span class="sprint-card-meta">${closedDate}</span>
+          ${closedDate ? `<span class="sprint-card-meta">${closedDate}</span>` : ''}
         </div>
-        ${description ? `<p class="sprint-card-description">${this.escapeHtml(description)}</p>` : ''}
         <div class="sprint-card-footer">
           <span class="sprint-card-count">${storyCount} ${storyCount === 1 ? 'story' : 'stories'}</span>
           <span class="sprint-card-status" aria-label="${this.getStatusLabel(statusClass)}">${this.getStatusLabel(statusClass)}</span>
         </div>
       </div>
     `
+  }
+
+  /**
+   * Format sprint date for display, handling various input formats
+   * @param {number|string|null} timestamp - Date value (timestamp, ISO string, or null)
+   * @returns {string} Formatted date string
+   */
+  formatSprintDate(timestamp) {
+    if (!timestamp) return ''
+
+    // Handle numeric timestamps
+    let date
+    if (typeof timestamp === 'number') {
+      date = new Date(timestamp)
+    } else if (typeof timestamp === 'string') {
+      // Try parsing as ISO string or other date format
+      date = new Date(timestamp)
+    } else {
+      return ''
+    }
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return ''
+    }
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
   }
 
   /**
@@ -245,15 +459,26 @@ export class UserStoriesComponent {
    */
   bindSprintTileEvents() {
     this.sprintTilesList.querySelectorAll('.sprint-history-card').forEach(tile => {
-      // Click handler - toggle filter by sprint
-      tile.addEventListener('click', () => {
+      // Click handler - show sprint stories in modal
+      tile.addEventListener('click', async () => {
         const sprintId = tile.dataset.sprintId
 
-        // Toggle filter: if already selected, clear filter; otherwise set filter
-        if (this.selectedSprintFilter === sprintId) {
-          this.intents.clearSprintFilter()
-        } else {
-          this.intents.setSprintFilter(sprintId)
+        // Fetch archived sprint with resolved story data
+        try {
+          const result = await window.puffin.state.getArchivedSprint(sprintId)
+
+          if (result.success && result.sprint) {
+            const sprint = result.sprint
+            // Show modal with sprint and its resolved stories
+            this.intents.showModal('sprint-stories', {
+              sprint,
+              stories: sprint.stories || []
+            })
+          } else {
+            console.warn('[USER-STORIES] Archived sprint not found:', sprintId, result.error)
+          }
+        } catch (error) {
+          console.error('[USER-STORIES] Failed to load archived sprint:', error)
         }
       })
 
@@ -264,61 +489,6 @@ export class UserStoriesComponent {
           tile.click()
         }
       })
-    })
-  }
-
-  /**
-   * Handle search input with debouncing
-   * @param {string} value - The search input value
-   */
-  handleSearchInput(value) {
-    clearTimeout(this.searchDebounceTimer)
-    this.searchDebounceTimer = setTimeout(() => {
-      this.searchQuery = value
-      this.render()
-    }, SEARCH_DEBOUNCE_MS)
-  }
-
-  /**
-   * Switch between Backlog and Insights tabs
-   */
-  switchTab(tabName) {
-    // Update tab buttons
-    this.container.querySelectorAll('.backlog-tab').forEach(tab => {
-      tab.classList.toggle('active', tab.dataset.tab === tabName)
-    })
-
-    // Update tab content
-    this.container.querySelectorAll('.backlog-tab-content').forEach(content => {
-      const isActive = content.id === `backlog-${tabName}-tab`
-      content.classList.toggle('active', isActive)
-    })
-  }
-
-  /**
-   * Subscribe to state changes
-   */
-  subscribeToState() {
-    document.addEventListener('puffin-state-change', (e) => {
-      const { state } = e.detail
-      this.stories = state.userStories || []
-      this.branches = state.history?.raw?.branches || {}
-
-      // Update sprint history if it changed
-      const newSprintHistory = state.sprintHistory || []
-      if (JSON.stringify(newSprintHistory) !== JSON.stringify(this.sprintHistory)) {
-        this.sprintHistory = newSprintHistory
-        this.renderSprintHistory()
-      }
-
-      // Update sprint filter if it changed
-      const newSprintFilter = state.selectedSprintFilter || null
-      if (newSprintFilter !== this.selectedSprintFilter) {
-        this.selectedSprintFilter = newSprintFilter
-        this.renderSprintHistory() // Re-render to update selection state
-      }
-
-      this.render()
     })
   }
 
@@ -342,19 +512,10 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Get filtered stories (by status, branch, sprint, and search query)
+   * Get filtered stories (by sprint, status, branch, and search query)
    */
   getFilteredStories() {
     let filtered = this.stories
-
-    // Filter by sprint (if a sprint is selected)
-    if (this.selectedSprintFilter) {
-      const selectedSprint = this.sprintHistory.find(s => s.id === this.selectedSprintFilter)
-      if (selectedSprint && selectedSprint.storyIds) {
-        const sprintStoryIds = new Set(selectedSprint.storyIds)
-        filtered = filtered.filter(s => sprintStoryIds.has(s.id))
-      }
-    }
 
     // Filter by branch
     if (this.currentBranch !== 'all') {
@@ -379,25 +540,144 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Render the stories list
+   * Render the stories list or kanban view
    */
   render() {
-    // Render branch filter dropdown
+    // Set view mode data attribute for CSS-based visibility toggling
+    this.container.dataset.viewMode = this.currentView
+
+    // Render layout indicator and branch filter
+    this.renderLayoutIndicator()
     this.renderBranchFilter()
 
-    // Render sprint filter indicator
-    this.renderSprintFilterIndicator()
+    // Use kanban or list view based on current setting
+    if (this.currentView === VIEW_MODES.KANBAN) {
+      this.renderKanbanView()
+    } else {
+      this.renderListView()
+    }
+  }
 
+  /**
+   * Render a subtle indicator showing current layout mode
+   * (Layout switches automatically based on window size)
+   */
+  renderLayoutIndicator() {
+    let indicatorContainer = this.container.querySelector('.layout-indicator-container')
+    if (!indicatorContainer) {
+      const toolbar = this.container.querySelector('.user-stories-toolbar')
+      if (toolbar) {
+        indicatorContainer = document.createElement('div')
+        indicatorContainer.className = 'layout-indicator-container'
+        // Insert at the beginning of toolbar
+        toolbar.insertBefore(indicatorContainer, toolbar.firstChild)
+      } else {
+        return
+      }
+    }
+
+    const isKanban = this.currentView === VIEW_MODES.KANBAN
+    indicatorContainer.innerHTML = `
+      <span class="layout-indicator" title="Layout adjusts automatically based on window size">
+        <span class="layout-icon">${isKanban ? '▦' : '☰'}</span>
+        <span class="layout-label">${isKanban ? 'Kanban' : 'List'}</span>
+      </span>
+    `
+  }
+
+  /**
+   * Render the kanban board view with three swimlanes
+   */
+  renderKanbanView() {
+    // Get stories filtered by branch and search (but not status since kanban shows all statuses)
+    let filtered = this.stories
+
+    // Filter by branch
+    if (this.currentBranch !== 'all') {
+      filtered = filtered.filter(s => s.branchId === this.currentBranch)
+    }
+
+    // Filter by search query
+    if (this.searchQuery.length >= SEARCH_MIN_CHARS) {
+      const query = this.searchQuery.toLowerCase()
+      filtered = filtered.filter(s =>
+        s.title.toLowerCase().includes(query) ||
+        (s.description && s.description.toLowerCase().includes(query))
+      )
+    }
+
+    // Group stories by status (excluding archived from kanban)
+    const pendingStories = filtered.filter(s => s.status === 'pending')
+    const inProgressStories = filtered.filter(s => s.status === 'in-progress')
+    const completedStories = filtered.filter(s => s.status === 'completed')
+    const archivedStories = filtered.filter(s => s.status === 'archived')
+
+    this.listContainer.innerHTML = `
+      <div class="kanban-container">
+        <div class="kanban-swimlane pending">
+          <div class="kanban-swimlane-header">
+            <h3>Pending <span class="story-count">${pendingStories.length}</span></h3>
+          </div>
+          <div class="kanban-swimlane-content">
+            ${pendingStories.length > 0
+              ? pendingStories.map(story => this.renderStoryCard(story)).join('')
+              : '<p class="placeholder">No pending stories</p>'}
+          </div>
+        </div>
+        <div class="kanban-swimlane in-progress">
+          <div class="kanban-swimlane-header">
+            <h3>In Progress <span class="story-count">${inProgressStories.length}</span></h3>
+          </div>
+          <div class="kanban-swimlane-content">
+            ${inProgressStories.length > 0
+              ? inProgressStories.map(story => this.renderStoryCard(story)).join('')
+              : '<p class="placeholder">No stories in progress</p>'}
+          </div>
+        </div>
+        <div class="kanban-swimlane completed">
+          <div class="kanban-swimlane-header">
+            <h3>Completed <span class="story-count">${completedStories.length}</span></h3>
+          </div>
+          <div class="kanban-swimlane-content">
+            ${completedStories.length > 0
+              ? completedStories.map(story => this.renderStoryCard(story)).join('')
+              : '<p class="placeholder">No completed stories</p>'}
+          </div>
+        </div>
+      </div>
+      ${archivedStories.length > 0 ? `
+        <div class="archived-stories-section">
+          <button class="archived-stories-toggle" aria-expanded="false">
+            <span class="toggle-icon">▶</span>
+            Archived Stories (${archivedStories.length})
+          </button>
+          <div class="archived-stories-list collapsed">
+            ${archivedStories.map(story => this.renderStoryCard(story)).join('')}
+          </div>
+        </div>
+      ` : ''}
+    `
+
+    // Bind card events
+    this.bindCardEvents()
+
+    // Bind archived section toggle
+    this.bindArchivedToggle()
+  }
+
+  /**
+   * Render the traditional list view
+   */
+  renderListView() {
     const filtered = this.getFilteredStories()
 
     if (filtered.length === 0) {
       const branchText = this.currentBranch !== 'all' ? ` in "${this.currentBranch}" branch` : ''
-      const sprintText = this.selectedSprintFilter ? ' in selected sprint' : ''
       this.listContainer.innerHTML = `
         <p class="placeholder">
           ${this.currentFilter === 'all'
-            ? `No user stories${branchText}${sprintText} yet. Use "Derive User Stories" checkbox when submitting a prompt, or click "+ Add Story".`
-            : `No ${this.currentFilter} stories${branchText}${sprintText}.`}
+            ? `No user stories${branchText} yet. Use "Derive User Stories" checkbox when submitting a prompt, or click "+ Add Story".`
+            : `No ${this.currentFilter} stories${branchText}.`}
         </p>
       `
       return
@@ -497,67 +777,6 @@ export class UserStoriesComponent {
     })
   }
 
-  /**
-   * Render sprint filter indicator bar
-   * Shows when a sprint is selected, with clear button
-   */
-  renderSprintFilterIndicator() {
-    // Find or create sprint filter indicator container
-    let indicatorContainer = this.container.querySelector('.sprint-filter-indicator')
-
-    // If no sprint is selected, remove indicator if it exists
-    if (!this.selectedSprintFilter) {
-      if (indicatorContainer) {
-        indicatorContainer.remove()
-      }
-      return
-    }
-
-    // Get selected sprint details
-    const selectedSprint = this.sprintHistory.find(s => s.id === this.selectedSprintFilter)
-    if (!selectedSprint) {
-      if (indicatorContainer) {
-        indicatorContainer.remove()
-      }
-      return
-    }
-
-    const sprintTitle = selectedSprint.title || `Sprint ${selectedSprint.id.substring(0, 6)}`
-    const storyCount = selectedSprint.storyIds?.length || 0
-
-    // Create indicator if it doesn't exist
-    if (!indicatorContainer) {
-      indicatorContainer = document.createElement('div')
-      indicatorContainer.className = 'sprint-filter-indicator'
-      indicatorContainer.setAttribute('role', 'status')
-      indicatorContainer.setAttribute('aria-live', 'polite')
-
-      // Insert before the story list
-      const storiesList = this.container.querySelector('#user-stories-list')
-      if (storiesList) {
-        storiesList.parentNode.insertBefore(indicatorContainer, storiesList)
-      } else {
-        return
-      }
-    }
-
-    indicatorContainer.innerHTML = `
-      <span class="sprint-filter-icon" aria-hidden="true">⚡</span>
-      <span class="sprint-filter-text">
-        Showing <strong>${storyCount}</strong> ${storyCount === 1 ? 'story' : 'stories'} from
-        <strong>${this.escapeHtml(sprintTitle)}</strong>
-      </span>
-      <button class="sprint-filter-clear-btn" type="button" aria-label="Clear sprint filter">
-        <span aria-hidden="true">×</span> Clear Filter
-      </button>
-    `
-
-    // Bind clear button event
-    const clearBtn = indicatorContainer.querySelector('.sprint-filter-clear-btn')
-    clearBtn.addEventListener('click', () => {
-      this.intents.clearSprintFilter()
-    })
-  }
 
   /**
    * Format branch name for display
@@ -567,6 +786,16 @@ export class UserStoriesComponent {
     if (branch?.name) return branch.name
     // Capitalize first letter
     return branchId.charAt(0).toUpperCase() + branchId.slice(1)
+  }
+
+  /**
+   * Check if drag-and-drop is supported
+   */
+  isDragDropSupported() {
+    // Check for touch-only device or if drag and drop API is available
+    const hasDragDrop = 'draggable' in document.createElement('div')
+    const isTouchOnly = 'ontouchstart' in window && !window.matchMedia('(pointer: fine)').matches
+    return hasDragDrop && !isTouchOnly
   }
 
   /**
@@ -581,17 +810,28 @@ export class UserStoriesComponent {
     const canReopen = story.status === 'completed' || story.status === 'archived' // Completed/archived stories can be reopened
     const canArchive = story.status === 'completed' // Completed stories can be archived manually
     const isArchived = story.status === 'archived'
+    const isKanban = this.currentView === VIEW_MODES.KANBAN
+    const isDraggable = isKanban && !isArchived && this.isDragDropSupported()
+    const showFallbackDropdown = isKanban && !isArchived && !this.isDragDropSupported()
 
     return `
-      <div class="story-card ${statusClass}${isSelected ? ' selected' : ''}" data-story-id="${story.id}">
+      <div class="story-card ${statusClass}${isSelected ? ' selected' : ''}${isDraggable ? ' draggable' : ''}"
+           data-story-id="${story.id}"
+           data-story-status="${story.status}"
+           ${isDraggable ? 'draggable="true"' : ''}>
         <div class="story-header">
+          ${isDraggable ? `
+            <span class="drag-handle" title="Drag to change status" aria-label="Drag handle">⋮⋮</span>
+          ` : ''}
           ${canImplement ? `
             <label class="story-checkbox-label">
               <input type="checkbox" class="story-checkbox" ${isSelected ? 'checked' : ''}>
             </label>
           ` : ''}
           <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
+          ${showFallbackDropdown ? this.renderStatusDropdown(story) : ''}
           <div class="story-actions">
+            <button class="story-action-btn expand-btn" title="View full details" aria-label="Expand story">⤢</button>
             ${canComplete ? `<button class="story-action-btn complete-btn" title="Mark as completed">✓</button>` : ''}
             ${canArchive ? `<button class="story-action-btn archive-btn" title="Archive story">⌫</button>` : ''}
             ${canReopen ? `<button class="story-action-btn reopen-btn" title="Reopen story">↺</button>` : ''}
@@ -619,6 +859,22 @@ export class UserStoriesComponent {
   }
 
   /**
+   * Render a fallback status dropdown for touch devices or unsupported browsers
+   */
+  renderStatusDropdown(story) {
+    const statuses = ['pending', 'in-progress', 'completed']
+    return `
+      <select class="status-dropdown" data-story-id="${story.id}" aria-label="Change story status">
+        ${statuses.map(status => `
+          <option value="${status}" ${story.status === status ? 'selected' : ''}>
+            ${this.formatStatus(status)}
+          </option>
+        `).join('')}
+      </select>
+    `
+  }
+
+  /**
    * Bind events for story cards
    */
   bindCardEvents() {
@@ -638,6 +894,16 @@ export class UserStoriesComponent {
         const card = e.target.closest('.story-card')
         const storyId = card.dataset.storyId
         this.cycleStatus(storyId)
+      })
+    })
+
+    // Expand button (opens full detail modal)
+    this.listContainer.querySelectorAll('.expand-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const card = e.target.closest('.story-card')
+        const storyId = card.dataset.storyId
+        this.showStoryDetailModal(storyId)
       })
     })
 
@@ -693,6 +959,158 @@ export class UserStoriesComponent {
         list.classList.toggle('collapsed')
       })
     })
+
+    // Status dropdown change (fallback for touch devices)
+    this.listContainer.querySelectorAll('.status-dropdown').forEach(dropdown => {
+      dropdown.addEventListener('change', (e) => {
+        e.stopPropagation()
+        const storyId = dropdown.dataset.storyId
+        const newStatus = dropdown.value
+        this.intents.updateUserStory(storyId, { status: newStatus })
+      })
+    })
+
+    // Drag and drop events (only in kanban view)
+    if (this.currentView === VIEW_MODES.KANBAN) {
+      this.bindDragDropEvents()
+    }
+  }
+
+  /**
+   * Bind drag and drop events for kanban view
+   */
+  bindDragDropEvents() {
+    // Bind drag events to draggable cards
+    this.listContainer.querySelectorAll('.story-card.draggable').forEach(card => {
+      card.addEventListener('dragstart', (e) => this.handleDragStart(e))
+      card.addEventListener('dragend', (e) => this.handleDragEnd(e))
+    })
+
+    // Bind drop events to swimlane content areas
+    this.listContainer.querySelectorAll('.kanban-swimlane-content').forEach(swimlane => {
+      swimlane.addEventListener('dragover', (e) => this.handleDragOver(e))
+      swimlane.addEventListener('dragenter', (e) => this.handleDragEnter(e))
+      swimlane.addEventListener('dragleave', (e) => this.handleDragLeave(e))
+      swimlane.addEventListener('drop', (e) => this.handleDrop(e))
+    })
+  }
+
+  /**
+   * Handle drag start event
+   */
+  handleDragStart(e) {
+    const card = e.target.closest('.story-card')
+    if (!card) return
+
+    // Store the story ID being dragged
+    this.draggedStoryId = card.dataset.storyId
+    this.draggedStoryStatus = card.dataset.storyStatus
+
+    // Set drag data
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', card.dataset.storyId)
+
+    // Add dragging class for visual feedback
+    card.classList.add('dragging')
+
+    // Highlight valid drop targets
+    requestAnimationFrame(() => {
+      this.listContainer.querySelectorAll('.kanban-swimlane').forEach(swimlane => {
+        const swimlaneStatus = this.getSwimlaneStatus(swimlane)
+        if (swimlaneStatus !== this.draggedStoryStatus) {
+          swimlane.classList.add('drop-target')
+        }
+      })
+    })
+  }
+
+  /**
+   * Handle drag end event
+   */
+  handleDragEnd(e) {
+    const card = e.target.closest('.story-card')
+    if (card) {
+      card.classList.remove('dragging')
+    }
+
+    // Remove all drag-related classes
+    this.listContainer.querySelectorAll('.kanban-swimlane').forEach(swimlane => {
+      swimlane.classList.remove('drop-target', 'drag-over')
+    })
+
+    // Clear drag state
+    this.draggedStoryId = null
+    this.draggedStoryStatus = null
+  }
+
+  /**
+   * Handle drag over event (allows drop)
+   */
+  handleDragOver(e) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  /**
+   * Handle drag enter event
+   */
+  handleDragEnter(e) {
+    e.preventDefault()
+    const swimlane = e.target.closest('.kanban-swimlane')
+    if (swimlane && !swimlane.classList.contains('drag-over')) {
+      const swimlaneStatus = this.getSwimlaneStatus(swimlane)
+      if (swimlaneStatus !== this.draggedStoryStatus) {
+        swimlane.classList.add('drag-over')
+      }
+    }
+  }
+
+  /**
+   * Handle drag leave event
+   */
+  handleDragLeave(e) {
+    const swimlane = e.target.closest('.kanban-swimlane')
+    if (swimlane) {
+      // Only remove if we're actually leaving the swimlane (not entering a child)
+      const relatedTarget = e.relatedTarget
+      if (!relatedTarget || !swimlane.contains(relatedTarget)) {
+        swimlane.classList.remove('drag-over')
+      }
+    }
+  }
+
+  /**
+   * Handle drop event
+   */
+  handleDrop(e) {
+    e.preventDefault()
+
+    const swimlane = e.target.closest('.kanban-swimlane')
+    if (!swimlane) return
+
+    const newStatus = this.getSwimlaneStatus(swimlane)
+    const storyId = e.dataTransfer.getData('text/plain') || this.draggedStoryId
+
+    if (!storyId || !newStatus) return
+
+    // Only update if status actually changed
+    if (newStatus !== this.draggedStoryStatus) {
+      // Update the story status (persists immediately via intents)
+      this.intents.updateUserStory(storyId, { status: newStatus })
+    }
+
+    // Clean up drag state
+    swimlane.classList.remove('drag-over')
+  }
+
+  /**
+   * Get the status associated with a swimlane element
+   */
+  getSwimlaneStatus(swimlane) {
+    if (swimlane.classList.contains('pending')) return 'pending'
+    if (swimlane.classList.contains('in-progress')) return 'in-progress'
+    if (swimlane.classList.contains('completed')) return 'completed'
+    return null
   }
 
   /**
@@ -824,6 +1242,21 @@ export class UserStoriesComponent {
   }
 
   /**
+   * Show story detail modal with full information and editing capability
+   */
+  showStoryDetailModal(storyId) {
+    const story = this.stories.find(s => s.id === storyId)
+    if (!story) return
+
+    this.intents.showModal('story-detail', {
+      story,
+      onSubmit: (data) => {
+        this.intents.updateUserStory(storyId, data)
+      }
+    })
+  }
+
+  /**
    * Mark a story as completed
    */
   markStoryCompleted(storyId) {
@@ -888,6 +1321,14 @@ export class UserStoriesComponent {
    * Cleanup
    */
   destroy() {
-    // No cleanup needed currently
+    // Clean up ResizeObserver
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect()
+      this.resizeObserver = null
+    }
+
+    // Clear any pending timers
+    clearTimeout(this.searchDebounceTimer)
+    clearTimeout(this.resizeDebounceTimer)
   }
 }

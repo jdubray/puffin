@@ -60,6 +60,17 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.invoke('state:updateSprintStoryProgress', { storyId, branchType, progressUpdate }),
     getSprintProgress: () => ipcRenderer.invoke('state:getSprintProgress'),
 
+    // Atomic story status sync (updates sprint and backlog in one transaction)
+    syncStoryStatus: (storyId, status) =>
+      ipcRenderer.invoke('state:syncStoryStatus', { storyId, status }),
+
+    // Event listener for story status sync updates (no polling needed)
+    onStoryStatusSynced: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('story-status-synced', handler)
+      return () => ipcRenderer.removeListener('story-status-synced', handler)
+    },
+
     // Sprint history operations
     archiveSprintToHistory: (sprint) => ipcRenderer.invoke('state:archiveSprintToHistory', sprint),
     getSprintHistory: (options) => ipcRenderer.invoke('state:getSprintHistory', options),

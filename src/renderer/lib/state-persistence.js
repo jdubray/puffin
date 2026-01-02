@@ -159,20 +159,78 @@ export class StatePersistence {
       if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
            'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
-        await window.puffin.state.updateActiveSprint(state.activeSprint)
 
-        // For COMPLETE_STORY_BRANCH: also persist any user stories that were marked complete
-        // The model updates userStories when all branches for a story are complete
+        // For UPDATE_SPRINT_STORY_STATUS: use atomic sync to update both sprint and backlog
+        // This ensures status is always consistent between views with no manual refresh needed
+        if (normalizedType === 'UPDATE_SPRINT_STORY_STATUS') {
+          const { storyId, status } = action.payload || {}
+          if (storyId && status) {
+            try {
+              const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)
+              if (syncResult.success) {
+                console.log('[PERSIST-DEBUG] Atomic status sync completed:', storyId, '->', status)
+                // The event listener will handle UI refresh automatically
+              } else {
+                console.error('[PERSIST-DEBUG] Atomic status sync failed:', syncResult.error)
+                // Fallback to separate updates if atomic fails
+                await window.puffin.state.updateActiveSprint(state.activeSprint)
+              }
+            } catch (e) {
+              console.error('[PERSIST-DEBUG] Atomic status sync error:', e)
+              // Fallback to separate updates
+              await window.puffin.state.updateActiveSprint(state.activeSprint)
+            }
+          } else {
+            // No payload, just update sprint
+            await window.puffin.state.updateActiveSprint(state.activeSprint)
+          }
+        }
+        // For TOGGLE_CRITERIA_COMPLETION: use atomic sync when story becomes complete
+        else if (normalizedType === 'TOGGLE_CRITERIA_COMPLETION') {
+          const { storyId } = action.payload || {}
+          const storyProgress = state.activeSprint?.storyProgress?.[storyId]
+
+          // First update the sprint
+          await window.puffin.state.updateActiveSprint(state.activeSprint)
+
+          // Then atomically sync if story is now complete or was uncompleted
+          if (storyId && storyProgress) {
+            const status = storyProgress.status === 'completed' ? 'completed' : 'in-progress'
+            try {
+              const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)
+              if (syncResult.success) {
+                console.log('[PERSIST-DEBUG] Atomic criteria sync completed:', storyId, '->', status)
+              }
+            } catch (e) {
+              // Fallback: update story separately
+              const story = state.userStories?.find(s => s.id === storyId)
+              if (story) {
+                await window.puffin.state.updateUserStory(storyId, story)
+                console.log('[PERSIST-DEBUG] Fallback story sync after criteria toggle:', storyId, story.status)
+              }
+            }
+          }
+        }
+        // For other sprint actions, use regular update
+        else {
+          await window.puffin.state.updateActiveSprint(state.activeSprint)
+        }
+
+        // For COMPLETE_STORY_BRANCH: use atomic sync for completed stories
         if (normalizedType === 'COMPLETE_STORY_BRANCH' && state.activeSprint?.storyProgress) {
           for (const [storyId, progress] of Object.entries(state.activeSprint.storyProgress)) {
             if (progress?.status === 'completed') {
-              const story = state.userStories?.find(s => s.id === storyId)
-              if (story && story.status === 'completed') {
-                try {
+              try {
+                const syncResult = await window.puffin.state.syncStoryStatus(storyId, 'completed')
+                if (syncResult.success) {
+                  console.log('[PERSIST-DEBUG] Atomic branch completion sync:', storyId)
+                }
+              } catch (e) {
+                // Fallback to separate update
+                const story = state.userStories?.find(s => s.id === storyId)
+                if (story && story.status === 'completed') {
                   await window.puffin.state.updateUserStory(storyId, story)
-                  console.log('[PERSIST-DEBUG] Persisted completed story:', storyId)
-                } catch (e) {
-                  console.error('[PERSIST-DEBUG] Failed to persist completed story:', storyId, e)
+                  console.log('[PERSIST-DEBUG] Fallback persisted completed story:', storyId)
                 }
               }
             }
@@ -181,6 +239,10 @@ export class StatePersistence {
 
         // For CLEAR_SPRINT or CLEAR_SPRINT_WITH_DETAILS: archive sprint and persist story status changes
         if (normalizedType === 'CLEAR_SPRINT' || normalizedType === 'CLEAR_SPRINT_WITH_DETAILS') {
+          console.log('[PERSIST-DEBUG] CLEAR_SPRINT_WITH_DETAILS - state.userStories count:', state.userStories?.length || 0)
+          console.log('[PERSIST-DEBUG] _completedStoryIdsToSync:', state._completedStoryIdsToSync)
+          console.log('[PERSIST-DEBUG] _resetToPendingStoryIds:', state._resetToPendingStoryIds)
+
           // Archive the sprint to history BEFORE clearing
           if (state._sprintToArchive) {
             console.log('[PERSIST-DEBUG] Archiving sprint to history:', state._sprintToArchive.id)
@@ -199,34 +261,33 @@ export class StatePersistence {
             }
           }
 
-          // Persist completed stories
+          // Persist completed stories directly (sprint already archived, can't use syncStoryStatus)
+          // IMPORTANT: Only update status field to 'completed' - don't pass entire story object
+          // to avoid any potential status corruption from stale data
           if (state._completedStoryIdsToSync?.length > 0) {
-            console.log('[PERSIST-DEBUG] Syncing completed stories on sprint clear:', state._completedStoryIdsToSync)
+            console.log('[PERSIST-DEBUG] Persisting completed stories on sprint clear:', state._completedStoryIdsToSync)
             for (const storyId of state._completedStoryIdsToSync) {
-              const story = state.userStories?.find(s => s.id === storyId)
-              if (story) {
-                try {
-                  await window.puffin.state.updateUserStory(storyId, story)
-                  console.log('[PERSIST-DEBUG] Persisted completed story on clear:', storyId)
-                } catch (e) {
-                  console.error('[PERSIST-DEBUG] Failed to persist story on clear:', storyId, e)
-                }
+              try {
+                // Update only the status field to 'completed' - this is safe and explicit
+                await window.puffin.state.updateUserStory(storyId, { status: 'completed' })
+                console.log('[PERSIST-DEBUG] Updated story status to completed:', storyId)
+              } catch (e) {
+                console.error('[PERSIST-DEBUG] Failed to update story status:', storyId, e)
               }
             }
           }
 
           // Persist reset-to-pending stories
+          // IMPORTANT: Only update status field to 'pending' - don't pass entire story object
           if (state._resetToPendingStoryIds?.length > 0) {
             console.log('[PERSIST-DEBUG] Resetting in-progress stories to pending:', state._resetToPendingStoryIds)
             for (const storyId of state._resetToPendingStoryIds) {
-              const story = state.userStories?.find(s => s.id === storyId)
-              if (story) {
-                try {
-                  await window.puffin.state.updateUserStory(storyId, story)
-                  console.log('[PERSIST-DEBUG] Reset story to pending on clear:', storyId)
-                } catch (e) {
-                  console.error('[PERSIST-DEBUG] Failed to reset story on clear:', storyId, e)
-                }
+              try {
+                // Update only the status field to 'pending' - this is safe and explicit
+                await window.puffin.state.updateUserStory(storyId, { status: 'pending' })
+                console.log('[PERSIST-DEBUG] Reset story status to pending:', storyId)
+              } catch (e) {
+                console.error('[PERSIST-DEBUG] Failed to reset story status:', storyId, e)
               }
             }
           }
@@ -258,22 +319,6 @@ export class StatePersistence {
             }
           } catch (e) {
             console.error('[PERSIST-DEBUG] Failed to refresh user stories:', e)
-          }
-        }
-
-        // For TOGGLE_CRITERIA_COMPLETION: sync story status if it changed to completed
-        if (normalizedType === 'TOGGLE_CRITERIA_COMPLETION') {
-          const storyId = action.payload?.storyId
-          if (storyId) {
-            const story = state.userStories?.find(s => s.id === storyId)
-            if (story) {
-              try {
-                await window.puffin.state.updateUserStory(storyId, story)
-                console.log('[PERSIST-DEBUG] Synced story after criteria toggle:', storyId, story.status)
-              } catch (e) {
-                console.error('[PERSIST-DEBUG] Failed to sync story after criteria toggle:', storyId, e)
-              }
-            }
           }
         }
       }

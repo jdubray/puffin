@@ -75,6 +75,18 @@ export class ModalManager {
       case 'claude-config-view':
         await this.renderClaudeConfigView(modalTitle, modalContent, modalActions, isStale)
         break
+      case 'story-detail':
+        this.renderStoryDetail(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'add-user-story':
+        this.renderAddUserStory(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'edit-user-story':
+        this.renderEditUserStory(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'sprint-stories':
+        this.renderSprintStories(modalTitle, modalContent, modalActions, modal.data)
+        break
       default:
         console.warn('Unknown modal type:', modal.type)
         // Provide a way to close unknown modals
@@ -966,6 +978,444 @@ export class ModalManager {
       .replace(/(<\/pre>)<\/p>/g, '$1')
       .replace(/<p>(<hr>)/g, '$1')
       .replace(/(<hr>)<\/p>/g, '$1')
+  }
+
+  /**
+   * Render story detail modal - full view with all fields editable
+   */
+  renderStoryDetail(title, content, actions, data) {
+    const story = data?.story
+    if (!story) {
+      title.textContent = 'Story Not Found'
+      content.innerHTML = '<p>The requested story could not be found.</p>'
+      actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Close</button>'
+      document.getElementById('modal-cancel-btn')?.addEventListener('click', () => this.intents.hideModal())
+      return
+    }
+
+    title.textContent = 'Story Details'
+
+    const statuses = ['pending', 'in-progress', 'completed', 'archived']
+    const criteriaHtml = (story.acceptanceCriteria || []).map((c, i) => `
+      <div class="criteria-item" data-index="${i}">
+        <input type="text" class="criteria-input" value="${this.escapeHtml(c)}" placeholder="Acceptance criterion">
+        <button type="button" class="criteria-remove-btn" title="Remove criterion" aria-label="Remove criterion">×</button>
+      </div>
+    `).join('')
+
+    content.innerHTML = `
+      <form id="story-detail-form" class="story-detail-form">
+        <div class="form-group">
+          <label for="story-title">Title <span class="required">*</span></label>
+          <input type="text" id="story-title" class="form-input" value="${this.escapeHtml(story.title)}" required maxlength="200">
+        </div>
+
+        <div class="form-group">
+          <label for="story-status">Status</label>
+          <select id="story-status" class="form-select">
+            ${statuses.map(s => `
+              <option value="${s}" ${story.status === s ? 'selected' : ''}>
+                ${this.formatStatus(s)}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="story-description">Description</label>
+          <textarea id="story-description" class="form-textarea" rows="4" placeholder="As a [user], I want [feature] so that [benefit]...">${this.escapeHtml(story.description || '')}</textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Acceptance Criteria</label>
+          <div id="criteria-list" class="criteria-list">
+            ${criteriaHtml || '<p class="no-criteria">No acceptance criteria defined.</p>'}
+          </div>
+          <button type="button" id="add-criterion-btn" class="btn small secondary">+ Add Criterion</button>
+        </div>
+
+        <div class="story-meta">
+          <span class="meta-item">Created: ${this.formatDate(story.createdAt)}</span>
+          ${story.branchId ? `<span class="meta-item">Branch: ${this.escapeHtml(story.branchId)}</span>` : ''}
+          ${story.sourcePromptId ? '<span class="meta-item">Auto-extracted</span>' : ''}
+        </div>
+      </form>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="story-cancel-btn">Cancel</button>
+      <button class="btn primary" id="story-save-btn">Save Changes</button>
+    `
+
+    this.bindStoryDetailEvents(data, story)
+  }
+
+  /**
+   * Bind events for story detail modal
+   */
+  bindStoryDetailEvents(data, story) {
+    // Cancel button
+    document.getElementById('story-cancel-btn')?.addEventListener('click', () => {
+      this.intents.hideModal()
+    })
+
+    // Save button
+    document.getElementById('story-save-btn')?.addEventListener('click', () => {
+      this.saveStoryDetail(data)
+    })
+
+    // Add criterion button
+    document.getElementById('add-criterion-btn')?.addEventListener('click', () => {
+      this.addCriterionField()
+    })
+
+    // Remove criterion buttons (use event delegation)
+    document.getElementById('criteria-list')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('criteria-remove-btn')) {
+        const item = e.target.closest('.criteria-item')
+        if (item) {
+          item.remove()
+          this.updateCriteriaPlaceholder()
+        }
+      }
+    })
+
+    // Keyboard handler for Escape
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        this.intents.hideModal()
+        document.removeEventListener('keydown', handleEscape)
+      }
+    }
+    document.addEventListener('keydown', handleEscape)
+
+    // Focus title input
+    setTimeout(() => {
+      document.getElementById('story-title')?.focus()
+    }, 100)
+  }
+
+  /**
+   * Add a new criterion input field
+   */
+  addCriterionField() {
+    const list = document.getElementById('criteria-list')
+    if (!list) return
+
+    // Remove "no criteria" placeholder if present
+    const placeholder = list.querySelector('.no-criteria')
+    if (placeholder) placeholder.remove()
+
+    const index = list.querySelectorAll('.criteria-item').length
+    const newItem = document.createElement('div')
+    newItem.className = 'criteria-item'
+    newItem.dataset.index = index
+    newItem.innerHTML = `
+      <input type="text" class="criteria-input" value="" placeholder="Acceptance criterion">
+      <button type="button" class="criteria-remove-btn" title="Remove criterion" aria-label="Remove criterion">×</button>
+    `
+    list.appendChild(newItem)
+
+    // Focus the new input
+    newItem.querySelector('.criteria-input')?.focus()
+  }
+
+  /**
+   * Update criteria placeholder if list is empty
+   */
+  updateCriteriaPlaceholder() {
+    const list = document.getElementById('criteria-list')
+    if (!list) return
+
+    if (list.querySelectorAll('.criteria-item').length === 0) {
+      list.innerHTML = '<p class="no-criteria">No acceptance criteria defined.</p>'
+    }
+  }
+
+  /**
+   * Save story detail from modal form
+   */
+  saveStoryDetail(data) {
+    const titleInput = document.getElementById('story-title')
+    const statusSelect = document.getElementById('story-status')
+    const descriptionInput = document.getElementById('story-description')
+    const criteriaInputs = document.querySelectorAll('#criteria-list .criteria-input')
+
+    const newTitle = titleInput?.value?.trim()
+    if (!newTitle) {
+      titleInput?.focus()
+      this.showToast('Title is required', 'error')
+      return
+    }
+
+    const acceptanceCriteria = Array.from(criteriaInputs)
+      .map(input => input.value.trim())
+      .filter(c => c.length > 0)
+
+    const updatedData = {
+      title: newTitle,
+      status: statusSelect?.value || 'pending',
+      description: descriptionInput?.value?.trim() || '',
+      acceptanceCriteria
+    }
+
+    if (data?.onSubmit) {
+      data.onSubmit(updatedData)
+    }
+
+    this.intents.hideModal()
+    this.showToast('Story updated successfully', 'success')
+  }
+
+  /**
+   * Render add user story modal
+   */
+  renderAddUserStory(title, content, actions, data) {
+    title.textContent = 'Add User Story'
+
+    content.innerHTML = `
+      <form id="add-story-form" class="story-detail-form">
+        <div class="form-group">
+          <label for="story-title">Title <span class="required">*</span></label>
+          <input type="text" id="story-title" class="form-input" placeholder="Brief descriptive title" required maxlength="200">
+        </div>
+
+        <div class="form-group">
+          <label for="story-description">Description</label>
+          <textarea id="story-description" class="form-textarea" rows="4" placeholder="As a [user], I want [feature] so that [benefit]..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Acceptance Criteria</label>
+          <div id="criteria-list" class="criteria-list">
+            <p class="no-criteria">No acceptance criteria defined.</p>
+          </div>
+          <button type="button" id="add-criterion-btn" class="btn small secondary">+ Add Criterion</button>
+        </div>
+      </form>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="story-cancel-btn">Cancel</button>
+      <button class="btn primary" id="story-save-btn">Add Story</button>
+    `
+
+    this.bindAddStoryEvents(data)
+  }
+
+  /**
+   * Bind events for add story modal
+   */
+  bindAddStoryEvents(data) {
+    // Cancel button
+    document.getElementById('story-cancel-btn')?.addEventListener('click', () => {
+      this.intents.hideModal()
+    })
+
+    // Save button
+    document.getElementById('story-save-btn')?.addEventListener('click', () => {
+      this.saveNewStory(data)
+    })
+
+    // Add criterion button
+    document.getElementById('add-criterion-btn')?.addEventListener('click', () => {
+      this.addCriterionField()
+    })
+
+    // Remove criterion buttons
+    document.getElementById('criteria-list')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('criteria-remove-btn')) {
+        const item = e.target.closest('.criteria-item')
+        if (item) {
+          item.remove()
+          this.updateCriteriaPlaceholder()
+        }
+      }
+    })
+
+    // Keyboard handler for Escape
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        this.intents.hideModal()
+        document.removeEventListener('keydown', handleEscape)
+      }
+    }
+    document.addEventListener('keydown', handleEscape)
+
+    // Focus title input
+    setTimeout(() => {
+      document.getElementById('story-title')?.focus()
+    }, 100)
+  }
+
+  /**
+   * Save new story from add modal
+   */
+  saveNewStory(data) {
+    const titleInput = document.getElementById('story-title')
+    const descriptionInput = document.getElementById('story-description')
+    const criteriaInputs = document.querySelectorAll('#criteria-list .criteria-input')
+
+    const newTitle = titleInput?.value?.trim()
+    if (!newTitle) {
+      titleInput?.focus()
+      this.showToast('Title is required', 'error')
+      return
+    }
+
+    const acceptanceCriteria = Array.from(criteriaInputs)
+      .map(input => input.value.trim())
+      .filter(c => c.length > 0)
+
+    const storyData = {
+      title: newTitle,
+      description: descriptionInput?.value?.trim() || '',
+      acceptanceCriteria
+    }
+
+    if (data?.onSubmit) {
+      data.onSubmit(storyData)
+    }
+
+    this.intents.hideModal()
+    this.showToast('Story added successfully', 'success')
+  }
+
+  /**
+   * Render edit user story modal (simpler version - just redirects to story-detail)
+   */
+  renderEditUserStory(title, content, actions, data) {
+    // Reuse story detail modal for editing
+    this.renderStoryDetail(title, content, actions, data)
+    title.textContent = 'Edit Story'
+  }
+
+  /**
+   * Render sprint stories modal - shows all stories from an archived sprint
+   */
+  renderSprintStories(title, content, actions, data) {
+    const { sprint, stories } = data || {}
+
+    if (!sprint) {
+      title.textContent = 'Sprint Not Found'
+      content.innerHTML = '<p>The requested sprint could not be found.</p>'
+      actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Close</button>'
+      document.getElementById('modal-cancel-btn')?.addEventListener('click', () => {
+        this.intents.hideModal()
+      })
+      return
+    }
+
+    // Format sprint title - try closedAt, createdAt, or fallback to ID
+    let sprintTitle = sprint.title
+    if (!sprintTitle) {
+      const dateStr = sprint.closedAt || sprint.createdAt
+      if (dateStr) {
+        const date = new Date(dateStr)
+        if (!isNaN(date.getTime())) {
+          sprintTitle = `Sprint ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+        }
+      }
+    }
+    if (!sprintTitle) {
+      sprintTitle = `Archived Sprint`
+    }
+
+    // Format closed date
+    let closedDate = ''
+    if (sprint.closedAt) {
+      const date = new Date(sprint.closedAt)
+      if (!isNaN(date.getTime())) {
+        closedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+      }
+    }
+
+    title.textContent = sprintTitle
+
+    // Build stories list HTML - show helpful message for deleted stories
+    const storiesHtml = stories && stories.length > 0
+      ? stories.map(story => {
+          const isDeleted = story.status === 'unknown' || story.title === '[Deleted Story]'
+          if (isDeleted) {
+            return `
+              <div class="sprint-story-item deleted">
+                <div class="sprint-story-header">
+                  <span class="sprint-story-status-badge archived">Archived</span>
+                  <h4 class="sprint-story-title text-muted">Story data unavailable</h4>
+                </div>
+                <p class="sprint-story-description text-muted">This story was part of the sprint but the original data is no longer available.</p>
+              </div>
+            `
+          }
+          return `
+            <div class="sprint-story-item ${story.status || ''}">
+              <div class="sprint-story-header">
+                <span class="sprint-story-status-badge ${story.status || 'pending'}">${this.formatStatus(story.status || 'pending')}</span>
+                <h4 class="sprint-story-title">${this.escapeHtml(story.title)}</h4>
+              </div>
+              ${story.description ? `<p class="sprint-story-description">${this.escapeHtml(story.description)}</p>` : ''}
+              ${story.acceptanceCriteria && story.acceptanceCriteria.length > 0 ? `
+                <div class="sprint-story-criteria">
+                  <strong>Acceptance Criteria:</strong>
+                  <ul>
+                    ${story.acceptanceCriteria.map(c => `<li>${this.escapeHtml(typeof c === 'string' ? c : c.text || c.description || '')}</li>`).join('')}
+                  </ul>
+                </div>
+              ` : ''}
+            </div>
+          `
+        }).join('')
+      : '<p class="no-stories">No stories were recorded for this sprint.</p>'
+
+    // Show story count summary
+    const storyCount = stories?.length || 0
+    const validStories = stories?.filter(s => s.status !== 'unknown' && s.title !== '[Deleted Story]').length || 0
+
+    content.innerHTML = `
+      <div class="sprint-stories-modal">
+        <div class="sprint-meta">
+          ${closedDate ? `<span class="sprint-date">Closed: ${closedDate}</span>` : ''}
+          <span class="sprint-story-count">${storyCount} ${storyCount === 1 ? 'story' : 'stories'}</span>
+        </div>
+        <div class="sprint-stories-list">
+          ${storiesHtml}
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="modal-close-btn">Close</button>
+    `
+
+    document.getElementById('modal-close-btn')?.addEventListener('click', () => {
+      this.intents.hideModal()
+    })
+  }
+
+  /**
+   * Format status for display
+   */
+  formatStatus(status) {
+    const statusMap = {
+      'pending': 'Pending',
+      'in-progress': 'In Progress',
+      'completed': 'Completed',
+      'archived': 'Archived'
+    }
+    return statusMap[status] || status
+  }
+
+  /**
+   * Format date for display
+   */
+  formatDate(timestamp) {
+    if (!timestamp) return 'Unknown'
+    const date = new Date(timestamp)
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   /**

@@ -1,0 +1,71 @@
+{
+  "name": "document-viewer-plugin",
+  "version": "1.0.0",
+  "displayName": "Documents",
+  "description": "Browse and preview documentation files from the docs/ directory",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["documents", "markdown", "viewer", "tree", "docs"],
+  "extensionPoints": {
+    "actions": [
+      "scanDirectory",
+      "getFileContent",
+      "refreshTree"
+    ],
+    "ipcHandlers": [
+      "document-viewer:scanDirectory",
+      "document-viewer:getFileContent",
+      "document-viewer:refreshTree"
+    ],
+    "components": ["document-viewer-view"]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "document-viewer-view",
+        "name": "Docs",
+        "location": "nav",
+        "icon": "📁",
+        "order": 55,
+        "component": "DocumentViewerComponent"
+      }
+    ],
+    "commands": [
+      {
+        "id": "document-viewer.refresh",
+        "title": "Refresh Document Tree",
+        "category": "Documents"
+      },
+      {
+        "id": "document-viewer.openFile",
+        "title": "Open Document",
+        "category": "Documents"
+      }
+    ],
+    "menus": {
+      "tools": [
+        {
+          "command": "document-viewer.refresh"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "DocumentViewerComponent",
+        "export": "DocumentViewerComponent",
+        "type": "class",
+        "description": "Document tree browser and markdown preview"
+      }
+    ],
+    "styles": [
+      "renderer/styles/document-viewer.css"
+    ]
+  }
+}

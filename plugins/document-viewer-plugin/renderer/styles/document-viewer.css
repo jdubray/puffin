@@ -1,0 +1,489 @@
+/**
+ * Document Viewer Plugin Styles
+ *
+ * Styles for the document tree browser and preview panel.
+ * Uses CSS custom properties for theming consistency.
+ */
+
+/* ===========================================
+   Container Layout
+   =========================================== */
+
+.document-viewer-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.document-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.document-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.document-viewer-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.15s ease;
+}
+
+.refresh-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.refresh-btn:active {
+  transform: rotate(180deg);
+}
+
+.document-viewer-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ===========================================
+   Tree Panel
+   =========================================== */
+
+.tree-panel {
+  width: 280px;
+  min-width: 200px;
+  max-width: 400px;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  overflow: auto;
+  flex-shrink: 0;
+}
+
+.tree-view {
+  padding: 0.5rem 0;
+}
+
+/* Loading state */
+.tree-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Error state */
+.tree-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--error);
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 1.5rem;
+}
+
+/* Empty state */
+.tree-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.tree-empty .empty-icon {
+  font-size: 2rem;
+  opacity: 0.5;
+}
+
+.tree-empty p {
+  margin: 0;
+}
+
+.tree-empty .hint {
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+
+/* ===========================================
+   Tree Nodes
+   =========================================== */
+
+.tree-node {
+  user-select: none;
+}
+
+.tree-node-content {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.tree-node-content:hover {
+  background: var(--bg-hover);
+}
+
+.tree-node.selected > .tree-node-content {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.tree-node.selected > .tree-node-content .tree-node-icon,
+.tree-node.selected > .tree-node-content .tree-expand-icon {
+  opacity: 0.9;
+}
+
+.tree-expand-icon {
+  width: 1rem;
+  font-size: 0.625rem;
+  text-align: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.tree-node.directory > .tree-node-content .tree-expand-icon {
+  cursor: pointer;
+}
+
+.tree-node-icon {
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.tree-node-name {
+  flex: 1;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-node-badge {
+  font-size: 0.625rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.tree-node-badge.empty-badge {
+  font-style: italic;
+}
+
+/* Directory states */
+.tree-node.directory.empty > .tree-node-content {
+  opacity: 0.7;
+}
+
+.tree-node.directory.empty > .tree-node-content .tree-node-icon {
+  opacity: 0.6;
+}
+
+/* File states */
+.tree-node.file.unsupported > .tree-node-content {
+  opacity: 0.5;
+}
+
+/* Nested children */
+.tree-children {
+  /* Children are already indented via padding-left */
+}
+
+/* Focus styles for keyboard navigation */
+.tree-node:focus {
+  outline: none;
+}
+
+.tree-node:focus > .tree-node-content {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+/* ===========================================
+   Preview Panel
+   =========================================== */
+
+.preview-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.preview-filename {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Preview empty state */
+.preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.preview-empty .empty-icon {
+  font-size: 2.5rem;
+  opacity: 0.5;
+}
+
+.preview-empty p {
+  margin: 0;
+}
+
+/* Preview loading */
+.preview-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+/* Preview error */
+.preview-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 100%;
+  color: var(--error);
+}
+
+/* Preview content */
+.preview-content {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
+/* ===========================================
+   Markdown Rendering
+   =========================================== */
+
+.markdown-body {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.markdown-body h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 1.5rem 0 1rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.markdown-body h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.75rem 0;
+}
+
+.markdown-body h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem 0;
+}
+
+.markdown-body p {
+  margin: 0.75rem 0;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.markdown-body em {
+  font-style: italic;
+}
+
+.markdown-body code {
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8125rem;
+  background: var(--bg-tertiary);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+}
+
+.markdown-body pre {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.markdown-body li {
+  margin: 0.25rem 0;
+}
+
+.markdown-body a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+/* ===========================================
+   Plaintext Content
+   =========================================== */
+
+.plaintext-content {
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* ===========================================
+   Responsive Adjustments
+   =========================================== */
+
+@media (max-width: 768px) {
+  .document-viewer-content {
+    flex-direction: column;
+  }
+
+  .tree-panel {
+    width: 100%;
+    max-width: none;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .preview-panel {
+    min-height: 300px;
+  }
+}
+
+/* ===========================================
+   Accessibility
+   =========================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-btn:active {
+    transform: none;
+  }
+
+  .loading-spinner {
+    animation: none;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .tree-node.selected > .tree-node-content {
+    outline: 2px solid white;
+    outline-offset: -2px;
+  }
+
+  .tree-node:focus > .tree-node-content {
+    outline-width: 3px;
+  }
+}

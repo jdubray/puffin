@@ -21,7 +21,9 @@
       "Bash(ls:*)",
       "Bash(sqlite3:*)",
       "Bash(python3:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)"
     ]
   }
 }

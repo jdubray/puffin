@@ -200,10 +200,16 @@ export class HistoryTreeComponent {
 
   /**
    * Handle drag leave
+   * Only remove drag-over class when actually leaving the branch-item bounds,
+   * not when moving between child elements within the same item
    */
   handleDragLeave(e) {
     const item = e.target.closest('.branch-item')
-    if (item) {
+    if (!item) return
+
+    // Check if we're leaving to an element outside this branch-item
+    const relatedTarget = e.relatedTarget
+    if (!relatedTarget || !item.contains(relatedTarget)) {
       item.classList.remove('drag-over')
     }
   }

@@ -6,6 +6,9 @@
 /* Branch List */
 .branch-list {
   list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .branch-item {
@@ -79,12 +82,25 @@
 }
 
 .branch-item.drag-over {
-  border-top: 2px solid var(--accent-primary);
-  margin-top: -2px;
+  position: relative;
 }
 
-.branch-item.drag-over.active {
-  border-top-color: white;
+/* Drop zone indicator - creates a visible drop area above the branch item */
+.branch-item.drag-over::before {
+  content: '';
+  position: absolute;
+  top: -0.75rem;
+  left: 0;
+  right: 0;
+  height: 1rem;
+  background: linear-gradient(to bottom, var(--accent-primary) 0%, var(--accent-primary) 3px, transparent 3px);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.branch-item.drag-over.active::before {
+  background: linear-gradient(to bottom, white 0%, white 3px, transparent 3px);
 }
 
 /* History Tree */

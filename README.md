@@ -52,7 +52,9 @@ Your Project/
 ├── .puffin/
 │   ├── config.json      # Project configuration & Claude options
 │   ├── history.json     # Branched conversation history
-│   └── architecture.md  # Architecture document
+│   ├── puffin.db        # SQLite database (user stories, sprints, etc.)
+│   ├── architecture.md  # Architecture document
+│   └── plugins/         # Claude Code plugins/skills
 ├── src/
 └── ...your project files
 ```
@@ -62,6 +64,7 @@ Your Project/
 - **Platform**: Electron 33+
 - **Frontend**: Vanilla JavaScript (ES6+ modules)
 - **State Management**: SAM Pattern ([sam-pattern](https://www.npmjs.com/package/sam-pattern) + [sam-fsm](https://github.com/jdubray/sam-fsm))
+- **Database**: SQLite via [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) for persistent storage
 - **AI Integration**: Claude Code CLI (spawned as subprocess with JSON streaming)
 - **Markdown**: [marked](https://www.npmjs.com/package/marked) for rendering responses
 
@@ -69,7 +72,7 @@ Your Project/
 
 ### Prerequisites
 
-- Node.js 18+
+- **Node.js v20 LTS** (required for SQLite/better-sqlite3 native module support)
 - Claude Code CLI installed globally: `npm install -g @anthropic-ai/claude-code`
 - Active Claude Code subscription or API access
 
@@ -152,7 +155,12 @@ puffin/
 │   │   ├── preload.js     # Secure IPC bridge
 │   │   ├── ipc-handlers.js
 │   │   ├── puffin-state.js # .puffin/ directory management
-│   │   └── claude-service.js # Claude CLI subprocess
+│   │   ├── claude-service.js # Claude CLI subprocess
+│   │   ├── database/      # SQLite database layer
+│   │   │   ├── database-manager.js
+│   │   │   ├── repositories/  # Data access layer
+│   │   │   └── migrations/    # Schema migrations
+│   │   └── plugins/       # Plugin system core
 │   │
 │   ├── renderer/          # Electron renderer process
 │   │   ├── index.html
@@ -161,6 +169,7 @@ puffin/
 │   │   ├── styles/        # CSS (main, components, themes, debugger)
 │   │   ├── sam/           # SAM pattern (model, state, actions, instance)
 │   │   ├── lib/           # SAM libraries (sam-pattern, sam-fsm)
+│   │   ├── plugins/       # Plugin renderer components
 │   │   └── components/    # UI components
 │   │       ├── project-form/
 │   │       ├── prompt-editor/
@@ -172,6 +181,12 @@ puffin/
 │   │       └── debugger/
 │   │
 │   └── shared/            # Shared utilities (validators, formatters, constants)
+│
+├── plugins/               # Built-in Puffin plugins
+│   ├── stats-plugin/      # Usage statistics dashboard
+│   ├── designer-plugin/   # GUI designer
+│   ├── claude-config-plugin/ # CLAUDE.md context management
+│   └── document-viewer-plugin/ # Documentation browser
 │
 ├── projects/              # Example projects (optional)
 └── tests/
@@ -235,6 +250,15 @@ Real-time streaming of Claude Code's output:
 - Live Stream tab: Raw text output as it streams
 - Messages tab: Parsed message blocks
 - Raw JSON tab: Full JSON output for debugging
+
+### Plugin Views
+
+Puffin includes four built-in plugins that add navigation tabs:
+
+- **Stats** 📊: Usage statistics dashboard with weekly metrics and export
+- **Designer** 🎨: Visual GUI designer for creating UI layouts
+- **Context** 📄: CLAUDE.md configuration viewer and editor with branch focus management
+- **Docs** 📁: Documentation browser for markdown and image files in your docs/ directory
 
 ## Latest Features
 

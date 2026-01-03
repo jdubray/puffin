@@ -37,7 +37,7 @@ Puffin wraps the Claude Code CLI, providing structure and persistence while lett
 ### Prerequisites
 - **Claude Code CLI (3CLI)** must be installed and configured
 - **Electron 33+** compatible system
-- **Node.js** for development setup
+- **Node.js v20 LTS** (required for SQLite/better-sqlite3 native module support)
 
 ### Installation
 ```bash
@@ -468,6 +468,114 @@ Structure your architecture documentation with:
 
 ---
 
+### Puffin Plugins
+
+Puffin features a modular plugin architecture that extends its core functionality. Plugins add new views, commands, and capabilities to the application.
+
+#### Built-in Plugins
+
+Puffin ships with four built-in plugins that are automatically loaded on startup:
+
+**1. Stats Dashboard** 📊
+- **Purpose**: Track and visualize usage statistics across branches
+- **Features**:
+  - Weekly statistics overview
+  - Export statistics as markdown
+  - Analytics dashboard view
+- **Access**: Click "Stats" in the navigation bar
+
+**2. GUI Designer** 🎨
+- **Purpose**: Visual GUI definition designer for creating and managing UI layouts
+- **Features**:
+  - Drag-and-drop element placement
+  - Save and load design templates
+  - Export designs for Claude implementation
+- **Access**: Click "Designer" in the navigation bar
+
+**3. Claude Context** 📄
+- **Purpose**: Manages CLAUDE.md configuration files for branch-specific Claude Code context
+- **Features**:
+  - View and edit CLAUDE.md content
+  - Branch-specific context management
+  - Propose and apply configuration changes
+  - Branch focus management with edit capability
+- **Access**: Click "Context" in the navigation bar
+
+**4. Documents** 📁
+- **Purpose**: Browse and preview documentation files from the docs/ directory
+- **Features**:
+  - Tree-based document navigation
+  - Markdown file preview with syntax highlighting
+  - Image file preview support
+  - Quick document access
+- **Access**: Click "Docs" in the navigation bar
+
+#### Plugin Architecture
+
+Plugins in Puffin follow a consistent structure:
+- **Main process component**: Handles backend logic and IPC handlers
+- **Renderer component**: Provides UI views and user interaction
+- **Manifest file**: Declares plugin metadata, views, commands, and activation events
+
+Plugins can contribute:
+- **Views**: New tabs in the navigation bar
+- **Commands**: Actions accessible via menus or keyboard shortcuts
+- **IPC Handlers**: Backend communication channels
+
+---
+
+### Claude Code Plugins and Skills
+
+Beyond Puffin's internal plugin system, you can configure **Claude Code plugins** (also called "skills") that inject additional context into Claude's prompts. These skills enhance Claude's capabilities for specific tasks like frontend development, testing patterns, or architectural decisions.
+
+#### How Claude Code Plugins Work
+
+Claude Code plugins are stored in `.puffin/plugins/` within your project and inject skill content into the CLAUDE.md file when working on specific branches.
+
+#### Plugin Structure
+
+Each Claude Code plugin consists of:
+```
+.puffin/plugins/
+└── frontend-design/
+    ├── manifest.json    # Plugin metadata
+    └── skill.md         # Skill content (injected into CLAUDE.md)
+```
+
+**manifest.json example:**
+```json
+{
+  "name": "frontend-design",
+  "version": "1.0.0",
+  "displayName": "Frontend Design Skill",
+  "description": "Distinctive, production-grade frontend interfaces",
+  "author": "Anthropic",
+  "skillFile": "skill.md",
+  "tags": ["ui", "frontend", "design"],
+  "enabled": true
+}
+```
+
+#### Branch Assignment
+
+Plugins can be assigned to specific branches so their skill content is automatically included when working on that branch:
+
+- **UI Branch**: Frontend design skills, accessibility guidelines
+- **Backend Branch**: API patterns, testing patterns
+- **Specifications Branch**: Requirements writing guidelines
+
+This allows Claude to receive contextually-relevant guidance based on the type of work being done.
+
+#### Creating Custom Skills
+
+You can create your own Claude Code plugins by:
+1. Creating a directory in `.puffin/plugins/`
+2. Adding a `manifest.json` with plugin metadata
+3. Adding a `skill.md` with the skill content (markdown format)
+4. Enabling the plugin in your configuration
+
+---
+
 ### CLI Output Monitoring
 
 Transparent debugging and monitoring of Claude Code CLI interactions.
@@ -712,7 +820,7 @@ Puffin maintains conversation context across sessions for seamless development.
 
 ### Data Persistence
 
-All Puffin data is stored in the `.puffin/` directory within your target project.
+All Puffin data is stored in the `.puffin/` directory within your target project. Puffin uses **SQLite** (via better-sqlite3) for structured data storage, providing reliable persistence with ACID transactions.
 
 #### Directory Structure
 ```
@@ -720,14 +828,26 @@ All Puffin data is stored in the `.puffin/` directory within your target project
 ├── config.json              # Project configuration
 ├── history.json             # Conversation history
 ├── architecture.md          # Architecture documentation
-├── user-stories.json        # User story database
+├── puffin.db                # SQLite database (user stories, sprints, etc.)
 ├── ui-guidelines.json       # Design system settings
 ├── gui-definitions/         # Saved GUI designs
 │   ├── main-layout.json
 │   └── user-profile.json
 ├── gui-designs/             # GUI design files
+├── plugins/                 # Claude Code plugins/skills
 └── stylesheets/             # CSS stylesheet storage
 ```
+
+#### SQLite Database
+
+The `puffin.db` SQLite database stores:
+- **User Stories**: Backlog items with acceptance criteria and status
+- **Sprints**: Sprint plans, story assignments, and progress
+- **Sprint History**: Archived sprints for historical reference
+- **Implementation Journeys**: Story implementation tracking
+- **Story Generations**: AI-generated story tracking
+
+The database uses migrations to manage schema changes, ensuring smooth upgrades between versions.
 
 #### Backup & Sync
 - **Git Integration**: `.puffin/` can be committed to version control
@@ -967,13 +1087,17 @@ Puffin uses Electron with modern web technologies:
 **Backlog**: Collection of user stories waiting to be implemented
 **Branch**: Organized conversation topic in Puffin
 **Branch-Specific Context**: Dynamic context injected into prompts based on active branch (UI guidelines, architecture docs, etc.)
+**Claude Code Plugin**: A skill package that injects context into Claude's prompts for specific tasks
 **GUI Definition**: Saved visual design that can be reused
+**Puffin Plugin**: An extension that adds views, commands, or functionality to Puffin itself
 **SAM Pattern**: State-Action-Model architecture pattern used by Puffin
 **Session ID**: Unique identifier for conversation continuity with Claude
+**Skill**: Context content (markdown) injected into CLAUDE.md to enhance Claude's capabilities
+**SQLite**: Lightweight database engine used by Puffin for persistent storage
 **Start Implementation**: Action that generates an implementation prompt for selected stories
 **Tool Execution**: When Claude uses tools like file reading, writing, or bash commands
 **User Story**: Structured requirement describing user needs and acceptance criteria
 
 ---
 
-*This manual covers Puffin version 1.0.1. For the latest updates and features, check the GitHub repository and release notes.*
+*This manual covers Puffin version 1.1.0. For the latest updates and features, check the GitHub repository and release notes.*

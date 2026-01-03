@@ -591,6 +591,23 @@ export class DocumentViewerComponent {
   }
 
   /**
+   * Lifecycle hook: Called when the view is activated (clicked in sidebar)
+   * Refreshes the document tree to pick up any new files created by Claude
+   */
+  async onActivate() {
+    console.log('[DocumentViewerComponent] onActivate() - refreshing document tree')
+    await this.loadTree()
+  }
+
+  /**
+   * Lifecycle hook: Called when the view is deactivated
+   */
+  onDeactivate() {
+    console.log('[DocumentViewerComponent] onDeactivate()')
+    // No cleanup needed currently
+  }
+
+  /**
    * Cleanup when component is destroyed
    */
   destroy() {

@@ -645,3 +645,98 @@
     outline-width: 3px;
   }
 }
+
+/* ===========================================
+   Drag and Drop
+   =========================================== */
+
+/* Draggable cursor */
+.tree-node[draggable="true"] > .tree-node-content {
+  cursor: grab;
+}
+
+.tree-node[draggable="true"]:active > .tree-node-content {
+  cursor: grabbing;
+}
+
+/* Node being dragged */
+.tree-node.dragging {
+  opacity: 0.5;
+}
+
+.tree-node.dragging > .tree-node-content {
+  background: var(--bg-tertiary);
+}
+
+/* Drop target highlight */
+.tree-node.directory.drag-over > .tree-node-content {
+  background: var(--accent-primary);
+  color: white;
+  outline: 2px dashed var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.tree-node.directory.drag-over > .tree-node-content .tree-node-icon,
+.tree-node.directory.drag-over > .tree-node-content .tree-expand-icon,
+.tree-node.directory.drag-over > .tree-node-content .tree-node-badge {
+  opacity: 0.9;
+}
+
+/* Drag preview element */
+.drag-preview {
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ===========================================
+   Notification Toast
+   =========================================== */
+
+.doc-notification {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(100px);
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: 10000;
+}
+
+.doc-notification.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.doc-notification-success {
+  background: var(--success-bg, #1e3a2f);
+  color: var(--success-text, #6fcf97);
+  border: 1px solid var(--success-border, #2d5a3f);
+}
+
+.doc-notification-error {
+  background: var(--error-bg, #3a1e1e);
+  color: var(--error-text, #eb5757);
+  border: 1px solid var(--error-border, #5a2d2d);
+}
+
+.doc-notification-info {
+  background: var(--info-bg, #1e2d3a);
+  color: var(--info-text, #7eb8ff);
+  border: 1px solid var(--info-border, #2d4a6f);
+}
+
+.doc-notification .notification-icon {
+  font-size: 1rem;
+}
+
+.doc-notification .notification-message {
+  max-width: 300px;
+}

@@ -282,6 +282,174 @@ class DocumentScanner {
       supportedFiles
     }
   }
+
+  /**
+   * Move a file or directory to a new location within the docs directory
+   * @param {string} sourcePath - Relative or absolute path to source
+   * @param {string} targetDir - Relative or absolute path to target directory
+   * @returns {Promise<Object>} Result with oldPath, newPath, and success status
+   */
+  async moveItem(sourcePath, targetDir) {
+    // Resolve paths
+    let resolvedSource = sourcePath
+    if (!path.isAbsolute(sourcePath)) {
+      resolvedSource = path.join(this.projectPath, sourcePath)
+    }
+
+    let resolvedTarget = targetDir
+    if (!path.isAbsolute(targetDir)) {
+      resolvedTarget = path.join(this.projectPath, targetDir)
+    }
+
+    // Special case: 'docs' or 'docs/' means root docs directory
+    if (targetDir === 'docs' || targetDir === 'docs/' || targetDir === '') {
+      resolvedTarget = this.docsPath
+    }
+
+    // Security: Validate both paths are within docs directory
+    if (!this.isPathSafe(resolvedSource)) {
+      throw new Error('Access denied: Source path is outside docs directory')
+    }
+    if (!this.isPathSafe(resolvedTarget) && resolvedTarget !== this.docsPath) {
+      throw new Error('Access denied: Target path is outside docs directory')
+    }
+
+    // Check source exists
+    try {
+      await fs.stat(resolvedSource)
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        throw new Error(`Source not found: ${sourcePath}`)
+      }
+      throw err
+    }
+
+    // Get the item name
+    const itemName = path.basename(resolvedSource)
+    const newPath = path.join(resolvedTarget, itemName)
+
+    // Check if already in target location
+    if (path.normalize(resolvedSource) === path.normalize(newPath)) {
+      return {
+        success: true,
+        oldPath: resolvedSource,
+        newPath: newPath,
+        relativePath: path.relative(this.projectPath, newPath),
+        message: 'Item is already in the target location'
+      }
+    }
+
+    // Check if target already exists
+    try {
+      await fs.stat(newPath)
+      throw new Error(`Target already exists: ${path.basename(newPath)}`)
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        throw err
+      }
+      // ENOENT is expected - target doesn't exist yet
+    }
+
+    // Ensure target directory exists
+    await fs.mkdir(resolvedTarget, { recursive: true })
+
+    // Move the item (rename works for both files and directories)
+    await fs.rename(resolvedSource, newPath)
+
+    this.logger.info(`Moved ${resolvedSource} to ${newPath}`)
+
+    return {
+      success: true,
+      oldPath: resolvedSource,
+      newPath: newPath,
+      relativePath: path.relative(this.projectPath, newPath)
+    }
+  }
+
+  /**
+   * Get list of directories within docs for move targets
+   * @returns {Promise<Array>} List of directories with path info
+   */
+  async listDirectories() {
+    const directories = [
+      {
+        name: 'docs (root)',
+        path: this.docsPath,
+        relativePath: 'docs',
+        isRoot: true
+      }
+    ]
+
+    const exists = await this.docsDirectoryExists()
+    if (!exists) {
+      return directories
+    }
+
+    // Recursively find all directories
+    const scanDirs = async (dirPath, parentRelative) => {
+      try {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true })
+        for (const entry of entries) {
+          if (entry.isDirectory() && !entry.name.startsWith('.')) {
+            const fullPath = path.join(dirPath, entry.name)
+            const relativePath = path.join(parentRelative, entry.name)
+            directories.push({
+              name: entry.name,
+              path: fullPath,
+              relativePath: relativePath,
+              isRoot: false
+            })
+            // Recurse into subdirectories
+            await scanDirs(fullPath, relativePath)
+          }
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to scan directory ${dirPath}: ${err.message}`)
+      }
+    }
+
+    await scanDirs(this.docsPath, 'docs')
+
+    return directories
+  }
+
+  /**
+   * Create a new directory within docs
+   * @param {string} dirPath - Relative path for new directory
+   * @returns {Promise<Object>} Result with path and created status
+   */
+  async createDirectory(dirPath) {
+    let resolvedPath = dirPath
+    if (!path.isAbsolute(dirPath)) {
+      resolvedPath = path.join(this.projectPath, dirPath)
+    }
+
+    // Security: Validate path is within docs directory
+    if (!this.isPathSafe(resolvedPath)) {
+      throw new Error('Access denied: Path is outside docs directory')
+    }
+
+    try {
+      await fs.mkdir(resolvedPath, { recursive: true })
+      this.logger.info(`Created directory: ${resolvedPath}`)
+      return {
+        success: true,
+        path: resolvedPath,
+        relativePath: path.relative(this.projectPath, resolvedPath),
+        created: true
+      }
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        return {
+          success: true,
+          path: resolvedPath,
+          relativePath: path.relative(this.projectPath, resolvedPath),
+          created: false
+        }
+      }
+      throw err
+    }
+  }
 }
 
 module.exports = { DocumentScanner, SUPPORTED_EXTENSIONS, IMAGE_EXTENSIONS, isImageExtension }

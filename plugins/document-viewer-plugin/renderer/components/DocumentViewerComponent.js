@@ -60,10 +60,20 @@ export class DocumentViewerComponent {
     this.selectedContent = null
     this.expandedNodes = new Set(['docs']) // Track expanded directories
 
+    // Drag and drop state
+    this.draggedNode = null
+    this.dragOverNode = null
+    this.isDragging = false
+
     // Bind methods
     this.handleNodeClick = this.handleNodeClick.bind(this)
     this.handleToggleExpand = this.handleToggleExpand.bind(this)
     this.handleRefresh = this.handleRefresh.bind(this)
+    this.handleDragStart = this.handleDragStart.bind(this)
+    this.handleDragEnd = this.handleDragEnd.bind(this)
+    this.handleDragOver = this.handleDragOver.bind(this)
+    this.handleDragLeave = this.handleDragLeave.bind(this)
+    this.handleDrop = this.handleDrop.bind(this)
   }
 
   /**
@@ -112,6 +122,252 @@ export class DocumentViewerComponent {
    */
   async handleRefresh() {
     await this.loadTree()
+  }
+
+  // ==================== Drag and Drop Handlers ====================
+
+  /**
+   * Handle drag start
+   * @param {Object} node - Node being dragged
+   * @param {DragEvent} event - Drag event
+   */
+  handleDragStart(node, event) {
+    // Stop propagation to prevent parent nodes from also starting drag
+    event.stopPropagation()
+
+    this.draggedNode = node
+    this.isDragging = true
+
+    // Set drag data
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', node.relativePath)
+    event.dataTransfer.setData('application/x-puffin-doc', JSON.stringify({
+      relativePath: node.relativePath,
+      name: node.name,
+      type: node.type
+    }))
+
+    // Add dragging class to the element
+    event.target.classList.add('dragging')
+
+    // Create a custom drag image
+    const dragImage = document.createElement('div')
+    dragImage.className = 'drag-preview'
+    dragImage.textContent = `${node.type === 'directory' ? '📁' : '📄'} ${node.name}`
+    dragImage.style.cssText = `
+      position: absolute;
+      top: -1000px;
+      left: -1000px;
+      padding: 4px 8px;
+      background: var(--bg-secondary, #2d2d2d);
+      border: 1px solid var(--accent-primary, #4a9eff);
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--text-primary, #fff);
+      white-space: nowrap;
+    `
+    document.body.appendChild(dragImage)
+    event.dataTransfer.setDragImage(dragImage, 0, 0)
+
+    // Remove the drag image element after a short delay
+    setTimeout(() => dragImage.remove(), 0)
+
+    console.log('[DocumentViewer] Drag started:', node.relativePath)
+  }
+
+  /**
+   * Handle drag end
+   * @param {Object} node - Node that was being dragged
+   * @param {DragEvent} event - Drag event
+   */
+  handleDragEnd(node, event) {
+    // Stop propagation to prevent parent nodes from also receiving event
+    event.stopPropagation()
+
+    this.draggedNode = null
+    this.dragOverNode = null
+    this.isDragging = false
+
+    // Remove dragging class
+    event.target.classList.remove('dragging')
+
+    // Remove any drag-over highlights
+    this.container.querySelectorAll('.drag-over').forEach(el => {
+      el.classList.remove('drag-over')
+    })
+
+    console.log('[DocumentViewer] Drag ended')
+  }
+
+  /**
+   * Handle drag over (entering a potential drop target)
+   * @param {Object} node - Directory node being dragged over
+   * @param {DragEvent} event - Drag event
+   */
+  handleDragOver(node, event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (!this.draggedNode) return
+
+    // Normalize paths for comparison (handle Windows backslashes)
+    const draggedPath = this.normalizePath(this.draggedNode.relativePath)
+    const nodePath = this.normalizePath(node.relativePath)
+
+    // Can't drop on self or into a subdirectory of self
+    if (draggedPath === nodePath) return
+    if (nodePath.startsWith(draggedPath + '/')) return
+
+    // Can't drop into current parent directory (would be a no-op)
+    const currentParent = this.getParentPath(this.draggedNode.relativePath)
+    if (currentParent === nodePath) return
+
+    event.dataTransfer.dropEffect = 'move'
+
+    // Update drag-over state and visual
+    if (this.dragOverNode?.relativePath !== node.relativePath) {
+      // Remove previous drag-over highlight
+      this.container.querySelectorAll('.drag-over').forEach(el => {
+        el.classList.remove('drag-over')
+      })
+
+      this.dragOverNode = node
+
+      // Add drag-over highlight to current target
+      const targetEl = this.container.querySelector(`[data-path="${node.relativePath}"]`)
+      if (targetEl) {
+        targetEl.classList.add('drag-over')
+      }
+    }
+  }
+
+  /**
+   * Handle drag leave
+   * @param {Object} node - Directory node being left
+   * @param {DragEvent} event - Drag event
+   */
+  handleDragLeave(node, event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    // Only clear if we're actually leaving this node (not entering a child)
+    const relatedTarget = event.relatedTarget
+    const nodeEl = this.container.querySelector(`[data-path="${node.relativePath}"]`)
+
+    if (nodeEl && relatedTarget && !nodeEl.contains(relatedTarget)) {
+      nodeEl.classList.remove('drag-over')
+      if (this.dragOverNode?.relativePath === node.relativePath) {
+        this.dragOverNode = null
+      }
+    }
+  }
+
+  /**
+   * Handle drop
+   * @param {Object} targetNode - Directory node receiving the drop
+   * @param {DragEvent} event - Drop event
+   */
+  async handleDrop(targetNode, event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    // Clear drag-over state
+    this.container.querySelectorAll('.drag-over').forEach(el => {
+      el.classList.remove('drag-over')
+    })
+
+    if (!this.draggedNode) {
+      console.warn('[DocumentViewer] Drop with no dragged node')
+      return
+    }
+
+    const sourceNode = this.draggedNode
+    this.draggedNode = null
+    this.dragOverNode = null
+    this.isDragging = false
+
+    // Normalize paths for comparison (handle Windows backslashes)
+    const sourcePath = this.normalizePath(sourceNode.relativePath)
+    const targetPath = this.normalizePath(targetNode.relativePath)
+
+    // Validate drop
+    if (sourcePath === targetPath) {
+      console.log('[DocumentViewer] Cannot drop on self')
+      return
+    }
+    if (targetPath.startsWith(sourcePath + '/')) {
+      this.showNotification('Cannot move a folder into itself', 'error')
+      return
+    }
+
+    // Check if already in this directory
+    const currentParent = this.getParentPath(sourceNode.relativePath)
+    if (currentParent === targetPath) {
+      console.log('[DocumentViewer] Already in target directory')
+      return
+    }
+
+    console.log('[DocumentViewer] Moving:', sourceNode.relativePath, '->', targetNode.relativePath)
+
+    try {
+      const result = await window.puffin.plugins.invoke(
+        'document-viewer-plugin',
+        'moveItem',
+        {
+          sourcePath: sourceNode.relativePath,
+          targetDir: targetNode.relativePath
+        }
+      )
+
+      if (result.success) {
+        // Check if it was a no-op (already in target location)
+        if (result.message && result.message.includes('already in')) {
+          this.showNotification(result.message, 'info')
+        } else {
+          this.showNotification(`Moved "${sourceNode.name}" to "${targetNode.name}"`, 'success')
+
+          // Refresh the tree to show updated structure
+          await this.loadTree()
+
+          // Expand the target directory to show the moved item
+          this.expandedNodes.add(targetNode.relativePath)
+          this.render()
+        }
+      } else {
+        this.showNotification('Failed to move item', 'error')
+      }
+    } catch (err) {
+      console.error('[DocumentViewer] Move failed:', err)
+      this.showNotification(`Move failed: ${err.message}`, 'error')
+    }
+  }
+
+  /**
+   * Show a notification toast
+   * @param {string} message - Notification message
+   * @param {string} type - 'success', 'error', or 'info'
+   */
+  showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div')
+    notification.className = `doc-notification doc-notification-${type}`
+    notification.innerHTML = `
+      <span class="notification-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</span>
+      <span class="notification-message">${this.escapeHtml(message)}</span>
+    `
+
+    document.body.appendChild(notification)
+
+    // Animate in
+    requestAnimationFrame(() => {
+      notification.classList.add('show')
+    })
+
+    // Remove after delay
+    setTimeout(() => {
+      notification.classList.remove('show')
+      setTimeout(() => notification.remove(), 300)
+    }, 3000)
   }
 
   /**
@@ -185,14 +441,27 @@ export class DocumentViewerComponent {
 
   /**
    * Get parent path from a node path
-   * @param {string} path - Node path
+   * @param {string} nodePath - Node path
    * @returns {string|null} Parent path or null if root
    */
-  getParentPath(path) {
-    if (!path || !path.includes('/')) return null
-    const parts = path.split('/')
+  getParentPath(nodePath) {
+    if (!nodePath) return null
+    // Handle both forward and back slashes (Windows/Unix)
+    const normalizedPath = nodePath.replace(/\\/g, '/')
+    if (!normalizedPath.includes('/')) return null
+    const parts = normalizedPath.split('/')
     parts.pop()
     return parts.join('/')
+  }
+
+  /**
+   * Normalize a path for comparison (handles Windows backslashes)
+   * @param {string} nodePath - Path to normalize
+   * @returns {string} Normalized path with forward slashes
+   */
+  normalizePath(nodePath) {
+    if (!nodePath) return ''
+    return nodePath.replace(/\\/g, '/')
   }
 
   /**
@@ -324,17 +593,21 @@ export class DocumentViewerComponent {
     const isExpanded = this.expandedNodes.has(nodeId)
     const isSelected = this.selectedFile?.relativePath === node.relativePath
     const indent = depth * 16
+    const isRoot = node.name === 'docs' && depth === 0
+    const isDraggedOver = this.dragOverNode?.relativePath === node.relativePath
 
     if (node.type === 'directory') {
       const hasChildren = node.children && node.children.length > 0
       const expandIcon = hasChildren ? (isExpanded ? '▼' : '▶') : '•'
 
       return `
-        <div class="tree-node directory ${isExpanded ? 'expanded' : ''} ${node.isEmpty ? 'empty' : ''}"
+        <div class="tree-node directory ${isExpanded ? 'expanded' : ''} ${node.isEmpty ? 'empty' : ''} ${isDraggedOver ? 'drag-over' : ''}"
              role="treeitem"
              aria-expanded="${isExpanded}"
              data-path="${this.escapeHtml(node.relativePath)}"
-             data-type="directory">
+             data-type="directory"
+             draggable="${!isRoot}"
+             data-draggable="${!isRoot}">
           <div class="tree-node-content" style="padding-left: ${indent}px">
             <span class="tree-expand-icon" aria-hidden="true">${expandIcon}</span>
             <span class="tree-node-icon" aria-hidden="true">📁</span>
@@ -359,7 +632,9 @@ export class DocumentViewerComponent {
            role="treeitem"
            aria-selected="${isSelected}"
            data-path="${this.escapeHtml(node.relativePath)}"
-           data-type="file">
+           data-type="file"
+           draggable="true"
+           data-draggable="true">
         <div class="tree-node-content" style="padding-left: ${indent}px">
           <span class="tree-expand-icon" aria-hidden="true"></span>
           <span class="tree-node-icon" aria-hidden="true">${icon}</span>
@@ -544,7 +819,7 @@ export class DocumentViewerComponent {
       refreshBtn.addEventListener('click', this.handleRefresh)
     }
 
-    // Tree node clicks
+    // Tree node clicks and drag-drop
     const treeNodes = this.container.querySelectorAll('.tree-node')
     treeNodes.forEach(nodeEl => {
       const path = nodeEl.dataset.path
@@ -564,6 +839,19 @@ export class DocumentViewerComponent {
 
         // Make focusable
         nodeEl.setAttribute('tabindex', '0')
+
+        // Drag and drop events
+        if (nodeEl.dataset.draggable === 'true') {
+          nodeEl.addEventListener('dragstart', (e) => this.handleDragStart(node, e))
+          nodeEl.addEventListener('dragend', (e) => this.handleDragEnd(node, e))
+        }
+
+        // All directories (including root) can be drop targets
+        if (type === 'directory') {
+          nodeEl.addEventListener('dragover', (e) => this.handleDragOver(node, e))
+          nodeEl.addEventListener('dragleave', (e) => this.handleDragLeave(node, e))
+          nodeEl.addEventListener('drop', (e) => this.handleDrop(node, e))
+        }
       }
     })
   }

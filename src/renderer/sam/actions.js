@@ -701,6 +701,14 @@ export const toggleThreadExpanded = (promptId) => ({
   }
 })
 
+// Expand a thread all the way to the last/deepest descendant
+export const expandThreadToEnd = (promptId) => ({
+  type: 'EXPAND_THREAD_TO_END',
+  payload: {
+    promptId
+  }
+})
+
 // Mark a thread as complete (with optional journey outcome for implementation threads)
 export const markThreadComplete = (promptId, journeyOutcome = 'success', outcomeNotes = null) => ({
   type: 'MARK_THREAD_COMPLETE',

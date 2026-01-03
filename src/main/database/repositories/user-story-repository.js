@@ -95,14 +95,13 @@ class UserStoryRepository extends BaseRepository {
     const db = this.getDb()
     const row = this._storyToRow(story)
 
-    const stmt = db.prepare(`
+    const sql = `
       INSERT INTO user_stories (
         id, branch_id, title, description, acceptance_criteria,
         status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    stmt.run(
+    `
+    const params = [
       row.id,
       row.branch_id,
       row.title,
@@ -114,7 +113,11 @@ class UserStoryRepository extends BaseRepository {
       row.created_at,
       row.updated_at,
       row.archived_at
-    )
+    ]
+
+    this.traceQuery('INSERT', sql, params, () => {
+      db.prepare(sql).run(...params)
+    })
 
     return this.findById(row.id)
   }
@@ -147,9 +150,12 @@ class UserStoryRepository extends BaseRepository {
    */
   findById(id) {
     const db = this.getDb()
-    const row = db.prepare(`
-      SELECT * FROM user_stories WHERE id = ?
-    `).get(id)
+    const sql = 'SELECT * FROM user_stories WHERE id = ?'
+    const params = [id]
+
+    const row = this.traceQuery('SELECT', sql, params, () => {
+      return db.prepare(sql).get(id)
+    })
 
     return this._rowToStory(row)
   }
@@ -177,7 +183,10 @@ class UserStoryRepository extends BaseRepository {
       }
     }
 
-    const rows = db.prepare(sql).all()
+    const rows = this.traceQuery('SELECT_ALL', sql, [], () => {
+      return db.prepare(sql).all()
+    })
+
     return rows.map(row => this._rowToStory(row))
   }
 
@@ -301,17 +310,26 @@ class UserStoryRepository extends BaseRepository {
    */
   update(id, updates) {
     const db = this.getDb()
+
+    // Log the incoming update request for debugging
+    console.log(`[SQL-TRACE] UPDATE REQUEST: id=${id}, updates=${JSON.stringify(updates)}`)
+
     const existing = this.findById(id)
 
     if (!existing) {
+      console.log(`[SQL-TRACE] UPDATE ABORTED: story ${id} not found`)
       return null
     }
+
+    console.log(`[SQL-TRACE] EXISTING STORY: status=${existing.status}, title="${existing.title}"`)
 
     // Merge updates with existing data
     const updated = { ...existing, ...updates, updatedAt: this.now() }
     const row = this._storyToRow(updated)
 
-    const stmt = db.prepare(`
+    console.log(`[SQL-TRACE] MERGED UPDATE: status=${updated.status} (was ${existing.status})`)
+
+    const sql = `
       UPDATE user_stories SET
         branch_id = ?,
         title = ?,
@@ -323,9 +341,8 @@ class UserStoryRepository extends BaseRepository {
         updated_at = ?,
         archived_at = ?
       WHERE id = ?
-    `)
-
-    stmt.run(
+    `
+    const params = [
       row.branch_id,
       row.title,
       row.description,
@@ -336,7 +353,11 @@ class UserStoryRepository extends BaseRepository {
       row.updated_at,
       row.archived_at,
       id
-    )
+    ]
+
+    this.traceQuery('UPDATE', sql, params, () => {
+      db.prepare(sql).run(...params)
+    })
 
     return this.findById(id)
   }
@@ -413,8 +434,15 @@ class UserStoryRepository extends BaseRepository {
    * @returns {Object|null} Archived story or null if not found
    */
   archive(id) {
+    console.log(`[SQL-TRACE] ARCHIVE REQUEST: id=${id}`)
+
     const existing = this.findById(id)
-    if (!existing) return null
+    if (!existing) {
+      console.log(`[SQL-TRACE] ARCHIVE ABORTED: story ${id} not found`)
+      return null
+    }
+
+    console.log(`[SQL-TRACE] ARCHIVING STORY: id=${id}, status=${existing.status}, title="${existing.title}"`)
 
     // Move to archived_stories table
     const db = this.getDb()
@@ -427,12 +455,13 @@ class UserStoryRepository extends BaseRepository {
         archivedAt: this.now()
       })
 
-      db.prepare(`
+      const insertSql = `
         INSERT OR REPLACE INTO archived_stories (
           id, branch_id, title, description, acceptance_criteria,
           status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `
+      const insertParams = [
         row.id,
         row.branch_id,
         row.title,
@@ -444,11 +473,19 @@ class UserStoryRepository extends BaseRepository {
         row.created_at,
         row.updated_at,
         row.archived_at
-      )
+      ]
+
+      this.traceQuery('INSERT_ARCHIVED', insertSql, insertParams, () => {
+        db.prepare(insertSql).run(...insertParams)
+      })
 
       // Delete from user_stories
-      db.prepare('DELETE FROM user_stories WHERE id = ?').run(id)
+      const deleteSql = 'DELETE FROM user_stories WHERE id = ?'
+      this.traceQuery('DELETE', deleteSql, [id], () => {
+        db.prepare(deleteSql).run(id)
+      })
 
+      console.log(`[SQL-TRACE] ARCHIVE COMPLETE: story ${id} moved to archived_stories`)
       return { ...existing, status: StoryStatus.ARCHIVED, archivedAt: row.archived_at }
     })
   }

@@ -6,6 +6,7 @@
  */
 
 const { dialog, shell } = require('electron')
+const { marked } = require('marked')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
 const { DeveloperProfileManager } = require('./developer-profile')
@@ -785,6 +786,17 @@ function setupClaudeHandlers(ipcMain) {
     console.log('[IPC] conversationContext length:', data?.conversationContext?.length || 0)
     console.log('[IPC] projectPath:', projectPath)
 
+    // Guard against double-spawn - reject if CLI is already running
+    if (claudeService.isProcessRunning()) {
+      console.error('[IPC-GUARD] Rejected deriveStories: CLI process already running')
+      event.sender.send('claude:storyDerivationError', {
+        error: 'A Claude CLI process is already running. Please wait for it to complete.',
+        code: 'PROCESS_ALREADY_RUNNING',
+        canRetry: true
+      })
+      return
+    }
+
     // Send progress updates to renderer for debugging
     const sendProgress = (message) => {
       console.log('[IPC-PROGRESS]', message)
@@ -1521,6 +1533,25 @@ function setupShellHandlers(ipcMain) {
     try {
       await shell.openExternal(url)
       return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Markdown parsing (moved from preload to main process for sandbox compatibility)
+  ipcMain.handle('markdown:parse', async (event, content, options = {}) => {
+    try {
+      const html = marked.parse(content, options)
+      return { success: true, html }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('markdown:parseInline', async (event, content, options = {}) => {
+    try {
+      const html = marked.parseInline(content, options)
+      return { success: true, html }
     } catch (error) {
       return { success: false, error: error.message }
     }

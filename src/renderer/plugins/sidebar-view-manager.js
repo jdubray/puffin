@@ -452,8 +452,8 @@ export class SidebarViewManager {
       view.classList.remove('active')
     }
 
-    // Also deactivate nav buttons
-    const navBtns = document.querySelectorAll('#main-nav .nav-btn')
+    // Deactivate built-in nav buttons only (not plugin nav buttons)
+    const navBtns = document.querySelectorAll('#main-nav .nav-btn:not(.plugin-nav-btn)')
     for (const btn of navBtns) {
       btn.classList.remove('active')
     }

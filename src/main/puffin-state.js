@@ -2305,7 +2305,13 @@ class PuffinState {
 
     // Execute atomic archive transaction with inline stories
     // This uses immediateTransaction internally - auto-rollback on failure
-    const archived = this.database.sprints.archive(sprint.id, stories)
+    // Pass title/description from the sprint object (set by modal) as overrides
+    const overrides = {
+      title: sprint.title,
+      description: sprint.description,
+      closedAt: sprint.closedAt
+    }
+    const archived = this.database.sprints.archive(sprint.id, stories, overrides)
 
     if (!archived) {
       throw new Error(`Sprint ${sprint.id} could not be archived - not found`)

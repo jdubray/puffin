@@ -4777,6 +4777,45 @@
   to { transform: rotate(360deg); }
 }
 
+/* Story Derivation Loading State */
+.story-derivation-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 3rem 2rem;
+  text-align: center;
+}
+
+.story-derivation-loading .loading-spinner-large {
+  width: 3rem;
+  height: 3rem;
+  border: 4px solid var(--accent-primary-alpha, rgba(108, 99, 255, 0.2));
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.story-derivation-loading .loading-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.story-derivation-loading .loading-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.story-derivation-loading .loading-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  max-width: 400px;
+  line-height: 1.5;
+}
+
 .pending-story-list {
   display: flex;
   flex-direction: column;
@@ -5748,14 +5787,15 @@
 /* Story Derivation Status */
 .derivation-status {
   display: none;
-  padding: 0.75rem 1rem;
-  margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, var(--accent-primary-alpha, rgba(108, 99, 255, 0.1)), var(--bg-secondary));
+  padding: 1rem 1.25rem;
+  margin: 0 0 0.75rem 0;
+  background: linear-gradient(135deg, var(--accent-primary-alpha, rgba(108, 99, 255, 0.15)), var(--bg-secondary));
   border: 1px solid var(--accent-primary);
   border-radius: var(--radius-md);
   opacity: 0;
   transform: translateY(-10px);
   transition: opacity 0.3s ease, transform 0.3s ease;
+  box-shadow: 0 2px 8px rgba(108, 99, 255, 0.15);
 }
 
 .derivation-status.visible {
@@ -5767,23 +5807,43 @@
 .derivation-status-content {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
   color: var(--accent-primary);
-  font-size: 0.875rem;
-  font-weight: 500;
 }
 
 .derivation-status .spinner {
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid var(--accent-primary-alpha, rgba(108, 99, 255, 0.3));
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border: 3px solid var(--accent-primary-alpha, rgba(108, 99, 255, 0.3));
   border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
+.derivation-status .status-text-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.derivation-status .status-text-primary {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.derivation-status .status-text-secondary {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Legacy single-line status text */
 .derivation-status .status-text {
   flex: 1;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 /* Handoff Chain Visualization */

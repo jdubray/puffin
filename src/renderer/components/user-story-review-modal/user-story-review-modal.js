@@ -75,12 +75,24 @@ export class UserStoryReviewModalComponent {
   buildContent(state) {
     let html = ''
 
-    // Status indicator
+    // Show prominent loading state when deriving
     if (state.isDeriving || state.isRequestingChanges) {
       const statusText = state.isDeriving
         ? 'Deriving user stories from your prompt...'
         : 'Updating stories based on your feedback...'
-      html += `<div class="story-review-status deriving">${statusText}</div>`
+      const subText = state.isDeriving
+        ? 'Claude is analyzing your requirements and creating user stories with acceptance criteria.'
+        : 'Claude is refining the stories based on your feedback.'
+
+      html += `
+        <div class="story-derivation-loading">
+          <div class="loading-spinner-large"></div>
+          <div class="loading-text">
+            <div class="loading-title">${statusText}</div>
+            <div class="loading-subtitle">${subText}</div>
+          </div>
+        </div>
+      `
     }
 
     // Original prompt preview
@@ -100,7 +112,7 @@ export class UserStoryReviewModalComponent {
         html += this.buildStoryCard(story)
       })
       html += '</div>'
-    } else if (!state.isDeriving) {
+    } else if (!state.isDeriving && !state.isRequestingChanges) {
       html += '<p class="no-stories">No stories to review.</p>'
     }
 

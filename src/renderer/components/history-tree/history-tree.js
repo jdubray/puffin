@@ -329,7 +329,12 @@ export class HistoryTreeComponent {
       if (expandBtn && prompt.hasChildren) {
         expandBtn.addEventListener('click', (e) => {
           e.stopPropagation()
-          this.intents.toggleThreadExpanded(prompt.id)
+          // If collapsed, expand all the way to the end for top-level threads
+          if (!prompt.isExpanded && prompt.depth === 0) {
+            this.intents.expandThreadToEnd(prompt.id)
+          } else {
+            this.intents.toggleThreadExpanded(prompt.id)
+          }
         })
       }
 
@@ -339,9 +344,15 @@ export class HistoryTreeComponent {
         if (e.target.classList.contains('history-rerun-btn')) return
         if (e.target.classList.contains('expand-indicator')) return
 
-        // If has children and collapsed, expand it. Otherwise select.
+        // If has children and collapsed, expand it
         if (prompt.hasChildren && !prompt.isExpanded) {
-          this.intents.toggleThreadExpanded(prompt.id)
+          // For top-level threads (depth 0), expand all the way to the end
+          // For nested items, just toggle the immediate children
+          if (prompt.depth === 0) {
+            this.intents.expandThreadToEnd(prompt.id)
+          } else {
+            this.intents.toggleThreadExpanded(prompt.id)
+          }
         }
         this.intents.selectPrompt(prompt.id)
         this.intents.switchView('prompt')

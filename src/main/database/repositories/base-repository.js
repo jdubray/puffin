@@ -8,6 +8,78 @@
  * @module database/repositories/base-repository
  */
 
+// SQL Tracing configuration - set to true to enable detailed query logging
+let SQL_TRACE_ENABLED = true
+
+/**
+ * Enable or disable SQL tracing globally
+ * @param {boolean} enabled - Whether to enable tracing
+ */
+function setSqlTraceEnabled(enabled) {
+  SQL_TRACE_ENABLED = enabled
+  console.log(`[SQL-TRACE] Tracing ${enabled ? 'ENABLED' : 'DISABLED'}`)
+}
+
+/**
+ * Check if SQL tracing is enabled
+ * @returns {boolean}
+ */
+function isSqlTraceEnabled() {
+  return SQL_TRACE_ENABLED
+}
+
+/**
+ * Log a SQL query with parameters and results
+ * @param {string} operation - Operation name (e.g., 'SELECT', 'INSERT', 'UPDATE', 'DELETE')
+ * @param {string} table - Table name
+ * @param {string} sql - SQL query
+ * @param {Array|Object} params - Query parameters
+ * @param {*} result - Query result
+ * @param {number} duration - Query duration in ms
+ */
+function traceSql(operation, table, sql, params, result, duration) {
+  if (!SQL_TRACE_ENABLED) return
+
+  const timestamp = new Date().toISOString()
+  const resultSummary = summarizeResult(result)
+
+  console.log(`[SQL-TRACE] ========================================`)
+  console.log(`[SQL-TRACE] ${timestamp} | ${operation} on ${table}`)
+  console.log(`[SQL-TRACE] Query: ${sql.replace(/\s+/g, ' ').trim()}`)
+  console.log(`[SQL-TRACE] Params: ${JSON.stringify(params)}`)
+  console.log(`[SQL-TRACE] Result: ${resultSummary}`)
+  console.log(`[SQL-TRACE] Duration: ${duration}ms`)
+  console.log(`[SQL-TRACE] ========================================`)
+}
+
+/**
+ * Summarize a result for logging
+ * @param {*} result - Query result
+ * @returns {string} Summary string
+ */
+function summarizeResult(result) {
+  if (result === null || result === undefined) {
+    return 'null'
+  }
+  if (Array.isArray(result)) {
+    if (result.length === 0) {
+      return '[] (0 rows)'
+    }
+    if (result.length <= 3) {
+      return JSON.stringify(result, null, 0)
+    }
+    return `[${result.length} rows] First: ${JSON.stringify(result[0])}`
+  }
+  if (typeof result === 'object') {
+    // Check if it's a run result (has changes property)
+    if ('changes' in result) {
+      return `{ changes: ${result.changes}, lastInsertRowid: ${result.lastInsertRowid} }`
+    }
+    return JSON.stringify(result, null, 0)
+  }
+  return String(result)
+}
+
 /**
  * Base repository with shared functionality
  */
@@ -21,6 +93,28 @@ class BaseRepository {
   constructor(connection, tableName) {
     this.connection = connection
     this.tableName = tableName
+  }
+
+  /**
+   * Execute a query with tracing
+   * @param {string} operation - Operation type
+   * @param {string} sql - SQL query
+   * @param {Array} params - Query parameters
+   * @param {function} executor - Function that executes the query
+   * @returns {*} Query result
+   */
+  traceQuery(operation, sql, params, executor) {
+    const start = Date.now()
+    try {
+      const result = executor()
+      const duration = Date.now() - start
+      traceSql(operation, this.tableName, sql, params, result, duration)
+      return result
+    } catch (error) {
+      const duration = Date.now() - start
+      traceSql(operation, this.tableName, sql, params, `ERROR: ${error.message}`, duration)
+      throw error
+    }
   }
 
   /**
@@ -214,4 +308,4 @@ class BaseRepository {
   }
 }
 
-module.exports = { BaseRepository }
+module.exports = { BaseRepository, setSqlTraceEnabled, isSqlTraceEnabled, traceSql }

@@ -636,5 +636,27 @@ contextBridge.exposeInMainWorld('puffin', {
   /**
    * Version info
    */
-  version: '0.1.0'
+  version: '0.1.0',
+
+  /**
+   * Markdown parser (via IPC to main process)
+   * Exposed for renderer-side markdown rendering
+   * Note: These are async functions that return promises
+   */
+  marked: {
+    parse: async (content, options) => {
+      const result = await ipcRenderer.invoke('markdown:parse', content, options)
+      if (result.success) {
+        return result.html
+      }
+      throw new Error(result.error || 'Markdown parsing failed')
+    },
+    parseInline: async (content, options) => {
+      const result = await ipcRenderer.invoke('markdown:parseInline', content, options)
+      if (result.success) {
+        return result.html
+      }
+      throw new Error(result.error || 'Markdown parsing failed')
+    }
+  }
 })

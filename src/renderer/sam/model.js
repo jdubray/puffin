@@ -750,6 +750,53 @@ export const toggleThreadExpandedAcceptor = model => proposal => {
   }
 }
 
+/**
+ * Expand a thread all the way to the last/deepest descendant
+ * This expands all nodes that have children along the path to the end
+ */
+export const expandThreadToEndAcceptor = model => proposal => {
+  if (proposal?.type === 'EXPAND_THREAD_TO_END') {
+    const { promptId } = proposal.payload
+
+    // Initialize expandedThreads if not present
+    if (!model.history.expandedThreads) {
+      model.history.expandedThreads = {}
+    }
+
+    // Find the active branch
+    const activeBranch = model.history.branches[model.history.activeBranch]
+    if (!activeBranch || !activeBranch.prompts) return
+
+    const prompts = activeBranch.prompts
+
+    // Build a map of parentId -> children for efficient lookup
+    const childrenMap = new Map()
+    for (const p of prompts) {
+      const parentId = p.parentId || null
+      if (!childrenMap.has(parentId)) {
+        childrenMap.set(parentId, [])
+      }
+      childrenMap.get(parentId).push(p)
+    }
+
+    // Recursively expand from the given promptId down to the deepest descendant
+    const expandRecursively = (currentId) => {
+      const children = childrenMap.get(currentId)
+      if (children && children.length > 0) {
+        // Mark this node as expanded
+        model.history.expandedThreads[currentId] = true
+
+        // Sort children by timestamp descending (newest first) and expand the first one
+        // This follows the same order as the tree display
+        const sortedChildren = [...children].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        expandRecursively(sortedChildren[0].id)
+      }
+    }
+
+    expandRecursively(promptId)
+  }
+}
+
 export const updateThreadSearchQueryAcceptor = model => proposal => {
   if (proposal?.type === 'UPDATE_THREAD_SEARCH_QUERY') {
     const { query } = proposal.payload
@@ -936,6 +983,12 @@ export const deriveUserStoriesAcceptor = model => proposal => {
     }
     // Clear the prompt input
     model.currentPrompt = { content: '', branchId: null }
+
+    // Show the review modal immediately with loading state
+    model.modal = {
+      type: 'user-story-review',
+      data: {}
+    }
   }
 }
 
@@ -2865,6 +2918,7 @@ export const acceptors = [
   updateBranchSettingsAcceptor,
   selectPromptAcceptor,
   toggleThreadExpandedAcceptor,
+  expandThreadToEndAcceptor,
   updateThreadSearchQueryAcceptor,
   markThreadCompleteAcceptor,
   unmarkThreadCompleteAcceptor,

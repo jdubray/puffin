@@ -222,8 +222,9 @@ export class PromptEditorComponent {
       btnLoading.classList.add('hidden')
     }
 
-    // Show derivation status message
-    this.updateDerivationStatus(isDerivingStories)
+    // Note: Derivation status is now shown in the modal with a prominent loading state
+    // The inline status bar is no longer needed since the modal opens immediately
+    // this.updateDerivationStatus(isDerivingStories)
 
     // Disable textarea during processing
     this.textarea.disabled = isProcessing
@@ -1435,6 +1436,21 @@ export class PromptEditorComponent {
     console.log('[DERIVE-STORIES] window.puffin:', !!window.puffin)
     console.log('[DERIVE-STORIES] window.puffin.claude.deriveStories:', !!window.puffin?.claude?.deriveStories)
 
+    // Guard: Check if a CLI process is already running
+    if (window.puffin?.claude?.isRunning) {
+      const isRunning = await window.puffin.claude.isRunning()
+      if (isRunning) {
+        console.error('[DERIVE-STORIES] Cannot derive: CLI process already running')
+        window.puffinApp?.showToast?.({
+          type: 'error',
+          title: 'Process Already Running',
+          message: 'A Claude process is already running. Please wait for it to complete.',
+          duration: 5000
+        })
+        return
+      }
+    }
+
     // Dispatch action to show derivation is in progress
     this.intents.deriveUserStories({
       branchId: state.history.activeBranch,
@@ -1503,13 +1519,22 @@ export class PromptEditorComponent {
         statusEl.innerHTML = `
           <div class="derivation-status-content">
             <span class="spinner"></span>
-            <span class="status-text">Deriving user stories from your prompt...</span>
+            <div class="status-text-container">
+              <span class="status-text-primary">Deriving user stories from your prompt...</span>
+              <span class="status-text-secondary">Claude is analyzing your requirements. This may take a moment.</span>
+            </div>
           </div>
         `
-        // Insert above the prompt input area
-        const promptArea = document.querySelector('.prompt-input-area')
+        // Insert above the prompt area (the textarea container)
+        const promptArea = document.querySelector('.prompt-area')
         if (promptArea) {
           promptArea.parentNode.insertBefore(statusEl, promptArea)
+        } else {
+          // Fallback: insert at the top of the response area
+          const responseArea = document.querySelector('.response-area')
+          if (responseArea) {
+            responseArea.parentNode.insertBefore(statusEl, responseArea.nextSibling)
+          }
         }
       }
       statusEl.classList.add('visible')

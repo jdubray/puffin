@@ -48,6 +48,8 @@ class SprintRepository extends BaseRepository {
 
     return {
       id: row.id,
+      title: row.title || null,
+      description: row.description || '',
       status: row.status,
       plan: row.plan || null,
       storyProgress: this.parseJson(row.story_progress, {}),
@@ -69,6 +71,8 @@ class SprintRepository extends BaseRepository {
   _sprintToRow(sprint) {
     return {
       id: sprint.id,
+      title: sprint.title || null,
+      description: sprint.description || '',
       status: sprint.status || SprintStatus.PLANNING,
       plan: sprint.plan || null,
       story_progress: this.toJson(sprint.storyProgress || {}),
@@ -90,12 +94,11 @@ class SprintRepository extends BaseRepository {
   _historyRowToSprint(row) {
     if (!row) return null
 
-    // Generate a title from the closed date if not stored
-    const closedAt = row.closed_at
-    let title = null
-    if (closedAt) {
+    // Use stored title, or generate from closed date as fallback
+    let title = row.title
+    if (!title && row.closed_at) {
       try {
-        const date = new Date(closedAt)
+        const date = new Date(row.closed_at)
         if (!isNaN(date.getTime())) {
           title = `Sprint ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
         }
@@ -110,6 +113,7 @@ class SprintRepository extends BaseRepository {
     return {
       id: row.id,
       title,
+      description: row.description || '',
       status: row.status,
       plan: row.plan || null,
       storyProgress: this.parseJson(row.story_progress, {}),
@@ -144,13 +148,15 @@ class SprintRepository extends BaseRepository {
 
       const stmt = db.prepare(`
         INSERT INTO sprints (
-          id, status, plan, story_progress, prompt_id,
+          id, title, description, status, plan, story_progress, prompt_id,
           created_at, plan_approved_at, completed_at, closed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
         row.id,
+        row.title,
+        row.description,
         row.status,
         row.plan,
         row.story_progress,
@@ -180,7 +186,12 @@ class SprintRepository extends BaseRepository {
    */
   findById(id) {
     const db = this.getDb()
-    const row = db.prepare('SELECT * FROM sprints WHERE id = ?').get(id)
+    const sql = 'SELECT * FROM sprints WHERE id = ?'
+    const params = [id]
+
+    const row = this.traceQuery('SELECT_SPRINT', sql, params, () => {
+      return db.prepare(sql).get(id)
+    })
 
     if (!row) return null
 
@@ -197,12 +208,16 @@ class SprintRepository extends BaseRepository {
    */
   findActive() {
     const db = this.getDb()
-    const row = db.prepare(`
+    const sql = `
       SELECT * FROM sprints
       WHERE closed_at IS NULL
       ORDER BY created_at DESC
       LIMIT 1
-    `).get()
+    `
+
+    const row = this.traceQuery('SELECT_ACTIVE_SPRINT', sql, [], () => {
+      return db.prepare(sql).get()
+    })
 
     if (!row) return null
 
@@ -327,6 +342,8 @@ class SprintRepository extends BaseRepository {
 
       const stmt = db.prepare(`
         UPDATE sprints SET
+          title = ?,
+          description = ?,
           status = ?,
           plan = ?,
           story_progress = ?,
@@ -338,6 +355,8 @@ class SprintRepository extends BaseRepository {
       `)
 
       stmt.run(
+        row.title,
+        row.description,
         row.status,
         row.plan,
         row.story_progress,
@@ -465,12 +484,17 @@ class SprintRepository extends BaseRepository {
    * @throws {Error} If transaction fails (automatically rolled back)
    */
   syncStoryStatus(sprintId, storyId, status, userStoryRepo) {
+    console.log(`[SQL-TRACE] SYNC_STORY_STATUS: sprintId=${sprintId}, storyId=${storyId}, status=${status}`)
+
     const db = this.getDb()
     const sprint = this.findById(sprintId)
 
     if (!sprint) {
+      console.log(`[SQL-TRACE] SYNC_STORY_STATUS ABORTED: sprint ${sprintId} not found`)
       throw new Error(`Sprint ${sprintId} not found`)
     }
+
+    console.log(`[SQL-TRACE] SYNC_STORY_STATUS: sprint found, stories count=${sprint.stories?.length || 0}`)
 
     const timestamp = this.now()
 
@@ -486,18 +510,20 @@ class SprintRepository extends BaseRepository {
       storyProgress[storyId].completedAt = status === 'completed' ? timestamp : null
 
       // Update the sprint's storyProgress
-      db.prepare(`
-        UPDATE sprints SET story_progress = ?, closed_at = NULL
-        WHERE id = ?
-      `).run(this.toJson(storyProgress), sprintId)
+      const updateSprintSql = 'UPDATE sprints SET story_progress = ?, closed_at = NULL WHERE id = ?'
+      const updateSprintParams = [this.toJson(storyProgress), sprintId]
+      this.traceQuery('UPDATE_SPRINT_PROGRESS', updateSprintSql, updateSprintParams, () => {
+        db.prepare(updateSprintSql).run(...updateSprintParams)
+      })
 
       // 2. Update user story status in backlog
       // Use 'completed' status to match UI convention (not 'implemented')
       const storyStatus = status === 'completed' ? 'completed' : 'in-progress'
-      db.prepare(`
-        UPDATE user_stories SET status = ?, updated_at = ?
-        WHERE id = ?
-      `).run(storyStatus, timestamp, storyId)
+      const updateStorySql = 'UPDATE user_stories SET status = ?, updated_at = ? WHERE id = ?'
+      const updateStoryParams = [storyStatus, timestamp, storyId]
+      this.traceQuery('UPDATE_USER_STORY_STATUS', updateStorySql, updateStoryParams, () => {
+        db.prepare(updateStorySql).run(...updateStoryParams)
+      })
 
       // 3. Check if all stories in sprint are now completed
       const allStoriesCompleted = sprint.stories.every(story => {
@@ -507,23 +533,29 @@ class SprintRepository extends BaseRepository {
         return storyProgress[story.id]?.status === 'completed'
       })
 
+      console.log(`[SQL-TRACE] SYNC_STORY_STATUS: allStoriesCompleted=${allStoriesCompleted}`)
+
       // Update sprint status if needed
       if (allStoriesCompleted && sprint.stories.length > 0) {
-        db.prepare(`
-          UPDATE sprints SET status = ?, completed_at = ?
-          WHERE id = ?
-        `).run(SprintStatus.COMPLETED, timestamp, sprintId)
+        const completeSql = 'UPDATE sprints SET status = ?, completed_at = ? WHERE id = ?'
+        const completeParams = [SprintStatus.COMPLETED, timestamp, sprintId]
+        this.traceQuery('UPDATE_SPRINT_COMPLETED', completeSql, completeParams, () => {
+          db.prepare(completeSql).run(...completeParams)
+        })
       } else if (sprint.status === SprintStatus.COMPLETED) {
         // Sprint was completed but now has incomplete story
-        db.prepare(`
-          UPDATE sprints SET status = ?, completed_at = NULL
-          WHERE id = ?
-        `).run(SprintStatus.IN_PROGRESS, sprintId)
+        const inProgressSql = 'UPDATE sprints SET status = ?, completed_at = NULL WHERE id = ?'
+        const inProgressParams = [SprintStatus.IN_PROGRESS, sprintId]
+        this.traceQuery('UPDATE_SPRINT_IN_PROGRESS', inProgressSql, inProgressParams, () => {
+          db.prepare(inProgressSql).run(...inProgressParams)
+        })
       }
 
       // Return the updated data
       const updatedSprint = this.findById(sprintId)
       const updatedStory = userStoryRepo ? userStoryRepo.findById(storyId) : null
+
+      console.log(`[SQL-TRACE] SYNC_STORY_STATUS COMPLETE: storyStatus=${updatedStory?.status}`)
 
       return {
         sprint: updatedSprint,
@@ -629,27 +661,45 @@ class SprintRepository extends BaseRepository {
    * Operations: insert to history, delete relationships, delete sprint.
    *
    * @param {string} id - Sprint ID
+   * @param {Object[]|null} stories - Optional inline story data to store
+   * @param {Object} overrides - Optional field overrides (title, description, closedAt)
    * @returns {Object|null} Archived sprint or null if not found
    * @throws {Error} If transaction fails (automatically rolled back)
    */
-  archive(id, stories = null) {
+  archive(id, stories = null, overrides = {}) {
+    console.log(`[SQL-TRACE] SPRINT_ARCHIVE: id=${id}, storiesProvided=${!!stories}, overrides=${JSON.stringify(overrides)}`)
+
     const db = this.getDb()
     const existing = this.findById(id)
 
-    if (!existing) return null
+    if (!existing) {
+      console.log(`[SQL-TRACE] SPRINT_ARCHIVE ABORTED: sprint ${id} not found`)
+      return null
+    }
+
+    console.log(`[SQL-TRACE] SPRINT_ARCHIVE: sprint found, status=${existing.status}`)
 
     return this.immediateTransaction(() => {
       const storyIds = this.getStoryIds(id)
-      const closedAt = existing.closedAt || this.now()
+      const closedAt = overrides.closedAt || existing.closedAt || this.now()
+
+      // Use overrides for title/description if provided (from modal input)
+      const title = overrides.title || existing.title
+      const description = overrides.description !== undefined ? overrides.description : (existing.description || '')
+
+      console.log(`[SQL-TRACE] SPRINT_ARCHIVE: storyIds=${JSON.stringify(storyIds)}, title="${title}"`)
 
       // Insert into sprint_history (with optional inline stories from migration 003)
-      db.prepare(`
+      const insertSql = `
         INSERT INTO sprint_history (
-          id, status, plan, story_progress, story_ids, stories, prompt_id,
+          id, title, description, status, plan, story_progress, story_ids, stories, prompt_id,
           created_at, plan_approved_at, completed_at, closed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+      const insertParams = [
         existing.id,
+        title,
+        description,
         SprintStatus.CLOSED,
         existing.plan,
         this.toJson(existing.storyProgress || {}),
@@ -660,16 +710,29 @@ class SprintRepository extends BaseRepository {
         existing.planApprovedAt,
         existing.completedAt,
         closedAt
-      )
+      ]
+      this.traceQuery('INSERT_SPRINT_HISTORY', insertSql, insertParams, () => {
+        db.prepare(insertSql).run(...insertParams)
+      })
 
       // Remove sprint-story relationships
-      db.prepare('DELETE FROM sprint_stories WHERE sprint_id = ?').run(id)
+      const deleteRelSql = 'DELETE FROM sprint_stories WHERE sprint_id = ?'
+      this.traceQuery('DELETE_SPRINT_STORIES', deleteRelSql, [id], () => {
+        db.prepare(deleteRelSql).run(id)
+      })
 
       // Delete from sprints
-      db.prepare('DELETE FROM sprints WHERE id = ?').run(id)
+      const deleteSprintSql = 'DELETE FROM sprints WHERE id = ?'
+      this.traceQuery('DELETE_SPRINT', deleteSprintSql, [id], () => {
+        db.prepare(deleteSprintSql).run(id)
+      })
+
+      console.log(`[SQL-TRACE] SPRINT_ARCHIVE COMPLETE: sprint ${id} moved to history`)
 
       return {
         ...existing,
+        title,
+        description,
         status: SprintStatus.CLOSED,
         storyIds,
         stories: stories || [],
@@ -797,11 +860,13 @@ class SprintRepository extends BaseRepository {
 
     db.prepare(`
       INSERT INTO sprint_history (
-        id, status, plan, story_progress, story_ids, prompt_id,
+        id, title, description, status, plan, story_progress, story_ids, prompt_id,
         created_at, plan_approved_at, completed_at, closed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       sprint.id,
+      sprint.title || null,
+      sprint.description || '',
       sprint.status || 'archived',
       sprint.plan || null,
       this.toJson(sprint.story_progress || {}),

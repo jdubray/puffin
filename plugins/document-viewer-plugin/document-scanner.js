@@ -14,6 +14,20 @@ const path = require('path')
 const SUPPORTED_EXTENSIONS = ['.md', '.txt', '.json', '.yaml', '.yml']
 
 /**
+ * Supported image file extensions
+ */
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp']
+
+/**
+ * Check if a file extension is an image type
+ * @param {string} ext - File extension including dot
+ * @returns {boolean}
+ */
+function isImageExtension(ext) {
+  return IMAGE_EXTENSIONS.includes(ext.toLowerCase())
+}
+
+/**
  * DocumentScanner - Handles directory scanning and file reading
  */
 class DocumentScanner {
@@ -90,13 +104,15 @@ class DocumentScanner {
     if (!stats.isDirectory()) {
       // File node
       const ext = path.extname(name).toLowerCase()
+      const isImage = isImageExtension(ext)
       return {
         name,
         path: dirPath,
         relativePath: path.relative(this.projectPath, dirPath),
         type: 'file',
         extension: ext,
-        isSupported: SUPPORTED_EXTENSIONS.includes(ext),
+        isSupported: SUPPORTED_EXTENSIONS.includes(ext) || isImage,
+        isImage,
         size: stats.size,
         modified: stats.mtime.toISOString()
       }
@@ -174,14 +190,37 @@ class DocumentScanner {
         throw new Error('Cannot read directory as file')
       }
 
-      // Check file size (limit to 1MB)
+      const ext = path.extname(resolvedPath).toLowerCase()
+      const isImage = isImageExtension(ext)
+
+      // For images, return path info without reading content
+      if (isImage) {
+        // Check file size (limit to 10MB for images)
+        const MAX_IMAGE_SIZE = 10 * 1024 * 1024
+        if (stats.size > MAX_IMAGE_SIZE) {
+          throw new Error(`Image too large: ${stats.size} bytes (max ${MAX_IMAGE_SIZE})`)
+        }
+
+        return {
+          content: null,
+          path: resolvedPath,
+          relativePath: path.relative(this.projectPath, resolvedPath),
+          name: path.basename(resolvedPath),
+          extension: ext,
+          size: stats.size,
+          modified: stats.mtime.toISOString(),
+          isMarkdown: false,
+          isImage: true
+        }
+      }
+
+      // Check file size (limit to 1MB for text files)
       const MAX_FILE_SIZE = 1024 * 1024
       if (stats.size > MAX_FILE_SIZE) {
         throw new Error(`File too large: ${stats.size} bytes (max ${MAX_FILE_SIZE})`)
       }
 
       const content = await fs.readFile(resolvedPath, 'utf-8')
-      const ext = path.extname(resolvedPath).toLowerCase()
 
       return {
         content,
@@ -191,7 +230,8 @@ class DocumentScanner {
         extension: ext,
         size: stats.size,
         modified: stats.mtime.toISOString(),
-        isMarkdown: ext === '.md'
+        isMarkdown: ext === '.md',
+        isImage: false
       }
     } catch (err) {
       if (err.code === 'ENOENT') {
@@ -244,4 +284,4 @@ class DocumentScanner {
   }
 }
 
-module.exports = { DocumentScanner, SUPPORTED_EXTENSIONS }
+module.exports = { DocumentScanner, SUPPORTED_EXTENSIONS, IMAGE_EXTENSIONS, isImageExtension }

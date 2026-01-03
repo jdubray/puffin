@@ -422,6 +422,164 @@
   text-decoration: underline;
 }
 
+/* Tables */
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.8125rem;
+  overflow-x: auto;
+  display: block;
+}
+
+.markdown-body thead {
+  background: var(--bg-tertiary);
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body th {
+  font-weight: 600;
+  background: var(--bg-secondary);
+}
+
+.markdown-body tr:nth-child(even) {
+  background: var(--bg-tertiary);
+}
+
+.markdown-body tr:hover {
+  background: var(--bg-hover);
+}
+
+/* Blockquotes */
+.markdown-body blockquote {
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  border-left: 4px solid var(--accent-primary);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.markdown-body blockquote p {
+  margin: 0.25rem 0;
+}
+
+/* Horizontal rules */
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 1.5rem 0;
+}
+
+/* Task lists (checkboxes) */
+.markdown-body input[type="checkbox"] {
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+.markdown-body li.task-list-item {
+  list-style: none;
+  margin-left: -1.5rem;
+}
+
+/* Markdown fallback (for ASCII diagrams and pre-formatted content) */
+.markdown-body.markdown-fallback {
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+}
+
+.markdown-body .markdown-pre {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ===========================================
+   Image Viewer
+   =========================================== */
+
+.preview-content.image {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  background: var(--bg-tertiary);
+  padding: 1rem;
+}
+
+.image-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  height: 100%;
+}
+
+.image-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.image-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: zoom-in;
+  transition: transform 0.2s ease;
+}
+
+.image-container img.zoomed {
+  max-width: none;
+  max-height: none;
+  cursor: zoom-out;
+}
+
+.image-container img:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.image-info {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.image-dimensions {
+  font-family: 'Fira Code', monospace;
+}
+
+/* Checkerboard background for images with transparency */
+.image-container img[src$=".png"],
+.image-container img[src$=".gif"],
+.image-container img[src$=".svg"],
+.image-container img[src$=".webp"] {
+  background-image:
+    linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+    linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+}
+
 /* ===========================================
    Plaintext Content
    =========================================== */

@@ -20,7 +20,8 @@
       "Bash(git branch:*)",
       "Bash(ls:*)",
       "Bash(sqlite3:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(xargs:*)"
     ]
   }
 }

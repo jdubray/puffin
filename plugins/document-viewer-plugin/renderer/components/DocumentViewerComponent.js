@@ -17,8 +17,21 @@ const FILE_ICONS = {
   '.json': '📋',
   '.yaml': '⚙️',
   '.yml': '⚙️',
+  '.png': '🖼️',
+  '.jpg': '🖼️',
+  '.jpeg': '🖼️',
+  '.gif': '🖼️',
+  '.svg': '🖼️',
+  '.webp': '🖼️',
+  '.ico': '🖼️',
+  '.bmp': '🖼️',
   'default': '📎'
 }
+
+/**
+ * Image file extensions
+ */
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp']
 
 /**
  * Get icon for a file based on extension
@@ -117,7 +130,8 @@ export class DocumentViewerComponent {
   }
 
   /**
-   * Handle expand/collapse toggle
+   * Handle expand/collapse toggle with accordion behavior
+   * When opening a folder, closes sibling folders at the same level
    * @param {Object} node - Directory node
    * @param {Event} event - Click event
    */
@@ -126,12 +140,72 @@ export class DocumentViewerComponent {
 
     const nodeId = node.relativePath || node.name
     if (this.expandedNodes.has(nodeId)) {
+      // Collapsing - just remove this node
       this.expandedNodes.delete(nodeId)
     } else {
+      // Expanding - close sibling folders first (accordion behavior)
+      const siblingIds = this.getSiblingDirectoryIds(node)
+      for (const siblingId of siblingIds) {
+        this.expandedNodes.delete(siblingId)
+        // Also collapse any children of the sibling
+        this.collapseDescendants(siblingId)
+      }
       this.expandedNodes.add(nodeId)
     }
 
     this.render()
+  }
+
+  /**
+   * Get IDs of sibling directories (same parent)
+   * @param {Object} node - Directory node
+   * @returns {string[]} Array of sibling directory IDs
+   */
+  getSiblingDirectoryIds(node) {
+    const nodeId = node.relativePath || node.name
+    const parentPath = this.getParentPath(nodeId)
+    const siblings = []
+
+    // Find the parent node and get its directory children
+    const parentNode = parentPath ? this.findNodeByPath(parentPath) : this.tree
+
+    if (parentNode && parentNode.children) {
+      for (const child of parentNode.children) {
+        if (child.type === 'directory') {
+          const childId = child.relativePath || child.name
+          if (childId !== nodeId) {
+            siblings.push(childId)
+          }
+        }
+      }
+    }
+
+    return siblings
+  }
+
+  /**
+   * Get parent path from a node path
+   * @param {string} path - Node path
+   * @returns {string|null} Parent path or null if root
+   */
+  getParentPath(path) {
+    if (!path || !path.includes('/')) return null
+    const parts = path.split('/')
+    parts.pop()
+    return parts.join('/')
+  }
+
+  /**
+   * Collapse all descendants of a node
+   * @param {string} nodeId - Node ID to collapse descendants of
+   */
+  collapseDescendants(nodeId) {
+    // Remove any expanded nodes that are children of this node
+    for (const expandedId of [...this.expandedNodes]) {
+      if (expandedId.startsWith(nodeId + '/')) {
+        this.expandedNodes.delete(expandedId)
+      }
+    }
   }
 
   /**
@@ -343,67 +417,89 @@ export class DocumentViewerComponent {
     const formattedDate = new Date(content.modified).toLocaleString()
     const formattedSize = this.formatFileSize(content.size)
 
+    // Determine content type for rendering
+    let previewClass = 'plaintext'
+    let previewContent = ''
+
+    if (content.isImage) {
+      previewClass = 'image'
+      previewContent = this.renderImage(content)
+    } else if (content.isMarkdown) {
+      previewClass = 'markdown'
+      previewContent = this.renderMarkdown(content.content)
+    } else {
+      previewContent = this.renderPlaintext(content.content)
+    }
+
     return `
       <div class="preview-panel">
         <div class="preview-header">
           <span class="preview-filename">${this.escapeHtml(content.name)}</span>
           <span class="preview-meta">${formattedSize} • ${formattedDate}</span>
         </div>
-        <div class="preview-content ${content.isMarkdown ? 'markdown' : 'plaintext'}">
-          ${content.isMarkdown ? this.renderMarkdown(content.content) : this.renderPlaintext(content.content)}
+        <div class="preview-content ${previewClass}">
+          ${previewContent}
         </div>
       </div>
     `
   }
 
   /**
-   * Render markdown content (simple implementation)
+   * Render markdown content using marked.js (async via IPC)
+   * Falls back to plaintext rendering with preserved whitespace if marked is unavailable
    * @param {string} content - Markdown content
-   * @returns {string} HTML string
+   * @returns {string} HTML string (initially fallback, updates async)
    */
   renderMarkdown(content) {
-    // Basic markdown rendering - escape HTML first for security
-    let html = this.escapeHtml(content)
+    // Generate a unique ID for this markdown container
+    const containerId = `markdown-${Date.now()}`
 
-    // Headers
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Schedule async markdown parsing after render
+    if (window.puffin?.marked?.parse) {
+      setTimeout(async () => {
+        try {
+          const html = await window.puffin.marked.parse(content)
+          const container = document.getElementById(containerId)
+          if (container) {
+            container.innerHTML = html
+            container.classList.remove('markdown-fallback')
+          }
+        } catch (err) {
+          console.warn('[DocumentViewer] Marked.js parsing failed:', err)
+          // Keep the fallback content on error
+        }
+      }, 0)
+    }
 
-    // Bold and italic
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Return fallback immediately (will be replaced async if marked succeeds)
+    return `<div class="markdown-body markdown-fallback" id="${containerId}"><pre class="markdown-pre">${this.escapeHtml(content)}</pre></div>`
+  }
 
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+  /**
+   * Render image content
+   * @param {Object} content - File content object with path info
+   * @returns {string} HTML string
+   */
+  renderImage(content) {
+    // Use file:// protocol for local images
+    const imageSrc = `file://${content.path.replace(/\\/g, '/')}`
 
-    // Code blocks
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
-
-    // Lists
-    html = html.replace(/^- (.+)$/gm, '<li>$1</li>')
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-
-    // Numbered lists
-    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-
-    // Links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-
-    // Paragraphs (double newlines)
-    html = html.replace(/\n\n/g, '</p><p>')
-    html = '<p>' + html + '</p>'
-
-    // Clean up empty paragraphs
-    html = html.replace(/<p><\/p>/g, '')
-    html = html.replace(/<p>(<h[1-6]>)/g, '$1')
-    html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1')
-    html = html.replace(/<p>(<ul>)/g, '$1')
-    html = html.replace(/(<\/ul>)<\/p>/g, '$1')
-    html = html.replace(/<p>(<pre>)/g, '$1')
-    html = html.replace(/(<\/pre>)<\/p>/g, '$1')
-
-    return `<div class="markdown-body">${html}</div>`
+    return `
+      <div class="image-viewer">
+        <div class="image-container">
+          <img
+            src="${this.escapeHtml(imageSrc)}"
+            alt="${this.escapeHtml(content.name)}"
+            loading="lazy"
+            onclick="this.classList.toggle('zoomed')"
+            title="Click to zoom"
+          />
+        </div>
+        <div class="image-info">
+          <span class="image-dimensions" id="image-dimensions-${this.escapeHtml(content.name)}"></span>
+        </div>
+      </div>
+    `
   }
 
   /**

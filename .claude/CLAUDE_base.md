@@ -67,6 +67,7 @@ The following stories have been completed and are available for reference:
 - **Existing Prompt View Compatibility**: As a user, I want the existing prompt view to continue working as before so that I can still use free-form prompting without creating a sprint
 - **Handoff Persistence Without Expiration**: As a user, I want handoffs to persist indefinitely until I explicitly delete them so that I don't lose context due to automatic expiration
 - **Handoff Summary Updates**: As a user, I want handoff summaries to be updated as I refine my work so that code changes and bug fixes are reflected in the handoff context
+- **Multi-Hop Handoff Chaining**: As a user, I want to chain multiple handoff summaries together so that context is preserved across multiple handoff sequences
 - **Handoff Ready Button in Prompt Area**: As a user, I want a 'Handoff Ready' button to appear below the prompt input so that I can initiate a handoff when I decide the work is ready
 - **Handoff Review Modal**: As a user, I want to review the handoff summary in a modal before completing the handoff so that I can verify the context being passed to the new thread
 - **User-Controlled Handoff Timing**: As a user, I want to control when a handoff occurs regardless of Claude's completion assessment so that I can fix bugs and refine features before handing off

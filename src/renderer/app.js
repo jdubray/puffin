@@ -375,7 +375,7 @@ class PuffinApp {
       'rerunPrompt', 'clearRerunRequest',
       'requestContinue', 'clearContinueRequest',
       'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'updateBranchSettings', 'selectPrompt',
-      'toggleThreadExpanded', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
+      'toggleThreadExpanded', 'expandThreadToEnd', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
       'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories', 'loadSprintHistory',
       'setSprintFilter', 'clearSprintFilter',
       'deriveUserStories', 'receiveDerivedStories', 'markStoryReady', 'unmarkStoryReady',
@@ -446,6 +446,7 @@ class PuffinApp {
 
           // Thread expansion/collapse actions
           ['TOGGLE_THREAD_EXPANDED', actions.toggleThreadExpanded],
+          ['EXPAND_THREAD_TO_END', actions.expandThreadToEnd],
           ['UPDATE_THREAD_SEARCH_QUERY', actions.updateThreadSearchQuery],
           ['MARK_THREAD_COMPLETE', actions.markThreadComplete],
           ['UNMARK_THREAD_COMPLETE', actions.unmarkThreadComplete],
@@ -1162,6 +1163,16 @@ class PuffinApp {
     // Update debug view content
     this.updateDebugView(state)
 
+    // Check if currentView changed - if so, deactivate any active plugin view
+    // This handles cases like branch selection triggering a view switch
+    const currentView = state.ui.currentView
+    if (this._lastCurrentView !== currentView) {
+      if (this.sidebarViewManager.hasActivePluginView()) {
+        this.sidebarViewManager.showBuiltInView()
+      }
+      this._lastCurrentView = currentView
+    }
+
     this.updateNavigation(state)
     this.updateSidebar(state)
     this.updateViews(state)
@@ -1315,7 +1326,8 @@ class PuffinApp {
    * Update navigation state
    */
   updateNavigation(state) {
-    document.querySelectorAll('.nav-btn').forEach(btn => {
+    // Only update built-in nav buttons (not plugin nav buttons which manage their own state)
+    document.querySelectorAll('.nav-btn:not(.plugin-nav-btn)').forEach(btn => {
       const view = btn.dataset.view
       btn.classList.toggle('active', view === state.ui.currentView)
     })
@@ -1337,10 +1349,34 @@ class PuffinApp {
   updateViews(state) {
     // Core views - plugins may contribute additional views (e.g., designer-plugin)
     const views = ['config', 'prompt', 'user-stories', 'cli-output', 'git', 'profile', 'debug']
+    const hasActivePluginView = this.sidebarViewManager.hasActivePluginView()
+    const currentView = state.ui.currentView
+
+    // Check if currentView is a built-in view
+    const isBuiltInView = views.includes(currentView)
+
+    // If a plugin view is active but we're switching to a built-in view,
+    // deactivate the plugin view first
+    if (hasActivePluginView && isBuiltInView) {
+      this.sidebarViewManager.showBuiltInView()
+      // Continue to show the built-in view below
+    } else if (hasActivePluginView) {
+      // Plugin view is active and currentView is not a built-in view
+      // Keep built-in views hidden and don't interfere
+      views.forEach(viewName => {
+        const view = document.getElementById(`${viewName}-view`)
+        if (view) {
+          view.classList.remove('active')
+        }
+      })
+      return
+    }
+
+    // Show the appropriate built-in view
     views.forEach(viewName => {
       const view = document.getElementById(`${viewName}-view`)
       if (view) {
-        view.classList.toggle('active', state.ui.currentView === viewName)
+        view.classList.toggle('active', currentView === viewName)
       }
     })
   }

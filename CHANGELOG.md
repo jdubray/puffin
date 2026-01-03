@@ -5,6 +5,76 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-01-02
+
+### Added
+
+- **Claude Config Plugin**: Branch focus management with edit capability
+  - Configure and edit focus areas per branch
+  - Branch context automatically included in prompts
+
+- **Designer Plugin**: GUI Designer refactored as standalone plugin
+  - Decoupled from core application
+  - Full plugin lifecycle management
+
+- **GitHub Plugin**: Plugin validation and installation system
+  - Install plugins from GitHub repositories
+  - Manifest validation and security checks
+
+- **Document Viewers**: Markdown and image viewer plugins
+  - View markdown files with proper rendering
+  - Image preview support in document panel
+
+- **SQLite Integration**: Persistent database layer
+  - Database schema for improved data management
+  - Migration from JSON-based storage
+
+- **RICE FACT Framework**: Enhanced implementation prompts
+  - Structured guidance for sprint implementation
+  - Better context for Claude during development
+
+- **Branch Drag-and-Drop**: History tree UX improvements
+  - Reorder branches via drag-and-drop
+  - Improved branch navigation
+
+### Changed
+
+- **Architecture Tab Removed**: Now reads directly from architecture file
+  - Simplified UI with fewer tabs
+  - Direct file access for architecture documentation
+
+- **Auto-Continue Removed**: Cleaned up sprint execution UI
+  - Removed automatic continuation feature
+  - Simplified sprint workflow
+
+- **Sprint History Panel**: Aligned with swimlane design system
+  - Consistent visual language across panels
+  - Better integration with conversation view
+
+### Fixed
+
+- **User Story Persistence**: Multi-layer protection against data loss
+  - Prevents story data loss during sprint archive
+  - UI refresh after archive operations
+
+- **Continue Button**: Implemented using SAM next-action pattern
+  - Reliable continuation of conversations
+  - Proper state management
+
+- **CLI Instance Management**: Prevent multiple CLI instances from spawning
+  - Single instance enforcement
+  - Resource cleanup on termination
+
+- **Fullstack Branch Mapping**: Branch button now maps to dedicated fullstack branch
+  - Correct branch targeting for fullstack implementation
+
+### Documentation
+
+- Added database schema documentation
+- Reorganized design docs with UI/UX guidelines
+- Added `/puffin-sync` section for CLI session syncing
+- Documentation restructured into categorical subdirectories
+
 ## [2.5.0] - 2025-12-25
 
 ### Added

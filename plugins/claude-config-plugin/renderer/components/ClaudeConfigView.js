@@ -52,6 +52,12 @@ export class ClaudeConfigView {
     this.loading = true
     this.error = null
 
+    // Branch focus state
+    this.branchFocus = null
+    this.branchFocusSource = null
+    this.editingBranchFocus = false
+    this.branchFocusEditContent = ''
+
     // Proposal state
     this.proposalPrompt = ''
     this.proposal = null
@@ -104,6 +110,21 @@ export class ClaudeConfigView {
       const sections = await window.puffin.plugins.invoke('claude-config-plugin', 'listSections')
       this.sections = sections || []
 
+      // Load branch focus for the selected context
+      if (this.selectedContext) {
+        try {
+          const focusResult = await window.puffin.plugins.invoke('claude-config-plugin', 'getBranchFocus', {
+            branchId: this.selectedContext
+          })
+          this.branchFocus = focusResult.focus
+          this.branchFocusSource = focusResult.source
+        } catch (err) {
+          console.warn('[ClaudeConfigView] Failed to load branch focus:', err)
+          this.branchFocus = null
+          this.branchFocusSource = null
+        }
+      }
+
       this.loading = false
       this.render()
     } catch (err) {
@@ -136,6 +157,9 @@ export class ClaudeConfigView {
 
         <!-- Source indicator -->
         ${this.renderSourceIndicator()}
+
+        <!-- Branch Focus Card -->
+        ${!this.loading && !this.error && !this.showingDiff ? this.renderBranchFocusCard() : ''}
 
         <!-- Main content area -->
         <div class="config-main">
@@ -215,6 +239,82 @@ export class ClaudeConfigView {
         ${mappingInfo ? `<span class="mapping-info" title="${mappingInfo}">→ CLAUDE.md</span>` : ''}
       </div>
     `
+  }
+
+  /**
+   * Render the Branch Focus card
+   * Shows the current branch focus with edit capability
+   */
+  renderBranchFocusCard() {
+    if (!this.selectedContext) return ''
+
+    const contextDisplay = formatContextName(this.selectedContext)
+    const sourceLabel = this.branchFocusSource === 'file' ? 'from file' :
+                        this.branchFocusSource === 'default' ? 'default' :
+                        this.branchFocusSource === 'fallback' ? 'generated' : ''
+
+    // Editing mode
+    if (this.editingBranchFocus) {
+      return `
+        <div class="branch-focus-card editing">
+          <div class="branch-focus-header">
+            <h3>Branch Focus: ${this.escapeHtml(contextDisplay)}</h3>
+            <span class="focus-source-badge">${sourceLabel}</span>
+          </div>
+          <div class="branch-focus-editor">
+            <textarea
+              id="branch-focus-textarea"
+              class="branch-focus-textarea"
+              rows="12"
+              placeholder="Enter the branch focus instructions..."
+            >${this.escapeHtml(this.branchFocusEditContent)}</textarea>
+            <div class="branch-focus-actions">
+              <button id="cancel-focus-edit-btn" class="btn secondary small">Cancel</button>
+              <button id="save-focus-btn" class="btn primary small">Save Focus</button>
+            </div>
+          </div>
+          <p class="branch-focus-hint">
+            This content is prepended to every prompt sent to Claude on this branch.
+            It sets the context and constraints for the conversation.
+          </p>
+        </div>
+      `
+    }
+
+    // View mode
+    const hasFocus = this.branchFocus && this.branchFocus.trim().length > 0
+    const previewText = hasFocus
+      ? this.truncateText(this.branchFocus.replace(/^##[^\n]*\n/, '').trim(), 200)
+      : 'No branch focus defined. Click Edit to add one.'
+
+    return `
+      <div class="branch-focus-card ${hasFocus ? '' : 'empty'}">
+        <div class="branch-focus-header">
+          <div class="branch-focus-title">
+            <h3>Branch Focus: ${this.escapeHtml(contextDisplay)}</h3>
+            ${sourceLabel ? `<span class="focus-source-badge ${this.branchFocusSource}">${sourceLabel}</span>` : ''}
+          </div>
+          <button id="edit-focus-btn" class="btn small" title="Edit branch focus">
+            ${hasFocus ? 'Edit' : 'Add Focus'}
+          </button>
+        </div>
+        <div class="branch-focus-preview">
+          <p>${this.escapeHtml(previewText)}</p>
+        </div>
+        <p class="branch-focus-hint">
+          Branch focus instructions are sent to Claude at the start of each prompt.
+        </p>
+      </div>
+    `
+  }
+
+  /**
+   * Truncate text with ellipsis
+   */
+  truncateText(text, maxLength) {
+    if (!text) return ''
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength).trim() + '...'
   }
 
   /**
@@ -605,6 +705,39 @@ Add guidelines for this branch..."
       this.selectContext(e.target.value)
     })
 
+    // Branch focus edit button
+    this.container.querySelector('#edit-focus-btn')?.addEventListener('click', () => {
+      this.startEditingBranchFocus()
+    })
+
+    // Branch focus save button
+    this.container.querySelector('#save-focus-btn')?.addEventListener('click', () => {
+      this.saveBranchFocus()
+    })
+
+    // Branch focus cancel button
+    this.container.querySelector('#cancel-focus-edit-btn')?.addEventListener('click', () => {
+      this.cancelEditingBranchFocus()
+    })
+
+    // Branch focus textarea
+    const focusTextarea = this.container.querySelector('#branch-focus-textarea')
+    if (focusTextarea) {
+      focusTextarea.addEventListener('input', (e) => {
+        this.branchFocusEditContent = e.target.value
+      })
+      // Save on Ctrl+S
+      focusTextarea.addEventListener('keydown', (e) => {
+        if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault()
+          this.saveBranchFocus()
+        }
+        if (e.key === 'Escape') {
+          this.cancelEditingBranchFocus()
+        }
+      })
+    }
+
     // Refresh button
     this.container.querySelector('#refresh-config-btn')?.addEventListener('click', () => {
       this.loadConfig()
@@ -975,6 +1108,95 @@ Add guidelines for this branch..."
       case 'delete':
         await this.removeSection()
         break
+    }
+  }
+
+  // ==================== Branch Focus Methods ====================
+
+  /**
+   * Start editing the branch focus
+   */
+  startEditingBranchFocus() {
+    this.editingBranchFocus = true
+    this.branchFocusEditContent = this.branchFocus || ''
+    this.render()
+
+    // Focus the textarea after render
+    requestAnimationFrame(() => {
+      const textarea = this.container.querySelector('#branch-focus-textarea')
+      if (textarea) {
+        textarea.focus()
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+      }
+    })
+  }
+
+  /**
+   * Cancel editing the branch focus
+   */
+  cancelEditingBranchFocus() {
+    this.editingBranchFocus = false
+    this.branchFocusEditContent = ''
+    this.render()
+  }
+
+  /**
+   * Save the branch focus to the context file
+   */
+  async saveBranchFocus() {
+    const content = this.branchFocusEditContent.trim()
+    const contextDisplay = formatContextName(this.selectedContext)
+
+    // Ensure the content has a proper Branch Focus heading
+    let finalContent = content
+    if (!content.toLowerCase().startsWith('## branch focus')) {
+      finalContent = `## Branch Focus: ${contextDisplay}\n\n${content}`
+    }
+
+    try {
+      // Read current file content
+      const configResult = await window.puffin.plugins.invoke('claude-config-plugin', 'getConfig')
+      let fileContent = configResult.content || ''
+
+      // Check if file already has a Branch Focus section
+      const branchFocusRegex = /## Branch Focus[:\s]*[^\n]*\n[\s\S]*?(?=\n## |\n---|\n# |$)/i
+      const hasBranchFocus = branchFocusRegex.test(fileContent)
+
+      let newContent
+      if (hasBranchFocus) {
+        // Replace existing Branch Focus section
+        newContent = fileContent.replace(branchFocusRegex, finalContent)
+      } else if (fileContent.trim()) {
+        // Prepend to existing content
+        newContent = finalContent + '\n\n' + fileContent
+      } else {
+        // Empty file - just use the focus content
+        newContent = finalContent
+      }
+
+      // Save the updated content
+      const result = await window.puffin.plugins.invoke(
+        'claude-config-plugin',
+        'updateConfig',
+        { content: newContent }
+      )
+
+      if (result.path) {
+        this.branchFocus = finalContent
+        this.branchFocusSource = 'file'
+        this.editingBranchFocus = false
+        this.showNotification('Branch focus saved successfully!', 'success')
+
+        // Sync to CLAUDE.md
+        await this.syncToActiveCLAUDEmd()
+
+        await this.loadConfig()
+      } else {
+        this.showNotification('Failed to save branch focus', 'error')
+      }
+    } catch (err) {
+      console.error('[ClaudeConfigView] Failed to save branch focus:', err)
+      this.showNotification(`Failed to save: ${err.message}`, 'error')
     }
   }
 

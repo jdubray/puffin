@@ -141,6 +141,10 @@ export class ProjectFormComponent {
       console.log('[PROJECT-FORM] Populating form with config:', state.config)
       this.populateForm(state.config)
       this._initialized = true
+
+      // Reload plugins now that the backend state is ready
+      // This ensures plugins are displayed after the state is loaded
+      this.loadPlugins()
     }
   }
 

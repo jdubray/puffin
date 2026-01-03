@@ -33,6 +33,7 @@ export class StatePersistence {
       'UPDATE_CONFIG', 'UPDATE_OPTIONS',
       'SUBMIT_PROMPT', 'COMPLETE_RESPONSE',
       'SELECT_BRANCH', 'SELECT_PROMPT', 'CREATE_BRANCH', 'DELETE_BRANCH', 'REORDER_BRANCHES',
+      'UPDATE_BRANCH_SETTINGS',
       'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
       'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
@@ -65,7 +66,7 @@ export class StatePersistence {
         console.log('Config persist result:', result)
       }
 
-      if (['SUBMIT_PROMPT', 'COMPLETE_RESPONSE', 'SELECT_BRANCH', 'SELECT_PROMPT', 'CREATE_BRANCH', 'DELETE_BRANCH', 'REORDER_BRANCHES'].includes(normalizedType)) {
+      if (['SUBMIT_PROMPT', 'COMPLETE_RESPONSE', 'SELECT_BRANCH', 'SELECT_PROMPT', 'CREATE_BRANCH', 'DELETE_BRANCH', 'REORDER_BRANCHES', 'UPDATE_BRANCH_SETTINGS'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Action:', normalizedType)
 
         // For COMPLETE_RESPONSE, verify the response is in the history before persisting

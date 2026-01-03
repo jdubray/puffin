@@ -48,6 +48,9 @@ const ClaudeConfigPlugin = {
     context.registerIpcHandler('proposeChange', this.handleProposeChange.bind(this))
     context.registerIpcHandler('applyProposedChange', this.handleApplyProposedChange.bind(this))
 
+    // Branch focus handlers
+    context.registerIpcHandler('getBranchFocus', this.handleGetBranchFocus.bind(this))
+
     // Register actions for programmatic access
     context.registerAction('getConfig', this.getConfig.bind(this))
     context.registerAction('getConfigWithContext', this.getConfigWithContext.bind(this))
@@ -298,6 +301,11 @@ const ClaudeConfigPlugin = {
 
   async handleApplyProposedChange({ proposedContent }) {
     return this.applyProposedChange(proposedContent)
+  },
+
+  // Branch focus handlers
+  async handleGetBranchFocus({ branchId, options }) {
+    return this.getBranchFocus(branchId, options)
   }
 }
 

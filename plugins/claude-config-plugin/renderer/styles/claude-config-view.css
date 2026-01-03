@@ -1159,3 +1159,126 @@
 #add-section-btn:hover {
   background: var(--success-hover, #2d5a3f);
 }
+
+/* ==================== Branch Focus Card ==================== */
+
+.branch-focus-card {
+  background: var(--bg-secondary, #252526);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 8px;
+}
+
+.branch-focus-card.empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.branch-focus-card.editing {
+  border-color: var(--accent-color, #6c63ff);
+  box-shadow: 0 0 0 1px var(--accent-color, #6c63ff);
+}
+
+.branch-focus-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.branch-focus-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.branch-focus-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.focus-source-badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-tertiary, #1e1e1e);
+  color: var(--text-secondary, #a0a0a0);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.focus-source-badge.file {
+  background: var(--success-bg, #1e3a2f);
+  color: var(--success-text, #6fcf97);
+}
+
+.focus-source-badge.default {
+  background: var(--info-bg, #1e3a4f);
+  color: var(--info-text, #56ccf2);
+}
+
+.focus-source-badge.fallback {
+  background: var(--warning-bg, #3a3a1e);
+  color: var(--warning-text, #f2c94c);
+}
+
+.branch-focus-preview {
+  margin-bottom: 8px;
+}
+
+.branch-focus-preview p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #a0a0a0);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.branch-focus-card.empty .branch-focus-preview p {
+  font-style: italic;
+}
+
+.branch-focus-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted, #666);
+}
+
+.branch-focus-editor {
+  margin-bottom: 12px;
+}
+
+.branch-focus-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px;
+  background: var(--input-bg, #1e1e1e);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  color: var(--text-primary, #e0e0e0);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.branch-focus-textarea:focus {
+  outline: none;
+  border-color: var(--accent-color, #6c63ff);
+  box-shadow: 0 0 0 1px var(--accent-color, #6c63ff);
+}
+
+.branch-focus-textarea::placeholder {
+  color: var(--text-muted, #666);
+}
+
+.branch-focus-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}

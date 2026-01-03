@@ -208,7 +208,10 @@ function computeHistoryState(model) {
       name: branch.name,
       icon: branch.icon || 'folder',
       promptCount: branch.prompts.length,
-      isActive: id === activeBranch
+      isActive: id === activeBranch,
+      // Include branch settings for UI (settings modal, context menu)
+      codeModificationAllowed: branch.codeModificationAllowed,
+      assignedPlugins: branch.assignedPlugins || []
     }
   }).filter(Boolean)
 

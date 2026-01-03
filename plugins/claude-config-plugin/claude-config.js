@@ -18,13 +18,13 @@ const CONTEXT_BRANCHES = [
   'architecture',
   'ui',
   'backend',
+  'fullstack',
   'deployment',
   'bug-fixes',
   'code-reviews',
   'improvements',
   'plugin-development',
   'tmp',
-  'fullstack'
 ]
 
 /**

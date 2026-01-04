@@ -206,10 +206,11 @@ export class StatePersistence {
         }
       }
 
-      // Persist sprint state changes (including criteria progress and story status)
+      // Persist sprint state changes (including criteria progress, story status, and assertions)
       if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
            'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
-           'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH'].includes(normalizedType)) {
+           'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
+           'UPDATE_SPRINT_STORY_ASSERTIONS'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
 
         // For UPDATE_SPRINT_STORY_STATUS: use atomic sync to update both sprint and backlog

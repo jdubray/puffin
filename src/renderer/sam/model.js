@@ -2848,8 +2848,6 @@ export const showModalAcceptor = model => proposal => {
 
 export const hideModalAcceptor = model => proposal => {
   if (proposal?.type === 'HIDE_MODAL') {
-    console.log('[HIDE_MODAL] Acceptor called - hiding modal')
-    console.log('[HIDE_MODAL] Stack trace:', new Error().stack)
     model.modal = null
   }
 }

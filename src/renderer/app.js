@@ -1691,6 +1691,11 @@ Please provide specific file locations and line numbers where issues are found, 
         const completedCriteria = criteriaList.filter(c => c.checked).length
         const criteriaPercentage = totalCriteria > 0 ? Math.round((completedCriteria / totalCriteria) * 100) : 0
 
+        // Get inspection assertions (from sprint story or backlog story)
+        const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
+        const assertionResults = story.assertionResults || backlogStory?.assertionResults
+        const hasAssertions = assertions.length > 0
+
         // Check if this section was expanded before re-render
         const isExpanded = expandedSections.has(story.id)
 
@@ -1729,6 +1734,7 @@ Please provide specific file locations and line numbers where issues are found, 
                 </ul>
               </div>
             ` : ''}
+            ${hasAssertions ? this.renderSprintAssertions(story.id, assertions, assertionResults) : ''}
             ${showBranchButtons ? this.renderStoryBranchButtons(story, progress) : ''}
             ${isActiveImplementation ? `
               <div class="cancel-implementation-section">
@@ -2649,6 +2655,50 @@ Keep it concise but informative. Use markdown formatting.`
             </button>
           `
         }).join('')}
+      </div>
+    `
+  }
+
+  /**
+   * Render inspection assertions section for a sprint story card
+   * @param {string} storyId - The story ID
+   * @param {Array} assertions - The inspection assertions array
+   * @param {Object} results - The assertion evaluation results (optional)
+   * @returns {string} HTML for the assertions section
+   */
+  renderSprintAssertions(storyId, assertions, results) {
+    if (!assertions || assertions.length === 0) return ''
+
+    const hasResults = results && results.summary
+    let statusClass = 'assertions-pending'
+    let summaryText = 'Not verified'
+    let passedCount = 0
+    let failedCount = 0
+
+    if (hasResults) {
+      passedCount = results.summary.passed || 0
+      failedCount = results.summary.failed || 0
+      const total = results.summary.total || assertions.length
+
+      if (failedCount > 0) {
+        statusClass = 'assertions-failed'
+        summaryText = `${passedCount}/${total} passed`
+      } else if (passedCount === total) {
+        statusClass = 'assertions-passed'
+        summaryText = `${passedCount}/${total} passed`
+      } else {
+        summaryText = `${passedCount}/${total} verified`
+      }
+    }
+
+    return `
+      <div class="story-assertions-section ${statusClass}" data-story-id="${storyId}">
+        <div class="assertions-header">
+          <span class="assertions-icon">${hasResults ? (failedCount > 0 ? '!' : '✓') : '○'}</span>
+          <span class="assertions-label">Assertions</span>
+          <span class="assertions-summary">${summaryText}</span>
+          <span class="assertions-total">(${assertions.length})</span>
+        </div>
       </div>
     `
   }

@@ -407,6 +407,20 @@ export class UserStoriesComponent {
         }
       }
 
+      // Debug logging for assertion updates
+      if (actionType === 'UPDATE_USER_STORY') {
+        const storiesWithAssertions = this.stories.filter(s => s.inspectionAssertions?.length > 0)
+        console.log('[USER-STORIES-COMPONENT] After UPDATE_USER_STORY:', {
+          totalStories: this.stories.length,
+          storiesWithAssertions: storiesWithAssertions.length,
+          assertionCounts: storiesWithAssertions.map(s => ({
+            id: s.id.substring(0, 8),
+            title: s.title.substring(0, 30),
+            assertions: s.inspectionAssertions?.length || 0
+          }))
+        })
+      }
+
       // Track active sprint state for single-sprint enforcement
       this.hasActiveSprint = !!state.activeSprint
       this.activeSprintTitle = state.activeSprint?.title || null

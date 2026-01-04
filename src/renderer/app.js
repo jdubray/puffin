@@ -1799,6 +1799,18 @@ Please provide specific file locations and line numbers where issues are found, 
                 this.intents.updateUserStory(storyId, { inspectionAssertions: assertions })
               }
 
+              // Fallback: Refresh stories from database to ensure UI is in sync
+              // This handles cases where the in-memory update might fail
+              try {
+                const storiesResult = await window.puffin.state.getUserStories()
+                if (storiesResult.success && Array.isArray(storiesResult.stories) && storiesResult.stories.length > 0) {
+                  console.log('[SPRINT] Refreshing stories from database after assertion generation:', storiesResult.stories.length, 'stories')
+                  this.intents.loadUserStories(storiesResult.stories)
+                }
+              } catch (refreshError) {
+                console.warn('[SPRINT] Failed to refresh stories from database:', refreshError)
+              }
+
               this.showToast(
                 `Plan approved! Generated ${result.totalAssertions} inspection assertions.`,
                 'success'

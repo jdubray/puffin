@@ -908,14 +908,33 @@ export const addUserStoryAcceptor = model => proposal => {
 
 export const updateUserStoryAcceptor = model => proposal => {
   if (proposal?.type === 'UPDATE_USER_STORY') {
-    const index = model.userStories.findIndex(s => s.id === proposal.payload.id)
+    const storyId = proposal.payload.id
+    const index = model.userStories.findIndex(s => s.id === storyId)
+
+    console.log('[UPDATE_USER_STORY] Acceptor called:', {
+      storyId,
+      payloadKeys: Object.keys(proposal.payload),
+      hasInspectionAssertions: !!proposal.payload.inspectionAssertions,
+      assertionCount: proposal.payload.inspectionAssertions?.length || 0,
+      modelStoriesCount: model.userStories?.length || 0,
+      foundIndex: index
+    })
+
     if (index !== -1) {
       model.userStories[index] = {
         ...model.userStories[index],
         ...proposal.payload
       }
       // Track which story was updated for persistence
-      model._lastUpdatedStoryId = proposal.payload.id
+      model._lastUpdatedStoryId = storyId
+
+      console.log('[UPDATE_USER_STORY] Story updated in model:', {
+        storyId,
+        newAssertionCount: model.userStories[index].inspectionAssertions?.length || 0
+      })
+    } else {
+      console.warn('[UPDATE_USER_STORY] Story not found in model.userStories:', storyId)
+      console.warn('[UPDATE_USER_STORY] Available story IDs:', model.userStories?.map(s => s.id.substring(0, 8)))
     }
   }
 }
@@ -932,6 +951,16 @@ export const loadUserStoriesAcceptor = model => proposal => {
     const currentStories = model.userStories || []
 
     console.log('[LOAD_USER_STORIES] Received:', newStories.length, 'stories, current:', currentStories.length, 'stories')
+
+    // Debug: Log stories with assertions
+    const storiesWithAssertions = newStories.filter(s => s.inspectionAssertions?.length > 0)
+    if (storiesWithAssertions.length > 0) {
+      console.log('[LOAD_USER_STORIES] Stories with assertions:', storiesWithAssertions.map(s => ({
+        id: s.id.substring(0, 8),
+        title: s.title.substring(0, 30),
+        assertionCount: s.inspectionAssertions?.length || 0
+      })))
+    }
 
     // SAFETY: Never wipe stories if we have existing stories and receiving empty
     // This is a defense-in-depth check - the caller should also prevent this

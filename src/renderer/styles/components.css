@@ -4441,8 +4441,10 @@
   display: none;
 }
 
-.story-actions {
+/* Story card action buttons - horizontal row */
+.story-card-actions {
   display: flex;
+  flex-direction: row;
   flex-wrap: nowrap;
   gap: 0.125rem;
   opacity: 0;
@@ -4451,8 +4453,8 @@
 }
 
 /* Show actions on card hover or when card/buttons have focus (accessibility) */
-.story-card:hover .story-actions,
-.story-card:focus-within .story-actions {
+.story-card:hover .story-card-actions,
+.story-card:focus-within .story-card-actions {
   opacity: 1;
 }
 
@@ -5492,7 +5494,7 @@
   margin-bottom: 0.375rem;
 }
 
-.kanban-swimlane .story-actions {
+.kanban-swimlane .story-card-actions {
   gap: 0;
 }
 

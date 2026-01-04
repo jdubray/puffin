@@ -939,7 +939,7 @@ export class UserStoriesComponent {
             <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
             ${showFallbackDropdown ? this.renderStatusDropdown(story) : ''}
           </div>
-          <div class="story-actions">
+          <div class="story-card-actions">
             <button class="story-action-btn expand-btn" title="View full details" aria-label="Expand story">⤢</button>
             ${canComplete ? `<button class="story-action-btn complete-btn" title="Mark as completed">✓</button>` : ''}
             ${canArchive ? `<button class="story-action-btn archive-btn" title="Archive story">⌫</button>` : ''}

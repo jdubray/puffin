@@ -297,7 +297,7 @@ Please provide specific file locations and line numbers where issues are found, 
     }
 
     // Switch to the code reviews branch
-    this.intents.setActiveBranch(branchId)
+    this.intents.selectBranch(branchId)
 
     // Submit the prompt
     this.intents.submitPrompt({
@@ -387,7 +387,11 @@ Please provide specific file locations and line numbers where issues are found, 
    * Initialize managers with dependencies
    */
   initManagers() {
-    this.modalManager = new ModalManager(this.intents, this.showToast.bind(this))
+    this.modalManager = new ModalManager(
+      this.intents,
+      this.showToast.bind(this),
+      this.showCodeReviewConfirmation.bind(this)
+    )
     this.statePersistence = new StatePersistence(
       () => this.state,
       this.intents,
@@ -1784,12 +1788,15 @@ Please provide specific file locations and line numbers where issues are found, 
             this.hideAssertionGenerationModal()
 
             if (result.success) {
-              // Update local state with new assertions
+              // Update model state with new assertions via SAM action
               for (const [storyId, assertions] of Object.entries(result.assertions)) {
+                // Update both sprint stories and backlog stories
                 const story = sprint.stories.find(s => s.id === storyId)
                 if (story) {
                   story.inspectionAssertions = assertions
                 }
+                // Dispatch action to update model.userStories (for backlog UI)
+                this.intents.updateUserStory(storyId, { inspectionAssertions: assertions })
               }
 
               this.showToast(
@@ -1797,8 +1804,7 @@ Please provide specific file locations and line numbers where issues are found, 
                 'success'
               )
 
-              // Ask if user wants to trigger a code review
-              this.showCodeReviewConfirmation(sprint)
+              // Note: Code review happens after sprint close, not here
             } else {
               this.showToast(
                 `Plan approved, but assertion generation failed: ${result.error}`,

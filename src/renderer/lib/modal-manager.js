@@ -6,9 +6,10 @@
  */
 
 export class ModalManager {
-  constructor(intents, showToast) {
+  constructor(intents, showToast, showCodeReviewConfirmation = null) {
     this.intents = intents
     this.showToast = showToast
+    this.showCodeReviewConfirmation = showCodeReviewConfirmation
     this._currentModalRender = null
   }
 
@@ -172,10 +173,20 @@ export class ModalManager {
         return
       }
 
+      // Save sprint reference before closing
+      const closedSprint = { ...sprint, title: sprintTitle, description: sprintDescription }
+
       // Call clearSprint with title and description
       this.intents.clearSprintWithDetails(sprintTitle, sprintDescription)
       this.intents.hideModal()
       this.showToast('Sprint closed successfully', 'success')
+
+      // Ask if user wants to trigger a code review after closing
+      if (this.showCodeReviewConfirmation) {
+        setTimeout(() => {
+          this.showCodeReviewConfirmation(closedSprint)
+        }, 500) // Small delay to let modal close
+      }
     })
 
     // Focus the title input

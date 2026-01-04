@@ -4434,14 +4434,20 @@
   display: none;
 }
 
+/* Actions row at top of card */
+.story-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.25rem;
+  min-height: 1.25rem;
+}
+
 .story-actions {
   display: flex;
   flex-wrap: nowrap;
   gap: 0.125rem;
   opacity: 0;
   transition: opacity 0.15s ease;
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 /* Show actions on card hover or when card/buttons have focus (accessibility) */

@@ -1513,18 +1513,14 @@ Please provide specific file locations and line numbers where issues are found, 
       const unsubStatusSync = window.puffin.state.onStoryStatusSynced((data) => {
         console.log('[STATUS-SYNC] Story status synced:', data.storyId, '->', data.status)
 
-        // Update the local state with the synced data
-        if (data.sprint && this.state.activeSprint) {
-          // Update active sprint in state
-          this.intents.loadActiveSprint(data.sprint)
+        // Update the specific story in userStories via SAM action
+        if (data.story) {
+          this.intents.updateUserStory(data.storyId, data.story)
         }
 
-        if (data.story) {
-          // Update the specific story in userStories
-          const storyIndex = this.state.userStories?.findIndex(s => s.id === data.storyId)
-          if (storyIndex !== -1) {
-            this.intents.updateUserStory(data.storyId, data.story)
-          }
+        // Update sprint story status via SAM action (this updates model.activeSprint.storyProgress)
+        if (data.sprint && this.state?.activeSprint) {
+          this.intents.updateSprintStoryStatus(data.storyId, data.status)
         }
 
         // Show toast for user feedback
@@ -2194,9 +2190,8 @@ Please provide specific file locations and line numbers where issues are found, 
           const { storyId, results } = data
           console.log('[SPRINT] Assertion evaluation complete for story:', storyId)
           // Update the model with assertion results (both backlog and sprint stories)
+          // SAM render cycle will automatically refresh the sprint panel
           this.intents.updateStoryAssertionResults(storyId, results)
-          // Refresh the sprint panel to show updated assertion results
-          this.updateSprintContextPanel(this.state)
         })
       }
 

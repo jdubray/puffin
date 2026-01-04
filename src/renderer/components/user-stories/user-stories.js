@@ -1877,7 +1877,18 @@ export class UserStoriesComponent {
    */
   formatDate(timestamp) {
     if (!timestamp) return ''
-    const date = new Date(timestamp)
+    // Handle various formats: number, numeric string (possibly with .0), or ISO string
+    let date
+    if (typeof timestamp === 'string' && /^\d+(\.\d+)?$/.test(timestamp)) {
+      // Numeric string like "1767506718283.0" - parse as number
+      date = new Date(parseFloat(timestamp))
+    } else if (typeof timestamp === 'number') {
+      date = new Date(timestamp)
+    } else {
+      // ISO string or other format
+      date = new Date(timestamp)
+    }
+    if (isNaN(date.getTime())) return ''
     return date.toLocaleDateString()
   }
 

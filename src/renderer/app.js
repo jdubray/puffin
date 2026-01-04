@@ -758,7 +758,7 @@ Please provide specific file locations and line numbers where issues are found, 
       'createSprint', 'startSprintPlanning', 'approvePlan', 'setSprintPlan', 'iterateSprintPlan',
       'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
-      'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'toggleCriteriaCompletion',
+      'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'updateStoryAssertionResults', 'toggleCriteriaCompletion',
       // Stuck detection actions
       'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection',
       // Debug actions
@@ -884,6 +884,7 @@ Please provide specific file locations and line numbers where issues are found, 
           ['UPDATE_SPRINT_STORY_STATUS', actions.updateSprintStoryStatus],
           ['UPDATE_SPRINT_STORY_ASSERTIONS', actions.updateSprintStoryAssertions],
           ['CLEAR_SPRINT_ERROR', actions.clearSprintError],
+          ['UPDATE_STORY_ASSERTION_RESULTS', actions.updateStoryAssertionResults],
           ['TOGGLE_CRITERIA_COMPLETION', actions.toggleCriteriaCompletion],
           // Stuck detection actions
           ['RECORD_ITERATION_OUTPUT', actions.recordIterationOutput],
@@ -2187,11 +2188,13 @@ Please provide specific file locations and line numbers where issues are found, 
         }
       })
 
-      // Listen for assertion evaluation completion to refresh sprint view
+      // Listen for assertion evaluation completion to update model and refresh UI
       if (window.puffin?.state?.onAssertionEvaluationComplete) {
         window.puffin.state.onAssertionEvaluationComplete((data) => {
           const { storyId, results } = data
           console.log('[SPRINT] Assertion evaluation complete for story:', storyId)
+          // Update the model with assertion results (both backlog and sprint stories)
+          this.intents.updateStoryAssertionResults(storyId, results)
           // Refresh the sprint panel to show updated assertion results
           this.updateSprintContextPanel(this.state)
         })

@@ -931,6 +931,16 @@ export const clearSprintError = () => ({
   payload: { timestamp: Date.now() }
 })
 
+// Update story assertion results (after evaluation completes)
+export const updateStoryAssertionResults = (storyId, results) => ({
+  type: 'UPDATE_STORY_ASSERTION_RESULTS',
+  payload: {
+    storyId,
+    results,
+    timestamp: Date.now()
+  }
+})
+
 // Record iteration output for stuck detection
 export const recordIterationOutput = (outputHash, outputSummary) => ({
   type: 'RECORD_ITERATION_OUTPUT',

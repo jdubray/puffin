@@ -2596,6 +2596,38 @@ export const clearSprintErrorAcceptor = model => proposal => {
   }
 }
 
+// Update story assertion results (after evaluation completes)
+// Updates both backlog stories and sprint stories for UI consistency
+export const updateStoryAssertionResultsAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_STORY_ASSERTION_RESULTS') {
+    const { storyId, results, timestamp } = proposal.payload
+
+    // Update in backlog (userStories)
+    const backlogStory = model.userStories?.find(s => s.id === storyId)
+    if (backlogStory) {
+      backlogStory.assertionResults = results
+      backlogStory.updatedAt = timestamp
+      console.log('[ASSERTIONS] Updated backlog story results:', {
+        storyId,
+        passed: results?.summary?.passed || 0,
+        failed: results?.summary?.failed || 0
+      })
+    }
+
+    // Update in sprint stories (if sprint is active)
+    const sprintStory = model.activeSprint?.stories?.find(s => s.id === storyId)
+    if (sprintStory) {
+      sprintStory.assertionResults = results
+      sprintStory.updatedAt = timestamp
+      console.log('[ASSERTIONS] Updated sprint story results:', {
+        storyId,
+        passed: results?.summary?.passed || 0,
+        failed: results?.summary?.failed || 0
+      })
+    }
+  }
+}
+
 // Toggle acceptance criteria completion for a story
 export const toggleCriteriaCompletionAcceptor = model => proposal => {
   if (proposal?.type === 'TOGGLE_CRITERIA_COMPLETION') {
@@ -3191,6 +3223,7 @@ export const acceptors = [
   updateSprintStoryStatusAcceptor,
   updateSprintStoryAssertionsAcceptor,
   clearSprintErrorAcceptor,
+  updateStoryAssertionResultsAcceptor,
   toggleCriteriaCompletionAcceptor,
 
   // Stuck Detection

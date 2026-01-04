@@ -1633,6 +1633,16 @@
   font-size: 0.65rem;
 }
 
+.assertions-summary.evaluating {
+  color: var(--color-warning);
+  animation: assertions-pulse 1s ease-in-out infinite;
+}
+
+@keyframes assertions-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 /* Assertions list - hidden by default */
 .assertions-list {
   display: none;
@@ -8626,4 +8636,97 @@
 .code-review-actions .btn.primary:hover {
   background: var(--accent-hover, #4f46e5);
   border-color: var(--accent-hover, #4f46e5);
+}
+
+/* Assertion Stats Summary in Code Review Modal */
+.assertion-stats-summary {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  text-align: left;
+}
+
+.assertion-stats-summary h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.assertion-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.assertion-stats-grid .stat-item {
+  text-align: center;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: var(--bg-primary);
+}
+
+.assertion-stats-grid .stat-value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.assertion-stats-grid .stat-label {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-top: 0.125rem;
+}
+
+.assertion-stats-grid .stat-total .stat-value {
+  color: var(--text-primary);
+}
+
+.assertion-stats-grid .stat-passed .stat-value {
+  color: var(--color-success);
+}
+
+.assertion-stats-grid .stat-failed .stat-value {
+  color: var(--color-error);
+}
+
+.assertion-stats-grid .stat-pending .stat-value {
+  color: var(--text-muted);
+}
+
+.assertion-stats-summary .recommendation {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.assertion-stats-summary .recommendation.success {
+  background: rgba(72, 187, 120, 0.15);
+  color: var(--color-success);
+}
+
+.assertion-stats-summary .recommendation.warning {
+  background: rgba(245, 101, 101, 0.15);
+  color: var(--color-error);
+}
+
+.assertion-stats-summary .recommendation.caution {
+  background: rgba(236, 201, 75, 0.15);
+  color: var(--color-warning);
+}
+
+.assertion-stats-summary .recommendation.neutral {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }

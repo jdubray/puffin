@@ -213,13 +213,55 @@ class PuffinApp {
    * @param {Object} sprint - The approved sprint with stories and plan
    */
   showCodeReviewConfirmation(sprint) {
+    // Calculate assertion statistics across all sprint stories
+    const assertionStats = this.calculateSprintAssertionStats(sprint)
+    const { total, passed, failed, pending, notEvaluated } = assertionStats
+
+    // Determine recommendation based on assertion results
+    let recommendationClass = 'neutral'
+    let recommendationText = 'Code review recommended for quality assurance.'
+
+    if (failed > 0) {
+      recommendationClass = 'warning'
+      recommendationText = 'Code review strongly recommended - some assertions failed.'
+    } else if (notEvaluated > 0) {
+      recommendationClass = 'caution'
+      recommendationText = 'Some assertions have not been evaluated yet.'
+    } else if (passed === total && total > 0) {
+      recommendationClass = 'success'
+      recommendationText = 'All assertions passed. Code review optional but recommended.'
+    }
+
     const modal = document.createElement('div')
     modal.id = 'code-review-confirmation-modal'
     modal.className = 'code-review-confirmation-modal'
     modal.innerHTML = `
       <div class="code-review-confirmation-content">
         <h3>Start Code Review?</h3>
-        <p>Would you like to start a code review thread for this sprint?</p>
+
+        <div class="assertion-stats-summary">
+          <h4>Inspection Assertions</h4>
+          <div class="assertion-stats-grid">
+            <div class="stat-item stat-total">
+              <span class="stat-value">${total}</span>
+              <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-item stat-passed">
+              <span class="stat-value">${passed}</span>
+              <span class="stat-label">Passed</span>
+            </div>
+            <div class="stat-item stat-failed">
+              <span class="stat-value">${failed}</span>
+              <span class="stat-label">Failed</span>
+            </div>
+            <div class="stat-item stat-pending">
+              <span class="stat-value">${notEvaluated}</span>
+              <span class="stat-label">Not Evaluated</span>
+            </div>
+          </div>
+          <p class="recommendation ${recommendationClass}">${recommendationText}</p>
+        </div>
+
         <p class="code-review-hint">Claude will review the implementation for common mistakes and best practices.</p>
         <div class="code-review-actions">
           <button class="btn secondary" data-action="skip">Skip</button>
@@ -240,6 +282,53 @@ class PuffinApp {
         await this.startSprintCodeReview(sprint)
       }
     })
+  }
+
+  /**
+   * Calculate assertion statistics across all stories in a sprint
+   * @param {Object} sprint - The sprint with stories
+   * @returns {Object} Stats: { total, passed, failed, pending, notEvaluated }
+   */
+  calculateSprintAssertionStats(sprint) {
+    const stories = sprint.stories || []
+    const backlogStories = this.state?.userStories || []
+
+    let total = 0
+    let passed = 0
+    let failed = 0
+    let pending = 0
+    let notEvaluated = 0
+
+    stories.forEach(story => {
+      // Get assertions from sprint story or backlog
+      const backlogStory = backlogStories.find(s => s.id === story.id)
+      const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
+      const results = story.assertionResults || backlogStory?.assertionResults
+
+      total += assertions.length
+
+      if (!results || !results.results) {
+        // No evaluation results - all are "not evaluated"
+        notEvaluated += assertions.length
+      } else {
+        // Count by status from results
+        const resultMap = new Map()
+        results.results.forEach(r => resultMap.set(r.assertionId, r.status))
+
+        assertions.forEach(assertion => {
+          const status = resultMap.get(assertion.id)
+          if (status === 'passed') {
+            passed++
+          } else if (status === 'failed' || status === 'error') {
+            failed++
+          } else {
+            pending++
+          }
+        })
+      }
+    })
+
+    return { total, passed, failed, pending, notEvaluated }
   }
 
   /**
@@ -1964,6 +2053,33 @@ Please provide specific file locations and line numbers where issues are found, 
           }
         }
       })
+
+      // Listen for assertion evaluation completion to refresh sprint view
+      if (window.puffin?.state?.onAssertionEvaluationComplete) {
+        window.puffin.state.onAssertionEvaluationComplete((data) => {
+          const { storyId, results } = data
+          console.log('[SPRINT] Assertion evaluation complete for story:', storyId)
+          // Refresh the sprint panel to show updated assertion results
+          this.updateSprintContextPanel(this.state)
+        })
+      }
+
+      // Listen for assertion evaluation progress to show spinner
+      if (window.puffin?.state?.onAssertionEvaluationProgress) {
+        window.puffin.state.onAssertionEvaluationProgress((data) => {
+          const { storyId, current, total } = data
+          const section = sprintContextPanel.querySelector(
+            `.story-assertions-section[data-story-id="${storyId}"]`
+          )
+          if (section) {
+            const summary = section.querySelector('.assertions-summary')
+            if (summary) {
+              summary.textContent = `Evaluating ${current}/${total}...`
+              summary.classList.add('evaluating')
+            }
+          }
+        })
+      }
     }
   }
 

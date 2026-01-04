@@ -4324,7 +4324,8 @@
 .story-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
   margin-bottom: 0.5rem;
   gap: 0.5rem;
 }
@@ -4435,9 +4436,12 @@
 
 .story-actions {
   display: flex;
-  gap: 0.25rem;
+  flex-wrap: nowrap;
+  gap: 0.125rem;
   opacity: 0;
   transition: opacity 0.15s ease;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* Show actions on card hover or when card/buttons have focus (accessibility) */
@@ -4451,10 +4455,11 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
+  padding: 0.125rem 0.25rem;
   border-radius: var(--radius-xs);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   transition: all 0.15s ease;
+  line-height: 1;
 }
 
 .story-action-btn:hover,
@@ -5475,6 +5480,19 @@
 /* Kanban story cards - slightly more compact */
 .kanban-swimlane .story-card {
   padding: 0.75rem;
+}
+
+.kanban-swimlane .story-header {
+  margin-bottom: 0.375rem;
+}
+
+.kanban-swimlane .story-actions {
+  gap: 0;
+}
+
+.kanban-swimlane .story-action-btn {
+  padding: 0.125rem 0.1875rem;
+  font-size: 0.6875rem;
 }
 
 .kanban-swimlane .story-title {
@@ -9088,4 +9106,244 @@
 .assertion-stats-summary .recommendation.neutral {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+}
+
+/* ========================================
+   Image Attachment Styles
+   ======================================== */
+
+/* Drop zone indicator overlay */
+.image-drop-zone-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(66, 153, 225, 0.15);
+  border: 2px dashed var(--color-primary);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.image-drop-zone-indicator.hidden {
+  display: none;
+}
+
+.drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.drop-zone-icon {
+  font-size: 2rem;
+}
+
+.drop-zone-text {
+  font-size: 0.875rem;
+}
+
+/* Image attachment preview container */
+.image-attachment-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+
+.image-attachment-preview.hidden {
+  display: none;
+}
+
+/* Individual image attachment item */
+.image-attachment-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  max-width: 80px;
+}
+
+.image-attachment-item:hover {
+  border-color: var(--color-primary);
+}
+
+/* Thumbnail image */
+.image-thumbnail {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.image-thumbnail:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Filename text */
+.image-filename {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* Remove button */
+.image-remove-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-error);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.image-attachment-item:hover .image-remove-btn {
+  opacity: 1;
+}
+
+.image-remove-btn:hover {
+  background: var(--color-error-hover, #c53030);
+}
+
+/* Image Preview Modal */
+.image-preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: image-modal-fade-in 0.2s ease;
+}
+
+.image-preview-modal.hidden {
+  display: none;
+}
+
+@keyframes image-modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.image-preview-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  cursor: pointer;
+}
+
+.image-preview-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 90vw;
+  max-height: 90vh;
+  z-index: 1;
+  animation: image-modal-scale-in 0.2s ease;
+}
+
+@keyframes image-modal-scale-in {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.image-preview-close {
+  position: absolute;
+  top: -40px;
+  right: -10px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 1.5rem;
+  font-weight: normal;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.image-preview-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+}
+
+.image-preview-close:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.image-preview-img {
+  max-width: 90vw;
+  max-height: calc(90vh - 40px);
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.image-preview-filename {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
+  text-align: center;
+  max-width: 90vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

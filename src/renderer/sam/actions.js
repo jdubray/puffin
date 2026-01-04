@@ -837,6 +837,15 @@ export const setSprintPlan = (planContent) => ({
   }
 })
 
+// Iterate on the sprint plan with clarifying answers
+export const iterateSprintPlan = (clarifications) => ({
+  type: 'ITERATE_SPRINT_PLAN',
+  payload: {
+    clarifications,
+    timestamp: Date.now()
+  }
+})
+
 // Clear/close the active sprint
 export const clearSprint = () => ({
   type: 'CLEAR_SPRINT',

@@ -209,6 +209,99 @@ class PuffinApp {
   }
 
   /**
+   * Show modal for iterating on the sprint plan with clarifying answers
+   */
+  showPlanIterationModal() {
+    const sprint = this.state.activeSprint
+    if (!sprint) {
+      this.showToast('No active sprint', 'warning')
+      return
+    }
+
+    // Remove any existing modal
+    this.hidePlanIterationModal()
+
+    const modal = document.createElement('div')
+    modal.id = 'plan-iteration-modal'
+    modal.className = 'plan-iteration-modal modal-overlay'
+    modal.innerHTML = `
+      <div class="plan-iteration-content modal-content">
+        <div class="modal-header">
+          <h3>Iterate on Sprint Plan</h3>
+          <button class="modal-close-btn" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="plan-iteration-hint">
+            Review the current plan and provide clarifying answers or additional requirements.
+            Claude will generate a revised plan based on your feedback.
+          </p>
+          <div class="form-group">
+            <label for="plan-clarifications">Your clarifications and answers:</label>
+            <textarea
+              id="plan-clarifications"
+              class="plan-clarifications-input"
+              rows="8"
+              placeholder="Enter your clarifying answers, additional requirements, or questions here...
+
+Example:
+- For the authentication feature, use JWT tokens instead of sessions
+- The sidebar should be collapsible with a toggle button
+- Please include error handling for network failures"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn secondary plan-iteration-cancel">Cancel</button>
+          <button class="btn primary plan-iteration-submit">Resubmit Plan</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Event handlers
+    const closeBtn = modal.querySelector('.modal-close-btn')
+    const cancelBtn = modal.querySelector('.plan-iteration-cancel')
+    const submitBtn = modal.querySelector('.plan-iteration-submit')
+    const textarea = modal.querySelector('#plan-clarifications')
+
+    const closeModal = () => this.hidePlanIterationModal()
+
+    closeBtn.addEventListener('click', closeModal)
+    cancelBtn.addEventListener('click', closeModal)
+
+    // Close on overlay click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal()
+    })
+
+    // Submit handler
+    submitBtn.addEventListener('click', () => {
+      const clarifications = textarea.value.trim()
+      if (!clarifications) {
+        this.showToast('Please enter your clarifications before submitting', 'warning')
+        return
+      }
+
+      // Close modal and trigger plan iteration
+      closeModal()
+      this.intents.iterateSprintPlan(clarifications)
+      this.showToast('Resubmitting plan with your clarifications...', 'info')
+    })
+
+    // Focus the textarea
+    setTimeout(() => textarea.focus(), 100)
+  }
+
+  /**
+   * Hide the plan iteration modal
+   */
+  hidePlanIterationModal() {
+    const modal = document.getElementById('plan-iteration-modal')
+    if (modal) {
+      modal.remove()
+    }
+  }
+
+  /**
    * Show confirmation dialog asking if user wants to start a code review
    * @param {Object} sprint - The approved sprint with stories and plan
    */
@@ -662,7 +755,7 @@ Please provide specific file locations and line numbers where issues are found, 
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'setSprintPlan',
+      'createSprint', 'startSprintPlanning', 'approvePlan', 'setSprintPlan', 'iterateSprintPlan',
       'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'toggleCriteriaCompletion',
@@ -780,6 +873,7 @@ Please provide specific file locations and line numbers where issues are found, 
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['APPROVE_PLAN', actions.approvePlan],
           ['SET_SPRINT_PLAN', actions.setSprintPlan],
+          ['ITERATE_SPRINT_PLAN', actions.iterateSprintPlan],
           ['CLEAR_SPRINT', actions.clearSprint],
           ['CLEAR_SPRINT_WITH_DETAILS', actions.clearSprintWithDetails],
           ['SHOW_SPRINT_CLOSE_MODAL', actions.showSprintCloseModal],
@@ -1696,6 +1790,7 @@ Please provide specific file locations and line numbers where issues are found, 
     const progressSection = document.getElementById('sprint-progress-section')
     const storiesContainer = document.getElementById('sprint-stories')
     const planBtn = document.getElementById('sprint-plan-btn')
+    const iterateBtn = document.getElementById('sprint-iterate-btn')
     const approveBtn = document.getElementById('sprint-approve-btn')
 
     // No active sprint - show empty state
@@ -1707,6 +1802,7 @@ Please provide specific file locations and line numbers where issues are found, 
       if (closeBtn) closeBtn.classList.add('hidden')
       if (progressSection) progressSection.classList.add('hidden')
       if (planBtn) planBtn.classList.add('hidden')
+      if (iterateBtn) iterateBtn.classList.add('hidden')
       if (approveBtn) approveBtn.classList.add('hidden')
       if (storiesContainer) {
         storiesContainer.innerHTML = `
@@ -1859,10 +1955,21 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Update action buttons based on status
     // Plan button: visible when sprint is 'created' (ready to plan)
-    // Approve button: visible when sprint is 'planned' (Claude finished generating plan)
-    if (planBtn && approveBtn) {
-      planBtn.classList.toggle('hidden', sprint.status !== 'created')
-      approveBtn.classList.toggle('hidden', sprint.status !== 'planned')
+    // Iterate/Approve buttons: visible when sprint has stories AND is not yet approved (in-progress)
+    const hasStories = sprint.stories && sprint.stories.length > 0
+    const canPlan = sprint.status === 'created'
+    const canApprove = hasStories && sprint.status !== 'in-progress' && sprint.status !== 'implementing'
+
+    console.log('[SPRINT-BUTTONS] status:', sprint.status, 'hasStories:', hasStories, 'canPlan:', canPlan, 'canApprove:', canApprove)
+
+    if (planBtn) {
+      planBtn.classList.toggle('hidden', !canPlan)
+    }
+    if (iterateBtn) {
+      iterateBtn.classList.toggle('hidden', !canApprove)
+    }
+    if (approveBtn) {
+      approveBtn.classList.toggle('hidden', !canApprove)
     }
 
     // Bind event handlers (only once)
@@ -1872,7 +1979,18 @@ Please provide specific file locations and line numbers where issues are found, 
       // Close button - shows modal for title/description capture
       if (closeBtn) {
         closeBtn.addEventListener('click', () => {
-          this.intents.showModal('sprint-close', { sprint: this.state.activeSprint })
+          const sprint = this.state.activeSprint
+          const userStories = this.state.userStories || []
+
+          // Pre-fetch git status and commit message asynchronously (non-blocking)
+          // The modal will display the results when ready
+          if (this.modalManager) {
+            this.modalManager.preCheckGitStatus()
+            this.modalManager.preGenerateSprintCommitMessage(sprint, userStories)
+          }
+
+          // Show modal immediately - data will be ready or loading
+          this.intents.showModal('sprint-close', { sprint })
         })
       }
 
@@ -1883,21 +2001,33 @@ Please provide specific file locations and line numbers where issues are found, 
         })
       }
 
+      // Iterate button - shows modal to refine the plan with clarifications
+      if (iterateBtn) {
+        iterateBtn.addEventListener('click', () => {
+          this.showPlanIterationModal()
+        })
+      }
+
       // Approve button
       if (approveBtn) {
         approveBtn.addEventListener('click', async () => {
-          // First approve the plan (updates status)
-          this.intents.approvePlan()
-
-          // Get the current sprint state
+          // Get the current sprint state before approving
           const sprint = this.state.activeSprint
           if (!sprint || !sprint.stories || sprint.stories.length === 0) {
-            this.showToast('Plan approved! Ready for implementation.', 'success')
+            this.showToast('No stories in sprint to approve.', 'warning')
             return
           }
 
           // Log plan state for debugging
           console.log('[SPRINT] Approve clicked - plan:', sprint.plan ? `${sprint.plan.length} chars` : 'null')
+
+          // Warn if no plan exists (user can still proceed)
+          if (!sprint.plan) {
+            console.log('[SPRINT] No plan captured - assertions will be generated without implementation context')
+          }
+
+          // Approve the plan (updates status to in-progress)
+          this.intents.approvePlan()
 
           // Show assertion generation modal
           this.showAssertionGenerationModal()

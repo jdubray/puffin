@@ -8,15 +8,45 @@
 /**
  * Trigger inspection assertion evaluation for a completed story
  * @param {string} storyId - The story ID to evaluate
+ * @param {Function} showToast - Optional toast function for user feedback
  * @returns {Promise<Object>} Evaluation results
  */
-async function triggerAssertionEvaluation(storyId) {
+async function triggerAssertionEvaluation(storyId, showToast = null) {
   if (!window.puffin?.state?.evaluateStoryAssertions) {
     console.log('[ASSERTION] Evaluation API not available')
     return null
   }
 
   console.log('[ASSERTION] Triggering evaluation for story:', storyId)
+
+  // First check if this story has any assertions - skip evaluation if none
+  let story = null
+  let storyTitle = ''
+  try {
+    const storyResult = await window.puffin.state.getUserStories()
+    if (storyResult.success) {
+      story = storyResult.stories.find(s => s.id === storyId)
+      storyTitle = story?.title?.substring(0, 30) || 'Story'
+      console.log('[ASSERTION] Story found:', story?.title)
+      console.log('[ASSERTION] Has inspectionAssertions:', story?.inspectionAssertions?.length || 0)
+
+      // Skip evaluation if no assertions defined
+      if (!story?.inspectionAssertions || story.inspectionAssertions.length === 0) {
+        console.log('[ASSERTION] Skipping evaluation - no assertions defined for this story')
+        if (showToast) {
+          showToast(`Story completed! No inspection assertions to verify.`, 'info')
+        }
+        return null
+      }
+    }
+  } catch (e) {
+    console.error('[ASSERTION] Error checking story assertions:', e)
+  }
+
+  // Show evaluation starting toast
+  if (showToast && story?.inspectionAssertions?.length > 0) {
+    showToast(`Verifying ${story.inspectionAssertions.length} assertion(s) for "${storyTitle}"...`, 'info')
+  }
 
   try {
     const result = await window.puffin.state.evaluateStoryAssertions(storyId)
@@ -31,25 +61,31 @@ async function triggerAssertionEvaluation(storyId) {
         error: summary.error
       })
 
-      // Log a summary for the user
-      if (summary.total === 0) {
-        console.log('[ASSERTION] No assertions defined for this story')
-      } else if (summary.failed === 0 && summary.error === 0) {
-        console.log('[ASSERTION] All assertions passed!')
-      } else {
-        console.warn('[ASSERTION] Some assertions failed or errored:', {
-          failed: summary.failed,
-          error: summary.error
-        })
+      // Show toast with results
+      if (showToast) {
+        if (summary.total === 0) {
+          showToast(`No assertions to verify for "${storyTitle}"`, 'info')
+        } else if (summary.failed === 0 && summary.error === 0) {
+          showToast(`All ${summary.passed} assertion(s) passed for "${storyTitle}"!`, 'success')
+        } else {
+          const failCount = summary.failed + summary.error
+          showToast(`${failCount} of ${summary.total} assertion(s) failed for "${storyTitle}"`, 'warning')
+        }
       }
 
       return result.results
     } else {
       console.error('[ASSERTION] Evaluation failed:', result.error)
+      if (showToast) {
+        showToast(`Assertion evaluation failed: ${result.error}`, 'error')
+      }
       return null
     }
   } catch (e) {
     console.error('[ASSERTION] Evaluation error:', e)
+    if (showToast) {
+      showToast(`Assertion evaluation error: ${e.message}`, 'error')
+    }
     throw e
   }
 }
@@ -88,7 +124,7 @@ export class StatePersistence {
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
       'ADD_STORIES_TO_BACKLOG',
       // Sprint actions
-      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
+      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN', 'ITERATE_SPRINT_PLAN',
       'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
       'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
@@ -226,7 +262,7 @@ export class StatePersistence {
 
                 // Trigger assertion evaluation when story is marked complete
                 if (status === 'completed') {
-                  triggerAssertionEvaluation(storyId).catch(e => {
+                  triggerAssertionEvaluation(storyId, this.showToast).catch(e => {
                     console.error('[PERSIST-DEBUG] Assertion evaluation failed:', storyId, e)
                   })
                 }
@@ -250,12 +286,21 @@ export class StatePersistence {
           const { storyId } = action.payload || {}
           const storyProgress = state.activeSprint?.storyProgress?.[storyId]
 
+          console.log('[PERSIST-DEBUG] TOGGLE_CRITERIA_COMPLETION:', {
+            storyId,
+            hasStoryProgress: !!storyProgress,
+            progressStatus: storyProgress?.status,
+            criteriaProgress: storyProgress?.criteriaProgress
+          })
+
           // First update the sprint
           await window.puffin.state.updateActiveSprint(state.activeSprint)
 
           // Then atomically sync if story is now complete or was uncompleted
           if (storyId && storyProgress) {
             const status = storyProgress.status === 'completed' ? 'completed' : 'in-progress'
+            console.log('[PERSIST-DEBUG] Story status for sync:', storyId, '->', status)
+
             try {
               const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)
               if (syncResult.success) {
@@ -263,7 +308,8 @@ export class StatePersistence {
 
                 // Trigger assertion evaluation when story auto-completes from criteria
                 if (status === 'completed') {
-                  triggerAssertionEvaluation(storyId).catch(e => {
+                  console.log('[PERSIST-DEBUG] Triggering assertion evaluation for completed story:', storyId)
+                  triggerAssertionEvaluation(storyId, this.showToast).catch(e => {
                     console.error('[PERSIST-DEBUG] Assertion evaluation failed:', storyId, e)
                   })
                 }
@@ -276,6 +322,8 @@ export class StatePersistence {
                 console.log('[PERSIST-DEBUG] Fallback story sync after criteria toggle:', storyId, story.status)
               }
             }
+          } else {
+            console.log('[PERSIST-DEBUG] Skipping sync - storyId:', storyId, 'storyProgress exists:', !!storyProgress)
           }
         }
         // For other sprint actions, use regular update

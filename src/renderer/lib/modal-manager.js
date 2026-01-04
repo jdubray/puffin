@@ -11,6 +11,250 @@ export class ModalManager {
     this.showToast = showToast
     this.showCodeReviewConfirmation = showCodeReviewConfirmation
     this._currentModalRender = null
+    // Transient state for pre-generated commit message
+    this._pendingCommitMessage = null
+    this._commitMessageGenerating = false
+    // Transient state for commit option
+    this._sprintCommitEnabled = true // Default checked
+    this._gitStatus = null // Cached git status { isRepo, hasChanges, branch, isMainBranch }
+    this._gitStatusLoading = false
+    // Transient state for editable commit message
+    this._userEditedCommitMessage = null // User's edited message (persists across toggle)
+    this._hasUserEditedMessage = false // Track if user has manually edited
+  }
+
+  /**
+   * Check git status for sprint close modal.
+   * Call this before showing the sprint-close modal to pre-fetch git state.
+   *
+   * @returns {Promise<Object>} Git status info
+   */
+  async preCheckGitStatus() {
+    this._gitStatusLoading = true
+    this._gitStatus = null
+
+    try {
+      // Check if git is available and this is a repo
+      const [availableResult, repoResult] = await Promise.all([
+        window.puffin.git.isAvailable(),
+        window.puffin.git.isRepository()
+      ])
+
+      const isAvailable = availableResult.success && availableResult.available
+      const isRepo = repoResult.success && repoResult.isRepo
+
+      if (!isAvailable || !isRepo) {
+        this._gitStatus = {
+          isRepo: false,
+          hasChanges: false,
+          branch: null,
+          isMainBranch: false
+        }
+        return this._gitStatus
+      }
+
+      // Get full status
+      const statusResult = await window.puffin.git.getStatus()
+
+      if (!statusResult.success) {
+        this._gitStatus = {
+          isRepo: true,
+          hasChanges: false,
+          branch: null,
+          isMainBranch: false,
+          error: statusResult.error
+        }
+        return this._gitStatus
+      }
+
+      const status = statusResult.status
+      const branch = status.branch || ''
+      const isMainBranch = /^(main|master)$/i.test(branch)
+
+      // Check if there are any changes
+      const hasChanges = status.hasUncommittedChanges ||
+        (status.files?.staged?.length > 0) ||
+        (status.files?.unstaged?.length > 0) ||
+        (status.files?.untracked?.length > 0)
+
+      this._gitStatus = {
+        isRepo: true,
+        hasChanges,
+        branch,
+        isMainBranch,
+        stagedCount: status.files?.staged?.length || 0,
+        unstagedCount: status.files?.unstaged?.length || 0,
+        untrackedCount: status.files?.untracked?.length || 0
+      }
+
+      return this._gitStatus
+    } catch (error) {
+      console.error('[ModalManager] Git status check failed:', error)
+      this._gitStatus = {
+        isRepo: false,
+        hasChanges: false,
+        branch: null,
+        isMainBranch: false,
+        error: error.message
+      }
+      return this._gitStatus
+    } finally {
+      this._gitStatusLoading = false
+    }
+  }
+
+  /**
+   * Generate a commit message for a sprint before the close modal opens.
+   * Call this before showing the sprint-close modal to pre-generate the message.
+   *
+   * @param {Object} sprint - The sprint to generate a message for
+   * @param {Object[]} userStories - Full user story data for status lookup
+   * @returns {Promise<string>} The generated commit message
+   */
+  async preGenerateSprintCommitMessage(sprint, userStories = []) {
+    if (!sprint) return ''
+
+    this._commitMessageGenerating = true
+    this._pendingCommitMessage = null
+
+    try {
+      const message = this.generateSprintCommitMessage(sprint, userStories)
+      this._pendingCommitMessage = message
+      return message
+    } finally {
+      this._commitMessageGenerating = false
+    }
+  }
+
+  /**
+   * Generate a conventional commit message summarizing sprint completion.
+   *
+   * @param {Object} sprint - The sprint to generate a message for
+   * @param {Object[]} userStories - Full user story data for status lookup
+   * @returns {string} The generated commit message
+   */
+  generateSprintCommitMessage(sprint, userStories = []) {
+    if (!sprint) return ''
+
+    const storyCount = sprint.stories?.length || 0
+    const storyProgress = sprint.storyProgress || {}
+
+    // Count completed stories - check multiple sources
+    const completedStories = []
+    const incompleteStories = []
+
+    for (const sprintStory of sprint.stories || []) {
+      const progress = storyProgress[sprintStory.id]
+      const backlogStory = userStories.find(s => s.id === sprintStory.id)
+
+      const isCompleted =
+        progress?.status === 'completed' ||
+        backlogStory?.status === 'completed' ||
+        sprintStory.status === 'completed'
+
+      if (isCompleted) {
+        completedStories.push(sprintStory.title || backlogStory?.title || 'Untitled')
+      } else {
+        incompleteStories.push(sprintStory.title || backlogStory?.title || 'Untitled')
+      }
+    }
+
+    const completedCount = completedStories.length
+
+    // Determine primary scope based on story titles
+    let scope = 'sprint'
+    const allTitles = completedStories.join(' ').toLowerCase()
+    if (allTitles.includes('ui') || allTitles.includes('component') || allTitles.includes('display')) {
+      scope = 'ui'
+    } else if (allTitles.includes('api') || allTitles.includes('backend') || allTitles.includes('handler')) {
+      scope = 'backend'
+    } else if (allTitles.includes('test') || allTitles.includes('spec')) {
+      scope = 'test'
+    } else if (allTitles.includes('fix') || allTitles.includes('bug')) {
+      scope = 'fix'
+    }
+
+    // Build commit message
+    const completionRatio = storyCount > 0 ? `${completedCount}/${storyCount}` : '0'
+    const statusWord = completedCount === storyCount ? 'complete' : 'close'
+
+    // Subject line
+    let subject = `feat(${scope}): ${statusWord} sprint with ${completionRatio} stories`
+    if (sprint.title) {
+      subject = `feat(${scope}): ${statusWord} "${sprint.title}" (${completionRatio} stories)`
+    }
+
+    // Build body with story details
+    const bodyLines = []
+
+    if (completedStories.length > 0) {
+      bodyLines.push('Completed:')
+      completedStories.forEach(title => {
+        bodyLines.push(`- ${title}`)
+      })
+    }
+
+    if (incompleteStories.length > 0) {
+      if (bodyLines.length > 0) bodyLines.push('')
+      bodyLines.push('Not completed:')
+      incompleteStories.forEach(title => {
+        bodyLines.push(`- ${title}`)
+      })
+    }
+
+    // Combine subject and body
+    if (bodyLines.length > 0) {
+      return `${subject}\n\n${bodyLines.join('\n')}`
+    }
+
+    return subject
+  }
+
+  /**
+   * Execute a git commit for the sprint close.
+   * Stages all changes and commits with the provided message.
+   *
+   * @param {string} message - The commit message
+   * @returns {Promise<Object>} Result with success, hash, or error
+   */
+  async executeSprintCommit(message) {
+    if (!message || !message.trim()) {
+      return { success: false, error: 'No commit message provided' }
+    }
+
+    try {
+      // Check if git is available
+      if (!window.puffin?.git) {
+        return { success: false, error: 'Git integration not available' }
+      }
+
+      // Stage all changes (using '.' to stage everything including untracked)
+      console.log('[MODAL] Staging all changes for sprint commit...')
+      const stageResult = await window.puffin.git.stageFiles(['.'])
+      if (!stageResult?.success && stageResult?.error) {
+        console.warn('[MODAL] Stage files result:', stageResult)
+        // Continue anyway - files might already be staged
+      }
+
+      // Execute the commit
+      console.log('[MODAL] Executing sprint commit...')
+      const commitResult = await window.puffin.git.commit(message.trim())
+
+      if (commitResult?.success) {
+        console.log('[MODAL] Sprint commit successful:', commitResult.hash)
+        return {
+          success: true,
+          hash: commitResult.hash || commitResult.commitHash
+        }
+      } else {
+        const errorMsg = commitResult?.error || 'Commit failed'
+        console.error('[MODAL] Sprint commit failed:', errorMsg)
+        return { success: false, error: errorMsg }
+      }
+    } catch (error) {
+      console.error('[MODAL] Sprint commit error:', error)
+      return { success: false, error: error.message || 'Unknown error during commit' }
+    }
   }
 
   /**
@@ -110,6 +354,7 @@ export class ModalManager {
     title.textContent = 'Close Sprint'
 
     const sprint = data?.sprint || state.activeSprint
+    const userStories = state.userStories || []
     const storyCount = sprint?.stories?.length || 0
     const completedCount = Object.values(sprint?.storyProgress || {})
       .filter(p => p.status === 'completed').length
@@ -117,6 +362,101 @@ export class ModalManager {
     // Generate default title from date
     const now = new Date()
     const defaultTitle = `Sprint ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+
+    // Get commit message - prefer user edits, then pre-generated, then generate now
+    let commitMessage
+    const isGenerating = this._commitMessageGenerating
+
+    if (this._hasUserEditedMessage && this._userEditedCommitMessage !== null) {
+      // Use user's edited message (persists across toggle)
+      commitMessage = this._userEditedCommitMessage
+    } else if (this._pendingCommitMessage) {
+      // Use pre-generated message
+      commitMessage = this._pendingCommitMessage
+    } else if (!isGenerating) {
+      // Generate synchronously if not pre-generated
+      commitMessage = this.generateSprintCommitMessage(sprint, userStories)
+    }
+
+    // Get git status (pre-fetched or defaults)
+    const gitStatus = this._gitStatus || { isRepo: false, hasChanges: false, branch: null, isMainBranch: false }
+    const gitStatusLoading = this._gitStatusLoading
+    const showGitSection = gitStatus.isRepo
+    const canCommit = gitStatus.isRepo && gitStatus.hasChanges
+    const commitEnabled = this._sprintCommitEnabled && canCommit
+
+    // Build git commit section HTML
+    let gitSectionHtml = ''
+    if (gitStatusLoading) {
+      gitSectionHtml = `
+        <div class="form-group sprint-git-section">
+          <div class="git-status-loading">
+            <span class="commit-spinner"></span>
+            Checking git status...
+          </div>
+        </div>
+      `
+    } else if (showGitSection) {
+      const branchWarningHtml = gitStatus.isMainBranch ? `
+        <span class="branch-warning-badge" title="You are on the ${gitStatus.branch} branch">
+          <span class="warning-icon">⚠️</span>
+          On ${gitStatus.branch}
+        </span>
+      ` : ''
+
+      const noChangesHtml = !gitStatus.hasChanges ? `
+        <span class="no-changes-badge">No changes to commit</span>
+      ` : ''
+
+      const changesSummary = gitStatus.hasChanges ? `
+        <span class="changes-summary">
+          ${gitStatus.stagedCount > 0 ? `${gitStatus.stagedCount} staged` : ''}
+          ${gitStatus.stagedCount > 0 && (gitStatus.unstagedCount > 0 || gitStatus.untrackedCount > 0) ? ', ' : ''}
+          ${gitStatus.unstagedCount > 0 ? `${gitStatus.unstagedCount} modified` : ''}
+          ${gitStatus.unstagedCount > 0 && gitStatus.untrackedCount > 0 ? ', ' : ''}
+          ${gitStatus.untrackedCount > 0 ? `${gitStatus.untrackedCount} untracked` : ''}
+        </span>
+      ` : ''
+
+      gitSectionHtml = `
+        <div class="form-group sprint-git-section">
+          <div class="git-commit-header">
+            <label class="checkbox-label ${!canCommit ? 'disabled' : ''}">
+              <input type="checkbox"
+                     id="sprint-commit-checkbox"
+                     ${commitEnabled ? 'checked' : ''}
+                     ${!canCommit ? 'disabled' : ''}>
+              <span class="checkbox-text">Commit sprint changes</span>
+            </label>
+            ${branchWarningHtml}
+            ${noChangesHtml}
+            ${changesSummary}
+          </div>
+
+          <div class="commit-message-area ${!commitEnabled ? 'hidden' : ''}" id="commit-message-container">
+            <div class="commit-message-header">
+              <label for="sprint-commit-message">Commit message:</label>
+              <button type="button" id="copy-commit-btn" class="btn-icon" title="Copy to clipboard">
+                <span class="copy-icon">📋</span>
+              </button>
+            </div>
+            <div class="commit-message-container">
+              ${isGenerating ? `
+                <div class="commit-generating">
+                  <span class="commit-spinner"></span>
+                  Generating commit message...
+                </div>
+              ` : `
+                <textarea id="sprint-commit-message"
+                          class="commit-message-input"
+                          rows="6"
+                          placeholder="Commit message...">${this.escapeHtml(commitMessage || '')}</textarea>
+              `}
+            </div>
+          </div>
+        </div>
+      `
+    }
 
     content.innerHTML = `
       <div class="sprint-close-content">
@@ -147,6 +487,8 @@ export class ModalManager {
                     maxlength="500"></textarea>
           <small class="form-hint">Optional notes about the sprint outcome</small>
         </div>
+
+        ${gitSectionHtml}
       </div>
     `
 
@@ -155,14 +497,62 @@ export class ModalManager {
       <button class="btn primary" id="sprint-close-confirm-btn">Close Sprint</button>
     `
 
+    // Commit message textarea - track user edits
+    const commitMessageTextarea = document.getElementById('sprint-commit-message')
+    if (commitMessageTextarea) {
+      commitMessageTextarea.addEventListener('input', (e) => {
+        // Mark that user has edited and save their changes
+        this._hasUserEditedMessage = true
+        this._userEditedCommitMessage = e.target.value
+      })
+    }
+
+    // Commit checkbox toggle handler
+    const commitCheckbox = document.getElementById('sprint-commit-checkbox')
+    const commitMessageContainer = document.getElementById('commit-message-container')
+    if (commitCheckbox && commitMessageContainer) {
+      commitCheckbox.addEventListener('change', (e) => {
+        // Save current message before toggling (preserves edits)
+        const messageTextarea = document.getElementById('sprint-commit-message')
+        if (messageTextarea && messageTextarea.value) {
+          this._userEditedCommitMessage = messageTextarea.value
+          // Only mark as user-edited if content differs from auto-generated
+          if (messageTextarea.value !== this._pendingCommitMessage) {
+            this._hasUserEditedMessage = true
+          }
+        }
+
+        this._sprintCommitEnabled = e.target.checked
+        commitMessageContainer.classList.toggle('hidden', !e.target.checked)
+      })
+    }
+
+    // Copy button handler
+    document.getElementById('copy-commit-btn')?.addEventListener('click', () => {
+      const messageEl = document.getElementById('sprint-commit-message')
+      const message = messageEl?.value || messageEl?.textContent
+      if (message) {
+        navigator.clipboard.writeText(message).then(() => {
+          this.showToast('Commit message copied to clipboard', 'success')
+        }).catch(() => {
+          this.showToast('Failed to copy to clipboard', 'error')
+        })
+      }
+    })
+
     // Event listeners
     document.getElementById('sprint-close-cancel-btn').addEventListener('click', () => {
+      // Clear all transient state on cancel
+      this._pendingCommitMessage = null
+      this._userEditedCommitMessage = null
+      this._hasUserEditedMessage = false
       this.intents.hideModal()
     })
 
-    document.getElementById('sprint-close-confirm-btn').addEventListener('click', () => {
+    document.getElementById('sprint-close-confirm-btn').addEventListener('click', async () => {
       const titleInput = document.getElementById('sprint-close-title')
       const descriptionInput = document.getElementById('sprint-close-description')
+      const confirmBtn = document.getElementById('sprint-close-confirm-btn')
 
       const sprintTitle = titleInput?.value?.trim()
       const sprintDescription = descriptionInput?.value?.trim() || ''
@@ -173,19 +563,60 @@ export class ModalManager {
         return
       }
 
+      // Check if commit is enabled
+      const commitCheckbox = document.getElementById('sprint-commit-checkbox')
+      const commitMessageTextarea = document.getElementById('sprint-commit-message')
+      const shouldCommit = commitCheckbox?.checked && !commitCheckbox?.disabled
+      const commitMessage = commitMessageTextarea?.value?.trim()
+
       // Save sprint reference before closing
       const closedSprint = { ...sprint, title: sprintTitle, description: sprintDescription }
 
-      // Call clearSprint with title and description
-      this.intents.clearSprintWithDetails(sprintTitle, sprintDescription)
-      this.intents.hideModal()
-      this.showToast('Sprint closed successfully', 'success')
+      // Disable button and show loading state
+      if (confirmBtn) {
+        confirmBtn.disabled = true
+        confirmBtn.textContent = shouldCommit ? 'Closing & Committing...' : 'Closing...'
+      }
 
-      // Ask if user wants to trigger a code review after closing
-      if (this.showCodeReviewConfirmation) {
-        setTimeout(() => {
-          this.showCodeReviewConfirmation(closedSprint)
-        }, 500) // Small delay to let modal close
+      try {
+        // Clear all transient commit state
+        this._pendingCommitMessage = null
+        this._userEditedCommitMessage = null
+        this._hasUserEditedMessage = false
+
+        // Call clearSprint with title and description (archive sprint data)
+        this.intents.clearSprintWithDetails(sprintTitle, sprintDescription)
+
+        // Execute git commit if enabled
+        if (shouldCommit && commitMessage) {
+          const commitResult = await this.executeSprintCommit(commitMessage)
+
+          if (commitResult.success) {
+            this.intents.hideModal()
+            this.showToast(`Sprint closed and committed: ${commitResult.hash?.substring(0, 7) || 'success'}`, 'success')
+          } else {
+            // Sprint was archived but commit failed
+            this.intents.hideModal()
+            this.showToast(`Sprint closed but commit failed: ${commitResult.error}`, 'warning')
+            console.error('[MODAL] Sprint commit failed:', commitResult.error)
+          }
+        } else {
+          // No commit requested
+          this.intents.hideModal()
+          this.showToast('Sprint closed successfully', 'success')
+        }
+
+        // Ask if user wants to trigger a code review after closing
+        if (this.showCodeReviewConfirmation) {
+          setTimeout(() => {
+            this.showCodeReviewConfirmation(closedSprint)
+          }, 500) // Small delay to let modal close
+        }
+      } catch (error) {
+        // Handle unexpected errors
+        console.error('[MODAL] Sprint close error:', error)
+        this.intents.hideModal()
+        this.showToast(`Sprint closed but an error occurred: ${error.message}`, 'warning')
       }
     })
 

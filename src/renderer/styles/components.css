@@ -3725,6 +3725,225 @@
   min-height: 80px;
 }
 
+/* Sprint Close - Commit Message Section */
+.sprint-commit-section {
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.sprint-commit-section label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sprint-commit-section .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sprint-commit-section .btn-icon:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+}
+
+.sprint-commit-section .copy-icon {
+  font-size: 0.75rem;
+}
+
+.commit-message-container {
+  margin-top: 0.5rem;
+}
+
+.commit-message-preview {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.commit-generating {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.commit-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: commit-spin 0.8s linear infinite;
+}
+
+@keyframes commit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sprint Close - Git Commit Section */
+.sprint-git-section {
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.git-status-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.git-commit-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.git-commit-header .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.git-commit-header .checkbox-label.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.git-commit-header .checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: inherit;
+}
+
+.git-commit-header .checkbox-text {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.branch-warning-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(255, 193, 7, 0.15);
+  border: 1px solid rgba(255, 193, 7, 0.4);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: #ffc107;
+  font-weight: 500;
+}
+
+.branch-warning-badge .warning-icon {
+  font-size: 0.75rem;
+}
+
+.no-changes-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.changes-summary {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.commit-message-area {
+  margin-top: 0.75rem;
+  transition: opacity 0.2s ease, max-height 0.3s ease;
+}
+
+.commit-message-area.hidden {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  margin-top: 0;
+}
+
+.commit-message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.commit-message-header label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.commit-message-input {
+  width: 100%;
+  padding: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+  min-height: 120px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.commit-message-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.15);
+}
+
+.commit-message-input::placeholder {
+  color: var(--text-muted);
+}
+
 /* Sprint Stories Modal */
 .sprint-stories-modal {
   display: flex;
@@ -8596,6 +8815,105 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ===== Plan Iteration Modal ===== */
+.plan-iteration-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(2px);
+}
+
+.plan-iteration-content {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
+}
+
+.plan-iteration-content .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.plan-iteration-content .modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  color: var(--text-primary);
+}
+
+.plan-iteration-content .modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.plan-iteration-content .modal-close-btn:hover {
+  color: var(--text-primary);
+}
+
+.plan-iteration-content .modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.plan-iteration-hint {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.plan-clarifications-input {
+  width: 100%;
+  min-height: 200px;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.plan-clarifications-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-shadow);
+}
+
+.plan-clarifications-input::placeholder {
+  color: var(--text-muted);
+}
+
+.plan-iteration-content .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color);
 }
 
 /* ===== Code Review Confirmation Modal ===== */

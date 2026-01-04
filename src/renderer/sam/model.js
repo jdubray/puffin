@@ -1966,6 +1966,8 @@ export const startSprintPlanningAcceptor = model => proposal => {
 
     const planningPrompt = `## Sprint Planning Request
 
+**IMPORTANT: This is a PLANNING ONLY request. Do NOT make any code changes, create files, or modify the codebase. Only analyze and produce a written plan.**
+
 Please create a detailed implementation plan for the following user stories:
 
 ${storyDescriptions}
@@ -1980,6 +1982,9 @@ ${storyDescriptions}
 4. **File Changes**: Identify the main files that will need to be created or modified
 5. **Risk Assessment**: Note any potential challenges or risks
 6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
+7. **Open Questions**: List any clarifications needed before implementation
+
+**Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
 
 Please provide a comprehensive plan that I can review before starting implementation.`
 
@@ -2208,6 +2213,115 @@ export const setSprintPlanAcceptor = model => proposal => {
 export const clearPendingSprintPlanningAcceptor = model => proposal => {
   if (proposal?.type === 'CLEAR_PENDING_SPRINT_PLANNING') {
     model._pendingSprintPlanning = null
+  }
+}
+
+// Iterate on the sprint plan with clarifying answers
+export const iterateSprintPlanAcceptor = model => proposal => {
+  if (proposal?.type === 'ITERATE_SPRINT_PLAN') {
+    if (!model.activeSprint) {
+      console.warn('[SPRINT] Cannot iterate on plan - no active sprint')
+      return
+    }
+
+    const sprint = model.activeSprint
+    const { clarifications } = proposal.payload
+
+    // Build iteration prompt with previous plan and clarifications
+    const stories = sprint.stories
+    const storyDescriptions = stories.map((story, i) => {
+      let desc = `### Story ${i + 1}: ${story.title}\n`
+      if (story.description) {
+        desc += `${story.description}\n`
+      }
+      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
+        desc += `\n**Acceptance Criteria:**\n`
+        desc += story.acceptanceCriteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n')
+      }
+      return desc
+    }).join('\n\n')
+
+    const iterationPrompt = `## Sprint Plan Iteration Request
+
+**IMPORTANT: This is a PLANNING ONLY request. Do NOT make any code changes, create files, or modify the codebase. Only analyze and produce a written plan.**
+
+The previous plan needs refinement based on the following clarifications and additional requirements:
+
+### Developer Clarifications:
+${clarifications}
+
+---
+
+Please create an updated implementation plan for these user stories:
+
+${storyDescriptions}
+
+---
+
+**Planning Requirements:**
+
+1. **Architecture Analysis**: Analyze how these stories fit together and identify shared components or dependencies
+2. **Implementation Order**: Recommend the optimal order to implement these stories
+3. **Technical Approach**: For each story, outline the key technical decisions and approach
+4. **File Changes**: Identify the main files that will need to be created or modified
+5. **Risk Assessment**: Note any potential challenges or risks
+6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
+7. **Open Questions**: List any remaining clarifications needed
+
+**Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
+
+Please incorporate the clarifications above and provide a comprehensive revised plan.`
+
+    // Update sprint status back to planning
+    sprint.status = 'planning'
+
+    // Get the current branch
+    const branchId = model.history.activeBranch || 'specifications'
+
+    // Ensure branch exists
+    if (!model.history.branches[branchId]) {
+      model.history.branches[branchId] = {
+        id: branchId,
+        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
+        prompts: []
+      }
+    }
+
+    // Create prompt entry for the iteration
+    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+    const prompt = {
+      id: promptId,
+      content: iterationPrompt,
+      parentId: sprint.promptId || null,  // Link to previous plan prompt
+      timestamp: Date.now(),
+      response: null,
+      storyIds: stories.map(s => s.id),
+      isIteration: true
+    }
+
+    // Add to branch
+    model.history.branches[branchId].prompts.push(prompt)
+
+    // Set as active prompt
+    model.history.activePromptId = promptId
+
+    // Set pending prompt for streaming
+    model.pendingPromptId = promptId
+    model.streamingResponse = ''
+
+    // Update sprint with prompt reference
+    sprint.promptId = promptId
+
+    // Store for IPC submission
+    model._pendingSprintPlanning = {
+      promptId,
+      promptContent: iterationPrompt,
+      branchId,
+      storyIds: stories.map(s => s.id),
+      isIteration: true
+    }
+
+    console.log('[SPRINT] Plan iteration started with clarifications, new promptId:', promptId)
   }
 }
 
@@ -3069,6 +3183,7 @@ export const acceptors = [
   clearSprintWithDetailsAcceptor,
   approvePlanAcceptor,
   setSprintPlanAcceptor,
+  iterateSprintPlanAcceptor,
   clearPendingSprintPlanningAcceptor,
   startSprintStoryImplementationAcceptor,
   clearPendingStoryImplementationAcceptor,

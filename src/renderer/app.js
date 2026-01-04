@@ -390,8 +390,8 @@ class PuffinApp {
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearSprintWithDetails',
-      'showSprintCloseModal', 'clearPendingSprintPlanning',
+      'createSprint', 'startSprintPlanning', 'approvePlan', 'setSprintPlan',
+      'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'clearSprintError', 'toggleCriteriaCompletion',
       // Stuck detection actions
@@ -507,6 +507,7 @@ class PuffinApp {
           ['CREATE_SPRINT', actions.createSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['APPROVE_PLAN', actions.approvePlan],
+          ['SET_SPRINT_PLAN', actions.setSprintPlan],
           ['CLEAR_SPRINT', actions.clearSprint],
           ['CLEAR_SPRINT_WITH_DETAILS', actions.clearSprintWithDetails],
           ['SHOW_SPRINT_CLOSE_MODAL', actions.showSprintCloseModal],
@@ -1039,6 +1040,17 @@ class PuffinApp {
         this.intents.completeResponse(response, filesModified)
       } catch (err) {
         console.error('[SAM-ERROR] completeResponse failed:', err)
+      }
+
+      // Capture sprint plan content if we're in planning mode
+      try {
+        const currentState = this.sam.getState()
+        if (currentState?.activeSprint?.status === 'planning' && response?.content) {
+          console.log('[SPRINT] Capturing plan content from Claude response, length:', response.content.length)
+          this.intents.setSprintPlan(response.content)
+        }
+      } catch (err) {
+        console.error('[SAM-ERROR] setSprintPlan failed:', err)
       }
 
       // Reset stuck detection when response completes successfully

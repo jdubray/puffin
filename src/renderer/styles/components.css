@@ -3658,6 +3658,80 @@
   padding: 2rem;
 }
 
+/* Sprint Story Assertion Status Badges */
+.assertion-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-right: 0.25rem;
+  flex-shrink: 0;
+}
+
+.assertion-status-badge.passed {
+  background-color: var(--color-success-bg, #dcfce7);
+  color: var(--color-success, #16a34a);
+}
+
+.assertion-status-badge.failed {
+  background-color: var(--color-error-bg, #fef2f2);
+  color: var(--color-error, #dc2626);
+}
+
+.assertion-status-badge.partial {
+  background-color: var(--color-warning-bg, #fef3c7);
+  color: var(--color-warning, #d97706);
+}
+
+.assertion-status-badge.not-evaluated {
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.assertion-icon {
+  line-height: 1;
+}
+
+/* Sprint Story Assertion Summary */
+.sprint-story-assertions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color-light, var(--border-color));
+}
+
+.sprint-story-assertions .assertions-label {
+  color: var(--text-secondary);
+}
+
+.sprint-story-assertions .assertions-status {
+  font-weight: 500;
+}
+
+.sprint-story-assertions .assertions-status.passed {
+  color: var(--color-success, #16a34a);
+}
+
+.sprint-story-assertions .assertions-status.failed {
+  color: var(--color-error, #dc2626);
+}
+
+.sprint-story-assertions .assertions-status.partial {
+  color: var(--color-warning, #d97706);
+}
+
+.sprint-story-assertions .assertions-status.not-evaluated {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* Form styling improvements for modals */
 .form-group .required {
   color: var(--color-error);
@@ -4016,6 +4090,746 @@
   color: var(--success-color);
 }
 
+/* Inspection Assertions Styles */
+.story-assertions {
+  margin-top: 0.5rem;
+  cursor: pointer;
+  border-top: 1px dashed var(--border-color);
+  padding-top: 0.5rem;
+}
+
+.assertions-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.assertions-count {
+  font-size: 0.75rem;
+  color: var(--accent-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.assertions-count::before {
+  content: '▶';
+  font-size: 0.5rem;
+  transition: transform 0.15s ease;
+}
+
+.assertions-list:not(.collapsed) + .assertions-header .assertions-count::before,
+.story-assertions:has(.assertions-list:not(.collapsed)) .assertions-count::before {
+  transform: rotate(90deg);
+}
+
+.assertions-summary {
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  font-weight: 500;
+}
+
+.assertions-summary.assertions-passed {
+  background: var(--success-bg, rgba(46, 160, 67, 0.15));
+  color: var(--success-color);
+}
+
+.assertions-summary.assertions-failed {
+  background: var(--error-bg, rgba(248, 81, 73, 0.15));
+  color: var(--error-color);
+}
+
+.assertions-list {
+  list-style: none;
+  margin: 0.5rem 0 0 0;
+  padding: 0;
+}
+
+.assertions-list.collapsed {
+  display: none;
+}
+
+.assertion-item.assertion-passed {
+  border-left: 2px solid var(--success-color);
+}
+
+.assertion-item.assertion-failed {
+  border-left: 2px solid var(--error-color);
+}
+
+.assertion-item.assertion-error {
+  border-left: 2px solid var(--warning-color);
+}
+
+.assertion-icon {
+  width: 1rem;
+  height: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.625rem;
+  font-weight: bold;
+}
+
+.assertion-icon.passed {
+  background: var(--success-color);
+  color: white;
+}
+
+.assertion-icon.failed {
+  background: var(--error-color);
+  color: white;
+}
+
+.assertion-icon.error {
+  background: var(--warning-color);
+  color: white;
+}
+
+.assertion-type {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+}
+
+.assertion-message {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assertion-target {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* Pending assertion state */
+.assertion-item.assertion-pending {
+  border-left: 2px solid var(--text-muted);
+  opacity: 0.8;
+}
+
+.assertion-icon.pending {
+  background: transparent;
+  border: 1.5px solid var(--text-muted);
+  color: var(--text-muted);
+}
+
+/* Evaluating state */
+.assertion-item.evaluating {
+  background: var(--bg-secondary);
+  animation: assertion-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes assertion-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Verify assertions button */
+.assertions-verify-btn {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-xs);
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  margin-left: auto;
+}
+
+.assertions-verify-btn:hover {
+  background: var(--accent-primary-hover);
+  transform: scale(1.05);
+}
+
+.assertions-verify-btn:active {
+  transform: scale(0.95);
+}
+
+/* Re-run button for individual assertions */
+.assertion-rerun-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.625rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.assertion-rerun-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.assertion-rerun-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Spinner for evaluation progress */
+.eval-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: eval-spin 0.8s linear infinite;
+  display: inline-block;
+  margin-right: 0.25rem;
+}
+
+.eval-spinner-small {
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1.5px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: eval-spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes eval-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Evaluating summary state */
+.assertions-summary.assertions-evaluating {
+  background: var(--accent-primary-bg, rgba(108, 99, 255, 0.15));
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+}
+
+/* Pending summary state */
+.assertions-summary.assertions-pending {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+/* Error summary state */
+.assertions-summary.assertions-error {
+  background: var(--error-bg, rgba(248, 81, 73, 0.15));
+  color: var(--error-color);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Failed assertions prominent highlighting */
+.story-assertions.has-failures {
+  border-color: var(--error-color);
+  background: var(--error-bg, rgba(248, 81, 73, 0.05));
+}
+
+.story-assertions.has-failures .assertions-header {
+  color: var(--error-color);
+}
+
+/* Assertion item grid update for rerun button */
+.assertion-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-xs);
+  margin-bottom: 0.25rem;
+}
+
+/* Tooltip for failure details */
+.assertion-item[data-failure-details]:hover::after {
+  content: attr(data-failure-details);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  white-space: normal;
+  max-width: 300px;
+}
+
+.assertion-item[data-failure-details] {
+  position: relative;
+  cursor: help;
+}
+
+/* View Failures Button */
+.assertions-failures-btn {
+  background: var(--error-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: 0.5rem;
+}
+
+.assertions-failures-btn:hover {
+  background: var(--error-color-dark, #c0392b);
+  transform: translateY(-1px);
+}
+
+.assertions-failures-btn:active {
+  transform: translateY(0);
+}
+
+/* ===== Assertion Failures Modal ===== */
+.assertion-failures-modal {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.failures-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  margin-bottom: 1rem;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 1rem;
+}
+
+.summary-stats .stat {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.summary-stats .stat.passed {
+  color: var(--success-color);
+}
+
+.summary-stats .stat.failed {
+  color: var(--error-color);
+}
+
+.summary-stats .stat.total {
+  color: var(--text-muted);
+}
+
+.summary-evaluated {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.failures-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.assertion-failure-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--error-color);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  transition: all 0.15s ease;
+}
+
+.assertion-failure-item:hover {
+  border-color: var(--error-color);
+}
+
+.assertion-failure-item.waived {
+  border-left-color: var(--warning-color);
+  opacity: 0.7;
+}
+
+.assertion-failure-item.deferred {
+  border-left-color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.failure-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.failure-status {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: white;
+}
+
+.failure-status.failed {
+  background: var(--error-color);
+}
+
+.failure-status.error {
+  background: var(--warning-color);
+}
+
+.failure-type {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+}
+
+.failure-target {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-xs);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.failure-message {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.failure-details {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.failure-detail-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.failure-detail-row:last-child {
+  margin-bottom: 0;
+}
+
+.failure-detail-row .detail-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.failure-detail-row .detail-value {
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.failure-detail-row .detail-value.expected {
+  color: var(--success-color);
+}
+
+.failure-detail-row .detail-value.actual {
+  color: var(--error-color);
+}
+
+.failure-detail-row.suggestion {
+  background: var(--success-bg, rgba(46, 160, 67, 0.1));
+  padding: 0.5rem;
+  border-radius: var(--radius-xs);
+  margin-top: 0.25rem;
+}
+
+.failure-detail-row.suggestion .detail-label {
+  color: var(--success-color);
+}
+
+.failure-detail-row.suggestion .detail-value {
+  color: var(--text-primary);
+}
+
+.failure-detail-row code {
+  font-family: var(--font-mono);
+  background: var(--bg-secondary);
+  padding: 0.125rem 0.25rem;
+  border-radius: 2px;
+}
+
+.failure-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.failure-actions .btn.small {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+/* Waive reason prompt */
+.waive-reason-prompt {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.waive-reason-input {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.waive-reason-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.waive-prompt-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* Waived/Deferred notices */
+.waived-notice,
+.deferred-notice {
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.waived-notice {
+  background: var(--warning-bg, rgba(241, 196, 15, 0.1));
+  border-left: 3px solid var(--warning-color);
+}
+
+.deferred-notice {
+  background: var(--bg-tertiary);
+  border-left: 3px solid var(--text-muted);
+}
+
+.no-failures {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* ===== Assertion Editor (Add Story Modal) ===== */
+.assertions-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.assertions-section label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.assertions-section .form-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.assertions-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.assertion-editor-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+}
+
+.assertion-editor-item[data-generated="true"] {
+  border-left: 3px solid var(--accent-primary);
+}
+
+.assertion-editor-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.assertion-editor-row .assertion-type-select {
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.assertion-editor-row .assertion-target-input {
+  flex: 1;
+}
+
+.assertion-editor-row .assertion-remove-btn {
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: 1px solid var(--error-color);
+  color: var(--error-color);
+}
+
+.assertion-editor-row .assertion-remove-btn:hover {
+  background: var(--error-color);
+  color: white;
+}
+
+.assertion-message-input {
+  width: 100%;
+}
+
+.assertion-criterion-badge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  background: var(--accent-primary-bg, rgba(108, 99, 255, 0.15));
+  color: var(--accent-primary);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  margin-top: 0.25rem;
+}
+
+.no-assertions {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+/* ===== Assertion Status Badges (Sprint Stories Modal) ===== */
+.assertion-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  font-weight: bold;
+  margin-left: 0.5rem;
+}
+
+.assertion-status-badge.passed {
+  background: var(--success-color);
+  color: white;
+}
+
+.assertion-status-badge.failed {
+  background: var(--error-color);
+  color: white;
+}
+
+.assertion-status-badge.partial {
+  background: var(--warning-color);
+  color: white;
+}
+
+.assertion-status-badge.not-evaluated {
+  background: var(--text-muted);
+  color: white;
+}
+
+.assertion-status-badge .assertion-icon {
+  line-height: 1;
+}
+
+/* Sprint story assertions summary */
+.sprint-story-assertions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border-color);
+  font-size: 0.75rem;
+}
+
+.sprint-story-assertions .assertions-label {
+  color: var(--text-muted);
+}
+
+.sprint-story-assertions .assertions-status {
+  font-weight: 500;
+}
+
+.sprint-story-assertions .assertions-status.passed {
+  color: var(--success-color);
+}
+
+.sprint-story-assertions .assertions-status.failed {
+  color: var(--error-color);
+}
+
+.sprint-story-assertions .assertions-status.partial {
+  color: var(--warning-color);
+}
+
+.sprint-story-assertions .assertions-status.not-evaluated {
+  color: var(--text-muted);
+}
+
 .story-footer {
   display: flex;
   align-items: center;
@@ -4044,6 +4858,95 @@
   padding: 0.125rem 0.375rem;
   border-radius: var(--radius-xs);
   color: var(--accent-primary);
+}
+
+/* ===== Assertion Editor (Story Creation) ===== */
+.assertions-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.assertions-section > label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.assertions-section > label > .btn {
+  font-size: 0.6875rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.assertions-editor-list {
+  max-height: 250px;
+  overflow-y: auto;
+  margin: 0.5rem 0;
+  padding: 0.25rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.assertions-editor-list .no-assertions {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 1rem;
+  margin: 0;
+}
+
+.assertion-editor-item {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.assertion-editor-item:last-child {
+  margin-bottom: 0;
+}
+
+.assertion-editor-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.375rem;
+}
+
+.assertion-type-select {
+  flex: 0 0 140px;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.375rem;
+}
+
+.assertion-target-input {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.375rem;
+}
+
+.assertion-message-input {
+  width: 100%;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.375rem;
+}
+
+.assertion-remove-btn {
+  flex: 0 0 auto;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.assertion-criterion-badge {
+  display: inline-block;
+  font-size: 0.625rem;
+  padding: 0.125rem 0.25rem;
+  background: var(--accent-primary);
+  color: white;
+  border-radius: var(--radius-xs);
+  margin-top: 0.25rem;
 }
 
 /* ===========================================
@@ -7391,4 +8294,21 @@
 
 .view-header-with-actions .btn .btn-text {
   font-size: 0.8125rem;
+}
+
+/* ===== Sprint Warning (Single Sprint Enforcement) ===== */
+.sprint-warning {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--warning-color, #e67e22);
+  background: var(--warning-bg, rgba(230, 126, 34, 0.1));
+  border-radius: 4px;
+  text-align: center;
+}
+
+.backlog-action-bar .create-sprint-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

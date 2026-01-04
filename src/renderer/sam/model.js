@@ -898,6 +898,7 @@ export const addUserStoryAcceptor = model => proposal => {
       title: proposal.payload.title,
       description: proposal.payload.description,
       acceptanceCriteria: proposal.payload.acceptanceCriteria,
+      inspectionAssertions: proposal.payload.inspectionAssertions || [],
       status: proposal.payload.status,
       sourcePromptId: proposal.payload.sourcePromptId,
       createdAt: proposal.payload.createdAt
@@ -1881,9 +1882,22 @@ export const createSprintAcceptor = model => proposal => {
       }
     })
 
-    // Create the sprint with deduplicated stories
+    // Generate sprint title from stories
+    // Use first story title, or date-based fallback
+    let sprintTitle
+    if (sprintStories.length === 1) {
+      sprintTitle = sprintStories[0].title
+    } else if (sprintStories.length > 1) {
+      sprintTitle = `${sprintStories[0].title} (+${sprintStories.length - 1} more)`
+    } else {
+      const date = new Date(timestamp)
+      sprintTitle = `Sprint ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    }
+
+    // Create the sprint with deduplicated stories and title
     model.activeSprint = {
       id: sprintId,
+      title: sprintTitle,
       stories: sprintStories,
       status: 'created', // 'created' | 'planning' | 'planned' | 'implementing'
       storyProgress: {}, // Initialize empty story progress
@@ -2132,6 +2146,19 @@ export const approvePlanAcceptor = model => proposal => {
         status: 'planned',
         planApprovedAt: proposal.payload.timestamp
       }
+    }
+  }
+}
+
+// Set the sprint plan content (captured from Claude's planning response)
+export const setSprintPlanAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_SPRINT_PLAN') {
+    if (model.activeSprint && model.activeSprint.status === 'planning') {
+      model.activeSprint = {
+        ...model.activeSprint,
+        plan: proposal.payload.plan
+      }
+      console.log('[SPRINT] Plan content captured, length:', proposal.payload.plan?.length || 0)
     }
   }
 }
@@ -2975,6 +3002,7 @@ export const acceptors = [
   clearSprintAcceptor,
   clearSprintWithDetailsAcceptor,
   approvePlanAcceptor,
+  setSprintPlanAcceptor,
   clearPendingSprintPlanningAcceptor,
   startSprintStoryImplementationAcceptor,
   clearPendingStoryImplementationAcceptor,

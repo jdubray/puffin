@@ -238,6 +238,7 @@ export const addUserStory = (story) => ({
     title: story.title,
     description: story.description || '',
     acceptanceCriteria: story.acceptanceCriteria || [],
+    inspectionAssertions: story.inspectionAssertions || [],
     status: story.status || 'pending',
     sourcePromptId: story.sourcePromptId || null,
     createdAt: Date.now()
@@ -823,6 +824,15 @@ export const startSprintPlanning = () => ({
 export const approvePlan = () => ({
   type: 'APPROVE_PLAN',
   payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Set the sprint plan content (captured from Claude's planning response)
+export const setSprintPlan = (planContent) => ({
+  type: 'SET_SPRINT_PLAN',
+  payload: {
+    plan: planContent,
     timestamp: Date.now()
   }
 })

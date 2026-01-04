@@ -114,6 +114,8 @@ Stores active user stories in the backlog.
 | `title` | TEXT | NOT NULL | Story title/summary |
 | `description` | TEXT | DEFAULT '' | Detailed description |
 | `acceptance_criteria` | TEXT | DEFAULT '[]' | JSON array of criteria strings |
+| `inspection_assertions` | TEXT | DEFAULT '[]' | JSON array of assertion definitions (see Inspection Assertions) |
+| `assertion_results` | TEXT | DEFAULT NULL | JSON object with evaluation results (null when unevaluated) |
 | `status` | TEXT | NOT NULL DEFAULT 'pending' | Story status (see Status Values) |
 | `implemented_on` | TEXT | DEFAULT '[]' | JSON array of branch names where implemented |
 | `source_prompt_id` | TEXT | | ID of prompt that generated this story |
@@ -147,6 +149,8 @@ Stores soft-deleted/archived user stories. Same schema as `user_stories` for eas
 | `title` | TEXT | NOT NULL | Story title |
 | `description` | TEXT | DEFAULT '' | Detailed description |
 | `acceptance_criteria` | TEXT | DEFAULT '[]' | JSON array of criteria |
+| `inspection_assertions` | TEXT | DEFAULT '[]' | JSON array of assertion definitions |
+| `assertion_results` | TEXT | DEFAULT NULL | JSON object with evaluation results |
 | `status` | TEXT | NOT NULL DEFAULT 'archived' | Always 'archived' |
 | `implemented_on` | TEXT | DEFAULT '[]' | JSON array of branch names |
 | `source_prompt_id` | TEXT | | ID of source prompt |
@@ -158,14 +162,14 @@ Stores soft-deleted/archived user stories. Same schema as `user_stories` for eas
 
 ### sprints
 
-Stores active sprint data.
+Stores active sprint data. Only one active sprint (where `closed_at IS NULL`) is allowed at a time.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | TEXT | PRIMARY KEY | Unique sprint identifier (UUID) |
-| `title` | TEXT | | Sprint title (user-defined) |
+| `title` | TEXT | NOT NULL DEFAULT '' | Sprint title (user-defined) |
 | `description` | TEXT | DEFAULT '' | Sprint description/goals |
-| `status` | TEXT | NOT NULL DEFAULT 'planning' | Sprint status (see Status Values) |
+| `status` | TEXT | NOT NULL DEFAULT 'created', CHECK constraint | Sprint status (see Status Values) |
 | `plan` | TEXT | | Implementation plan markdown |
 | `story_progress` | TEXT | DEFAULT '{}' | JSON object tracking per-story progress |
 | `prompt_id` | TEXT | | ID of associated prompt |
@@ -178,10 +182,14 @@ Stores active sprint data.
 - `idx_sprints_status` on `status`
 - `idx_sprints_closed` on `closed_at DESC`
 
+**Triggers:**
+- `enforce_single_active_sprint`: Prevents inserting a new sprint when an active sprint exists (`closed_at IS NULL`)
+
 **Status Values:**
 | Status | Description |
 |--------|-------------|
-| `planning` | Initial state, plan being created |
+| `created` | Sprint created, not yet started planning |
+| `planning` | Plan being created |
 | `plan-review` | Plan submitted for review |
 | `in-progress` | Plan approved, work underway |
 | `completed` | All stories completed |
@@ -325,6 +333,8 @@ Migrations are stored in `src/main/database/migrations/` and applied in order:
 | 002 | `002_fix_implemented_status.js` | Fixes status naming: 'implemented' → 'completed' |
 | 003 | `003_add_sprint_history_stories.js` | Adds `stories` column to `sprint_history` for denormalized storage |
 | 004 | `004_add_sprint_title_description.js` | Adds `title` and `description` columns to `sprints` and `sprint_history` |
+| 005 | `005_add_inspection_assertions.js` | Adds `inspection_assertions` and `assertion_results` columns to `user_stories` and `archived_stories` |
+| 006 | `006_reset_sprint_schema.js` | Clean reset of sprint tables with status CHECK constraints and single-active-sprint trigger |
 
 ---
 
@@ -335,12 +345,105 @@ Several columns store JSON-encoded data:
 | Table | Column | JSON Type | Example |
 |-------|--------|-----------|---------|
 | user_stories | acceptance_criteria | Array | `["User can login", "Password is validated"]` |
+| user_stories | inspection_assertions | Array | `[{id: "IA1", type: "FILE_EXISTS", ...}]` |
+| user_stories | assertion_results | Object | `{evaluatedAt: "...", summary: {...}, results: [...]}` |
 | user_stories | implemented_on | Array | `["ui", "backend"]` |
 | sprints | story_progress | Object | `{"story-1": {"status": "completed"}}` |
 | sprint_history | story_ids | Array | `["story-1", "story-2"]` |
 | sprint_history | stories | Array | `[{id: "story-1", title: "..."}]` |
 | story_generations | generated_stories | Array | `[{title: "...", description: "..."}]` |
 | implementation_journeys | inputs | Array | `["prompt 1", "prompt 2"]` |
+
+---
+
+## Inspection Assertions Schema
+
+Inspection assertions provide declarative verification for user story implementations. See `docs/INSPECTION_ASSERTIONS_METAMODEL.md` for full specification.
+
+### inspection_assertions Column
+
+Stores an array of assertion definitions:
+
+```json
+[
+  {
+    "id": "IA1",
+    "criterion": "AC1",
+    "type": "FILE_EXISTS",
+    "target": "src/components/Feature.js",
+    "assertion": { "type": "file" },
+    "message": "Feature component file exists"
+  },
+  {
+    "id": "IA2",
+    "criterion": "AC2",
+    "type": "EXPORT_EXISTS",
+    "target": "src/components/Feature.js",
+    "assertion": {
+      "exports": [
+        { "name": "FeatureComponent", "type": "class" }
+      ]
+    },
+    "message": "FeatureComponent class is exported"
+  }
+]
+```
+
+**Assertion Types:**
+| Type | Purpose |
+|------|---------|
+| `FILE_EXISTS` | Verify file or directory exists |
+| `FILE_CONTAINS` | Verify file contains specific content |
+| `JSON_PROPERTY` | Verify JSON file has expected properties |
+| `EXPORT_EXISTS` | Verify JS/TS module exports |
+| `CLASS_STRUCTURE` | Verify class methods and properties |
+| `FUNCTION_SIGNATURE` | Verify function parameters and modifiers |
+| `IMPORT_EXISTS` | Verify module imports |
+| `IPC_HANDLER_REGISTERED` | Verify IPC handler registration (Puffin-specific) |
+| `CSS_SELECTOR_EXISTS` | Verify CSS selectors defined |
+| `PATTERN_MATCH` | Generic pattern matching |
+
+### assertion_results Column
+
+Stores evaluation results (null when unevaluated):
+
+```json
+{
+  "evaluatedAt": "2024-01-15T10:30:00Z",
+  "summary": {
+    "total": 5,
+    "passed": 4,
+    "failed": 1,
+    "undecided": 0
+  },
+  "results": [
+    {
+      "assertionId": "IA1",
+      "status": "passed",
+      "message": "Feature component file exists",
+      "details": null
+    },
+    {
+      "assertionId": "IA2",
+      "status": "failed",
+      "message": "FeatureComponent class is exported",
+      "details": {
+        "expected": "Export 'FeatureComponent' of type 'class'",
+        "actual": "Export not found",
+        "file": "src/components/Feature.js",
+        "suggestion": "Add 'export class FeatureComponent { ... }' to the file"
+      }
+    }
+  ]
+}
+```
+
+**Result Status Values:**
+| Status | Description |
+|--------|-------------|
+| `passed` | Assertion condition was met |
+| `failed` | Assertion condition was not met |
+| `error` | Evaluation could not complete (e.g., file unreadable) |
 
 ---
 

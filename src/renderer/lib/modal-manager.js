@@ -87,6 +87,9 @@ export class ModalManager {
       case 'sprint-stories':
         this.renderSprintStories(modalTitle, modalContent, modalActions, modal.data)
         break
+      case 'assertion-failures':
+        this.renderAssertionFailures(modalTitle, modalContent, modalActions, modal.data)
+        break
       default:
         console.warn('Unknown modal type:', modal.type)
         // Provide a way to close unknown modals
@@ -1034,6 +1037,20 @@ export class ModalManager {
           <button type="button" id="add-criterion-btn" class="btn small secondary">+ Add Criterion</button>
         </div>
 
+        <div class="form-group assertions-section">
+          <label>
+            Inspection Assertions
+            <button type="button" id="generate-assertions-btn" class="btn small secondary" title="Generate assertions from criteria">
+              Generate
+            </button>
+          </label>
+          <p class="form-hint">Assertions verify implementation correctness when the story is marked complete.</p>
+          <div id="assertions-list" class="assertions-editor-list">
+            <p class="no-assertions">No assertions defined. Click "Generate" to auto-generate from acceptance criteria.</p>
+          </div>
+          <button type="button" id="add-assertion-btn" class="btn small secondary">+ Add Assertion</button>
+        </div>
+
         <div class="story-meta">
           <span class="meta-item">Created: ${this.formatDate(story.createdAt)}</span>
           ${story.branchId ? `<span class="meta-item">Branch: ${this.escapeHtml(story.branchId)}</span>` : ''}
@@ -1046,6 +1063,10 @@ export class ModalManager {
       <button class="btn secondary" id="story-cancel-btn">Cancel</button>
       <button class="btn primary" id="story-save-btn">Save Changes</button>
     `
+
+    // Initialize assertions from story data
+    this.generatedAssertions = story.inspectionAssertions || []
+    this.renderAssertionsList()
 
     this.bindStoryDetailEvents(data, story)
   }
@@ -1076,6 +1097,29 @@ export class ModalManager {
         if (item) {
           item.remove()
           this.updateCriteriaPlaceholder()
+        }
+      }
+    })
+
+    // Generate assertions button
+    document.getElementById('generate-assertions-btn')?.addEventListener('click', () => {
+      this.generateAssertionsFromForm()
+    })
+
+    // Add assertion button
+    document.getElementById('add-assertion-btn')?.addEventListener('click', () => {
+      this.addAssertionField()
+    })
+
+    // Remove assertion buttons
+    document.getElementById('assertions-list')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('assertion-remove-btn')) {
+        const item = e.target.closest('.assertion-editor-item')
+        if (item) {
+          const assertionId = item.dataset.assertionId
+          this.generatedAssertions = this.generatedAssertions.filter(a => a.id !== assertionId)
+          item.remove()
+          this.updateAssertionsPlaceholder()
         }
       }
     })
@@ -1116,8 +1160,51 @@ export class ModalManager {
     `
     list.appendChild(newItem)
 
+    // Add blur handler for auto-generation
+    const input = newItem.querySelector('.criteria-input')
+    input?.addEventListener('blur', () => {
+      this.scheduleAutoGeneration()
+    })
+
     // Focus the new input
-    newItem.querySelector('.criteria-input')?.focus()
+    input?.focus()
+  }
+
+  /**
+   * Schedule auto-generation of assertions (debounced)
+   * Triggers generation after user finishes editing criteria
+   */
+  scheduleAutoGeneration() {
+    // Clear any existing timer
+    if (this.autoGenerateTimer) {
+      clearTimeout(this.autoGenerateTimer)
+    }
+
+    // Debounce: wait 500ms after last blur before generating
+    this.autoGenerateTimer = setTimeout(() => {
+      this.autoGenerateAssertions()
+    }, 500)
+  }
+
+  /**
+   * Auto-generate assertions from current form values
+   * Only generates if there are criteria and no assertions yet
+   */
+  async autoGenerateAssertions() {
+    const criteriaInputs = document.querySelectorAll('#criteria-list .criteria-input')
+    const criteria = Array.from(criteriaInputs)
+      .map(input => input.value.trim())
+      .filter(c => c.length > 0)
+
+    // Only auto-generate if:
+    // 1. There are acceptance criteria
+    // 2. No assertions have been generated yet (user can still use Generate button)
+    if (criteria.length === 0 || (this.generatedAssertions && this.generatedAssertions.length > 0)) {
+      return
+    }
+
+    // Auto-generate
+    await this.generateAssertionsFromForm()
   }
 
   /**
@@ -1152,11 +1239,15 @@ export class ModalManager {
       .map(input => input.value.trim())
       .filter(c => c.length > 0)
 
+    // Collect assertions from the editor
+    const inspectionAssertions = this.collectAssertionsFromEditor()
+
     const updatedData = {
       title: newTitle,
       status: statusSelect?.value || 'pending',
       description: descriptionInput?.value?.trim() || '',
-      acceptanceCriteria
+      acceptanceCriteria,
+      inspectionAssertions
     }
 
     if (data?.onSubmit) {
@@ -1192,6 +1283,20 @@ export class ModalManager {
           </div>
           <button type="button" id="add-criterion-btn" class="btn small secondary">+ Add Criterion</button>
         </div>
+
+        <div class="form-group assertions-section">
+          <label>
+            Inspection Assertions
+            <button type="button" id="generate-assertions-btn" class="btn small secondary" title="Generate assertions from criteria">
+              Generate
+            </button>
+          </label>
+          <p class="form-hint">Assertions verify implementation correctness when the story is marked complete.</p>
+          <div id="assertions-list" class="assertions-editor-list">
+            <p class="no-assertions">No assertions defined. Click "Generate" to auto-generate from acceptance criteria.</p>
+          </div>
+          <button type="button" id="add-assertion-btn" class="btn small secondary">+ Add Assertion</button>
+        </div>
       </form>
     `
 
@@ -1199,6 +1304,9 @@ export class ModalManager {
       <button class="btn secondary" id="story-cancel-btn">Cancel</button>
       <button class="btn primary" id="story-save-btn">Add Story</button>
     `
+
+    // Store generated assertions
+    this.generatedAssertions = []
 
     this.bindAddStoryEvents(data)
   }
@@ -1229,6 +1337,29 @@ export class ModalManager {
         if (item) {
           item.remove()
           this.updateCriteriaPlaceholder()
+        }
+      }
+    })
+
+    // Generate assertions button
+    document.getElementById('generate-assertions-btn')?.addEventListener('click', () => {
+      this.generateAssertionsFromForm()
+    })
+
+    // Add assertion button
+    document.getElementById('add-assertion-btn')?.addEventListener('click', () => {
+      this.addAssertionField()
+    })
+
+    // Remove assertion buttons
+    document.getElementById('assertions-list')?.addEventListener('click', (e) => {
+      if (e.target.classList.contains('assertion-remove-btn')) {
+        const item = e.target.closest('.assertion-editor-item')
+        if (item) {
+          const assertionId = item.dataset.assertionId
+          this.generatedAssertions = this.generatedAssertions.filter(a => a.id !== assertionId)
+          item.remove()
+          this.updateAssertionsPlaceholder()
         }
       }
     })
@@ -1267,10 +1398,14 @@ export class ModalManager {
       .map(input => input.value.trim())
       .filter(c => c.length > 0)
 
+    // Collect assertions from the editor
+    const inspectionAssertions = this.collectAssertionsFromEditor()
+
     const storyData = {
       title: newTitle,
       description: descriptionInput?.value?.trim() || '',
-      acceptanceCriteria
+      acceptanceCriteria,
+      inspectionAssertions
     }
 
     if (data?.onSubmit) {
@@ -1279,6 +1414,179 @@ export class ModalManager {
 
     this.intents.hideModal()
     this.showToast('Story added successfully', 'success')
+  }
+
+  /**
+   * Collect assertions from the editor UI
+   * @returns {Object[]} Array of assertion objects
+   */
+  collectAssertionsFromEditor() {
+    const assertions = []
+    const items = document.querySelectorAll('#assertions-list .assertion-editor-item')
+
+    items.forEach(item => {
+      const typeSelect = item.querySelector('.assertion-type-select')
+      const targetInput = item.querySelector('.assertion-target-input')
+      const messageInput = item.querySelector('.assertion-message-input')
+
+      if (typeSelect && targetInput && messageInput) {
+        assertions.push({
+          id: item.dataset.assertionId || `IA${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          type: typeSelect.value,
+          target: targetInput.value.trim(),
+          message: messageInput.value.trim(),
+          assertion: {},
+          generated: item.dataset.generated === 'true'
+        })
+      }
+    })
+
+    return assertions.filter(a => a.target && a.message)
+  }
+
+  /**
+   * Generate assertions from the current form values
+   */
+  async generateAssertionsFromForm() {
+    const titleInput = document.getElementById('story-title')
+    const descriptionInput = document.getElementById('story-description')
+    const criteriaInputs = document.querySelectorAll('#criteria-list .criteria-input')
+
+    const story = {
+      title: titleInput?.value?.trim() || '',
+      description: descriptionInput?.value?.trim() || '',
+      acceptanceCriteria: Array.from(criteriaInputs)
+        .map(input => input.value.trim())
+        .filter(c => c.length > 0)
+    }
+
+    if (!story.title && story.acceptanceCriteria.length === 0) {
+      this.showToast('Add a title or acceptance criteria first', 'warning')
+      return
+    }
+
+    const generateBtn = document.getElementById('generate-assertions-btn')
+    if (generateBtn) {
+      generateBtn.disabled = true
+      generateBtn.textContent = 'Generating...'
+    }
+
+    try {
+      const result = await window.puffin.state.generateAssertions(story, { includeSuggestions: true })
+
+      if (result.success) {
+        // Merge with existing assertions (don't duplicate)
+        const existingIds = new Set(this.generatedAssertions.map(a => a.id))
+        const newAssertions = result.assertions.filter(a => !existingIds.has(a.id))
+        this.generatedAssertions = [...this.generatedAssertions, ...newAssertions]
+
+        // Render all assertions
+        this.renderAssertionsList()
+
+        const count = result.assertions.length
+        this.showToast(`Generated ${count} assertion${count !== 1 ? 's' : ''}`, 'success')
+      } else {
+        this.showToast('Failed to generate assertions', 'error')
+      }
+    } catch (error) {
+      console.error('[MODAL] Assertion generation error:', error)
+      this.showToast('Failed to generate assertions', 'error')
+    } finally {
+      if (generateBtn) {
+        generateBtn.disabled = false
+        generateBtn.textContent = 'Generate'
+      }
+    }
+  }
+
+  /**
+   * Render the assertions list in the editor
+   */
+  renderAssertionsList() {
+    const list = document.getElementById('assertions-list')
+    if (!list) return
+
+    if (this.generatedAssertions.length === 0) {
+      list.innerHTML = '<p class="no-assertions">No assertions defined. Click "Generate" to auto-generate from acceptance criteria.</p>'
+      return
+    }
+
+    list.innerHTML = this.generatedAssertions.map(assertion => this.renderAssertionEditorItem(assertion)).join('')
+  }
+
+  /**
+   * Render a single assertion editor item
+   * @param {Object} assertion
+   * @returns {string} HTML
+   */
+  renderAssertionEditorItem(assertion) {
+    const types = [
+      'FILE_EXISTS', 'FILE_CONTAINS', 'JSON_PROPERTY', 'EXPORT_EXISTS',
+      'CLASS_STRUCTURE', 'FUNCTION_SIGNATURE', 'IMPORT_EXISTS',
+      'IPC_HANDLER_REGISTERED', 'CSS_SELECTOR_EXISTS', 'PATTERN_MATCH'
+    ]
+
+    const typeOptions = types.map(t =>
+      `<option value="${t}" ${assertion.type === t ? 'selected' : ''}>${this.formatAssertionType(t)}</option>`
+    ).join('')
+
+    return `
+      <div class="assertion-editor-item" data-assertion-id="${assertion.id}" data-generated="${assertion.generated || false}">
+        <div class="assertion-editor-row">
+          <select class="assertion-type-select form-select" title="Assertion type">
+            ${typeOptions}
+          </select>
+          <input type="text" class="assertion-target-input form-input" placeholder="Target path" value="${this.escapeHtml(assertion.target || '')}" title="Target file or pattern">
+          <button type="button" class="assertion-remove-btn btn small danger" title="Remove assertion">×</button>
+        </div>
+        <input type="text" class="assertion-message-input form-input" placeholder="Description" value="${this.escapeHtml(assertion.message || '')}" title="What this assertion verifies">
+        ${assertion.criterion ? `<span class="assertion-criterion-badge">${assertion.criterion}</span>` : ''}
+      </div>
+    `
+  }
+
+  /**
+   * Format assertion type for display
+   * @param {string} type
+   * @returns {string}
+   */
+  formatAssertionType(type) {
+    return type.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')
+  }
+
+  /**
+   * Add a blank assertion field
+   */
+  addAssertionField() {
+    const newAssertion = {
+      id: `IA${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      type: 'FILE_EXISTS',
+      target: '',
+      message: '',
+      generated: false
+    }
+    this.generatedAssertions.push(newAssertion)
+    this.renderAssertionsList()
+
+    // Focus the new target input
+    setTimeout(() => {
+      const items = document.querySelectorAll('#assertions-list .assertion-editor-item')
+      const lastItem = items[items.length - 1]
+      lastItem?.querySelector('.assertion-target-input')?.focus()
+    }, 50)
+  }
+
+  /**
+   * Update assertions placeholder visibility
+   */
+  updateAssertionsPlaceholder() {
+    const list = document.getElementById('assertions-list')
+    if (!list) return
+
+    const items = list.querySelectorAll('.assertion-editor-item')
+    if (items.length === 0) {
+      list.innerHTML = '<p class="no-assertions">No assertions defined. Click "Generate" to auto-generate from acceptance criteria.</p>'
+    }
   }
 
   /**
@@ -1347,10 +1655,15 @@ export class ModalManager {
               </div>
             `
           }
+
+          // Render assertion status indicator if assertions exist
+          const assertionStatusHtml = this.renderAssertionStatusBadge(story)
+
           return `
             <div class="sprint-story-item ${story.status || ''}">
               <div class="sprint-story-header">
                 <span class="sprint-story-status-badge ${story.status || 'pending'}">${this.formatStatus(story.status || 'pending')}</span>
+                ${assertionStatusHtml}
                 <h4 class="sprint-story-title">${this.escapeHtml(story.title)}</h4>
               </div>
               ${story.description ? `<p class="sprint-story-description">${this.escapeHtml(story.description)}</p>` : ''}
@@ -1362,6 +1675,7 @@ export class ModalManager {
                   </ul>
                 </div>
               ` : ''}
+              ${this.renderAssertionSummary(story)}
             </div>
           `
         }).join('')
@@ -1389,6 +1703,277 @@ export class ModalManager {
 
     document.getElementById('modal-close-btn')?.addEventListener('click', () => {
       this.intents.hideModal()
+    })
+  }
+
+  /**
+   * Render assertion failures modal - shows detailed failure report
+   */
+  renderAssertionFailures(title, content, actions, data) {
+    const { story, results, onWaive, onDefer, onRerun, onClose } = data || {}
+
+    if (!story || !results) {
+      title.textContent = 'Error'
+      content.innerHTML = '<p>No failure data available.</p>'
+      actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Close</button>'
+      document.getElementById('modal-cancel-btn')?.addEventListener('click', () => this.intents.hideModal())
+      return
+    }
+
+    const { passed, failed, total } = results.summary || { passed: 0, failed: 0, total: 0 }
+    const failedResults = (results.results || []).filter(r => r.status === 'failed' || r.status === 'error')
+    const assertions = story.inspectionAssertions || []
+
+    // Build assertion lookup map
+    const assertionMap = new Map()
+    assertions.forEach(a => assertionMap.set(a.id, a))
+
+    title.textContent = `Assertion Failures: ${story.title}`
+
+    // Generate failure items HTML
+    const failuresHtml = failedResults.map(result => {
+      const assertion = assertionMap.get(result.assertionId)
+      if (!assertion) return ''
+
+      const typeDisplay = assertion.type
+        .split('_')
+        .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+        .join(' ')
+
+      const details = result.details || {}
+      const hasExpected = details.expected !== undefined && details.expected !== null
+      const hasActual = details.actual !== undefined && details.actual !== null
+      const hasSuggestion = details.suggestion
+
+      return `
+        <div class="assertion-failure-item" data-assertion-id="${assertion.id}">
+          <div class="failure-header">
+            <span class="failure-status ${result.status}">${result.status === 'error' ? '!' : '✗'}</span>
+            <span class="failure-type">${typeDisplay}</span>
+            <span class="failure-target" title="${this.escapeHtml(assertion.target)}">${this.escapeHtml(assertion.target)}</span>
+          </div>
+          <div class="failure-message">${this.escapeHtml(assertion.message)}</div>
+
+          ${hasExpected || hasActual || hasSuggestion ? `
+            <div class="failure-details">
+              ${hasExpected ? `
+                <div class="failure-detail-row">
+                  <span class="detail-label">Expected:</span>
+                  <code class="detail-value expected">${this.escapeHtml(String(details.expected))}</code>
+                </div>
+              ` : ''}
+              ${hasActual ? `
+                <div class="failure-detail-row">
+                  <span class="detail-label">Actual:</span>
+                  <code class="detail-value actual">${this.escapeHtml(String(details.actual))}</code>
+                </div>
+              ` : ''}
+              ${hasSuggestion ? `
+                <div class="failure-detail-row suggestion">
+                  <span class="detail-label">💡 Suggestion:</span>
+                  <span class="detail-value">${this.escapeHtml(details.suggestion)}</span>
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+
+          <div class="failure-actions">
+            <button class="btn small primary failure-rerun-btn"
+                    data-assertion-id="${assertion.id}"
+                    title="Re-run this assertion after fixing">
+              ↻ Re-run
+            </button>
+            <button class="btn small secondary failure-waive-btn"
+                    data-assertion-id="${assertion.id}"
+                    title="Accept this failure and continue">
+              Waive
+            </button>
+            <button class="btn small secondary failure-defer-btn"
+                    data-assertion-id="${assertion.id}"
+                    title="Defer to fix later">
+              Defer
+            </button>
+          </div>
+        </div>
+      `
+    }).join('')
+
+    content.innerHTML = `
+      <div class="assertion-failures-modal">
+        <div class="failures-summary">
+          <div class="summary-stats">
+            <span class="stat passed">${passed} passed</span>
+            <span class="stat failed">${failed} failed</span>
+            <span class="stat total">of ${total} assertions</span>
+          </div>
+          <div class="summary-evaluated">
+            Last evaluated: ${this.formatDateTime(results.evaluatedAt)}
+          </div>
+        </div>
+
+        <div class="failures-list">
+          ${failuresHtml || '<p class="no-failures">No failures to display.</p>'}
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="failures-close-btn">Close</button>
+      <button class="btn secondary" id="failures-waive-all-btn" title="Waive all failures and continue">Waive All</button>
+      <button class="btn primary" id="failures-rerun-all-btn" title="Re-run all failed assertions">Re-run All</button>
+    `
+
+    // Bind event handlers
+    this.bindAssertionFailureEvents(data, story, failedResults)
+  }
+
+  /**
+   * Bind events for assertion failure modal
+   */
+  bindAssertionFailureEvents(data, story, failedResults) {
+    const { onWaive, onDefer, onRerun, onClose } = data || {}
+
+    // Close button
+    document.getElementById('failures-close-btn')?.addEventListener('click', () => {
+      if (onClose) onClose()
+      this.intents.hideModal()
+    })
+
+    // Waive all button
+    document.getElementById('failures-waive-all-btn')?.addEventListener('click', async () => {
+      if (onWaive) {
+        const waiveIds = failedResults.map(r => r.assertionId)
+        for (const id of waiveIds) {
+          await onWaive(story.id, id, 'Bulk waive from failure report')
+        }
+        this.showToast(`Waived ${waiveIds.length} assertion${waiveIds.length !== 1 ? 's' : ''}`, 'info')
+        this.intents.hideModal()
+      }
+    })
+
+    // Re-run all button
+    document.getElementById('failures-rerun-all-btn')?.addEventListener('click', async () => {
+      if (onRerun) {
+        await onRerun(story.id)
+        this.showToast('Re-running all assertions...', 'info')
+        this.intents.hideModal()
+      }
+    })
+
+    // Individual failure action buttons
+    document.querySelectorAll('.failure-rerun-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const assertionId = btn.dataset.assertionId
+        if (onRerun) {
+          btn.disabled = true
+          btn.innerHTML = '<span class="eval-spinner-small"></span>'
+          await onRerun(story.id, assertionId)
+          // Modal will be refreshed by parent component if needed
+        }
+      })
+    })
+
+    document.querySelectorAll('.failure-waive-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const assertionId = btn.dataset.assertionId
+        // Show waive reason input
+        this.showWaiveReasonPrompt(story.id, assertionId, onWaive, btn)
+      })
+    })
+
+    document.querySelectorAll('.failure-defer-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const assertionId = btn.dataset.assertionId
+        if (onDefer) {
+          await onDefer(story.id, assertionId)
+          // Remove item from list visually
+          const item = btn.closest('.assertion-failure-item')
+          if (item) {
+            item.classList.add('deferred')
+            item.innerHTML = '<div class="deferred-notice">Deferred to fix later</div>'
+          }
+          this.showToast('Assertion deferred', 'info')
+        }
+      })
+    })
+
+    // Keyboard handler for Escape
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        if (onClose) onClose()
+        this.intents.hideModal()
+        document.removeEventListener('keydown', handleEscape)
+      }
+    }
+    document.addEventListener('keydown', handleEscape)
+  }
+
+  /**
+   * Show inline waive reason prompt
+   */
+  showWaiveReasonPrompt(storyId, assertionId, onWaive, triggerBtn) {
+    const item = triggerBtn.closest('.assertion-failure-item')
+    if (!item) return
+
+    // Check if prompt already exists
+    if (item.querySelector('.waive-reason-prompt')) return
+
+    const actionsDiv = item.querySelector('.failure-actions')
+    const prompt = document.createElement('div')
+    prompt.className = 'waive-reason-prompt'
+    prompt.innerHTML = `
+      <input type="text"
+             class="waive-reason-input"
+             placeholder="Reason for waiving (optional)"
+             maxlength="200">
+      <div class="waive-prompt-actions">
+        <button class="btn small primary confirm-waive-btn">Confirm Waive</button>
+        <button class="btn small secondary cancel-waive-btn">Cancel</button>
+      </div>
+    `
+
+    actionsDiv.style.display = 'none'
+    item.appendChild(prompt)
+
+    const input = prompt.querySelector('.waive-reason-input')
+    input.focus()
+
+    prompt.querySelector('.confirm-waive-btn').addEventListener('click', async () => {
+      const reason = input.value.trim() || 'No reason provided'
+      if (onWaive) {
+        await onWaive(storyId, assertionId, reason)
+        item.classList.add('waived')
+        item.innerHTML = `<div class="waived-notice">Waived: ${this.escapeHtml(reason)}</div>`
+        this.showToast('Assertion waived', 'info')
+      }
+    })
+
+    prompt.querySelector('.cancel-waive-btn').addEventListener('click', () => {
+      prompt.remove()
+      actionsDiv.style.display = ''
+    })
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        prompt.querySelector('.confirm-waive-btn').click()
+      } else if (e.key === 'Escape') {
+        prompt.querySelector('.cancel-waive-btn').click()
+      }
+    })
+  }
+
+  /**
+   * Format date/time for display
+   */
+  formatDateTime(timestamp) {
+    if (!timestamp) return 'Unknown'
+    const date = new Date(timestamp)
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 
@@ -1428,5 +2013,85 @@ export class ModalManager {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
+  }
+
+  /**
+   * Render assertion status badge for a story
+   * Shows pass/fail status if assertions have been evaluated
+   */
+  renderAssertionStatusBadge(story) {
+    const assertions = story.inspectionAssertions || []
+    const results = story.assertionResults
+
+    // No assertions defined
+    if (assertions.length === 0) return ''
+
+    // Not evaluated yet
+    if (!results || !results.summary) {
+      return `<span class="assertion-status-badge not-evaluated" title="${assertions.length} assertions not evaluated">
+        <span class="assertion-icon">?</span>
+      </span>`
+    }
+
+    const { passed, failed, total } = results.summary
+
+    if (failed > 0) {
+      return `<span class="assertion-status-badge failed" title="${failed} of ${total} assertions failed">
+        <span class="assertion-icon">!</span>
+      </span>`
+    }
+
+    if (passed === total) {
+      return `<span class="assertion-status-badge passed" title="All ${total} assertions passed">
+        <span class="assertion-icon">✓</span>
+      </span>`
+    }
+
+    // Partial (some passed, none failed, but not all evaluated)
+    return `<span class="assertion-status-badge partial" title="${passed} of ${total} assertions passed">
+      <span class="assertion-icon">~</span>
+    </span>`
+  }
+
+  /**
+   * Render assertion summary for a story in sprint view
+   * Shows compact summary of assertion results
+   */
+  renderAssertionSummary(story) {
+    const assertions = story.inspectionAssertions || []
+    const results = story.assertionResults
+
+    // No assertions to show
+    if (assertions.length === 0) return ''
+
+    // Not evaluated
+    if (!results || !results.summary) {
+      return `
+        <div class="sprint-story-assertions">
+          <span class="assertions-label">${assertions.length} inspection assertion${assertions.length !== 1 ? 's' : ''}</span>
+          <span class="assertions-status not-evaluated">Not evaluated</span>
+        </div>
+      `
+    }
+
+    const { passed, failed, total, undecided } = results.summary
+
+    let statusClass = 'passed'
+    let statusText = `${passed}/${total} passed`
+
+    if (failed > 0) {
+      statusClass = 'failed'
+      statusText = `${failed} failed, ${passed} passed`
+    } else if (undecided > 0) {
+      statusClass = 'partial'
+      statusText = `${passed} passed, ${undecided} undecided`
+    }
+
+    return `
+      <div class="sprint-story-assertions">
+        <span class="assertions-label">Assertions:</span>
+        <span class="assertions-status ${statusClass}">${statusText}</span>
+      </div>
+    `
   }
 }

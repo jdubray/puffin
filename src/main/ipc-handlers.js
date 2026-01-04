@@ -12,6 +12,8 @@ const { ClaudeService } = require('./claude-service')
 const { DeveloperProfileManager } = require('./developer-profile')
 const { GitService } = require('./git-service')
 const ClaudeMdGenerator = require('./claude-md-generator')
+const { AssertionEvaluator } = require('./evaluators/assertion-evaluator')
+const { AssertionGenerator } = require('./generators/assertion-generator')
 
 let puffinState = null
 let claudeService = null
@@ -258,11 +260,36 @@ function setupStateHandlers(ipcMain) {
 
   // ============ Sprint Operations ============
 
+  // Check if an active sprint exists (for single-sprint enforcement)
+  ipcMain.handle('state:hasActiveSprint', async () => {
+    try {
+      if (!puffinState.database?.sprints) {
+        return { success: true, hasActive: false }
+      }
+      const hasActive = puffinState.database.sprints.hasActiveSprint()
+      const activeSprint = hasActive ? puffinState.database.sprints.findActive() : null
+      return {
+        success: true,
+        hasActive,
+        activeSprint: activeSprint ? {
+          id: activeSprint.id,
+          title: activeSprint.title || `Sprint ${activeSprint.id?.substring(0, 6)}`
+        } : null
+      }
+    } catch (error) {
+      console.error('[IPC] state:hasActiveSprint failed:', error.message)
+      return { success: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('state:updateActiveSprint', async (event, sprint) => {
     try {
+      console.log(`[IPC] state:updateActiveSprint called with sprint: id=${sprint?.id}, status=${sprint?.status}, stories=${sprint?.stories?.length || 0}`)
       await puffinState.updateActiveSprint(sprint)
+      console.log('[IPC] state:updateActiveSprint completed successfully')
       return { success: true }
     } catch (error) {
+      console.error('[IPC] state:updateActiveSprint failed:', error.message)
       return { success: false, error: error.message }
     }
   })
@@ -340,6 +367,124 @@ function setupStateHandlers(ipcMain) {
         return { success: false, error: 'Sprint not found' }
       }
       return { success: true, sprint }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ============ Inspection Assertion Evaluation ============
+
+  // Evaluate assertions for a user story
+  ipcMain.handle('state:evaluateStoryAssertions', async (event, storyId) => {
+    try {
+      // Get story with its assertions
+      const story = puffinState.getUserStoryById(storyId)
+      if (!story) {
+        return { success: false, error: 'Story not found' }
+      }
+
+      // Get inspection assertions for the story
+      const assertions = puffinState.getStoryInspectionAssertions(storyId)
+      if (!assertions || assertions.length === 0) {
+        return {
+          success: true,
+          results: {
+            evaluatedAt: new Date().toISOString(),
+            summary: { total: 0, passed: 0, failed: 0, error: 0 },
+            results: []
+          },
+          storyId
+        }
+      }
+
+      // Create evaluator with project path
+      const evaluator = new AssertionEvaluator(projectPath)
+
+      // Evaluate all assertions with progress reporting
+      const results = await evaluator.evaluateAll(assertions, (index, total, result) => {
+        // Emit progress events for UI updates
+        event.sender.send('assertion-evaluation-progress', {
+          storyId,
+          current: index,
+          total,
+          lastResult: result
+        })
+      })
+
+      // Store results in database
+      await puffinState.saveAssertionResults(storyId, results)
+
+      // Emit completion event
+      event.sender.send('assertion-evaluation-complete', {
+        storyId,
+        results
+      })
+
+      return { success: true, results, storyId }
+    } catch (error) {
+      console.error('[IPC] evaluateStoryAssertions error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get stored assertion results for a story
+  ipcMain.handle('state:getAssertionResults', async (event, storyId) => {
+    try {
+      const results = puffinState.getAssertionResults(storyId)
+      return { success: true, results, storyId }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Evaluate a single assertion (for manual re-runs)
+  ipcMain.handle('state:evaluateSingleAssertion', async (event, { storyId, assertionId }) => {
+    try {
+      const assertions = puffinState.getStoryInspectionAssertions(storyId)
+      const assertion = assertions?.find(a => a.id === assertionId)
+
+      if (!assertion) {
+        return { success: false, error: 'Assertion not found' }
+      }
+
+      const evaluator = new AssertionEvaluator(projectPath)
+      const result = await evaluator.evaluateAssertion(assertion)
+
+      return { success: true, result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Generate inspection assertions from a story
+  ipcMain.handle('state:generateAssertions', async (event, { story, options }) => {
+    try {
+      const generator = new AssertionGenerator()
+      const result = generator.generate(story, {
+        includeSuggestions: options?.includeSuggestions ?? true,
+        projectContext: options?.projectContext
+      })
+
+      console.log('[IPC] generateAssertions:', {
+        storyTitle: story.title,
+        assertionCount: result.assertions.length,
+        suggestionCount: result.suggestions?.length || 0
+      })
+
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC] generateAssertions error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get assertion generation patterns for UI display
+  ipcMain.handle('state:getAssertionPatterns', async () => {
+    try {
+      const generator = new AssertionGenerator()
+      const patterns = generator.getPatternDescriptions()
+      const types = generator.getAssertionTypes()
+      return { success: true, patterns, types }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -699,6 +844,29 @@ function setupStateHandlers(ipcMain) {
       const content = puffinState.getBranchSkillContent(branchId)
       return { success: true, content }
     } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Database reset handler (for development/troubleshooting)
+  // This runs pending migrations and optionally clears sprint data
+  ipcMain.handle('state:resetDatabase', async (event, options = {}) => {
+    try {
+      const result = await puffinState.resetDatabase(options)
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC] Database reset failed:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get database migration status
+  ipcMain.handle('state:getDatabaseStatus', async () => {
+    try {
+      const status = await puffinState.getDatabaseStatus()
+      return { success: true, ...status }
+    } catch (error) {
+      console.error('[IPC] Failed to get database status:', error)
       return { success: false, error: error.message }
     }
   })

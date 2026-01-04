@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.invoke('state:restoreArchivedStory', { storyId, newStatus }),
 
     // Sprint operations
+    hasActiveSprint: () => ipcRenderer.invoke('state:hasActiveSprint'),
     updateActiveSprint: (sprint) => ipcRenderer.invoke('state:updateActiveSprint', sprint),
 
     // Sprint progress tracking
@@ -75,6 +76,29 @@ contextBridge.exposeInMainWorld('puffin', {
     archiveSprintToHistory: (sprint) => ipcRenderer.invoke('state:archiveSprintToHistory', sprint),
     getSprintHistory: (options) => ipcRenderer.invoke('state:getSprintHistory', options),
     getArchivedSprint: (sprintId) => ipcRenderer.invoke('state:getArchivedSprint', sprintId),
+
+    // Inspection assertion evaluation
+    evaluateStoryAssertions: (storyId) => ipcRenderer.invoke('state:evaluateStoryAssertions', storyId),
+    getAssertionResults: (storyId) => ipcRenderer.invoke('state:getAssertionResults', storyId),
+    evaluateSingleAssertion: (storyId, assertionId) =>
+      ipcRenderer.invoke('state:evaluateSingleAssertion', { storyId, assertionId }),
+
+    // Inspection assertion generation
+    generateAssertions: (story, options) =>
+      ipcRenderer.invoke('state:generateAssertions', { story, options }),
+    getAssertionPatterns: () => ipcRenderer.invoke('state:getAssertionPatterns'),
+
+    // Event listeners for assertion evaluation progress
+    onAssertionEvaluationProgress: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('assertion-evaluation-progress', handler)
+      return () => ipcRenderer.removeListener('assertion-evaluation-progress', handler)
+    },
+    onAssertionEvaluationComplete: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('assertion-evaluation-complete', handler)
+      return () => ipcRenderer.removeListener('assertion-evaluation-complete', handler)
+    },
 
     // Design document operations
     getDesignDocuments: () => ipcRenderer.invoke('state:getDesignDocuments'),
@@ -161,7 +185,11 @@ contextBridge.exposeInMainWorld('puffin', {
     getBranchPlugins: (branchId) => ipcRenderer.invoke('state:getBranchPlugins', branchId),
 
     // Get combined skill content for a branch
-    getBranchSkillContent: (branchId) => ipcRenderer.invoke('state:getBranchSkillContent', branchId)
+    getBranchSkillContent: (branchId) => ipcRenderer.invoke('state:getBranchSkillContent', branchId),
+
+    // Database management operations (for development/troubleshooting)
+    resetDatabase: (options) => ipcRenderer.invoke('state:resetDatabase', options),
+    getDatabaseStatus: () => ipcRenderer.invoke('state:getDatabaseStatus')
   },
 
   /**

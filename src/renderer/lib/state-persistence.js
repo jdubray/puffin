@@ -5,6 +5,55 @@
  * Extracted from app.js for better separation of concerns.
  */
 
+/**
+ * Trigger inspection assertion evaluation for a completed story
+ * @param {string} storyId - The story ID to evaluate
+ * @returns {Promise<Object>} Evaluation results
+ */
+async function triggerAssertionEvaluation(storyId) {
+  if (!window.puffin?.state?.evaluateStoryAssertions) {
+    console.log('[ASSERTION] Evaluation API not available')
+    return null
+  }
+
+  console.log('[ASSERTION] Triggering evaluation for story:', storyId)
+
+  try {
+    const result = await window.puffin.state.evaluateStoryAssertions(storyId)
+
+    if (result.success) {
+      const { summary } = result.results
+      console.log('[ASSERTION] Evaluation complete:', {
+        storyId,
+        total: summary.total,
+        passed: summary.passed,
+        failed: summary.failed,
+        error: summary.error
+      })
+
+      // Log a summary for the user
+      if (summary.total === 0) {
+        console.log('[ASSERTION] No assertions defined for this story')
+      } else if (summary.failed === 0 && summary.error === 0) {
+        console.log('[ASSERTION] All assertions passed!')
+      } else {
+        console.warn('[ASSERTION] Some assertions failed or errored:', {
+          failed: summary.failed,
+          error: summary.error
+        })
+      }
+
+      return result.results
+    } else {
+      console.error('[ASSERTION] Evaluation failed:', result.error)
+      return null
+    }
+  } catch (e) {
+    console.error('[ASSERTION] Evaluation error:', e)
+    throw e
+  }
+}
+
 export class StatePersistence {
   constructor(getState, intents, showToast) {
     this.getState = getState
@@ -39,7 +88,8 @@ export class StatePersistence {
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
       'ADD_STORIES_TO_BACKLOG',
       // Sprint actions
-      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
+      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
+      'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
       'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
       // Story generation tracking
@@ -157,7 +207,8 @@ export class StatePersistence {
       }
 
       // Persist sprint state changes (including criteria progress and story status)
-      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
+      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
+           'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
            'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
 
@@ -171,6 +222,13 @@ export class StatePersistence {
               if (syncResult.success) {
                 console.log('[PERSIST-DEBUG] Atomic status sync completed:', storyId, '->', status)
                 // The event listener will handle UI refresh automatically
+
+                // Trigger assertion evaluation when story is marked complete
+                if (status === 'completed') {
+                  triggerAssertionEvaluation(storyId).catch(e => {
+                    console.error('[PERSIST-DEBUG] Assertion evaluation failed:', storyId, e)
+                  })
+                }
               } else {
                 console.error('[PERSIST-DEBUG] Atomic status sync failed:', syncResult.error)
                 // Fallback to separate updates if atomic fails
@@ -201,6 +259,13 @@ export class StatePersistence {
               const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)
               if (syncResult.success) {
                 console.log('[PERSIST-DEBUG] Atomic criteria sync completed:', storyId, '->', status)
+
+                // Trigger assertion evaluation when story auto-completes from criteria
+                if (status === 'completed') {
+                  triggerAssertionEvaluation(storyId).catch(e => {
+                    console.error('[PERSIST-DEBUG] Assertion evaluation failed:', storyId, e)
+                  })
+                }
               }
             } catch (e) {
               // Fallback: update story separately
@@ -214,7 +279,9 @@ export class StatePersistence {
         }
         // For other sprint actions, use regular update
         else {
+          console.log('[PERSIST-DEBUG] Calling updateActiveSprint for action:', normalizedType, 'sprint:', state.activeSprint?.id, 'stories:', state.activeSprint?.stories?.length)
           await window.puffin.state.updateActiveSprint(state.activeSprint)
+          console.log('[PERSIST-DEBUG] updateActiveSprint completed for action:', normalizedType)
         }
 
         // For COMPLETE_STORY_BRANCH: use atomic sync for completed stories

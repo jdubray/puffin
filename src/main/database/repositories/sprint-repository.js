@@ -48,7 +48,7 @@ class SprintRepository extends BaseRepository {
 
     return {
       id: row.id,
-      title: row.title || null,
+      title: row.title || '',
       description: row.description || '',
       status: row.status,
       plan: row.plan || null,
@@ -71,7 +71,7 @@ class SprintRepository extends BaseRepository {
   _sprintToRow(sprint) {
     return {
       id: sprint.id,
-      title: sprint.title || null,
+      title: sprint.title || '',
       description: sprint.description || '',
       status: sprint.status || SprintStatus.PLANNING,
       plan: sprint.plan || null,
@@ -138,10 +138,18 @@ class SprintRepository extends BaseRepository {
    * @param {Object} sprint - Sprint data
    * @param {string[]} [storyIds] - IDs of stories to include in sprint
    * @returns {Object} Created sprint with stories
-   * @throws {Error} If transaction fails (automatically rolled back)
+   * @throws {Error} If an active sprint already exists or transaction fails
    */
   create(sprint, storyIds = []) {
     const db = this.getDb()
+
+    // Check for existing active sprint before attempting creation
+    // This provides a cleaner error message than the database trigger
+    if (this.hasActiveSprint()) {
+      const activeSprint = this.findActive()
+      const title = activeSprint?.title || `Sprint ${activeSprint?.id?.substring(0, 6)}`
+      throw new Error(`Cannot create sprint: "${title}" is already active. Close it before creating a new one.`)
+    }
 
     return this.immediateTransaction(() => {
       const row = this._sprintToRow(sprint)
@@ -181,6 +189,9 @@ class SprintRepository extends BaseRepository {
   /**
    * Find a sprint by ID (with stories)
    *
+   * Automatically filters out orphaned story references from both
+   * the stories array and the storyProgress object.
+   *
    * @param {string} id - Sprint ID
    * @returns {Object|null} Sprint with stories or null
    */
@@ -198,11 +209,25 @@ class SprintRepository extends BaseRepository {
     const sprint = this._rowToSprint(row)
     sprint.stories = this._getSprintStories(id)
 
+    // Filter orphaned entries from storyProgress
+    // Only keep progress for stories that still exist
+    const validStoryIds = new Set(sprint.stories.map(s => s.id))
+    const filteredProgress = {}
+    for (const [storyId, progress] of Object.entries(sprint.storyProgress)) {
+      if (validStoryIds.has(storyId)) {
+        filteredProgress[storyId] = progress
+      }
+    }
+    sprint.storyProgress = filteredProgress
+
     return sprint
   }
 
   /**
    * Find the active sprint (non-closed sprint)
+   *
+   * Automatically filters out orphaned story references from both
+   * the stories array and the storyProgress object.
    *
    * @returns {Object|null} Active sprint or null
    */
@@ -224,7 +249,33 @@ class SprintRepository extends BaseRepository {
     const sprint = this._rowToSprint(row)
     sprint.stories = this._getSprintStories(row.id)
 
+    // Filter orphaned entries from storyProgress
+    const validStoryIds = new Set(sprint.stories.map(s => s.id))
+    const filteredProgress = {}
+    for (const [storyId, progress] of Object.entries(sprint.storyProgress)) {
+      if (validStoryIds.has(storyId)) {
+        filteredProgress[storyId] = progress
+      }
+    }
+    sprint.storyProgress = filteredProgress
+
     return sprint
+  }
+
+  /**
+   * Check if an active sprint exists
+   *
+   * @returns {boolean} True if an active sprint exists
+   */
+  hasActiveSprint() {
+    const db = this.getDb()
+    const sql = 'SELECT 1 FROM sprints WHERE closed_at IS NULL LIMIT 1'
+
+    const row = this.traceQuery('CHECK_ACTIVE_SPRINT', sql, [], () => {
+      return db.prepare(sql).get()
+    })
+
+    return !!row
   }
 
   /**
@@ -271,12 +322,16 @@ class SprintRepository extends BaseRepository {
   /**
    * Get stories for a sprint
    *
+   * Uses INNER JOIN which naturally filters out orphaned story references
+   * (stories that were deleted but still have junction table entries).
+   *
    * @private
    * @param {string} sprintId - Sprint ID
    * @returns {Object[]} Array of story objects
    */
   _getSprintStories(sprintId) {
     const db = this.getDb()
+    // INNER JOIN filters out orphans: only returns stories that exist in user_stories
     const rows = db.prepare(`
       SELECT us.*, ss.added_at as sprint_added_at
       FROM user_stories us
@@ -291,6 +346,8 @@ class SprintRepository extends BaseRepository {
       title: row.title,
       description: row.description || '',
       acceptanceCriteria: this.parseJson(row.acceptance_criteria, []),
+      inspectionAssertions: this.parseJson(row.inspection_assertions, []),
+      assertionResults: this.parseJson(row.assertion_results, null),
       status: row.status,
       implementedOn: this.parseJson(row.implemented_on, []),
       sourcePromptId: row.source_prompt_id,
@@ -509,8 +566,8 @@ class SprintRepository extends BaseRepository {
       storyProgress[storyId].status = status
       storyProgress[storyId].completedAt = status === 'completed' ? timestamp : null
 
-      // Update the sprint's storyProgress
-      const updateSprintSql = 'UPDATE sprints SET story_progress = ?, closed_at = NULL WHERE id = ?'
+      // Update the sprint's storyProgress (do NOT modify closed_at here)
+      const updateSprintSql = 'UPDATE sprints SET story_progress = ? WHERE id = ?'
       const updateSprintParams = [this.toJson(storyProgress), sprintId]
       this.traceQuery('UPDATE_SPRINT_PROGRESS', updateSprintSql, updateSprintParams, () => {
         db.prepare(updateSprintSql).run(...updateSprintParams)
@@ -569,13 +626,37 @@ class SprintRepository extends BaseRepository {
   // ===== SPRINT-STORY RELATIONSHIP OPERATIONS =====
 
   /**
+   * Update status of multiple stories atomically
+   *
+   * @private
+   * @param {string[]} storyIds - Story IDs to update
+   * @param {string} status - New status ('pending', 'in-progress', 'completed')
+   */
+  _updateStoryStatuses(storyIds, status) {
+    if (!storyIds || storyIds.length === 0) return
+
+    const db = this.getDb()
+    const timestamp = this.now()
+    const stmt = db.prepare(`
+      UPDATE user_stories SET status = ?, updated_at = ? WHERE id = ?
+    `)
+
+    for (const storyId of storyIds) {
+      stmt.run(status, timestamp, storyId)
+    }
+
+    console.log(`[SQL-TRACE] UPDATE_STORY_STATUSES: ${storyIds.length} stories -> ${status}`)
+  }
+
+  /**
    * Add stories to a sprint
    *
    * @private
    * @param {string} sprintId - Sprint ID
    * @param {string[]} storyIds - Story IDs to add
+   * @param {boolean} [updateStatus=true] - Whether to update story status to 'in-progress'
    */
-  _addStoriesToSprint(sprintId, storyIds) {
+  _addStoriesToSprint(sprintId, storyIds, updateStatus = true) {
     const db = this.getDb()
     const stmt = db.prepare(`
       INSERT OR IGNORE INTO sprint_stories (sprint_id, story_id, added_at)
@@ -585,6 +666,11 @@ class SprintRepository extends BaseRepository {
     const now = this.now()
     for (const storyId of storyIds) {
       stmt.run(sprintId, storyId, now)
+    }
+
+    // Update story statuses to 'in-progress' when added to sprint
+    if (updateStatus && storyIds.length > 0) {
+      this._updateStoryStatuses(storyIds, 'in-progress')
     }
   }
 
@@ -597,16 +683,23 @@ class SprintRepository extends BaseRepository {
    */
   addStory(sprintId, storyId) {
     const db = this.getDb()
-    try {
-      db.prepare(`
-        INSERT INTO sprint_stories (sprint_id, story_id, added_at)
-        VALUES (?, ?, ?)
-      `).run(sprintId, storyId, this.now())
-      return true
-    } catch (error) {
-      // Already exists or constraint violation
-      return false
-    }
+
+    return this.immediateTransaction(() => {
+      try {
+        db.prepare(`
+          INSERT INTO sprint_stories (sprint_id, story_id, added_at)
+          VALUES (?, ?, ?)
+        `).run(sprintId, storyId, this.now())
+
+        // Update story status to 'in-progress' when added to sprint
+        this._updateStoryStatuses([storyId], 'in-progress')
+
+        return true
+      } catch (error) {
+        // Already exists or constraint violation
+        return false
+      }
+    })
   }
 
   /**
@@ -614,15 +707,25 @@ class SprintRepository extends BaseRepository {
    *
    * @param {string} sprintId - Sprint ID
    * @param {string} storyId - Story ID to remove
+   * @param {boolean} [resetStatus=true] - Whether to reset story status to 'pending'
    * @returns {boolean} True if removed
    */
-  removeStory(sprintId, storyId) {
+  removeStory(sprintId, storyId, resetStatus = true) {
     const db = this.getDb()
-    const result = db.prepare(`
-      DELETE FROM sprint_stories
-      WHERE sprint_id = ? AND story_id = ?
-    `).run(sprintId, storyId)
-    return result.changes > 0
+
+    return this.immediateTransaction(() => {
+      const result = db.prepare(`
+        DELETE FROM sprint_stories
+        WHERE sprint_id = ? AND story_id = ?
+      `).run(sprintId, storyId)
+
+      // Reset story status to 'pending' when removed from sprint
+      if (result.changes > 0 && resetStatus) {
+        this._updateStoryStatuses([storyId], 'pending')
+      }
+
+      return result.changes > 0
+    })
   }
 
   /**
@@ -714,6 +817,24 @@ class SprintRepository extends BaseRepository {
       this.traceQuery('INSERT_SPRINT_HISTORY', insertSql, insertParams, () => {
         db.prepare(insertSql).run(...insertParams)
       })
+
+      // Update story statuses based on their completion state
+      // Completed stories stay 'completed', incomplete stories return to 'pending'
+      const storyProgress = existing.storyProgress || {}
+      const completedStoryIds = storyIds.filter(sid => storyProgress[sid]?.status === 'completed')
+      const incompleteStoryIds = storyIds.filter(sid => storyProgress[sid]?.status !== 'completed')
+
+      // Keep completed stories as 'completed'
+      if (completedStoryIds.length > 0) {
+        this._updateStoryStatuses(completedStoryIds, 'completed')
+      }
+
+      // Return incomplete stories to 'pending' so they can be added to future sprints
+      if (incompleteStoryIds.length > 0) {
+        this._updateStoryStatuses(incompleteStoryIds, 'pending')
+      }
+
+      console.log(`[SQL-TRACE] SPRINT_ARCHIVE: ${completedStoryIds.length} completed, ${incompleteStoryIds.length} returned to pending`)
 
       // Remove sprint-story relationships
       const deleteRelSql = 'DELETE FROM sprint_stories WHERE sprint_id = ?'
@@ -845,6 +966,9 @@ class SprintRepository extends BaseRepository {
   /**
    * Insert a sprint directly into history (for migration)
    *
+   * Accepts both camelCase (preferred) and snake_case (legacy) property names
+   * for backwards compatibility with existing migration code.
+   *
    * @param {Object} sprint - Sprint data to insert
    * @returns {Object} Inserted sprint
    */
@@ -858,6 +982,15 @@ class SprintRepository extends BaseRepository {
       return this.findArchivedById(sprint.id)
     }
 
+    // Accept both camelCase (preferred) and snake_case (legacy) for backwards compatibility
+    const storyProgress = sprint.storyProgress || sprint.story_progress || {}
+    const storyIds = sprint.storyIds || sprint.story_ids || []
+    const promptId = sprint.promptId || sprint.prompt_id || null
+    const createdAt = sprint.createdAt || sprint.created_at || this.now()
+    const planApprovedAt = sprint.planApprovedAt || sprint.plan_approved_at || null
+    const completedAt = sprint.completedAt || sprint.completed_at || null
+    const closedAt = sprint.closedAt || sprint.closed_at || this.now()
+
     db.prepare(`
       INSERT INTO sprint_history (
         id, title, description, status, plan, story_progress, story_ids, prompt_id,
@@ -865,17 +998,17 @@ class SprintRepository extends BaseRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       sprint.id,
-      sprint.title || null,
+      sprint.title || '',
       sprint.description || '',
       sprint.status || 'archived',
       sprint.plan || null,
-      this.toJson(sprint.story_progress || {}),
-      this.toJson(sprint.story_ids || []),
-      sprint.prompt_id || null,
-      sprint.created_at || this.now(),
-      sprint.plan_approved_at || null,
-      sprint.completed_at || null,
-      sprint.closed_at || this.now()
+      this.toJson(storyProgress),
+      this.toJson(storyIds),
+      promptId,
+      createdAt,
+      planApprovedAt,
+      completedAt,
+      closedAt
     )
 
     return this.findArchivedById(sprint.id)

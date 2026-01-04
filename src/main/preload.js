@@ -88,6 +88,17 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.invoke('state:generateAssertions', { story, options }),
     getAssertionPatterns: () => ipcRenderer.invoke('state:getAssertionPatterns'),
 
+    // Generate assertions for sprint stories using Claude (called after plan approval)
+    generateSprintAssertions: (stories, plan) =>
+      ipcRenderer.invoke('state:generateSprintAssertions', { stories, plan }),
+
+    // Event listener for sprint assertion generation progress
+    onAssertionGenerationProgress: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('assertion-generation-progress', handler)
+      return () => ipcRenderer.removeListener('assertion-generation-progress', handler)
+    },
+
     // Event listeners for assertion evaluation progress
     onAssertionEvaluationProgress: (callback) => {
       const handler = (event, data) => callback(data)

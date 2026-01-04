@@ -490,6 +490,57 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Generate inspection assertions for sprint stories using Claude
+  ipcMain.handle('state:generateSprintAssertions', async (event, { stories, plan }) => {
+    try {
+      console.log('[IPC] generateSprintAssertions called with', stories.length, 'stories')
+
+      // Use the module-level claudeService instance
+      if (!claudeService) {
+        return { success: false, error: 'Claude service not available' }
+      }
+
+      // Generate assertions via Claude
+      const result = await claudeService.generateInspectionAssertions(stories, plan, (msg) => {
+        // Send progress updates to renderer
+        event.sender.send('assertion-generation-progress', { message: msg })
+      })
+
+      if (!result.success) {
+        console.error('[IPC] generateSprintAssertions failed:', result.error)
+        return { success: false, error: result.error }
+      }
+
+      // Persist assertions to each story in the database
+      const assertionsByStory = result.assertions
+      let totalPersisted = 0
+
+      for (const [storyId, assertions] of Object.entries(assertionsByStory)) {
+        if (Array.isArray(assertions) && assertions.length > 0) {
+          try {
+            await puffinState.updateUserStory(storyId, {
+              inspectionAssertions: assertions
+            })
+            totalPersisted += assertions.length
+            console.log(`[IPC] Persisted ${assertions.length} assertions for story ${storyId}`)
+          } catch (err) {
+            console.error(`[IPC] Failed to persist assertions for story ${storyId}:`, err)
+          }
+        }
+      }
+
+      console.log('[IPC] generateSprintAssertions complete:', totalPersisted, 'assertions persisted')
+      return {
+        success: true,
+        assertions: assertionsByStory,
+        totalAssertions: totalPersisted
+      }
+    } catch (error) {
+      console.error('[IPC] generateSprintAssertions error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
   // ============ Design Document Operations ============
 
   // Get list of available design documents from docs/ directory

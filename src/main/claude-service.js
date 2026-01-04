@@ -1658,6 +1658,212 @@ ${content}`
 
     return words.slice(0, 4).join(' ').substring(0, 30) || 'New Request'
   }
+
+  /**
+   * Generate inspection assertions for sprint stories based on the approved plan
+   *
+   * @param {Array} stories - Array of user stories with id, title, description, acceptanceCriteria
+   * @param {string} plan - The approved sprint plan
+   * @param {Function} progressCallback - Optional callback for progress updates
+   * @returns {Promise<{success: boolean, assertions?: Object, error?: string}>}
+   *          assertions is a map of storyId -> array of assertions
+   */
+  async generateInspectionAssertions(stories, plan, progressCallback = null) {
+    const progress = (msg) => {
+      console.log('[ASSERTION-GEN]', msg)
+      if (progressCallback) progressCallback(msg)
+    }
+
+    progress('Starting inspection assertion generation...')
+
+    const systemPrompt = `You are generating inspection assertions for user stories. These assertions will be automatically evaluated against the codebase to verify implementation.
+
+CRITICAL INSTRUCTIONS:
+1. Output ONLY a valid JSON object - nothing else
+2. Do NOT use markdown code blocks
+3. Each assertion must be specific and testable against the actual codebase
+4. Use the implementation plan to determine file paths and structures
+
+ASSERTION TYPES:
+- FILE_EXISTS: Verify a file/directory exists
+  { type: "FILE_EXISTS", target: "path/to/file.js", message: "description", assertion: { type: "file" } }
+
+- FILE_CONTAINS: Verify file contains specific content
+  { type: "FILE_CONTAINS", target: "path/to/file.js", message: "description", assertion: { match: "literal"|"regex", content: "text to find" } }
+
+- EXPORT_EXISTS: Verify module exports specific identifiers
+  { type: "EXPORT_EXISTS", target: "path/to/file.js", message: "description", assertion: { exports: [{ name: "functionName", type: "function"|"class"|"const" }] } }
+
+- FUNCTION_SIGNATURE: Verify function exists with expected parameters
+  { type: "FUNCTION_SIGNATURE", target: "path/to/file.js", message: "description", assertion: { function_name: "myFunc", parameters: ["param1", "param2"] } }
+
+- IPC_HANDLER_REGISTERED: Verify IPC handlers are registered
+  { type: "IPC_HANDLER_REGISTERED", target: "src/main/ipc-handlers.js", message: "description", assertion: { handlers: ["channel:name"] } }
+
+- PATTERN_MATCH: Verify presence/absence of patterns
+  { type: "PATTERN_MATCH", target: "path/to/file.js", message: "description", assertion: { pattern: "regex pattern", operator: "present"|"absent" } }
+
+OUTPUT FORMAT (JSON object mapping story IDs to assertion arrays):
+{
+  "story-id-1": [
+    { "id": "IA001", "criterion": "AC text", "type": "FILE_EXISTS", "target": "...", "message": "...", "assertion": {...} },
+    { "id": "IA002", "criterion": "AC text", "type": "EXPORT_EXISTS", "target": "...", "message": "...", "assertion": {...} }
+  ],
+  "story-id-2": [...]
+}
+
+GUIDELINES:
+- Generate 2-5 assertions per story, focusing on the most critical verifications
+- Each assertion ID should be unique (format: IA + 3 digits)
+- The "criterion" field should reference which acceptance criterion this assertion verifies
+- Use relative paths from project root
+- Be specific about what to check (exact function names, file paths from the plan)`
+
+    const storiesContext = stories.map(s => {
+      return `Story ID: ${s.id}
+Title: ${s.title}
+Description: ${s.description}
+Acceptance Criteria:
+${(s.acceptanceCriteria || []).map((ac, i) => `  ${i + 1}. ${ac}`).join('\n')}`
+    }).join('\n\n---\n\n')
+
+    const fullPrompt = `${systemPrompt}
+
+=== APPROVED IMPLEMENTATION PLAN ===
+${plan}
+
+=== USER STORIES TO GENERATE ASSERTIONS FOR ===
+${storiesContext}
+
+Generate inspection assertions for each story. Output ONLY the JSON object.`
+
+    return new Promise((resolve) => {
+      const args = [
+        '--print',
+        '--output-format', 'stream-json',
+        '--verbose',
+        '--max-turns', '1',
+        '-'
+      ]
+
+      const cwd = this.projectPath || process.cwd()
+      const spawnOptions = this.getSpawnOptions(cwd)
+      spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
+
+      progress('Spawning Claude CLI...')
+
+      const proc = spawn('claude', args, spawnOptions)
+
+      if (!proc.pid) {
+        progress('ERROR: Failed to spawn process')
+        resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
+        return
+      }
+
+      progress(`Process spawned with PID: ${proc.pid}`)
+
+      let buffer = ''
+      let resultText = ''
+      let resolved = false
+
+      // Timeout after 2 minutes
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          proc.kill()
+          progress('ERROR: Timeout')
+          resolve({ success: false, error: 'Assertion generation timed out' })
+        }
+      }, 120000)
+
+      proc.stdin.write(fullPrompt)
+      proc.stdin.end()
+      progress('Prompt sent, waiting for response...')
+
+      proc.stdout.on('data', (chunk) => {
+        buffer += chunk.toString()
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const json = JSON.parse(line)
+            if (json.type === 'assistant' && json.message?.content) {
+              for (const block of json.message.content) {
+                if (block.type === 'text') {
+                  resultText += block.text
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors for non-JSON lines
+          }
+        }
+      })
+
+      proc.stderr.on('data', (chunk) => {
+        const text = chunk.toString()
+        if (text.includes('error') || text.includes('Error')) {
+          console.error('[ASSERTION-GEN] stderr:', text)
+        }
+      })
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout)
+        if (resolved) return
+        resolved = true
+
+        progress(`Process exited with code: ${code}`)
+        progress(`Result text length: ${resultText.length}`)
+
+        if (!resultText.trim()) {
+          resolve({ success: false, error: 'No response received from Claude' })
+          return
+        }
+
+        // Try to parse the JSON response
+        try {
+          // Clean up the response - remove markdown code blocks if present
+          let cleanedResult = resultText.trim()
+          if (cleanedResult.startsWith('```')) {
+            cleanedResult = cleanedResult.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+          }
+
+          const assertions = JSON.parse(cleanedResult)
+
+          // Validate structure - should be an object with story IDs as keys
+          if (typeof assertions !== 'object' || Array.isArray(assertions)) {
+            resolve({ success: false, error: 'Invalid response format: expected object with story IDs' })
+            return
+          }
+
+          // Count total assertions generated
+          let totalAssertions = 0
+          for (const storyId of Object.keys(assertions)) {
+            if (Array.isArray(assertions[storyId])) {
+              totalAssertions += assertions[storyId].length
+            }
+          }
+
+          progress(`Successfully generated ${totalAssertions} assertions for ${Object.keys(assertions).length} stories`)
+          resolve({ success: true, assertions })
+        } catch (parseError) {
+          console.error('[ASSERTION-GEN] Parse error:', parseError.message)
+          console.error('[ASSERTION-GEN] Raw result:', resultText.substring(0, 500))
+          resolve({ success: false, error: `Failed to parse assertions: ${parseError.message}`, rawResponse: resultText })
+        }
+      })
+
+      proc.on('error', (err) => {
+        clearTimeout(timeout)
+        if (resolved) return
+        resolved = true
+        progress(`ERROR: ${err.message}`)
+        resolve({ success: false, error: err.message })
+      })
+    })
+  }
 }
 
 module.exports = { ClaudeService }

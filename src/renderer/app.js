@@ -162,6 +162,53 @@ class PuffinApp {
   }
 
   /**
+   * Show a modal for assertion generation progress
+   */
+  showAssertionGenerationModal() {
+    // Remove any existing modal
+    this.hideAssertionGenerationModal()
+
+    const modal = document.createElement('div')
+    modal.id = 'assertion-generation-modal'
+    modal.className = 'assertion-generation-modal'
+    modal.innerHTML = `
+      <div class="assertion-generation-content">
+        <div class="assertion-generation-spinner"></div>
+        <h3>Generating Inspection Assertions</h3>
+        <p class="assertion-generation-status">Analyzing stories and implementation plan...</p>
+        <p class="assertion-generation-hint">Claude is creating testable assertions for each story based on the approved plan.</p>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Subscribe to progress updates
+    if (window.puffin?.state?.onAssertionGenerationProgress) {
+      this._assertionProgressUnsubscribe = window.puffin.state.onAssertionGenerationProgress((data) => {
+        const statusEl = modal.querySelector('.assertion-generation-status')
+        if (statusEl && data.message) {
+          statusEl.textContent = data.message
+        }
+      })
+    }
+  }
+
+  /**
+   * Hide the assertion generation modal
+   */
+  hideAssertionGenerationModal() {
+    // Unsubscribe from progress updates
+    if (this._assertionProgressUnsubscribe) {
+      this._assertionProgressUnsubscribe()
+      this._assertionProgressUnsubscribe = null
+    }
+
+    const modal = document.getElementById('assertion-generation-modal')
+    if (modal) {
+      modal.remove()
+    }
+  }
+
+  /**
    * Initialize the application
    */
   async init() {
@@ -1597,9 +1644,56 @@ class PuffinApp {
 
       // Approve button
       if (approveBtn) {
-        approveBtn.addEventListener('click', () => {
+        approveBtn.addEventListener('click', async () => {
+          // First approve the plan (updates status)
           this.intents.approvePlan()
-          this.showToast('Plan approved! Ready for implementation.', 'success')
+
+          // Get the current sprint state
+          const sprint = this.state.activeSprint
+          if (!sprint || !sprint.stories || !sprint.plan) {
+            this.showToast('Plan approved! Ready for implementation.', 'success')
+            return
+          }
+
+          // Show assertion generation modal
+          this.showAssertionGenerationModal()
+
+          try {
+            // Generate assertions for all stories
+            const result = await window.puffin.state.generateSprintAssertions(
+              sprint.stories,
+              sprint.plan
+            )
+
+            this.hideAssertionGenerationModal()
+
+            if (result.success) {
+              // Update local state with new assertions
+              for (const [storyId, assertions] of Object.entries(result.assertions)) {
+                const story = sprint.stories.find(s => s.id === storyId)
+                if (story) {
+                  story.inspectionAssertions = assertions
+                }
+              }
+
+              this.showToast(
+                `Plan approved! Generated ${result.totalAssertions} inspection assertions.`,
+                'success'
+              )
+            } else {
+              this.showToast(
+                `Plan approved, but assertion generation failed: ${result.error}`,
+                'warning'
+              )
+            }
+          } catch (error) {
+            this.hideAssertionGenerationModal()
+            console.error('[SPRINT] Assertion generation error:', error)
+            this.showToast(
+              `Plan approved, but assertion generation failed: ${error.message}`,
+              'warning'
+            )
+          }
         })
       }
 

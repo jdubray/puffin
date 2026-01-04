@@ -551,7 +551,7 @@ Please provide specific file locations and line numbers where issues are found, 
       'createSprint', 'startSprintPlanning', 'approvePlan', 'setSprintPlan',
       'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
-      'updateSprintStoryStatus', 'clearSprintError', 'toggleCriteriaCompletion',
+      'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'toggleCriteriaCompletion',
       // Stuck detection actions
       'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection',
       // Debug actions
@@ -674,6 +674,7 @@ Please provide specific file locations and line numbers where issues are found, 
           ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation],
           ['COMPLETE_STORY_BRANCH', actions.completeStoryBranch],
           ['UPDATE_SPRINT_STORY_STATUS', actions.updateSprintStoryStatus],
+          ['UPDATE_SPRINT_STORY_ASSERTIONS', actions.updateSprintStoryAssertions],
           ['CLEAR_SPRINT_ERROR', actions.clearSprintError],
           ['TOGGLE_CRITERIA_COMPLETION', actions.toggleCriteriaCompletion],
           // Stuck detection actions
@@ -1788,13 +1789,10 @@ Please provide specific file locations and line numbers where issues are found, 
             this.hideAssertionGenerationModal()
 
             if (result.success) {
-              // Update model state with new assertions via SAM action
+              // Update model state with new assertions via SAM actions
               for (const [storyId, assertions] of Object.entries(result.assertions)) {
-                // Update both sprint stories and backlog stories
-                const story = sprint.stories.find(s => s.id === storyId)
-                if (story) {
-                  story.inspectionAssertions = assertions
-                }
+                // Dispatch action to update model.activeSprint.stories (for sprint UI)
+                this.intents.updateSprintStoryAssertions(storyId, assertions)
                 // Dispatch action to update model.userStories (for backlog UI)
                 this.intents.updateUserStory(storyId, { inspectionAssertions: assertions })
               }

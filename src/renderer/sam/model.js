@@ -2440,6 +2440,33 @@ export const updateSprintStoryStatusAcceptor = model => proposal => {
   }
 }
 
+// Update sprint story assertions (when assertions are generated for sprint stories)
+export const updateSprintStoryAssertionsAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_SPRINT_STORY_ASSERTIONS') {
+    const { storyId, assertions, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) {
+      console.warn('[SPRINT] Cannot update story assertions - no active sprint')
+      return
+    }
+
+    // Find and update the story in the sprint's stories array
+    const sprintStory = sprint.stories.find(s => s.id === storyId)
+    if (sprintStory) {
+      sprintStory.inspectionAssertions = assertions
+      sprintStory.updatedAt = timestamp
+      console.log('[SPRINT] Updated story assertions:', {
+        storyId,
+        assertionCount: assertions?.length || 0,
+        storyTitle: sprintStory.title?.substring(0, 30)
+      })
+    } else {
+      console.warn('[SPRINT] Story not found in active sprint:', storyId)
+    }
+  }
+}
+
 // Clear sprint validation error
 export const clearSprintErrorAcceptor = model => proposal => {
   if (proposal?.type === 'CLEAR_SPRINT_ERROR') {
@@ -3041,6 +3068,7 @@ export const acceptors = [
   clearPendingStoryImplementationAcceptor,
   completeStoryBranchAcceptor,
   updateSprintStoryStatusAcceptor,
+  updateSprintStoryAssertionsAcceptor,
   clearSprintErrorAcceptor,
   toggleCriteriaCompletionAcceptor,
 

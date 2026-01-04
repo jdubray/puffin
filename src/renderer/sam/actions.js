@@ -906,6 +906,16 @@ export const updateSprintStoryStatus = (storyId, status) => ({
   }
 })
 
+// Update sprint story assertions (when assertions are generated for sprint stories)
+export const updateSprintStoryAssertions = (storyId, assertions) => ({
+  type: 'UPDATE_SPRINT_STORY_ASSERTIONS',
+  payload: {
+    storyId,
+    assertions,
+    timestamp: Date.now()
+  }
+})
+
 // Clear sprint validation error
 export const clearSprintError = () => ({
   type: 'CLEAR_SPRINT_ERROR',

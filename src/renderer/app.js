@@ -1951,6 +1951,19 @@ Please provide specific file locations and line numbers where issues are found, 
           }
         }
       })
+
+      // Assertions toggle button clicks (expand/collapse)
+      sprintContextPanel.addEventListener('click', (e) => {
+        const toggleBtn = e.target.closest('.assertions-toggle-btn')
+        if (toggleBtn) {
+          const section = toggleBtn.closest('.story-assertions-section')
+          const list = section?.querySelector('.assertions-list')
+          if (section && list) {
+            section.classList.toggle('expanded')
+            list.classList.toggle('expanded')
+          }
+        }
+      })
     }
   }
 
@@ -2675,6 +2688,12 @@ Keep it concise but informative. Use markdown formatting.`
     let passedCount = 0
     let failedCount = 0
 
+    // Build a map of assertion results by ID for quick lookup
+    const resultMap = new Map()
+    if (results && results.results) {
+      results.results.forEach(r => resultMap.set(r.assertionId, r))
+    }
+
     if (hasResults) {
       passedCount = results.summary.passed || 0
       failedCount = results.summary.failed || 0
@@ -2691,16 +2710,63 @@ Keep it concise but informative. Use markdown formatting.`
       }
     }
 
+    // Render individual assertions list
+    const assertionsListHtml = assertions.map(assertion => {
+      const result = resultMap.get(assertion.id)
+      let itemStatusClass = 'assertion-pending'
+      let itemIcon = '○'
+
+      if (result) {
+        if (result.status === 'passed') {
+          itemStatusClass = 'assertion-passed'
+          itemIcon = '✓'
+        } else if (result.status === 'failed' || result.status === 'error') {
+          itemStatusClass = 'assertion-failed'
+          itemIcon = '✗'
+        }
+      }
+
+      const typeLabel = this.formatAssertionType(assertion.type)
+      const targetDisplay = assertion.target ? this.escapeHtml(assertion.target) : ''
+
+      return `
+        <li class="assertion-item ${itemStatusClass}">
+          <span class="assertion-item-icon">${itemIcon}</span>
+          <div class="assertion-item-content">
+            <span class="assertion-item-type">${typeLabel}</span>
+            ${targetDisplay ? `<span class="assertion-item-target" title="${targetDisplay}">${targetDisplay}</span>` : ''}
+            <span class="assertion-item-message">${this.escapeHtml(assertion.message || '')}</span>
+          </div>
+        </li>
+      `
+    }).join('')
+
     return `
       <div class="story-assertions-section ${statusClass}" data-story-id="${storyId}">
-        <div class="assertions-header">
+        <button class="assertions-toggle-btn" data-story-id="${storyId}" title="Toggle assertions">
+          <span class="assertions-toggle-icon">▶</span>
           <span class="assertions-icon">${hasResults ? (failedCount > 0 ? '!' : '✓') : '○'}</span>
           <span class="assertions-label">Assertions</span>
           <span class="assertions-summary">${summaryText}</span>
           <span class="assertions-total">(${assertions.length})</span>
-        </div>
+        </button>
+        <ul class="assertions-list">
+          ${assertionsListHtml}
+        </ul>
       </div>
     `
+  }
+
+  /**
+   * Format assertion type for display
+   * @param {string} type - The assertion type (e.g., FILE_EXISTS)
+   * @returns {string} Formatted type label
+   */
+  formatAssertionType(type) {
+    if (!type) return ''
+    return type.split('_').map(word =>
+      word.charAt(0) + word.slice(1).toLowerCase()
+    ).join(' ')
   }
 
   /**

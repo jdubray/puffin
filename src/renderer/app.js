@@ -1411,7 +1411,7 @@ Please provide specific file locations and line numbers where issues are found, 
 
       // Capture sprint plan content if we're in planning mode
       try {
-        const currentState = this.sam.getState()
+        const currentState = this.state
         const sprintStatus = currentState?.activeSprint?.status
         const hasContent = !!response?.content
         console.log('[SPRINT] Plan capture check - status:', sprintStatus, 'hasContent:', hasContent, 'contentLength:', response?.content?.length || 0)

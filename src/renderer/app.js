@@ -299,19 +299,44 @@ Please provide specific file locations and line numbers where issues are found, 
     // Switch to the code reviews branch
     this.intents.selectBranch(branchId)
 
-    // Submit the prompt
+    // Submit the prompt to SAM (adds to history)
     this.intents.submitPrompt({
       branchId,
       content: reviewPrompt,
       parentId: null
     })
 
-    // Notify the user
-    this.showToast('Code review started on Code Reviews branch', 'info')
-
     // Switch view to prompt if not already there
     if (this.state.currentView !== 'prompt') {
       this.intents.switchView('prompt')
+    }
+
+    // Actually submit to Claude CLI
+    if (window.puffin?.claude) {
+      // Check if a CLI process is already running
+      const isRunning = await window.puffin.claude.isRunning()
+      if (isRunning) {
+        console.error('[CODE-REVIEW] Cannot start review: CLI process already running')
+        this.showToast({
+          type: 'error',
+          title: 'Process Already Running',
+          message: 'Please wait for the current process to complete',
+          duration: 5000
+        })
+        return
+      }
+
+      window.puffin.claude.submit({
+        prompt: reviewPrompt,
+        branchId,
+        sessionId: null, // New session for code review
+        project: this.state.config ? {
+          name: this.state.config.name,
+          description: this.state.config.description
+        } : null
+      })
+
+      this.showToast('Code review started on Code Reviews branch', 'info')
     }
   }
 

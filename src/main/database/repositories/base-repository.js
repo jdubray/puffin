@@ -308,4 +308,52 @@ class BaseRepository {
   }
 }
 
-module.exports = { BaseRepository, setSqlTraceEnabled, isSqlTraceEnabled, traceSql }
+/**
+ * Standard database error with context
+ */
+class DatabaseError extends Error {
+  constructor(operation, table, originalError, context = {}) {
+    super(`${operation} on ${table} failed: ${originalError.message}`)
+    this.name = 'DatabaseError'
+    this.operation = operation
+    this.table = table
+    this.originalError = originalError
+    this.context = context
+    this.timestamp = new Date().toISOString()
+  }
+}
+
+/**
+ * Record not found error
+ */
+class RecordNotFoundError extends Error {
+  constructor(table, id) {
+    super(`Record not found in ${table}: ${id}`)
+    this.name = 'RecordNotFoundError'
+    this.table = table
+    this.recordId = id
+  }
+}
+
+/**
+ * Transaction failed error (rollback occurred)
+ */
+class TransactionError extends Error {
+  constructor(operation, originalError) {
+    super(`Transaction failed during ${operation}: ${originalError.message}`)
+    this.name = 'TransactionError'
+    this.operation = operation
+    this.originalError = originalError
+    this.rolledBack = true
+  }
+}
+
+module.exports = {
+  BaseRepository,
+  setSqlTraceEnabled,
+  isSqlTraceEnabled,
+  traceSql,
+  DatabaseError,
+  RecordNotFoundError,
+  TransactionError
+}

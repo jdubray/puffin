@@ -12,13 +12,20 @@ const { ClaudeService } = require('./claude-service')
 const { DeveloperProfileManager } = require('./developer-profile')
 const { GitService } = require('./git-service')
 const ClaudeMdGenerator = require('./claude-md-generator')
+const { AssertionEvaluator } = require('./evaluators/assertion-evaluator')
+const { AssertionGenerator } = require('./generators/assertion-generator')
+const { getTempImageService } = require('./services')
 
 let puffinState = null
 let claudeService = null
 let developerProfile = null
 let gitService = null
 let claudeMdGenerator = null
+let tempImageService = null
 let projectPath = null
+
+// Maximum allowed image file size (50MB)
+const MAX_IMAGE_SIZE = 50 * 1024 * 1024
 
 /**
  * Setup all IPC handlers
@@ -56,6 +63,9 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
 
   // Shell handlers
   setupShellHandlers(ipcMain)
+
+  // Image attachment handlers
+  setupImageHandlers(ipcMain)
 }
 
 /**
@@ -258,11 +268,36 @@ function setupStateHandlers(ipcMain) {
 
   // ============ Sprint Operations ============
 
+  // Check if an active sprint exists (for single-sprint enforcement)
+  ipcMain.handle('state:hasActiveSprint', async () => {
+    try {
+      if (!puffinState.database?.sprints) {
+        return { success: true, hasActive: false }
+      }
+      const hasActive = puffinState.database.sprints.hasActiveSprint()
+      const activeSprint = hasActive ? puffinState.database.sprints.findActive() : null
+      return {
+        success: true,
+        hasActive,
+        activeSprint: activeSprint ? {
+          id: activeSprint.id,
+          title: activeSprint.title || `Sprint ${activeSprint.id?.substring(0, 6)}`
+        } : null
+      }
+    } catch (error) {
+      console.error('[IPC] state:hasActiveSprint failed:', error.message)
+      return { success: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('state:updateActiveSprint', async (event, sprint) => {
     try {
+      console.log(`[IPC] state:updateActiveSprint called with sprint: id=${sprint?.id}, status=${sprint?.status}, stories=${sprint?.stories?.length || 0}`)
       await puffinState.updateActiveSprint(sprint)
+      console.log('[IPC] state:updateActiveSprint completed successfully')
       return { success: true }
     } catch (error) {
+      console.error('[IPC] state:updateActiveSprint failed:', error.message)
       return { success: false, error: error.message }
     }
   })
@@ -341,6 +376,175 @@ function setupStateHandlers(ipcMain) {
       }
       return { success: true, sprint }
     } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ============ Inspection Assertion Evaluation ============
+
+  // Evaluate assertions for a user story
+  ipcMain.handle('state:evaluateStoryAssertions', async (event, storyId) => {
+    try {
+      // Get story with its assertions
+      const story = puffinState.getUserStoryById(storyId)
+      if (!story) {
+        return { success: false, error: 'Story not found' }
+      }
+
+      // Get inspection assertions for the story
+      const assertions = puffinState.getStoryInspectionAssertions(storyId)
+      if (!assertions || assertions.length === 0) {
+        return {
+          success: true,
+          results: {
+            evaluatedAt: new Date().toISOString(),
+            summary: { total: 0, passed: 0, failed: 0, error: 0 },
+            results: []
+          },
+          storyId
+        }
+      }
+
+      // Create evaluator with project path
+      const evaluator = new AssertionEvaluator(projectPath)
+
+      // Evaluate all assertions with progress reporting
+      const results = await evaluator.evaluateAll(assertions, (index, total, result) => {
+        // Emit progress events for UI updates
+        event.sender.send('assertion-evaluation-progress', {
+          storyId,
+          current: index,
+          total,
+          lastResult: result
+        })
+      })
+
+      // Store results in database
+      await puffinState.saveAssertionResults(storyId, results)
+
+      // Emit completion event
+      event.sender.send('assertion-evaluation-complete', {
+        storyId,
+        results
+      })
+
+      return { success: true, results, storyId }
+    } catch (error) {
+      console.error('[IPC] evaluateStoryAssertions error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get stored assertion results for a story
+  ipcMain.handle('state:getAssertionResults', async (event, storyId) => {
+    try {
+      const results = puffinState.getAssertionResults(storyId)
+      return { success: true, results, storyId }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Evaluate a single assertion (for manual re-runs)
+  ipcMain.handle('state:evaluateSingleAssertion', async (event, { storyId, assertionId }) => {
+    try {
+      const assertions = puffinState.getStoryInspectionAssertions(storyId)
+      const assertion = assertions?.find(a => a.id === assertionId)
+
+      if (!assertion) {
+        return { success: false, error: 'Assertion not found' }
+      }
+
+      const evaluator = new AssertionEvaluator(projectPath)
+      const result = await evaluator.evaluateAssertion(assertion)
+
+      return { success: true, result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Generate inspection assertions from a story
+  ipcMain.handle('state:generateAssertions', async (event, { story, options }) => {
+    try {
+      const generator = new AssertionGenerator()
+      const result = generator.generate(story, {
+        includeSuggestions: options?.includeSuggestions ?? true,
+        projectContext: options?.projectContext
+      })
+
+      console.log('[IPC] generateAssertions:', {
+        storyTitle: story.title,
+        assertionCount: result.assertions.length,
+        suggestionCount: result.suggestions?.length || 0
+      })
+
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC] generateAssertions error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get assertion generation patterns for UI display
+  ipcMain.handle('state:getAssertionPatterns', async () => {
+    try {
+      const generator = new AssertionGenerator()
+      const patterns = generator.getPatternDescriptions()
+      const types = generator.getAssertionTypes()
+      return { success: true, patterns, types }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Generate inspection assertions for sprint stories using Claude
+  ipcMain.handle('state:generateSprintAssertions', async (event, { stories, plan }) => {
+    try {
+      console.log('[IPC] generateSprintAssertions called with', stories.length, 'stories')
+
+      // Use the module-level claudeService instance
+      if (!claudeService) {
+        return { success: false, error: 'Claude service not available' }
+      }
+
+      // Generate assertions via Claude
+      const result = await claudeService.generateInspectionAssertions(stories, plan, (msg) => {
+        // Send progress updates to renderer
+        event.sender.send('assertion-generation-progress', { message: msg })
+      })
+
+      if (!result.success) {
+        console.error('[IPC] generateSprintAssertions failed:', result.error)
+        return { success: false, error: result.error }
+      }
+
+      // Persist assertions to each story in the database
+      const assertionsByStory = result.assertions
+      let totalPersisted = 0
+
+      for (const [storyId, assertions] of Object.entries(assertionsByStory)) {
+        if (Array.isArray(assertions) && assertions.length > 0) {
+          try {
+            await puffinState.updateUserStory(storyId, {
+              inspectionAssertions: assertions
+            })
+            totalPersisted += assertions.length
+            console.log(`[IPC] Persisted ${assertions.length} assertions for story ${storyId}`)
+          } catch (err) {
+            console.error(`[IPC] Failed to persist assertions for story ${storyId}:`, err)
+          }
+        }
+      }
+
+      console.log('[IPC] generateSprintAssertions complete:', totalPersisted, 'assertions persisted')
+      return {
+        success: true,
+        assertions: assertionsByStory,
+        totalAssertions: totalPersisted
+      }
+    } catch (error) {
+      console.error('[IPC] generateSprintAssertions error:', error)
       return { success: false, error: error.message }
     }
   })
@@ -699,6 +903,29 @@ function setupStateHandlers(ipcMain) {
       const content = puffinState.getBranchSkillContent(branchId)
       return { success: true, content }
     } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Database reset handler (for development/troubleshooting)
+  // This runs pending migrations and optionally clears sprint data
+  ipcMain.handle('state:resetDatabase', async (event, options = {}) => {
+    try {
+      const result = await puffinState.resetDatabase(options)
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC] Database reset failed:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get database migration status
+  ipcMain.handle('state:getDatabaseStatus', async () => {
+    try {
+      const status = await puffinState.getDatabaseStatus()
+      return { success: true, ...status }
+    } catch (error) {
+      console.error('[IPC] Failed to get database status:', error)
       return { success: false, error: error.message }
     }
   })
@@ -2030,6 +2257,136 @@ function setupPluginStyleHandlers(ipcMain, pluginManager) {
       console.error('[IPC] plugin:get-all-style-paths error:', error)
       return { success: false, error: error.message }
     }
+  })
+}
+
+/**
+ * Image attachment handlers
+ * Manages temp image files for prompt attachments
+ */
+function setupImageHandlers(ipcMain) {
+  // Initialize temp image service when state is initialized
+  ipcMain.handle('image:init', async () => {
+    try {
+      if (!puffinState?.puffinPath) {
+        return { success: false, error: 'Project not initialized' }
+      }
+
+      tempImageService = getTempImageService(puffinState.puffinPath)
+
+      // Cleanup old temp files on init (older than 24 hours)
+      await tempImageService.cleanupOldFiles(24)
+
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC:image:init] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Save an image from buffer data
+  ipcMain.handle('image:save', async (event, { buffer, extension, originalName }) => {
+    try {
+      if (!tempImageService) {
+        // Try to initialize if not already
+        if (puffinState?.puffinPath) {
+          tempImageService = getTempImageService(puffinState.puffinPath)
+        } else {
+          return { success: false, error: 'Image service not initialized' }
+        }
+      }
+
+      // Convert array back to Buffer (IPC serialization)
+      const imageBuffer = Buffer.from(buffer)
+
+      // Validate file size (security: prevent disk exhaustion)
+      if (imageBuffer.length > MAX_IMAGE_SIZE) {
+        const sizeMB = (imageBuffer.length / (1024 * 1024)).toFixed(2)
+        return {
+          success: false,
+          error: `Image too large (${sizeMB}MB). Maximum size is 50MB.`
+        }
+      }
+
+      const result = await tempImageService.saveImage(imageBuffer, extension, originalName)
+
+      return {
+        success: true,
+        id: result.id,
+        filePath: result.filePath,
+        fileName: result.fileName,
+        originalName: result.originalName
+      }
+    } catch (error) {
+      console.error('[IPC:image:save] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Delete a single image
+  ipcMain.handle('image:delete', async (event, { filePath }) => {
+    try {
+      if (!tempImageService) {
+        return { success: false, error: 'Image service not initialized' }
+      }
+
+      const deleted = await tempImageService.deleteImage(filePath)
+      return { success: deleted }
+    } catch (error) {
+      console.error('[IPC:image:delete] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Delete multiple images (called after prompt submission)
+  ipcMain.handle('image:deleteMultiple', async (event, { filePaths }) => {
+    try {
+      if (!tempImageService) {
+        return { success: false, error: 'Image service not initialized' }
+      }
+
+      const result = await tempImageService.deleteImages(filePaths)
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC:image:deleteMultiple] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Clear all temp images
+  ipcMain.handle('image:clearAll', async () => {
+    try {
+      if (!tempImageService) {
+        return { success: true, deleted: 0 }
+      }
+
+      const result = await tempImageService.clearAll()
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC:image:clearAll] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // List all temp images
+  ipcMain.handle('image:list', async () => {
+    try {
+      if (!tempImageService) {
+        return { success: true, images: [] }
+      }
+
+      const images = await tempImageService.listImages()
+      return { success: true, images }
+    } catch (error) {
+      console.error('[IPC:image:list] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get supported image extensions
+  ipcMain.handle('image:getSupportedExtensions', async () => {
+    const { SUPPORTED_IMAGE_EXTENSIONS } = require('./services')
+    return { success: true, extensions: SUPPORTED_IMAGE_EXTENSIONS }
   })
 }
 

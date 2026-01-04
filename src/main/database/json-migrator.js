@@ -312,16 +312,18 @@ class JsonMigrator {
 
     const db = this.connection.getConnection()
 
-    // Insert sprint
+    // Insert sprint (includes title and description from migration 004/006)
     const insertSprint = db.prepare(`
       INSERT OR REPLACE INTO sprints (
-        id, status, plan, story_progress, prompt_id,
+        id, title, description, status, plan, story_progress, prompt_id,
         created_at, plan_approved_at, completed_at, closed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     insertSprint.run(
       sprint.id,
+      sprint.title || '',
+      sprint.description || '',
       sprint.status || 'planning',
       sprint.plan ? JSON.stringify(sprint.plan) : null,
       JSON.stringify(sprint.storyProgress || sprint.story_progress || {}),
@@ -371,21 +373,25 @@ class JsonMigrator {
     }
 
     const db = this.connection.getConnection()
+    // Includes title, description, and stories from migrations 003/004/006
     const insert = db.prepare(`
       INSERT OR REPLACE INTO sprint_history (
-        id, status, plan, story_progress, story_ids, prompt_id,
+        id, title, description, status, plan, story_progress, story_ids, stories, prompt_id,
         created_at, plan_approved_at, completed_at, closed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     const insertMany = db.transaction((sprints) => {
       for (const sprint of sprints) {
         insert.run(
           sprint.id,
+          sprint.title || '',
+          sprint.description || '',
           sprint.status || 'closed',
           sprint.plan ? JSON.stringify(sprint.plan) : null,
           JSON.stringify(sprint.storyProgress || sprint.story_progress || {}),
           JSON.stringify(sprint.storyIds || sprint.story_ids || []),
+          JSON.stringify(sprint.stories || []),
           sprint.promptId || sprint.prompt_id || null,
           sprint.createdAt || sprint.created_at || new Date().toISOString(),
           sprint.planApprovedAt || sprint.plan_approved_at || null,

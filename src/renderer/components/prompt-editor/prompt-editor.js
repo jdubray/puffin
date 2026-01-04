@@ -4,6 +4,9 @@
  * Handles prompt input and submission to Claude.
  */
 
+// Maximum number of image attachments allowed per prompt
+const MAX_ATTACHMENTS = 5
+
 export class PromptEditorComponent {
   constructor(intents) {
     this.intents = intents
@@ -35,6 +38,12 @@ export class PromptEditorComponent {
     this.includeDocsMenu = null
     this.includeDocs = false
     this.selectedDocuments = [] // Array of selected document filenames
+    // Image attachment state
+    this.attachedImages = [] // Array of {id, filePath, fileName, originalName, thumbnailDataUrl}
+    this.imageAttachmentPreview = null // Container for image thumbnails
+    this.dropZoneIndicator = null // Visual feedback for drag-drop
+    this.imagePreviewModal = null // Modal for viewing full-size images
+    this.supportedImageExtensions = ['.png', '.jpg', '.jpeg', '.webp']
   }
 
   /**
@@ -60,8 +69,152 @@ export class PromptEditorComponent {
     this.includeDocsDropdown = document.getElementById('include-docs-dropdown')
     this.includeDocsMenu = document.getElementById('include-docs-menu')
 
+    // Initialize image attachment UI
+    this.initImageAttachmentUI()
+
     this.bindEvents()
     this.subscribeToState()
+
+    // Initialize image service
+    this.initImageService()
+  }
+
+  /**
+   * Initialize image attachment UI elements
+   */
+  initImageAttachmentUI() {
+    // Create drop zone indicator (hidden by default)
+    this.dropZoneIndicator = document.createElement('div')
+    this.dropZoneIndicator.className = 'image-drop-zone-indicator hidden'
+    this.dropZoneIndicator.innerHTML = `
+      <div class="drop-zone-content">
+        <span class="drop-zone-icon">📎</span>
+        <span class="drop-zone-text">Drop image(s) here</span>
+      </div>
+    `
+
+    // Create image attachment preview container
+    this.imageAttachmentPreview = document.createElement('div')
+    this.imageAttachmentPreview.className = 'image-attachment-preview hidden'
+    this.imageAttachmentPreview.id = 'image-attachment-preview'
+
+    // Create image preview modal (for viewing full-size images)
+    this.imagePreviewModal = document.createElement('div')
+    this.imagePreviewModal.className = 'image-preview-modal hidden'
+    this.imagePreviewModal.id = 'image-preview-modal'
+    this.imagePreviewModal.setAttribute('role', 'dialog')
+    this.imagePreviewModal.setAttribute('aria-modal', 'true')
+    this.imagePreviewModal.setAttribute('aria-label', 'Image preview')
+    this.imagePreviewModal.innerHTML = `
+      <div class="image-preview-backdrop"></div>
+      <div class="image-preview-content">
+        <button class="image-preview-close" title="Close preview (Escape)" aria-label="Close preview">×</button>
+        <img class="image-preview-img" src="" alt="Image preview" />
+        <div class="image-preview-filename"></div>
+      </div>
+    `
+
+    // Insert before the textarea's parent (prompt input container)
+    const promptInputContainer = this.textarea?.parentElement
+    if (promptInputContainer) {
+      promptInputContainer.style.position = 'relative'
+      promptInputContainer.appendChild(this.dropZoneIndicator)
+      promptInputContainer.insertBefore(this.imageAttachmentPreview, this.textarea)
+    }
+
+    // Add modal to body (so it overlays everything)
+    document.body.appendChild(this.imagePreviewModal)
+
+    // Bind modal close events
+    this.bindImagePreviewModalEvents()
+  }
+
+  /**
+   * Bind events for the image preview modal
+   */
+  bindImagePreviewModalEvents() {
+    if (!this.imagePreviewModal) return
+
+    // Close on backdrop click
+    const backdrop = this.imagePreviewModal.querySelector('.image-preview-backdrop')
+    if (backdrop) {
+      backdrop.addEventListener('click', () => this.closeImagePreviewModal())
+    }
+
+    // Close on close button click
+    const closeBtn = this.imagePreviewModal.querySelector('.image-preview-close')
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.closeImagePreviewModal())
+    }
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !this.imagePreviewModal.classList.contains('hidden')) {
+        this.closeImagePreviewModal()
+      }
+    })
+  }
+
+  /**
+   * Open the image preview modal with a specific image
+   * @param {Object} imageData - Image data with filePath and originalName
+   */
+  openImagePreviewModal(imageData) {
+    if (!this.imagePreviewModal || !imageData) return
+
+    const img = this.imagePreviewModal.querySelector('.image-preview-img')
+    const filename = this.imagePreviewModal.querySelector('.image-preview-filename')
+
+    if (img) {
+      // Use file:// protocol to load the image from temp directory
+      img.src = `file://${imageData.filePath}`
+      img.alt = imageData.originalName || 'Image preview'
+    }
+
+    if (filename) {
+      filename.textContent = imageData.originalName || imageData.fileName
+    }
+
+    this.imagePreviewModal.classList.remove('hidden')
+    document.body.style.overflow = 'hidden' // Prevent background scrolling
+
+    // Focus the close button for accessibility
+    const closeBtn = this.imagePreviewModal.querySelector('.image-preview-close')
+    if (closeBtn) {
+      closeBtn.focus()
+    }
+  }
+
+  /**
+   * Close the image preview modal
+   */
+  closeImagePreviewModal() {
+    if (!this.imagePreviewModal) return
+
+    this.imagePreviewModal.classList.add('hidden')
+    document.body.style.overflow = '' // Restore scrolling
+
+    // Clear the image src to free memory
+    const img = this.imagePreviewModal.querySelector('.image-preview-img')
+    if (img) {
+      img.src = ''
+    }
+  }
+
+  /**
+   * Initialize the image service
+   */
+  async initImageService() {
+    if (window.puffin?.image?.init) {
+      try {
+        const result = await window.puffin.image.init()
+        if (result.success) {
+          console.log('[PROMPT-EDITOR] Image service initialized')
+        }
+      } catch (error) {
+        console.warn('[PROMPT-EDITOR] Failed to initialize image service:', error)
+      }
+    }
   }
 
   /**
@@ -161,6 +314,352 @@ export class PromptEditorComponent {
         this.submit()
       }
     })
+
+    // Image drag-drop event handlers
+    this.bindImageDragDropEvents()
+  }
+
+  /**
+   * Bind drag-drop events for image attachments
+   */
+  bindImageDragDropEvents() {
+    const promptContainer = this.textarea?.parentElement
+    if (!promptContainer) return
+
+    let dragCounter = 0
+
+    // Prevent default to allow drop
+    promptContainer.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+    })
+
+    // Show drop indicator when dragging over
+    promptContainer.addEventListener('dragenter', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      dragCounter++
+
+      // Check if dragging files
+      if (e.dataTransfer?.types?.includes('Files')) {
+        this.showDropZone()
+      }
+    })
+
+    // Hide drop indicator when leaving
+    promptContainer.addEventListener('dragleave', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      dragCounter--
+
+      if (dragCounter === 0) {
+        this.hideDropZone()
+      }
+    })
+
+    // Handle the drop
+    promptContainer.addEventListener('drop', async (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      dragCounter = 0
+      this.hideDropZone()
+
+      const files = e.dataTransfer?.files
+      if (files && files.length > 0) {
+        await this.processDroppedFiles(files)
+      }
+    })
+
+    // Handle paste events for images
+    this.textarea.addEventListener('paste', async (e) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+
+      // Collect all image files from clipboard first
+      const imageFiles = []
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            imageFiles.push(file)
+          }
+        }
+      }
+
+      // Process all images if any found
+      if (imageFiles.length > 0) {
+        e.preventDefault()
+        for (const file of imageFiles) {
+          await this.processImageFile(file)
+        }
+      }
+    })
+
+    // Handle image preview click events (for removal and full preview)
+    if (this.imageAttachmentPreview) {
+      this.imageAttachmentPreview.addEventListener('click', (e) => {
+        // Handle remove button click
+        const removeBtn = e.target.closest('.image-remove-btn')
+        if (removeBtn) {
+          e.stopPropagation()
+          const imageId = removeBtn.dataset.imageId
+          if (imageId) {
+            this.removeAttachedImage(imageId)
+          }
+          return
+        }
+
+        // Handle thumbnail click to open full preview
+        const thumbnail = e.target.closest('.image-thumbnail')
+        const attachmentItem = e.target.closest('.image-attachment-item')
+        if (thumbnail && attachmentItem) {
+          const imageId = attachmentItem.dataset.imageId
+          const imageData = this.attachedImages.find(img => img.id === imageId)
+          if (imageData) {
+            this.openImagePreviewModal(imageData)
+          }
+        }
+      })
+    }
+  }
+
+  /**
+   * Show the drop zone indicator
+   */
+  showDropZone() {
+    if (this.dropZoneIndicator) {
+      this.dropZoneIndicator.classList.remove('hidden')
+    }
+  }
+
+  /**
+   * Hide the drop zone indicator
+   */
+  hideDropZone() {
+    if (this.dropZoneIndicator) {
+      this.dropZoneIndicator.classList.add('hidden')
+    }
+  }
+
+  /**
+   * Process dropped files
+   * @param {FileList} files
+   */
+  async processDroppedFiles(files) {
+    for (const file of files) {
+      const ext = this.getFileExtension(file.name)
+      if (this.supportedImageExtensions.includes(ext.toLowerCase())) {
+        await this.processImageFile(file)
+      }
+    }
+  }
+
+  /**
+   * Get file extension with dot
+   * @param {string} filename
+   * @returns {string}
+   */
+  getFileExtension(filename) {
+    const lastDot = filename.lastIndexOf('.')
+    return lastDot >= 0 ? filename.substring(lastDot).toLowerCase() : ''
+  }
+
+  /**
+   * Process a single image file
+   * @param {File} file
+   */
+  async processImageFile(file) {
+    // Check attachment limit before processing
+    if (this.attachedImages.length >= MAX_ATTACHMENTS) {
+      window.puffinApp?.showToast?.({
+        type: 'warning',
+        title: 'Attachment Limit Reached',
+        message: `Maximum of ${MAX_ATTACHMENTS} images allowed`,
+        duration: 3000
+      })
+      return
+    }
+
+    try {
+      // Read file as ArrayBuffer
+      const buffer = await file.arrayBuffer()
+      const extension = this.getFileExtension(file.name) || '.png'
+
+      // Save to temp directory via IPC
+      const result = await window.puffin.image.save(buffer, extension, file.name)
+
+      if (result.success) {
+        // Generate thumbnail data URL
+        const thumbnailDataUrl = await this.generateThumbnail(file)
+
+        // Add to attached images
+        this.attachedImages.push({
+          id: result.id,
+          filePath: result.filePath,
+          fileName: result.fileName,
+          originalName: result.originalName || file.name,
+          thumbnailDataUrl
+        })
+
+        // Update preview UI
+        this.renderImageAttachmentPreview()
+
+        console.log(`[PROMPT-EDITOR] Image attached: ${file.name}`)
+      } else {
+        console.error('[PROMPT-EDITOR] Failed to save image:', result.error)
+        window.puffinApp?.showToast?.({
+          type: 'error',
+          title: 'Image Upload Failed',
+          message: result.error || 'Failed to save image',
+          duration: 3000
+        })
+      }
+    } catch (error) {
+      console.error('[PROMPT-EDITOR] Error processing image:', error)
+    }
+  }
+
+  /**
+   * Generate a thumbnail data URL from a file
+   * @param {File} file
+   * @returns {Promise<string>}
+   */
+  async generateThumbnail(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          // Create canvas for thumbnail
+          const canvas = document.createElement('canvas')
+          const maxSize = 120
+          let width = img.width
+          let height = img.height
+
+          // Scale down if needed
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width
+              width = maxSize
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height
+              height = maxSize
+            }
+          }
+
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, width, height)
+
+          resolve(canvas.toDataURL('image/jpeg', 0.7))
+        }
+        img.onerror = () => resolve('')
+        img.src = e.target.result
+      }
+      reader.onerror = () => resolve('')
+      reader.readAsDataURL(file)
+    })
+  }
+
+  /**
+   * Render the image attachment preview
+   */
+  renderImageAttachmentPreview() {
+    if (!this.imageAttachmentPreview) return
+
+    if (this.attachedImages.length === 0) {
+      this.imageAttachmentPreview.classList.add('hidden')
+      this.imageAttachmentPreview.innerHTML = ''
+      return
+    }
+
+    this.imageAttachmentPreview.classList.remove('hidden')
+    this.imageAttachmentPreview.innerHTML = this.attachedImages.map(img => `
+      <div class="image-attachment-item" data-image-id="${img.id}" title="${this.escapeHtml(img.originalName)}">
+        <img src="${img.thumbnailDataUrl}" alt="${this.escapeHtml(img.originalName)}" class="image-thumbnail" />
+        <span class="image-filename">${this.truncateFilename(img.originalName, 15)}</span>
+        <button type="button" class="image-remove-btn" data-image-id="${img.id}" title="Remove image">×</button>
+      </div>
+    `).join('')
+
+    // Update submit button state
+    this.updateSubmitButtonState()
+  }
+
+  /**
+   * Truncate a filename for display
+   * @param {string} filename
+   * @param {number} maxLength
+   * @returns {string}
+   */
+  truncateFilename(filename, maxLength) {
+    if (filename.length <= maxLength) return filename
+    const ext = this.getFileExtension(filename)
+    const name = filename.substring(0, filename.length - ext.length)
+    const truncatedName = name.substring(0, maxLength - ext.length - 3) + '...'
+    return truncatedName + ext
+  }
+
+  /**
+   * Remove an attached image
+   * @param {string} imageId
+   */
+  async removeAttachedImage(imageId) {
+    const image = this.attachedImages.find(img => img.id === imageId)
+    if (!image) return
+
+    // Delete from temp storage
+    if (window.puffin?.image?.delete) {
+      await window.puffin.image.delete(image.filePath)
+    }
+
+    // Remove from array
+    this.attachedImages = this.attachedImages.filter(img => img.id !== imageId)
+
+    // Update preview
+    this.renderImageAttachmentPreview()
+
+    console.log(`[PROMPT-EDITOR] Image removed: ${image.originalName}`)
+  }
+
+  /**
+   * Clear all attached images
+   */
+  async clearAttachedImages() {
+    if (this.attachedImages.length === 0) return
+
+    // Delete all from temp storage
+    const filePaths = this.attachedImages.map(img => img.filePath)
+    if (window.puffin?.image?.deleteMultiple) {
+      await window.puffin.image.deleteMultiple(filePaths)
+    }
+
+    this.attachedImages = []
+    this.renderImageAttachmentPreview()
+  }
+
+  /**
+   * Update submit button state based on content and images
+   */
+  updateSubmitButtonState() {
+    const hasContent = this.textarea?.value?.trim().length > 0
+    const hasImages = this.attachedImages.length > 0
+    this.submitBtn.disabled = !hasContent && !hasImages
+  }
+
+  /**
+   * Format attached images for prompt inclusion
+   * @returns {string}
+   */
+  formatImagesForPrompt() {
+    if (this.attachedImages.length === 0) return ''
+
+    return this.attachedImages
+      .map(img => `[image: ${img.filePath}]`)
+      .join('\n')
   }
 
   /**
@@ -184,6 +683,14 @@ export class PromptEditorComponent {
       if (this.wasProcessing && !state.prompt.isProcessing) {
         this.textarea.value = ''
         this.submitBtn.disabled = true
+
+        // Cleanup attached images from temp storage
+        if (this._pendingImageCleanup && this._pendingImageCleanup.length > 0) {
+          window.puffin?.image?.deleteMultiple(this._pendingImageCleanup)
+            .then(() => console.log('[PROMPT-EDITOR] Cleaned up temp images'))
+            .catch(err => console.warn('[PROMPT-EDITOR] Failed to cleanup images:', err))
+          this._pendingImageCleanup = null
+        }
       }
       this.wasProcessing = state.prompt.isProcessing
 
@@ -687,7 +1194,17 @@ export class PromptEditorComponent {
       }
 
       // Append design documents to prompt if selected
-      const finalPrompt = docsContent ? content + docsContent : content
+      let finalPrompt = docsContent ? content + docsContent : content
+
+      // Prepend image attachments to prompt if any
+      const imageAttachments = this.formatImagesForPrompt()
+      if (imageAttachments) {
+        finalPrompt = imageAttachments + '\n\n' + finalPrompt
+        console.log(`[PROMPT-EDITOR] Including ${this.attachedImages.length} image(s) in prompt`)
+      }
+
+      // Store image paths for cleanup after submission
+      const attachedImagePaths = this.attachedImages.map(img => img.filePath)
 
       const selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
 
@@ -722,6 +1239,12 @@ export class PromptEditorComponent {
       if (this.pendingHandoff) {
         this.clearPendingHandoff()
       }
+
+      // Clear attached images after submission (cleanup happens in state change handler)
+      // Store paths for cleanup in the onComplete handler
+      this._pendingImageCleanup = attachedImagePaths
+      this.attachedImages = []
+      this.renderImageAttachmentPreview()
     }
   }
 

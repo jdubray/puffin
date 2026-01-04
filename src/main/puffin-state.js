@@ -21,15 +21,13 @@
 const fs = require('fs').promises
 const path = require('path')
 const { database } = require('./database')
+const { SprintService } = require('./services')
 
 const PUFFIN_DIR = '.puffin'
 const CONFIG_FILE = 'config.json'
 const HISTORY_FILE = 'history.json'
 const ARCHITECTURE_FILE = 'architecture.md'
-const USER_STORIES_FILE = 'user-stories.json'
-const ARCHIVED_STORIES_FILE = 'archived-stories.json'
-const ACTIVE_SPRINT_FILE = 'active-sprint.json'
-const SPRINT_HISTORY_FILE = 'sprint-history.json'
+// Note: User stories and sprint data are stored in SQLite only (no JSON backup)
 const STORY_GENERATIONS_FILE = 'story-generations.json'
 const GIT_OPERATIONS_FILE = 'git-operations.json'
 const GUI_DESIGNS_DIR = 'gui-definitions'
@@ -52,6 +50,7 @@ class PuffinState {
     this.claudePlugins = null // Claude Code skill plugins
     this.database = database // SQLite database manager
     this.useSqlite = true // Flag to enable/disable SQLite (for debugging)
+    this.sprintService = null // Sprint service layer (initialized after database)
   }
 
   /**
@@ -102,6 +101,27 @@ class PuffinState {
           if (dbResult.migrated) {
             console.log('[PUFFIN-STATE] JSON data migrated to SQLite')
           }
+
+          // Initialize SprintService with repositories and callbacks
+          this.sprintService = new SprintService({
+            sprintRepo: this.database.sprints,
+            userStoryRepo: this.database.userStories,
+            onSprintCreated: (sprint) => {
+              console.log(`[PUFFIN-STATE] SprintService: sprint created ${sprint.id}`)
+              this.invalidateCache(['activeSprint'])
+            },
+            onSprintArchived: (sprint) => {
+              console.log(`[PUFFIN-STATE] SprintService: sprint archived ${sprint.id}`)
+              this.invalidateCache(['activeSprint'])
+            },
+            onStoryStatusChanged: ({ storyId, status, allStoriesCompleted }) => {
+              console.log(`[PUFFIN-STATE] SprintService: story ${storyId} -> ${status}`)
+              if (allStoriesCompleted) {
+                console.log('[PUFFIN-STATE] SprintService: all stories completed!')
+              }
+            }
+          })
+          console.log('[PUFFIN-STATE] SprintService initialized')
         } else {
           console.error('[PUFFIN-STATE] SQLite initialization failed:', dbResult.errors)
           // Continue with JSON fallback
@@ -227,7 +247,7 @@ class PuffinState {
     const archivedStories = this.getArchivedStories()
     const activeSprint = this.getActiveSprint()
 
-    return {
+    const state = {
       projectPath: this.projectPath,
       projectName: path.basename(this.projectPath),
       config: this.config,
@@ -241,6 +261,39 @@ class PuffinState {
       gitOperations: this.gitOperations,
       claudePlugins: this.claudePlugins,
       database: this.getDatabaseStatus()
+    }
+
+    // Ensure state is IPC-serializable by removing any non-clonable values
+    // (functions, class instances with methods, circular references, etc.)
+    try {
+      return JSON.parse(JSON.stringify(state))
+    } catch (error) {
+      console.error('[PUFFIN-STATE] State serialization failed:', error.message)
+      // Try to identify which part of the state is failing
+      const keys = Object.keys(state)
+      for (const key of keys) {
+        try {
+          JSON.stringify(state[key])
+        } catch (keyError) {
+          console.error(`[PUFFIN-STATE] Serialization failed for key '${key}':`, keyError.message)
+        }
+      }
+      // Return a minimal safe state if serialization fails
+      return {
+        projectPath: this.projectPath,
+        projectName: path.basename(this.projectPath),
+        config: {},
+        history: { activeBranch: 'specifications', branches: {} },
+        userStories: [],
+        archivedStoriesCount: 0,
+        activeSprint: null,
+        sprintHistory: [],
+        storyGenerations: [],
+        uiGuidelines: null,
+        gitOperations: [],
+        claudePlugins: [],
+        database: { enabled: false, reason: 'serialization-error' }
+      }
     }
   }
 
@@ -363,6 +416,7 @@ class PuffinState {
       title: story.title,
       description: story.description || '',
       acceptanceCriteria: story.acceptanceCriteria || [],
+      inspectionAssertions: story.inspectionAssertions || [],
       status: story.status || 'pending',
       implementedOn: story.implementedOn || [],
       sourcePromptId: story.sourcePromptId || null,
@@ -489,6 +543,69 @@ class PuffinState {
 
     // Cache fallback (should rarely be needed)
     return this.userStories || []
+  }
+
+  /**
+   * Get a single user story by ID
+   *
+   * @param {string} storyId - The story ID
+   * @returns {Object|null} The user story or null if not found
+   */
+  getUserStoryById(storyId) {
+    if (this.database.isInitialized() && this.database.userStories) {
+      try {
+        return this.database.userStories.findById(storyId)
+      } catch (error) {
+        console.warn('[PUFFIN-STATE] SQLite read failed for story:', error.message)
+      }
+    }
+    // Cache fallback
+    const stories = this.userStories || []
+    return stories.find(s => s.id === storyId) || null
+  }
+
+  /**
+   * Get inspection assertions for a story
+   *
+   * @param {string} storyId - The story ID
+   * @returns {Array} Array of inspection assertion objects
+   */
+  getStoryInspectionAssertions(storyId) {
+    const story = this.getUserStoryById(storyId)
+    return story?.inspectionAssertions || []
+  }
+
+  /**
+   * Save assertion evaluation results for a story
+   *
+   * @param {string} storyId - The story ID
+   * @param {Object} results - Evaluation results object
+   * @returns {Promise<Object>} Updated story
+   */
+  async saveAssertionResults(storyId, results) {
+    if (!this.database.isInitialized() || !this.database.userStories) {
+      throw new Error('Database not initialized')
+    }
+
+    const updated = this.database.userStories.storeAssertionResults(storyId, results)
+    if (updated) {
+      // Invalidate cache
+      this.invalidateCache(['userStories'])
+      // Persist to JSON backup
+      await this._saveUserStoriesToJson(this.getUserStories())
+    }
+    return updated
+  }
+
+  /**
+   * Get assertion evaluation results for a story
+   *
+   * @param {string} storyId - The story ID
+   * @returns {Object|null} Assertion results or null if not evaluated
+   */
+  getAssertionResults(storyId) {
+    const story = this.getUserStoryById(storyId)
+    return story?.assertionResults || null
   }
 
   // ============ Story Generation Tracking Methods ============
@@ -1927,30 +2044,13 @@ class PuffinState {
   }
 
   /**
-   * Save user stories to JSON file with safety checks
+   * Save user stories to JSON file - DISABLED
+   * SQLite is the single source of truth, JSON backup removed.
    * @private
-   * @param {Array} stories - Stories to save
+   * @param {Array} stories - Stories to save (ignored)
    */
   async _saveUserStoriesToJson(stories) {
-    const storiesPath = path.join(this.puffinPath, USER_STORIES_FILE)
-
-    // Safety check: If writing empty array but file exists with stories, create backup first
-    if (stories.length === 0) {
-      try {
-        const existingContent = await fs.readFile(storiesPath, 'utf-8')
-        const existingStories = JSON.parse(existingContent)
-        if (Array.isArray(existingStories) && existingStories.length > 0) {
-          // Create backup before wiping
-          const backupPath = path.join(this.puffinPath, 'user-stories.backup.json')
-          await fs.writeFile(backupPath, existingContent, 'utf-8')
-          console.warn(`[PUFFIN-STATE] SAFETY: Creating backup before writing empty array. ${existingStories.length} stories backed up to user-stories.backup.json`)
-        }
-      } catch {
-        // File doesn't exist or can't be parsed, safe to proceed
-      }
-    }
-
-    await fs.writeFile(storiesPath, JSON.stringify(stories, null, 2), 'utf-8')
+    // No-op: JSON backup disabled, SQLite is source of truth
   }
 
   /**
@@ -2024,13 +2124,13 @@ class PuffinState {
   }
 
   /**
-   * Save archived stories to JSON file (backup)
+   * Save archived stories to JSON file - DISABLED
+   * SQLite is the single source of truth, JSON backup removed.
    * @private
-   * @param {Array} stories - Stories to save
+   * @param {Array} stories - Stories to save (ignored)
    */
   async _saveArchivedStoriesToJson(stories) {
-    const archivePath = path.join(this.puffinPath, ARCHIVED_STORIES_FILE)
-    await fs.writeFile(archivePath, JSON.stringify(stories, null, 2), 'utf-8')
+    // No-op: JSON backup disabled, SQLite is source of truth
   }
 
   /**
@@ -2126,15 +2226,20 @@ class PuffinState {
     // Execute atomic SQLite operation
     // Both create() and update() use immediateTransaction - auto-rollback on failure
     if (sprint) {
+      console.log(`[PUFFIN-STATE] Saving active sprint: id=${sprint.id}, status=${sprint.status}, stories=${sprint.stories?.length || 0}`)
       const existing = this.database.sprints.findById(sprint.id)
       if (existing) {
         // Atomic update
+        console.log(`[PUFFIN-STATE] Updating existing sprint: ${sprint.id}`)
         this.database.sprints.update(sprint.id, sprint)
       } else {
         // Atomic create with story relationships
         const storyIds = (sprint.stories || []).map(s => s.id)
+        console.log(`[PUFFIN-STATE] Creating new sprint: ${sprint.id} with ${storyIds.length} stories`)
         this.database.sprints.create(sprint, storyIds)
       }
+    } else {
+      console.log('[PUFFIN-STATE] saveActiveSprint called with null/undefined sprint')
     }
     // Note: We don't delete from SQLite here - use archive instead
 
@@ -2179,21 +2284,8 @@ class PuffinState {
     }
 
     try {
-      let sprints = this.database.sprints.findArchived()
+      const sprints = this.database.sprints.findArchived()
       console.log(`[PUFFIN-STATE] SQLite sprint history: ${sprints?.length || 0} sprints`)
-
-      // If SQLite is empty, try loading from JSON and migrate
-      if (!sprints || sprints.length === 0) {
-        console.log('[PUFFIN-STATE] SQLite empty, checking JSON file...')
-        const jsonSprints = await this.loadSprintHistoryFromJson()
-        console.log(`[PUFFIN-STATE] JSON sprint history: ${jsonSprints?.length || 0} sprints`)
-        if (jsonSprints && jsonSprints.length > 0) {
-          console.log(`[PUFFIN-STATE] Migrating ${jsonSprints.length} sprints from JSON to SQLite`)
-          await this.migrateSprintHistoryToSqlite(jsonSprints)
-          sprints = this.database.sprints.findArchived()
-          console.log(`[PUFFIN-STATE] After migration: ${sprints?.length || 0} sprints in SQLite`)
-        }
-      }
 
       return {
         sprints: sprints || [],
@@ -2207,66 +2299,29 @@ class PuffinState {
   }
 
   /**
-   * Save sprint history
+   * Save sprint history - DISABLED
+   * SQLite is the single source of truth, JSON backup removed.
    * @private
    */
   async saveSprintHistory(history = this.sprintHistory) {
-    history.updatedAt = new Date().toISOString()
-    const historyPath = path.join(this.puffinPath, SPRINT_HISTORY_FILE)
-    await fs.writeFile(historyPath, JSON.stringify(history, null, 2), 'utf-8')
+    // No-op: JSON backup disabled, SQLite is source of truth
   }
 
   /**
-   * Load sprint history from JSON file (for migration)
+   * Load sprint history from JSON file - DISABLED
    * @private
    */
   async loadSprintHistoryFromJson() {
-    try {
-      const historyPath = path.join(this.puffinPath, SPRINT_HISTORY_FILE)
-      const data = await fs.readFile(historyPath, 'utf-8')
-      const parsed = JSON.parse(data)
-      return parsed.sprints || []
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        console.warn('[PUFFIN-STATE] Failed to read sprint history JSON:', error.message)
-      }
-      return []
-    }
+    // No-op: JSON migration disabled
+    return []
   }
 
   /**
-   * Migrate sprint history from JSON to SQLite
+   * Migrate sprint history from JSON to SQLite - DISABLED
    * @private
    */
   async migrateSprintHistoryToSqlite(sprints) {
-    if (!this.database.isInitialized() || !this.database.sprints) {
-      console.warn('[PUFFIN-STATE] Cannot migrate sprints - database not initialized')
-      return
-    }
-
-    for (const sprint of sprints) {
-      try {
-        // Convert JSON format to SQLite format
-        const sprintData = {
-          id: sprint.id,
-          title: sprint.title || `Sprint ${sprint.id.substring(0, 6)}`,
-          description: sprint.description || '',
-          status: 'archived',
-          created_at: sprint.createdAt,
-          closed_at: sprint.closedAt,
-          story_ids: sprint.storyIds || [],
-          story_progress: sprint.storyProgress || {},
-          prompt_id: sprint.promptId || null,
-          plan_approved_at: sprint.planApprovedAt || null
-        }
-
-        // Use insertToHistory to directly insert into sprint_history table
-        this.database.sprints.insertToHistory(sprintData)
-        console.log(`[PUFFIN-STATE] Migrated sprint: ${sprint.id}`)
-      } catch (error) {
-        console.warn(`[PUFFIN-STATE] Failed to migrate sprint ${sprint.id}:`, error.message)
-      }
-    }
+    // No-op: JSON migration disabled
   }
 
   /**
@@ -2286,18 +2341,47 @@ class PuffinState {
       throw new Error('Database not initialized - cannot archive sprint')
     }
 
+    // Use SprintService for atomic closure if available
+    // SprintService.closeAndArchive() handles:
+    // 1. Story status updates (completed stay completed, others go to pending)
+    // 2. Archival to sprint_history with inline story data
+    // 3. Cleanup of sprint and relationships
+    // All in a single atomic transaction
+    if (this.sprintService) {
+      const options = {
+        title: sprint.title,
+        description: sprint.description
+      }
+      const archived = this.sprintService.closeAndArchive(sprint.id, options)
+
+      // Transaction committed successfully - backup to JSON
+      try {
+        const history = await this.loadSprintHistory()
+        this.sprintHistory = history
+        await this.saveSprintHistory()
+        console.log(`[PUFFIN-STATE] Archived sprint atomically via service: ${sprint.id}`)
+      } catch (backupError) {
+        console.warn(`[PUFFIN-STATE] JSON backup failed after archive: ${backupError.message}`)
+      }
+
+      return archived
+    }
+
+    // Fallback: Direct repository access (for backward compatibility)
     // Fetch story data to store inline with the archived sprint
     const storyIds = this.database.sprints.getStoryIds(sprint.id)
     const stories = storyIds.map(id => {
       const story = this.database.userStories.findById(id)
       if (story) {
-        // Store essential fields for historical display
+        // Store essential fields for historical display including assertion data
         return {
           id: story.id,
           title: story.title,
           description: story.description,
           status: story.status,
-          acceptanceCriteria: story.acceptanceCriteria || []
+          acceptanceCriteria: story.acceptanceCriteria || [],
+          inspectionAssertions: story.inspectionAssertions || [],
+          assertionResults: story.assertionResults
         }
       }
       return null
@@ -2474,14 +2558,12 @@ class PuffinState {
   }
 
   /**
-   * Save active sprint to JSON file only (for backup)
+   * Save active sprint to JSON file - DISABLED
+   * SQLite is the single source of truth, JSON backup removed.
    * @private
    */
   async _saveActiveSprintToJson(sprint) {
-    const sprintPath = path.join(this.puffinPath, ACTIVE_SPRINT_FILE)
-    if (sprint) {
-      await fs.writeFile(sprintPath, JSON.stringify(sprint, null, 2), 'utf-8')
-    }
+    // No-op: JSON backup disabled, SQLite is source of truth
   }
 
   /**
@@ -2944,6 +3026,111 @@ class PuffinState {
       return true
     } catch {
       return false
+    }
+  }
+
+  // ===== DATABASE MANAGEMENT OPERATIONS =====
+
+  /**
+   * Get database migration status
+   *
+   * @returns {Object} Database status including applied and pending migrations
+   */
+  async getDatabaseStatus() {
+    if (!this.useSqlite || !this.database.isInitialized()) {
+      return {
+        initialized: false,
+        currentVersion: null,
+        appliedMigrations: [],
+        pendingMigrations: [],
+        needsMigrations: false
+      }
+    }
+
+    try {
+      const status = this.database.getMigrationStatus()
+      return {
+        initialized: true,
+        ...status
+      }
+    } catch (error) {
+      console.error('[PuffinState] Failed to get database status:', error)
+      return {
+        initialized: true,
+        error: error.message
+      }
+    }
+  }
+
+  /**
+   * Reset database by running pending migrations
+   *
+   * This method:
+   * 1. Runs any pending migrations (including migration 006 which resets sprint tables)
+   * 2. Optionally clears all user stories if requested
+   * 3. Invalidates all caches
+   *
+   * @param {Object} options - Reset options
+   * @param {boolean} [options.clearStories=false] - If true, delete all user stories
+   * @param {boolean} [options.forceRunMigrations=false] - If true, run migrations even if none pending
+   * @returns {Object} Result of the reset operation
+   */
+  async resetDatabase(options = {}) {
+    const { clearStories = false, forceRunMigrations = false } = options
+
+    if (!this.useSqlite || !this.database.isInitialized()) {
+      throw new Error('Database is not initialized')
+    }
+
+    const results = {
+      migrationsApplied: [],
+      migrationsErrors: [],
+      storiesCleared: 0,
+      sprintCleared: false,
+      cacheInvalidated: true
+    }
+
+    try {
+      // 1. Run pending migrations
+      const migrationResult = this.database.runPendingMigrations()
+      results.migrationsApplied = migrationResult.applied || []
+      results.migrationsErrors = migrationResult.errors || []
+
+      if (migrationResult.errors.length > 0) {
+        console.error('[PuffinState] Migration errors:', migrationResult.errors)
+      }
+
+      // 2. Optionally clear all user stories
+      if (clearStories) {
+        const db = this.database.getConnection()
+        if (db) {
+          // Clear user stories
+          const deleteResult = db.prepare('DELETE FROM user_stories').run()
+          results.storiesCleared = deleteResult.changes
+
+          // Clear archived stories
+          db.prepare('DELETE FROM archived_stories').run()
+
+          console.log(`[PuffinState] Cleared ${results.storiesCleared} user stories`)
+        }
+      }
+
+      // 3. Check if sprint was cleared (migration 006 drops sprint tables)
+      if (results.migrationsApplied.includes('006')) {
+        results.sprintCleared = true
+      }
+
+      // 4. Invalidate all caches to force fresh reads
+      this.invalidateCache()
+      this.userStories = null
+      this.archivedStories = null
+      this.sprintHistory = null
+
+      console.log('[PuffinState] Database reset completed:', results)
+      return results
+    } catch (error) {
+      console.error('[PuffinState] Database reset failed:', error)
+      throw error
     }
   }
 }

@@ -898,6 +898,7 @@ export const addUserStoryAcceptor = model => proposal => {
       title: proposal.payload.title,
       description: proposal.payload.description,
       acceptanceCriteria: proposal.payload.acceptanceCriteria,
+      inspectionAssertions: proposal.payload.inspectionAssertions || [],
       status: proposal.payload.status,
       sourcePromptId: proposal.payload.sourcePromptId,
       createdAt: proposal.payload.createdAt
@@ -907,14 +908,33 @@ export const addUserStoryAcceptor = model => proposal => {
 
 export const updateUserStoryAcceptor = model => proposal => {
   if (proposal?.type === 'UPDATE_USER_STORY') {
-    const index = model.userStories.findIndex(s => s.id === proposal.payload.id)
+    const storyId = proposal.payload.id
+    const index = model.userStories.findIndex(s => s.id === storyId)
+
+    console.log('[UPDATE_USER_STORY] Acceptor called:', {
+      storyId,
+      payloadKeys: Object.keys(proposal.payload),
+      hasInspectionAssertions: !!proposal.payload.inspectionAssertions,
+      assertionCount: proposal.payload.inspectionAssertions?.length || 0,
+      modelStoriesCount: model.userStories?.length || 0,
+      foundIndex: index
+    })
+
     if (index !== -1) {
       model.userStories[index] = {
         ...model.userStories[index],
         ...proposal.payload
       }
       // Track which story was updated for persistence
-      model._lastUpdatedStoryId = proposal.payload.id
+      model._lastUpdatedStoryId = storyId
+
+      console.log('[UPDATE_USER_STORY] Story updated in model:', {
+        storyId,
+        newAssertionCount: model.userStories[index].inspectionAssertions?.length || 0
+      })
+    } else {
+      console.warn('[UPDATE_USER_STORY] Story not found in model.userStories:', storyId)
+      console.warn('[UPDATE_USER_STORY] Available story IDs:', model.userStories?.map(s => s.id.substring(0, 8)))
     }
   }
 }
@@ -931,6 +951,16 @@ export const loadUserStoriesAcceptor = model => proposal => {
     const currentStories = model.userStories || []
 
     console.log('[LOAD_USER_STORIES] Received:', newStories.length, 'stories, current:', currentStories.length, 'stories')
+
+    // Debug: Log stories with assertions
+    const storiesWithAssertions = newStories.filter(s => s.inspectionAssertions?.length > 0)
+    if (storiesWithAssertions.length > 0) {
+      console.log('[LOAD_USER_STORIES] Stories with assertions:', storiesWithAssertions.map(s => ({
+        id: s.id.substring(0, 8),
+        title: s.title.substring(0, 30),
+        assertionCount: s.inspectionAssertions?.length || 0
+      })))
+    }
 
     // SAFETY: Never wipe stories if we have existing stories and receiving empty
     // This is a defense-in-depth check - the caller should also prevent this
@@ -1881,9 +1911,22 @@ export const createSprintAcceptor = model => proposal => {
       }
     })
 
-    // Create the sprint with deduplicated stories
+    // Generate sprint title from stories
+    // Use first story title, or date-based fallback
+    let sprintTitle
+    if (sprintStories.length === 1) {
+      sprintTitle = sprintStories[0].title
+    } else if (sprintStories.length > 1) {
+      sprintTitle = `${sprintStories[0].title} (+${sprintStories.length - 1} more)`
+    } else {
+      const date = new Date(timestamp)
+      sprintTitle = `Sprint ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    }
+
+    // Create the sprint with deduplicated stories and title
     model.activeSprint = {
       id: sprintId,
+      title: sprintTitle,
       stories: sprintStories,
       status: 'created', // 'created' | 'planning' | 'planned' | 'implementing'
       storyProgress: {}, // Initialize empty story progress
@@ -1923,6 +1966,8 @@ export const startSprintPlanningAcceptor = model => proposal => {
 
     const planningPrompt = `## Sprint Planning Request
 
+**IMPORTANT: This is a PLANNING ONLY request. Do NOT make any code changes, create files, or modify the codebase. Only analyze and produce a written plan.**
+
 Please create a detailed implementation plan for the following user stories:
 
 ${storyDescriptions}
@@ -1937,6 +1982,9 @@ ${storyDescriptions}
 4. **File Changes**: Identify the main files that will need to be created or modified
 5. **Risk Assessment**: Note any potential challenges or risks
 6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
+7. **Open Questions**: List any clarifications needed before implementation
+
+**Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
 
 Please provide a comprehensive plan that I can review before starting implementation.`
 
@@ -2123,15 +2171,40 @@ export const clearSprintWithDetailsAcceptor = model => proposal => {
   }
 }
 
-// Approve the sprint plan - transitions sprint to 'planned' status
+// Approve the sprint plan - transitions sprint to 'in-progress' status
 export const approvePlanAcceptor = model => proposal => {
   if (proposal?.type === 'APPROVE_PLAN') {
     if (model.activeSprint) {
       model.activeSprint = {
         ...model.activeSprint,
-        status: 'planned',
+        status: 'in-progress',  // Plan approved, ready for implementation
         planApprovedAt: proposal.payload.timestamp
       }
+    }
+  }
+}
+
+// Set the sprint plan content (captured from Claude's planning response)
+// Also transitions status from 'planning' to 'planned' so approve button becomes visible
+export const setSprintPlanAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_SPRINT_PLAN') {
+    if (model.activeSprint) {
+      const previousPlan = model.activeSprint.plan
+      const previousStatus = model.activeSprint.status
+
+      // Transition to 'planned' if currently in 'planning' status
+      const newStatus = previousStatus === 'planning' ? 'planned' : previousStatus
+
+      model.activeSprint = {
+        ...model.activeSprint,
+        plan: proposal.payload.plan,
+        status: newStatus
+      }
+      console.log('[SPRINT] Plan content captured, length:', proposal.payload.plan?.length || 0,
+        'previous:', previousPlan?.length || 0,
+        'status:', previousStatus, '->', newStatus)
+    } else {
+      console.warn('[SPRINT] Cannot set plan - no active sprint')
     }
   }
 }
@@ -2143,14 +2216,123 @@ export const clearPendingSprintPlanningAcceptor = model => proposal => {
   }
 }
 
+// Iterate on the sprint plan with clarifying answers
+export const iterateSprintPlanAcceptor = model => proposal => {
+  if (proposal?.type === 'ITERATE_SPRINT_PLAN') {
+    if (!model.activeSprint) {
+      console.warn('[SPRINT] Cannot iterate on plan - no active sprint')
+      return
+    }
+
+    const sprint = model.activeSprint
+    const { clarifications } = proposal.payload
+
+    // Build iteration prompt with previous plan and clarifications
+    const stories = sprint.stories
+    const storyDescriptions = stories.map((story, i) => {
+      let desc = `### Story ${i + 1}: ${story.title}\n`
+      if (story.description) {
+        desc += `${story.description}\n`
+      }
+      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
+        desc += `\n**Acceptance Criteria:**\n`
+        desc += story.acceptanceCriteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n')
+      }
+      return desc
+    }).join('\n\n')
+
+    const iterationPrompt = `## Sprint Plan Iteration Request
+
+**IMPORTANT: This is a PLANNING ONLY request. Do NOT make any code changes, create files, or modify the codebase. Only analyze and produce a written plan.**
+
+The previous plan needs refinement based on the following clarifications and additional requirements:
+
+### Developer Clarifications:
+${clarifications}
+
+---
+
+Please create an updated implementation plan for these user stories:
+
+${storyDescriptions}
+
+---
+
+**Planning Requirements:**
+
+1. **Architecture Analysis**: Analyze how these stories fit together and identify shared components or dependencies
+2. **Implementation Order**: Recommend the optimal order to implement these stories
+3. **Technical Approach**: For each story, outline the key technical decisions and approach
+4. **File Changes**: Identify the main files that will need to be created or modified
+5. **Risk Assessment**: Note any potential challenges or risks
+6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
+7. **Open Questions**: List any remaining clarifications needed
+
+**Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
+
+Please incorporate the clarifications above and provide a comprehensive revised plan.`
+
+    // Update sprint status back to planning
+    sprint.status = 'planning'
+
+    // Get the current branch
+    const branchId = model.history.activeBranch || 'specifications'
+
+    // Ensure branch exists
+    if (!model.history.branches[branchId]) {
+      model.history.branches[branchId] = {
+        id: branchId,
+        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
+        prompts: []
+      }
+    }
+
+    // Create prompt entry for the iteration
+    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+    const prompt = {
+      id: promptId,
+      content: iterationPrompt,
+      parentId: sprint.promptId || null,  // Link to previous plan prompt
+      timestamp: Date.now(),
+      response: null,
+      storyIds: stories.map(s => s.id),
+      isIteration: true
+    }
+
+    // Add to branch
+    model.history.branches[branchId].prompts.push(prompt)
+
+    // Set as active prompt
+    model.history.activePromptId = promptId
+
+    // Set pending prompt for streaming
+    model.pendingPromptId = promptId
+    model.streamingResponse = ''
+
+    // Update sprint with prompt reference
+    sprint.promptId = promptId
+
+    // Store for IPC submission
+    model._pendingSprintPlanning = {
+      promptId,
+      promptContent: iterationPrompt,
+      branchId,
+      storyIds: stories.map(s => s.id),
+      isIteration: true
+    }
+
+    console.log('[SPRINT] Plan iteration started with clarifications, new promptId:', promptId)
+  }
+}
+
 // Start implementation for a specific story and branch (sprint workflow)
 export const startSprintStoryImplementationAcceptor = model => proposal => {
   if (proposal?.type === 'START_SPRINT_STORY_IMPLEMENTATION') {
     const { storyId, branchType } = proposal.payload
     const sprint = model.activeSprint
 
-    if (!sprint || (sprint.status !== 'planned' && sprint.status !== 'implementing')) {
-      console.warn('[SPRINT] Cannot start implementation - sprint not in planned or implementing state')
+    if (!sprint || (sprint.status !== 'in-progress' && sprint.status !== 'implementing')) {
+      console.warn('[SPRINT] Cannot start implementation - sprint not in in-progress or implementing state, current:', sprint?.status)
       return
     }
 
@@ -2380,10 +2562,69 @@ export const updateSprintStoryStatusAcceptor = model => proposal => {
   }
 }
 
+// Update sprint story assertions (when assertions are generated for sprint stories)
+export const updateSprintStoryAssertionsAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_SPRINT_STORY_ASSERTIONS') {
+    const { storyId, assertions, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) {
+      console.warn('[SPRINT] Cannot update story assertions - no active sprint')
+      return
+    }
+
+    // Find and update the story in the sprint's stories array
+    const sprintStory = sprint.stories.find(s => s.id === storyId)
+    if (sprintStory) {
+      sprintStory.inspectionAssertions = assertions
+      sprintStory.updatedAt = timestamp
+      console.log('[SPRINT] Updated story assertions:', {
+        storyId,
+        assertionCount: assertions?.length || 0,
+        storyTitle: sprintStory.title?.substring(0, 30)
+      })
+    } else {
+      console.warn('[SPRINT] Story not found in active sprint:', storyId)
+    }
+  }
+}
+
 // Clear sprint validation error
 export const clearSprintErrorAcceptor = model => proposal => {
   if (proposal?.type === 'CLEAR_SPRINT_ERROR') {
     model.sprintError = null
+  }
+}
+
+// Update story assertion results (after evaluation completes)
+// Updates both backlog stories and sprint stories for UI consistency
+export const updateStoryAssertionResultsAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_STORY_ASSERTION_RESULTS') {
+    const { storyId, results, timestamp } = proposal.payload
+
+    // Update in backlog (userStories)
+    const backlogStory = model.userStories?.find(s => s.id === storyId)
+    if (backlogStory) {
+      backlogStory.assertionResults = results
+      backlogStory.updatedAt = timestamp
+      console.log('[ASSERTIONS] Updated backlog story results:', {
+        storyId,
+        passed: results?.summary?.passed || 0,
+        failed: results?.summary?.failed || 0
+      })
+    }
+
+    // Update in sprint stories (if sprint is active)
+    const sprintStory = model.activeSprint?.stories?.find(s => s.id === storyId)
+    if (sprintStory) {
+      sprintStory.assertionResults = results
+      sprintStory.updatedAt = timestamp
+      console.log('[ASSERTIONS] Updated sprint story results:', {
+        storyId,
+        passed: results?.summary?.passed || 0,
+        failed: results?.summary?.failed || 0
+      })
+    }
   }
 }
 
@@ -2761,8 +3002,6 @@ export const showModalAcceptor = model => proposal => {
 
 export const hideModalAcceptor = model => proposal => {
   if (proposal?.type === 'HIDE_MODAL') {
-    console.log('[HIDE_MODAL] Acceptor called - hiding modal')
-    console.log('[HIDE_MODAL] Stack trace:', new Error().stack)
     model.modal = null
   }
 }
@@ -2975,12 +3214,16 @@ export const acceptors = [
   clearSprintAcceptor,
   clearSprintWithDetailsAcceptor,
   approvePlanAcceptor,
+  setSprintPlanAcceptor,
+  iterateSprintPlanAcceptor,
   clearPendingSprintPlanningAcceptor,
   startSprintStoryImplementationAcceptor,
   clearPendingStoryImplementationAcceptor,
   completeStoryBranchAcceptor,
   updateSprintStoryStatusAcceptor,
+  updateSprintStoryAssertionsAcceptor,
   clearSprintErrorAcceptor,
+  updateStoryAssertionResultsAcceptor,
   toggleCriteriaCompletionAcceptor,
 
   // Stuck Detection

@@ -51,6 +51,8 @@ class UserStoryRepository extends BaseRepository {
       title: row.title,
       description: row.description || '',
       acceptanceCriteria: this.parseJson(row.acceptance_criteria, []),
+      inspectionAssertions: this.parseJson(row.inspection_assertions, []),
+      assertionResults: this.parseJson(row.assertion_results, null),
       status: row.status,
       implementedOn: this.parseJson(row.implemented_on, []),
       sourcePromptId: row.source_prompt_id,
@@ -74,6 +76,8 @@ class UserStoryRepository extends BaseRepository {
       title: story.title,
       description: story.description || '',
       acceptance_criteria: this.toJson(story.acceptanceCriteria || []),
+      inspection_assertions: this.toJson(story.inspectionAssertions || []),
+      assertion_results: story.assertionResults ? this.toJson(story.assertionResults) : null,
       status: story.status || StoryStatus.PENDING,
       implemented_on: this.toJson(story.implementedOn || []),
       source_prompt_id: story.sourcePromptId || null,
@@ -98,8 +102,9 @@ class UserStoryRepository extends BaseRepository {
     const sql = `
       INSERT INTO user_stories (
         id, branch_id, title, description, acceptance_criteria,
+        inspection_assertions, assertion_results,
         status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     const params = [
       row.id,
@@ -107,6 +112,8 @@ class UserStoryRepository extends BaseRepository {
       row.title,
       row.description,
       row.acceptance_criteria,
+      row.inspection_assertions,
+      row.assertion_results,
       row.status,
       row.implemented_on,
       row.source_prompt_id,
@@ -335,6 +342,8 @@ class UserStoryRepository extends BaseRepository {
         title = ?,
         description = ?,
         acceptance_criteria = ?,
+        inspection_assertions = ?,
+        assertion_results = ?,
         status = ?,
         implemented_on = ?,
         source_prompt_id = ?,
@@ -347,6 +356,8 @@ class UserStoryRepository extends BaseRepository {
       row.title,
       row.description,
       row.acceptance_criteria,
+      row.inspection_assertions,
+      row.assertion_results,
       row.status,
       row.implemented_on,
       row.source_prompt_id,
@@ -458,8 +469,9 @@ class UserStoryRepository extends BaseRepository {
       const insertSql = `
         INSERT OR REPLACE INTO archived_stories (
           id, branch_id, title, description, acceptance_criteria,
+          inspection_assertions, assertion_results,
           status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
       const insertParams = [
         row.id,
@@ -467,6 +479,8 @@ class UserStoryRepository extends BaseRepository {
         row.title,
         row.description,
         row.acceptance_criteria,
+        row.inspection_assertions,
+        row.assertion_results,
         row.status,
         row.implemented_on,
         row.source_prompt_id,
@@ -513,11 +527,39 @@ class UserStoryRepository extends BaseRepository {
   /**
    * Permanently delete a user story
    *
+   * Atomically removes the story from any active sprint before deleting.
+   * This ensures sprint integrity is maintained when stories are deleted.
+   *
    * @param {string} id - Story ID
    * @returns {boolean} True if deleted
    */
   delete(id) {
-    return this.deleteById(id)
+    const db = this.getDb()
+
+    return this.immediateTransaction(() => {
+      // Always clean up sprint references to prevent orphaned data
+      // Remove from sprint_stories junction table
+      db.prepare('DELETE FROM sprint_stories WHERE story_id = ?').run(id)
+
+      // Clean storyProgress JSON in active sprint
+      const sprintRow = db.prepare(`
+        SELECT id, story_progress FROM sprints WHERE closed_at IS NULL
+      `).get()
+
+      if (sprintRow) {
+        const progress = this.parseJson(sprintRow.story_progress, {})
+        if (progress[id]) {
+          delete progress[id]
+          db.prepare(`
+            UPDATE sprints SET story_progress = ? WHERE id = ?
+          `).run(this.toJson(progress), sprintRow.id)
+        }
+      }
+
+      // Delete the story
+      const result = db.prepare('DELETE FROM user_stories WHERE id = ?').run(id)
+      return result.changes > 0
+    })
   }
 
   // ===== ARCHIVED STORY OPERATIONS =====
@@ -584,14 +626,17 @@ class UserStoryRepository extends BaseRepository {
       db.prepare(`
         INSERT OR REPLACE INTO user_stories (
           id, branch_id, title, description, acceptance_criteria,
+          inspection_assertions, assertion_results,
           status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         row.id,
         row.branch_id,
         row.title,
         row.description,
         row.acceptance_criteria,
+        row.inspection_assertions,
+        row.assertion_results,
         row.status,
         row.implemented_on,
         row.source_prompt_id,
@@ -664,6 +709,145 @@ class UserStoryRepository extends BaseRepository {
     const db = this.getDb()
     const result = db.prepare('SELECT COUNT(*) as count FROM archived_stories').get()
     return result.count
+  }
+
+  // ===== INSPECTION ASSERTIONS OPERATIONS =====
+
+  /**
+   * Update inspection assertions for a story
+   *
+   * @param {string} id - Story ID
+   * @param {Object[]} assertions - Array of inspection assertion objects
+   * @returns {Object|null} Updated user story or null if not found
+   */
+  updateInspectionAssertions(id, assertions) {
+    if (!Array.isArray(assertions)) {
+      throw new Error('Inspection assertions must be an array')
+    }
+    return this.update(id, { inspectionAssertions: assertions })
+  }
+
+  /**
+   * Store assertion evaluation results for a story
+   *
+   * @param {string} id - Story ID
+   * @param {Object} results - Assertion results object
+   * @param {string} results.evaluatedAt - ISO timestamp of evaluation
+   * @param {Object} results.summary - Summary counts (total, passed, failed, undecided)
+   * @param {Object[]} results.results - Array of individual assertion results
+   * @returns {Object|null} Updated user story or null if not found
+   */
+  storeAssertionResults(id, results) {
+    if (!results || typeof results !== 'object') {
+      throw new Error('Assertion results must be an object')
+    }
+
+    // Validate required fields
+    if (!results.evaluatedAt || !results.summary || !Array.isArray(results.results)) {
+      throw new Error('Assertion results must include evaluatedAt, summary, and results array')
+    }
+
+    return this.update(id, { assertionResults: results })
+  }
+
+  /**
+   * Clear assertion results for a story (e.g., when story is reopened)
+   *
+   * @param {string} id - Story ID
+   * @returns {Object|null} Updated user story or null if not found
+   */
+  clearAssertionResults(id) {
+    return this.update(id, { assertionResults: null })
+  }
+
+  /**
+   * Find stories that have inspection assertions defined
+   *
+   * @returns {Object[]} Array of user stories with assertions
+   */
+  findWithAssertions() {
+    const db = this.getDb()
+    const rows = db.prepare(`
+      SELECT * FROM user_stories
+      WHERE inspection_assertions != '[]'
+        AND status != 'archived'
+      ORDER BY created_at DESC
+    `).all()
+
+    return rows.map(row => this._rowToStory(row))
+  }
+
+  /**
+   * Find stories with pending (unevaluated) assertions
+   *
+   * @returns {Object[]} Array of user stories with unevaluated assertions
+   */
+  findWithPendingAssertions() {
+    const db = this.getDb()
+    const rows = db.prepare(`
+      SELECT * FROM user_stories
+      WHERE inspection_assertions != '[]'
+        AND assertion_results IS NULL
+        AND status != 'archived'
+      ORDER BY created_at DESC
+    `).all()
+
+    return rows.map(row => this._rowToStory(row))
+  }
+
+  /**
+   * Find stories with failed assertions
+   *
+   * @returns {Object[]} Array of user stories with failed assertions
+   */
+  findWithFailedAssertions() {
+    const stories = this.findWithAssertions()
+    return stories.filter(story => {
+      if (!story.assertionResults?.summary) return false
+      return story.assertionResults.summary.failed > 0
+    })
+  }
+
+  /**
+   * Get assertion summary statistics across all active stories
+   *
+   * @returns {Object} Aggregated assertion statistics
+   */
+  getAssertionStats() {
+    const stories = this.findWithAssertions()
+
+    const stats = {
+      storiesWithAssertions: stories.length,
+      storiesEvaluated: 0,
+      storiesPending: 0,
+      storiesPassed: 0,
+      storiesFailed: 0,
+      totalAssertions: 0,
+      totalPassed: 0,
+      totalFailed: 0,
+      totalUndecided: 0
+    }
+
+    for (const story of stories) {
+      stats.totalAssertions += story.inspectionAssertions?.length || 0
+
+      if (story.assertionResults?.summary) {
+        stats.storiesEvaluated++
+        stats.totalPassed += story.assertionResults.summary.passed || 0
+        stats.totalFailed += story.assertionResults.summary.failed || 0
+        stats.totalUndecided += story.assertionResults.summary.undecided || 0
+
+        if (story.assertionResults.summary.failed > 0) {
+          stats.storiesFailed++
+        } else {
+          stats.storiesPassed++
+        }
+      } else {
+        stats.storiesPending++
+      }
+    }
+
+    return stats
   }
 }
 

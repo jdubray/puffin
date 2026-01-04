@@ -260,7 +260,8 @@ a:hover {
 }
 
 /* Override for swimlane layout - use full width */
-.view-content.swimlane-container {
+.view-content.swimlane-container,
+.view-content.user-stories-layout {
   max-width: none;
   margin: 0;
   padding: 0;

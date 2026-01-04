@@ -5,6 +5,91 @@
  * Extracted from app.js for better separation of concerns.
  */
 
+/**
+ * Trigger inspection assertion evaluation for a completed story
+ * @param {string} storyId - The story ID to evaluate
+ * @param {Function} showToast - Optional toast function for user feedback
+ * @returns {Promise<Object>} Evaluation results
+ */
+async function triggerAssertionEvaluation(storyId, showToast = null) {
+  if (!window.puffin?.state?.evaluateStoryAssertions) {
+    console.log('[ASSERTION] Evaluation API not available')
+    return null
+  }
+
+  console.log('[ASSERTION] Triggering evaluation for story:', storyId)
+
+  // First check if this story has any assertions - skip evaluation if none
+  let story = null
+  let storyTitle = ''
+  try {
+    const storyResult = await window.puffin.state.getUserStories()
+    if (storyResult.success) {
+      story = storyResult.stories.find(s => s.id === storyId)
+      storyTitle = story?.title?.substring(0, 30) || 'Story'
+      console.log('[ASSERTION] Story found:', story?.title)
+      console.log('[ASSERTION] Has inspectionAssertions:', story?.inspectionAssertions?.length || 0)
+
+      // Skip evaluation if no assertions defined
+      if (!story?.inspectionAssertions || story.inspectionAssertions.length === 0) {
+        console.log('[ASSERTION] Skipping evaluation - no assertions defined for this story')
+        if (showToast) {
+          showToast(`Story completed! No inspection assertions to verify.`, 'info')
+        }
+        return null
+      }
+    }
+  } catch (e) {
+    console.error('[ASSERTION] Error checking story assertions:', e)
+  }
+
+  // Show evaluation starting toast
+  if (showToast && story?.inspectionAssertions?.length > 0) {
+    showToast(`Verifying ${story.inspectionAssertions.length} assertion(s) for "${storyTitle}"...`, 'info')
+  }
+
+  try {
+    const result = await window.puffin.state.evaluateStoryAssertions(storyId)
+
+    if (result.success) {
+      const { summary } = result.results
+      console.log('[ASSERTION] Evaluation complete:', {
+        storyId,
+        total: summary.total,
+        passed: summary.passed,
+        failed: summary.failed,
+        error: summary.error
+      })
+
+      // Show toast with results
+      if (showToast) {
+        if (summary.total === 0) {
+          showToast(`No assertions to verify for "${storyTitle}"`, 'info')
+        } else if (summary.failed === 0 && summary.error === 0) {
+          showToast(`All ${summary.passed} assertion(s) passed for "${storyTitle}"!`, 'success')
+        } else {
+          const failCount = summary.failed + summary.error
+          showToast(`${failCount} of ${summary.total} assertion(s) failed for "${storyTitle}"`, 'warning')
+        }
+      }
+
+      return result.results
+    } else {
+      console.error('[ASSERTION] Evaluation failed:', result.error)
+      if (showToast) {
+        showToast(`Assertion evaluation failed: ${result.error}`, 'error')
+      }
+      return null
+    }
+  } catch (e) {
+    console.error('[ASSERTION] Evaluation error:', e)
+    if (showToast) {
+      showToast(`Assertion evaluation error: ${e.message}`, 'error')
+    }
+    throw e
+  }
+}
+
 export class StatePersistence {
   constructor(getState, intents, showToast) {
     this.getState = getState
@@ -39,7 +124,8 @@ export class StatePersistence {
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
       'ADD_STORIES_TO_BACKLOG',
       // Sprint actions
-      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
+      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN', 'ITERATE_SPRINT_PLAN',
+      'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
       'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
       // Story generation tracking
@@ -156,21 +242,32 @@ export class StatePersistence {
         }
       }
 
-      // Persist sprint state changes (including criteria progress and story status)
-      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
-           'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH'].includes(normalizedType)) {
+      // Persist sprint state changes (including criteria progress, story status, and assertions)
+      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
+           'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
+           'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
+           'UPDATE_SPRINT_STORY_ASSERTIONS'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
 
         // For UPDATE_SPRINT_STORY_STATUS: use atomic sync to update both sprint and backlog
         // This ensures status is always consistent between views with no manual refresh needed
         if (normalizedType === 'UPDATE_SPRINT_STORY_STATUS') {
-          const { storyId, status } = action.payload || {}
+          // Handle both payload format and args format (from wrapIntentsForDebugging)
+          const storyId = action.payload?.storyId || action.args?.[0]
+          const status = action.payload?.status || action.args?.[1]
           if (storyId && status) {
             try {
               const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)
               if (syncResult.success) {
                 console.log('[PERSIST-DEBUG] Atomic status sync completed:', storyId, '->', status)
                 // The event listener will handle UI refresh automatically
+
+                // Trigger assertion evaluation when story is marked complete
+                if (status === 'completed') {
+                  triggerAssertionEvaluation(storyId, this.showToast).catch(e => {
+                    console.error('[PERSIST-DEBUG] Assertion evaluation failed:', storyId, e)
+                  })
+                }
               } else {
                 console.error('[PERSIST-DEBUG] Atomic status sync failed:', syncResult.error)
                 // Fallback to separate updates if atomic fails
@@ -188,8 +285,16 @@ export class StatePersistence {
         }
         // For TOGGLE_CRITERIA_COMPLETION: use atomic sync when story becomes complete
         else if (normalizedType === 'TOGGLE_CRITERIA_COMPLETION') {
-          const { storyId } = action.payload || {}
+          // Handle both payload format and args format (from wrapIntentsForDebugging)
+          const storyId = action.payload?.storyId || action.args?.[0]
           const storyProgress = state.activeSprint?.storyProgress?.[storyId]
+
+          console.log('[PERSIST-DEBUG] TOGGLE_CRITERIA_COMPLETION:', {
+            storyId,
+            hasStoryProgress: !!storyProgress,
+            progressStatus: storyProgress?.status,
+            criteriaProgress: storyProgress?.criteriaProgress
+          })
 
           // First update the sprint
           await window.puffin.state.updateActiveSprint(state.activeSprint)
@@ -197,10 +302,20 @@ export class StatePersistence {
           // Then atomically sync if story is now complete or was uncompleted
           if (storyId && storyProgress) {
             const status = storyProgress.status === 'completed' ? 'completed' : 'in-progress'
+            console.log('[PERSIST-DEBUG] Story status for sync:', storyId, '->', status)
+
             try {
               const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)
               if (syncResult.success) {
                 console.log('[PERSIST-DEBUG] Atomic criteria sync completed:', storyId, '->', status)
+
+                // Trigger assertion evaluation when story auto-completes from criteria
+                if (status === 'completed') {
+                  console.log('[PERSIST-DEBUG] Triggering assertion evaluation for completed story:', storyId)
+                  triggerAssertionEvaluation(storyId, this.showToast).catch(e => {
+                    console.error('[PERSIST-DEBUG] Assertion evaluation failed:', storyId, e)
+                  })
+                }
               }
             } catch (e) {
               // Fallback: update story separately
@@ -210,11 +325,15 @@ export class StatePersistence {
                 console.log('[PERSIST-DEBUG] Fallback story sync after criteria toggle:', storyId, story.status)
               }
             }
+          } else {
+            console.log('[PERSIST-DEBUG] Skipping sync - storyId:', storyId, 'storyProgress exists:', !!storyProgress)
           }
         }
         // For other sprint actions, use regular update
         else {
+          console.log('[PERSIST-DEBUG] Calling updateActiveSprint for action:', normalizedType, 'sprint:', state.activeSprint?.id, 'stories:', state.activeSprint?.stories?.length)
           await window.puffin.state.updateActiveSprint(state.activeSprint)
+          console.log('[PERSIST-DEBUG] updateActiveSprint completed for action:', normalizedType)
         }
 
         // For COMPLETE_STORY_BRANCH: use atomic sync for completed stories
@@ -326,31 +445,50 @@ export class StatePersistence {
 
       // Persist user stories and history when adding to backlog from derivation
       if (normalizedType === 'ADD_STORIES_TO_BACKLOG') {
-        // Persist history (we added a prompt entry)
-        await window.puffin.state.updateHistory(state.history.raw)
+        // Persist history (we added a prompt entry) - wrapped in try-catch so story persistence still runs
+        try {
+          await window.puffin.state.updateHistory(state.history.raw)
+        } catch (historyError) {
+          console.error('[PERSIST-DEBUG] History update failed, continuing with story persistence:', historyError)
+        }
 
-        // Get story IDs from action payload
-        const newStoryIds = action.payload?.storyIds || []
-        console.log('[PERSIST-DEBUG] ADD_STORIES_TO_BACKLOG - storyIds from payload:', newStoryIds)
+        // Get story IDs from action - check both payload format and args format
+        // payload format: { type, payload: { storyIds } } - from action creators
+        // args format: { type, args: [storyIds] } - from lastAction wrapper
+        const newStoryIds = action.payload?.storyIds || action.args?.[0] || []
+        console.log('[PERSIST-DEBUG] ADD_STORIES_TO_BACKLOG - storyIds:', newStoryIds, 'source:', action.payload?.storyIds ? 'payload' : action.args?.[0] ? 'args' : 'none')
 
         if (newStoryIds.length > 0) {
           const newStories = state.userStories.filter(s => newStoryIds.includes(s.id))
-          console.log('[PERSIST-DEBUG] Found stories to persist:', newStories.length)
+          console.log('[PERSIST-DEBUG] Found stories to persist:', newStories.length, 'of', newStoryIds.length, 'requested')
+          console.log('[PERSIST-DEBUG] Total stories in state:', state.userStories.length)
 
+          if (newStories.length === 0) {
+            console.error('[PERSIST-DEBUG] CRITICAL: Stories not found in state.userStories!', {
+              requestedIds: newStoryIds,
+              availableIds: state.userStories.map(s => s.id)
+            })
+          }
+
+          let persistedCount = 0
           for (const story of newStories) {
             try {
-              await window.puffin.state.addUserStory(story)
-              console.log('[PERSIST-DEBUG] Added story to backlog:', story.id, story.title)
+              const result = await window.puffin.state.addUserStory(story)
+              console.log('[PERSIST-DEBUG] Added story to database:', story.id, story.title, 'result:', result)
+              persistedCount++
             } catch (e) {
+              console.error('[PERSIST-DEBUG] addUserStory failed:', e.message)
               // Story might already exist, update instead
               try {
                 await window.puffin.state.updateUserStory(story.id, story)
                 console.log('[PERSIST-DEBUG] Updated existing story:', story.id)
+                persistedCount++
               } catch (e2) {
                 console.error('[PERSIST-DEBUG] Failed to persist story:', story.id, e2)
               }
             }
           }
+          console.log('[PERSIST-DEBUG] Successfully persisted', persistedCount, 'of', newStories.length, 'stories')
         } else {
           console.warn('[PERSIST-DEBUG] No storyIds in action payload - stories may not persist!')
         }
@@ -378,7 +516,7 @@ export class StatePersistence {
 
       // Persist user story status when manually updated in sprint
       if (normalizedType === 'UPDATE_SPRINT_STORY_STATUS') {
-        const storyId = action.payload?.storyId
+        const storyId = action.payload?.storyId || action.args?.[0]
         if (storyId) {
           const story = state.userStories?.find(s => s.id === storyId)
           if (story) {

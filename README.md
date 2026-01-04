@@ -6,6 +6,8 @@
 
 A GUI for Claude Code to help cloders collaborate on new projects.
 
+
+
 ## Why Puffin?
 
 Claude Code is extraordinary out of the box. It can take you to production for projects in the 10k-100k LoC range. But as projects grow, maintaining context, traceability, and structured collaboration becomes critical.
@@ -42,6 +44,19 @@ You can't "prompt along" a coding agent, just like you can't "prompt along" a de
 - **Architecture Document**: Living documentation that evolves with Claude reviews
 - **Intelligent Title Generation**: Automatic prompt title generation using Claude API with smart fallback mechanisms
 - **CLI Output View**: Real-time streaming of Claude's raw JSON output for debugging and transparency
+
+<p align="center">
+  <br>
+  <a href="https://youtu.be/RzgzaSNgs1w">
+    <img src="https://img.youtube.com/vi/RzgzaSNgs1w/maxresdefault.jpg" alt="Introduction to Puffin" width="380">
+  </a>
+  <br>
+  <em>Watch the introduction</em>
+  <br>
+  <br>
+  <br>
+  
+</p>
 
 ## How It Works
 

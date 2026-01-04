@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.invoke('state:restoreArchivedStory', { storyId, newStatus }),
 
     // Sprint operations
+    hasActiveSprint: () => ipcRenderer.invoke('state:hasActiveSprint'),
     updateActiveSprint: (sprint) => ipcRenderer.invoke('state:updateActiveSprint', sprint),
 
     // Sprint progress tracking
@@ -75,6 +76,40 @@ contextBridge.exposeInMainWorld('puffin', {
     archiveSprintToHistory: (sprint) => ipcRenderer.invoke('state:archiveSprintToHistory', sprint),
     getSprintHistory: (options) => ipcRenderer.invoke('state:getSprintHistory', options),
     getArchivedSprint: (sprintId) => ipcRenderer.invoke('state:getArchivedSprint', sprintId),
+
+    // Inspection assertion evaluation
+    evaluateStoryAssertions: (storyId) => ipcRenderer.invoke('state:evaluateStoryAssertions', storyId),
+    getAssertionResults: (storyId) => ipcRenderer.invoke('state:getAssertionResults', storyId),
+    evaluateSingleAssertion: (storyId, assertionId) =>
+      ipcRenderer.invoke('state:evaluateSingleAssertion', { storyId, assertionId }),
+
+    // Inspection assertion generation
+    generateAssertions: (story, options) =>
+      ipcRenderer.invoke('state:generateAssertions', { story, options }),
+    getAssertionPatterns: () => ipcRenderer.invoke('state:getAssertionPatterns'),
+
+    // Generate assertions for sprint stories using Claude (called after plan approval)
+    generateSprintAssertions: (stories, plan) =>
+      ipcRenderer.invoke('state:generateSprintAssertions', { stories, plan }),
+
+    // Event listener for sprint assertion generation progress
+    onAssertionGenerationProgress: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('assertion-generation-progress', handler)
+      return () => ipcRenderer.removeListener('assertion-generation-progress', handler)
+    },
+
+    // Event listeners for assertion evaluation progress
+    onAssertionEvaluationProgress: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('assertion-evaluation-progress', handler)
+      return () => ipcRenderer.removeListener('assertion-evaluation-progress', handler)
+    },
+    onAssertionEvaluationComplete: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('assertion-evaluation-complete', handler)
+      return () => ipcRenderer.removeListener('assertion-evaluation-complete', handler)
+    },
 
     // Design document operations
     getDesignDocuments: () => ipcRenderer.invoke('state:getDesignDocuments'),
@@ -161,7 +196,11 @@ contextBridge.exposeInMainWorld('puffin', {
     getBranchPlugins: (branchId) => ipcRenderer.invoke('state:getBranchPlugins', branchId),
 
     // Get combined skill content for a branch
-    getBranchSkillContent: (branchId) => ipcRenderer.invoke('state:getBranchSkillContent', branchId)
+    getBranchSkillContent: (branchId) => ipcRenderer.invoke('state:getBranchSkillContent', branchId),
+
+    // Database management operations (for development/troubleshooting)
+    resetDatabase: (options) => ipcRenderer.invoke('state:resetDatabase', options),
+    getDatabaseStatus: () => ipcRenderer.invoke('state:getDatabaseStatus')
   },
 
   /**
@@ -400,6 +439,39 @@ contextBridge.exposeInMainWorld('puffin', {
 
     // Fetch user's activity events
     getActivity: (perPage) => ipcRenderer.invoke('github:getActivity', perPage)
+  },
+
+  /**
+   * Image attachment operations
+   * Manages temp images for prompt attachments
+   */
+  image: {
+    // Initialize the image service (called after state init)
+    init: () => ipcRenderer.invoke('image:init'),
+
+    // Save an image to temp directory
+    // buffer: ArrayBuffer, extension: string (e.g., '.png')
+    save: (buffer, extension, originalName = null) =>
+      ipcRenderer.invoke('image:save', {
+        buffer: Array.from(new Uint8Array(buffer)),
+        extension,
+        originalName
+      }),
+
+    // Delete a single image by file path
+    delete: (filePath) => ipcRenderer.invoke('image:delete', { filePath }),
+
+    // Delete multiple images (called after prompt submission)
+    deleteMultiple: (filePaths) => ipcRenderer.invoke('image:deleteMultiple', { filePaths }),
+
+    // Clear all temp images
+    clearAll: () => ipcRenderer.invoke('image:clearAll'),
+
+    // List all temp images
+    list: () => ipcRenderer.invoke('image:list'),
+
+    // Get supported image extensions
+    getSupportedExtensions: () => ipcRenderer.invoke('image:getSupportedExtensions')
   },
 
   /**

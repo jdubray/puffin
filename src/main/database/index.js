@@ -145,6 +145,47 @@ class Database {
   }
 
   /**
+   * Get migration status summary
+   *
+   * @returns {Object} Migration status with applied and pending migrations
+   */
+  getMigrationStatus() {
+    if (!this.migrationRunner) {
+      return {
+        currentVersion: null,
+        appliedMigrations: [],
+        pendingMigrations: [],
+        needsMigrations: false
+      }
+    }
+
+    const status = this.migrationRunner.getStatus()
+    return {
+      currentVersion: status.currentVersion,
+      appliedMigrations: status.applied,
+      pendingMigrations: status.pending,
+      needsMigrations: status.pendingCount > 0
+    }
+  }
+
+  /**
+   * Run pending migrations
+   *
+   * @returns {Object} Result with applied migrations and any errors
+   */
+  runPendingMigrations() {
+    if (!this.migrationRunner) {
+      return {
+        success: false,
+        applied: [],
+        errors: ['Migration runner not initialized']
+      }
+    }
+
+    return this.migrationRunner.runPending()
+  }
+
+  /**
    * Check database integrity
    *
    * @returns {{ok: boolean, errors: string[]}}

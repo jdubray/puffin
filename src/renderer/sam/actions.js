@@ -238,6 +238,7 @@ export const addUserStory = (story) => ({
     title: story.title,
     description: story.description || '',
     acceptanceCriteria: story.acceptanceCriteria || [],
+    inspectionAssertions: story.inspectionAssertions || [],
     status: story.status || 'pending',
     sourcePromptId: story.sourcePromptId || null,
     createdAt: Date.now()
@@ -827,6 +828,24 @@ export const approvePlan = () => ({
   }
 })
 
+// Set the sprint plan content (captured from Claude's planning response)
+export const setSprintPlan = (planContent) => ({
+  type: 'SET_SPRINT_PLAN',
+  payload: {
+    plan: planContent,
+    timestamp: Date.now()
+  }
+})
+
+// Iterate on the sprint plan with clarifying answers
+export const iterateSprintPlan = (clarifications) => ({
+  type: 'ITERATE_SPRINT_PLAN',
+  payload: {
+    clarifications,
+    timestamp: Date.now()
+  }
+})
+
 // Clear/close the active sprint
 export const clearSprint = () => ({
   type: 'CLEAR_SPRINT',
@@ -896,10 +915,30 @@ export const updateSprintStoryStatus = (storyId, status) => ({
   }
 })
 
+// Update sprint story assertions (when assertions are generated for sprint stories)
+export const updateSprintStoryAssertions = (storyId, assertions) => ({
+  type: 'UPDATE_SPRINT_STORY_ASSERTIONS',
+  payload: {
+    storyId,
+    assertions,
+    timestamp: Date.now()
+  }
+})
+
 // Clear sprint validation error
 export const clearSprintError = () => ({
   type: 'CLEAR_SPRINT_ERROR',
   payload: { timestamp: Date.now() }
+})
+
+// Update story assertion results (after evaluation completes)
+export const updateStoryAssertionResults = (storyId, results) => ({
+  type: 'UPDATE_STORY_ASSERTION_RESULTS',
+  payload: {
+    storyId,
+    results,
+    timestamp: Date.now()
+  }
 })
 
 // Record iteration output for stuck detection

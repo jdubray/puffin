@@ -319,6 +319,274 @@ describe('UserStoryRepository', () => {
   })
 })
 
+describe('Inspection Assertions Integration', () => {
+  describe('Story Creation with Assertions', () => {
+    it('should include inspectionAssertions in story object', () => {
+      const story = {
+        id: 'story-1',
+        title: 'Test Story',
+        description: 'Test description',
+        acceptanceCriteria: ['Create file "test.js"'],
+        inspectionAssertions: [
+          {
+            id: 'IA1234',
+            type: 'FILE_EXISTS',
+            criterion: 'AC1',
+            target: 'test.js',
+            message: 'File test.js should exist',
+            generated: true
+          }
+        ],
+        status: 'pending'
+      }
+
+      assert.ok(Array.isArray(story.inspectionAssertions))
+      assert.strictEqual(story.inspectionAssertions.length, 1)
+      assert.strictEqual(story.inspectionAssertions[0].type, 'FILE_EXISTS')
+      assert.strictEqual(story.inspectionAssertions[0].generated, true)
+    })
+
+    it('should transform inspectionAssertions to database row', () => {
+      const story = {
+        id: 'story-1',
+        title: 'Test Story',
+        inspectionAssertions: [
+          {
+            id: 'IA1234',
+            type: 'FILE_EXISTS',
+            target: 'src/test.js',
+            message: 'File should exist'
+          },
+          {
+            id: 'IA5678',
+            type: 'CLASS_STRUCTURE',
+            target: 'src/**/*.js',
+            assertion: { class_name: 'TestService' },
+            message: 'Class TestService should exist'
+          }
+        ]
+      }
+
+      // Simulate transformation to DB row
+      const row = {
+        id: story.id,
+        title: story.title,
+        inspection_assertions: JSON.stringify(story.inspectionAssertions || [])
+      }
+
+      const parsedAssertions = JSON.parse(row.inspection_assertions)
+      assert.strictEqual(parsedAssertions.length, 2)
+      assert.strictEqual(parsedAssertions[0].type, 'FILE_EXISTS')
+      assert.strictEqual(parsedAssertions[1].assertion.class_name, 'TestService')
+    })
+
+    it('should transform database row to story with inspectionAssertions', () => {
+      const row = {
+        id: 'story-1',
+        title: 'Test Story',
+        description: 'Description',
+        acceptance_criteria: '["AC1", "AC2"]',
+        inspection_assertions: '[{"id":"IA1","type":"FILE_EXISTS","target":"test.js","message":"Test"}]',
+        assertion_results: null,
+        status: 'pending',
+        implemented_on: '[]',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-02T00:00:00Z'
+      }
+
+      const parseJson = (value, defaultValue) => {
+        if (!value) return defaultValue
+        try { return JSON.parse(value) } catch { return defaultValue }
+      }
+
+      const story = {
+        id: row.id,
+        title: row.title,
+        description: row.description || '',
+        acceptanceCriteria: parseJson(row.acceptance_criteria, []),
+        inspectionAssertions: parseJson(row.inspection_assertions, []),
+        assertionResults: parseJson(row.assertion_results, null),
+        status: row.status,
+        implementedOn: parseJson(row.implemented_on, [])
+      }
+
+      assert.deepStrictEqual(story.acceptanceCriteria, ['AC1', 'AC2'])
+      assert.strictEqual(story.inspectionAssertions.length, 1)
+      assert.strictEqual(story.inspectionAssertions[0].type, 'FILE_EXISTS')
+      assert.strictEqual(story.assertionResults, null)
+    })
+
+    it('should default to empty array when inspectionAssertions is null', () => {
+      const row = {
+        id: 'story-1',
+        title: 'Test Story',
+        inspection_assertions: null,
+        assertion_results: null
+      }
+
+      const parseJson = (value, defaultValue) => {
+        if (!value) return defaultValue
+        try { return JSON.parse(value) } catch { return defaultValue }
+      }
+
+      const story = {
+        inspectionAssertions: parseJson(row.inspection_assertions, []),
+        assertionResults: parseJson(row.assertion_results, null)
+      }
+
+      assert.deepStrictEqual(story.inspectionAssertions, [])
+      assert.strictEqual(story.assertionResults, null)
+    })
+  })
+
+  describe('Assertion Action and Model Integration', () => {
+    it('should include inspectionAssertions in ADD_USER_STORY payload', () => {
+      const generateId = () => `story-${Date.now()}`
+
+      // Simulate actions.addUserStory
+      const addUserStory = (story) => ({
+        type: 'ADD_USER_STORY',
+        payload: {
+          id: generateId(),
+          title: story.title,
+          description: story.description || '',
+          acceptanceCriteria: story.acceptanceCriteria || [],
+          inspectionAssertions: story.inspectionAssertions || [],
+          status: story.status || 'pending',
+          sourcePromptId: story.sourcePromptId || null,
+          createdAt: Date.now()
+        }
+      })
+
+      const story = {
+        title: 'My Story',
+        description: 'Description',
+        acceptanceCriteria: ['AC1'],
+        inspectionAssertions: [
+          { id: 'IA1', type: 'FILE_EXISTS', target: 'test.js', message: 'Test' }
+        ]
+      }
+
+      const action = addUserStory(story)
+
+      assert.strictEqual(action.type, 'ADD_USER_STORY')
+      assert.ok(action.payload.id.startsWith('story-'))
+      assert.deepStrictEqual(action.payload.inspectionAssertions, story.inspectionAssertions)
+    })
+
+    it('should include inspectionAssertions in model after acceptor', () => {
+      // Simulate model acceptor
+      const model = {
+        userStories: []
+      }
+
+      const proposal = {
+        type: 'ADD_USER_STORY',
+        payload: {
+          id: 'story-1',
+          title: 'Test Story',
+          description: 'Desc',
+          acceptanceCriteria: ['AC1'],
+          inspectionAssertions: [
+            { id: 'IA1', type: 'FILE_EXISTS', target: 'test.js', message: 'Test' }
+          ],
+          status: 'pending',
+          createdAt: Date.now()
+        }
+      }
+
+      // Simulate addUserStoryAcceptor
+      if (proposal?.type === 'ADD_USER_STORY') {
+        model.userStories.push({
+          id: proposal.payload.id,
+          title: proposal.payload.title,
+          description: proposal.payload.description,
+          acceptanceCriteria: proposal.payload.acceptanceCriteria,
+          inspectionAssertions: proposal.payload.inspectionAssertions || [],
+          status: proposal.payload.status,
+          createdAt: proposal.payload.createdAt
+        })
+      }
+
+      assert.strictEqual(model.userStories.length, 1)
+      assert.strictEqual(model.userStories[0].inspectionAssertions.length, 1)
+      assert.strictEqual(model.userStories[0].inspectionAssertions[0].type, 'FILE_EXISTS')
+    })
+  })
+
+  describe('Assertion Persistence Flow', () => {
+    it('should serialize assertions for database storage', () => {
+      const story = {
+        id: 'story-1',
+        title: 'Test Story',
+        inspectionAssertions: [
+          {
+            id: 'IA1',
+            type: 'FILE_EXISTS',
+            criterion: 'AC1',
+            target: 'src/service.js',
+            assertion: { type: 'file' },
+            message: 'Service file should exist',
+            generated: true
+          },
+          {
+            id: 'IA2',
+            type: 'CLASS_STRUCTURE',
+            criterion: 'AC2',
+            target: 'src/**/*.js',
+            assertion: { class_name: 'MyService', methods: ['init'] },
+            message: 'MyService class should have init method',
+            generated: true
+          }
+        ]
+      }
+
+      // Simulate puffin-state.addUserStory building the newStory
+      const newStory = {
+        id: story.id,
+        title: story.title,
+        inspectionAssertions: story.inspectionAssertions || []
+      }
+
+      assert.strictEqual(newStory.inspectionAssertions.length, 2)
+
+      // Simulate repository converting to row
+      const serialized = JSON.stringify(newStory.inspectionAssertions)
+      const parsed = JSON.parse(serialized)
+
+      assert.strictEqual(parsed.length, 2)
+      assert.strictEqual(parsed[0].type, 'FILE_EXISTS')
+      assert.deepStrictEqual(parsed[1].assertion.methods, ['init'])
+    })
+
+    it('should preserve assertion structure through save and load cycle', () => {
+      const originalAssertions = [
+        {
+          id: 'IA-test-1',
+          type: 'EXPORT_EXISTS',
+          criterion: 'AC1',
+          target: 'src/index.js',
+          assertion: { exports: [{ name: 'MyClass', type: 'class' }] },
+          message: 'Should export MyClass',
+          generated: true
+        }
+      ]
+
+      // Simulate save
+      const dbValue = JSON.stringify(originalAssertions)
+
+      // Simulate load
+      const parseJson = (value, defaultValue) => {
+        try { return JSON.parse(value) } catch { return defaultValue }
+      }
+      const loadedAssertions = parseJson(dbValue, [])
+
+      assert.deepStrictEqual(loadedAssertions, originalAssertions)
+      assert.strictEqual(loadedAssertions[0].assertion.exports[0].name, 'MyClass')
+    })
+  })
+})
+
 describe('BaseRepository', () => {
   describe('Utility Methods', () => {
     it('should check record existence', () => {

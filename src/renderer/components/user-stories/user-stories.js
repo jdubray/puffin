@@ -59,6 +59,15 @@ export class UserStoriesComponent {
 
     // Sprint filter state
     this.selectedSprintFilter = null // Sprint ID or null for "all stories"
+
+    // Active sprint state (for single-sprint enforcement)
+    this.hasActiveSprint = false
+    this.activeSprintTitle = null
+
+    // Assertion evaluation state
+    this.evaluatingStories = new Set() // Story IDs currently being evaluated
+    this.evaluationProgress = new Map() // Story ID -> { current, total }
+    this.evaluationCleanups = [] // Cleanup functions for IPC listeners
   }
 
   /**
@@ -87,12 +96,92 @@ export class UserStoriesComponent {
     this.bindEvents()
     this.subscribeToState()
     this.setupResizeObserver()
+    this.setupAssertionEvaluationListeners()
 
     // Set initial view based on current container width
     this.updateViewForWidth()
 
     // Load sprint history on init
     this.loadSprintHistory()
+  }
+
+  /**
+   * Set up IPC listeners for assertion evaluation progress and completion
+   */
+  setupAssertionEvaluationListeners() {
+    if (!window.puffin?.state?.onAssertionEvaluationProgress || !window.puffin?.state?.onAssertionEvaluationComplete) {
+      console.warn('[UserStories] Assertion evaluation IPC not available')
+      return
+    }
+
+    // Listen for evaluation progress updates
+    const progressCleanup = window.puffin.state.onAssertionEvaluationProgress((data) => {
+      const { storyId, current, total, assertionId } = data
+      this.evaluationProgress.set(storyId, { current, total, assertionId })
+      this.updateAssertionProgressUI(storyId)
+    })
+
+    // Listen for evaluation completion
+    const completeCleanup = window.puffin.state.onAssertionEvaluationComplete((data) => {
+      const { storyId, results } = data
+      this.evaluatingStories.delete(storyId)
+      this.evaluationProgress.delete(storyId)
+      // Re-render the story card with updated results
+      this.refreshStoryCard(storyId)
+    })
+
+    this.evaluationCleanups.push(progressCleanup, completeCleanup)
+  }
+
+  /**
+   * Update the assertion progress UI for a specific story
+   * @param {string} storyId - The story ID to update
+   */
+  updateAssertionProgressUI(storyId) {
+    const assertionsSection = this.listContainer?.querySelector(
+      `.story-assertions[data-story-id="${storyId}"]`
+    )
+    if (!assertionsSection) return
+
+    const progress = this.evaluationProgress.get(storyId)
+    if (!progress) return
+
+    const summaryEl = assertionsSection.querySelector('.assertions-summary')
+    if (summaryEl) {
+      summaryEl.className = 'assertions-summary assertions-evaluating'
+      summaryEl.innerHTML = `
+        <span class="eval-spinner"></span>
+        Evaluating ${progress.current}/${progress.total}...
+      `
+    }
+
+    // Highlight the currently evaluating assertion
+    const items = assertionsSection.querySelectorAll('.assertion-item')
+    items.forEach(item => {
+      item.classList.remove('evaluating')
+    })
+    if (progress.assertionId) {
+      const currentItem = assertionsSection.querySelector(
+        `.assertion-item[data-assertion-id="${progress.assertionId}"]`
+      )
+      if (currentItem) {
+        currentItem.classList.add('evaluating')
+      }
+    }
+  }
+
+  /**
+   * Refresh a single story card after evaluation completes
+   * @param {string} storyId - The story ID to refresh
+   */
+  async refreshStoryCard(storyId) {
+    // Request updated story data and trigger re-render
+    if (this.intents.refreshUserStory) {
+      await this.intents.refreshUserStory(storyId)
+    } else {
+      // Fallback: trigger full re-render
+      this.render(this.stories)
+    }
   }
 
   /**
@@ -317,6 +406,24 @@ export class UserStoriesComponent {
           console.error('[USER-STORIES-COMPONENT] state.userStories:', state.userStories)
         }
       }
+
+      // Debug logging for assertion updates
+      if (actionType === 'UPDATE_USER_STORY') {
+        const storiesWithAssertions = this.stories.filter(s => s.inspectionAssertions?.length > 0)
+        console.log('[USER-STORIES-COMPONENT] After UPDATE_USER_STORY:', {
+          totalStories: this.stories.length,
+          storiesWithAssertions: storiesWithAssertions.length,
+          assertionCounts: storiesWithAssertions.map(s => ({
+            id: s.id.substring(0, 8),
+            title: s.title.substring(0, 30),
+            assertions: s.inspectionAssertions?.length || 0
+          }))
+        })
+      }
+
+      // Track active sprint state for single-sprint enforcement
+      this.hasActiveSprint = !!state.activeSprint
+      this.activeSprintTitle = state.activeSprint?.title || null
 
       // Reload sprint history after state is loaded (database is now ready)
       if (actionType === 'LOAD_STATE' && this.sprintHistory.length === 0) {
@@ -820,17 +927,19 @@ export class UserStoriesComponent {
            data-story-status="${story.status}"
            ${isDraggable ? 'draggable="true"' : ''}>
         <div class="story-header">
-          ${isDraggable ? `
-            <span class="drag-handle" title="Drag to change status" aria-label="Drag handle">⋮⋮</span>
-          ` : ''}
-          ${canImplement ? `
-            <label class="story-checkbox-label">
-              <input type="checkbox" class="story-checkbox" ${isSelected ? 'checked' : ''}>
-            </label>
-          ` : ''}
-          <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
-          ${showFallbackDropdown ? this.renderStatusDropdown(story) : ''}
-          <div class="story-actions">
+          <div class="story-header-left">
+            ${isDraggable ? `
+              <span class="drag-handle" title="Drag to change status" aria-label="Drag handle">⋮⋮</span>
+            ` : ''}
+            ${canImplement ? `
+              <label class="story-checkbox-label">
+                <input type="checkbox" class="story-checkbox" ${isSelected ? 'checked' : ''}>
+              </label>
+            ` : ''}
+            <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
+            ${showFallbackDropdown ? this.renderStatusDropdown(story) : ''}
+          </div>
+          <div class="story-card-actions">
             <button class="story-action-btn expand-btn" title="View full details" aria-label="Expand story">⤢</button>
             ${canComplete ? `<button class="story-action-btn complete-btn" title="Mark as completed">✓</button>` : ''}
             ${canArchive ? `<button class="story-action-btn archive-btn" title="Archive story">⌫</button>` : ''}
@@ -849,6 +958,7 @@ export class UserStoriesComponent {
             </ul>
           </div>
         ` : ''}
+        ${this.renderInspectionAssertions(story)}
         <div class="story-footer">
           <span class="story-date">${this.formatDate(story.createdAt)}</span>
           ${story.branchId ? `<span class="story-branch">${this.formatBranchName(story.branchId)}</span>` : ''}
@@ -957,6 +1067,47 @@ export class UserStoriesComponent {
       criteria.addEventListener('click', () => {
         const list = criteria.querySelector('.criteria-list')
         list.classList.toggle('collapsed')
+      })
+    })
+
+    // Expand/collapse inspection assertions
+    this.listContainer.querySelectorAll('.story-assertions').forEach(assertions => {
+      assertions.addEventListener('click', (e) => {
+        // Prevent toggling when clicking on buttons or interactive elements
+        if (e.target.closest('.assertions-verify-btn') ||
+            e.target.closest('.assertions-failures-btn') ||
+            e.target.closest('.assertion-rerun-btn') ||
+            e.target.closest('.assertion-target')) return
+        const list = assertions.querySelector('.assertions-list')
+        list.classList.toggle('collapsed')
+      })
+    })
+
+    // Verify assertions button
+    this.listContainer.querySelectorAll('.assertions-verify-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const storyId = btn.dataset.storyId
+        this.evaluateStoryAssertions(storyId)
+      })
+    })
+
+    // View assertion failures button
+    this.listContainer.querySelectorAll('.assertions-failures-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const storyId = btn.dataset.storyId
+        this.showAssertionFailures(storyId)
+      })
+    })
+
+    // Re-run individual assertion button
+    this.listContainer.querySelectorAll('.assertion-rerun-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const storyId = btn.dataset.storyId
+        const assertionId = btn.dataset.assertionId
+        this.evaluateSingleAssertion(storyId, assertionId)
       })
     })
 
@@ -1152,12 +1303,19 @@ export class UserStoriesComponent {
       toolbar.parentNode.insertBefore(actionBar, toolbar.nextSibling)
     }
 
+    // Determine if Create Sprint button should be disabled
+    const sprintBtnDisabled = this.hasActiveSprint
+    const sprintBtnTitle = sprintBtnDisabled
+      ? `Cannot create: "${this.activeSprintTitle || 'Active sprint'}" is in progress. Close it first.`
+      : 'Create a new sprint from selected stories'
+
     actionBar.innerHTML = `
       <span class="selection-count">${this.selectedStoryIds.size} ${this.selectedStoryIds.size === 1 ? 'story' : 'stories'} selected</span>
       <div class="action-buttons">
         <button class="btn secondary clear-selection-btn">Clear Selection</button>
-        <button class="btn primary create-sprint-btn">Create Sprint</button>
+        <button class="btn primary create-sprint-btn" ${sprintBtnDisabled ? 'disabled' : ''} title="${sprintBtnTitle}">Create Sprint</button>
       </div>
+      ${sprintBtnDisabled ? `<span class="sprint-warning">Close active sprint to create a new one</span>` : ''}
     `
 
     // Bind action bar events
@@ -1165,8 +1323,11 @@ export class UserStoriesComponent {
       this.clearSelection()
     })
 
-    actionBar.querySelector('.create-sprint-btn').addEventListener('click', () => {
-      this.createSprint()
+    const createSprintBtn = actionBar.querySelector('.create-sprint-btn')
+    createSprintBtn.addEventListener('click', () => {
+      if (!sprintBtnDisabled) {
+        this.createSprint()
+      }
     })
   }
 
@@ -1181,11 +1342,30 @@ export class UserStoriesComponent {
   /**
    * Create a sprint from selected stories
    */
-  createSprint() {
+  async createSprint() {
     const selectedStories = this.stories.filter(s => this.selectedStoryIds.has(s.id))
 
     if (selectedStories.length === 0) {
       return
+    }
+
+    // Double-check for active sprint (in case UI state is stale)
+    if (this.hasActiveSprint) {
+      this.showSprintExistsError()
+      return
+    }
+
+    // Verify with backend before attempting to create
+    try {
+      const result = await window.puffin.state.hasActiveSprint()
+      if (result.success && result.hasActive) {
+        const title = result.activeSprint?.title || 'Active sprint'
+        this.showSprintExistsError(title)
+        return
+      }
+    } catch (error) {
+      console.error('[USER-STORIES] Failed to check active sprint:', error)
+      // Continue anyway - the backend will reject if there's a conflict
     }
 
     // Call intent to create sprint - this will switch to prompt view with sprint header
@@ -1194,6 +1374,19 @@ export class UserStoriesComponent {
     // Clear selection after creating sprint
     this.selectedStoryIds.clear()
     this.updateActionBar()
+  }
+
+  /**
+   * Show error when trying to create sprint while one exists
+   * @param {string} [title] - Title of the existing sprint
+   */
+  showSprintExistsError(title = this.activeSprintTitle) {
+    const sprintName = title || 'an active sprint'
+    this.intents.showModal('alert', {
+      title: 'Sprint Already Active',
+      message: `Cannot create a new sprint because "${sprintName}" is already in progress.\n\nClose the current sprint before starting a new one.`,
+      confirmLabel: 'OK'
+    })
   }
 
   /**
@@ -1287,6 +1480,388 @@ export class UserStoriesComponent {
   }
 
   /**
+   * Evaluate all assertions for a story
+   * @param {string} storyId - The story ID to evaluate
+   */
+  async evaluateStoryAssertions(storyId) {
+    if (this.evaluatingStories.has(storyId)) {
+      console.warn('[UserStories] Already evaluating story:', storyId)
+      return
+    }
+
+    if (!window.puffin?.state?.evaluateStoryAssertions) {
+      console.error('[UserStories] Assertion evaluation API not available')
+      return
+    }
+
+    // Mark as evaluating and update UI immediately
+    this.evaluatingStories.add(storyId)
+    const story = this.stories.find(s => s.id === storyId)
+    if (story) {
+      this.evaluationProgress.set(storyId, {
+        current: 0,
+        total: story.inspectionAssertions?.length || 0
+      })
+    }
+
+    // Update the card to show evaluating state
+    this.updateAssertionProgressUI(storyId)
+
+    // Hide the verify button during evaluation
+    const verifyBtn = this.listContainer?.querySelector(
+      `.assertions-verify-btn[data-story-id="${storyId}"]`
+    )
+    if (verifyBtn) {
+      verifyBtn.style.display = 'none'
+    }
+
+    try {
+      const result = await window.puffin.state.evaluateStoryAssertions(storyId)
+      if (!result.success) {
+        console.error('[UserStories] Evaluation failed:', result.error)
+        // Show error state
+        this.showEvaluationError(storyId, result.error)
+      }
+      // Note: The completion event from IPC will handle refreshing the UI
+    } catch (error) {
+      console.error('[UserStories] Evaluation error:', error)
+      this.showEvaluationError(storyId, error.message)
+    }
+  }
+
+  /**
+   * Evaluate a single assertion
+   * @param {string} storyId - The story ID
+   * @param {string} assertionId - The assertion ID to re-run
+   */
+  async evaluateSingleAssertion(storyId, assertionId) {
+    if (!window.puffin?.state?.evaluateSingleAssertion) {
+      console.error('[UserStories] Single assertion evaluation API not available')
+      return
+    }
+
+    // Find and update the specific assertion item to show evaluating state
+    const assertionItem = this.listContainer?.querySelector(
+      `.assertion-item[data-assertion-id="${assertionId}"]`
+    )
+    if (assertionItem) {
+      assertionItem.classList.add('evaluating')
+      const rerunBtn = assertionItem.querySelector('.assertion-rerun-btn')
+      if (rerunBtn) {
+        rerunBtn.disabled = true
+        rerunBtn.innerHTML = '<span class="eval-spinner-small"></span>'
+      }
+    }
+
+    try {
+      const result = await window.puffin.state.evaluateSingleAssertion(storyId, assertionId)
+      if (result.success) {
+        // Refresh the story card to show updated results
+        await this.refreshStoryCard(storyId)
+      } else {
+        console.error('[UserStories] Single assertion evaluation failed:', result.error)
+        // Reset the assertion item
+        if (assertionItem) {
+          assertionItem.classList.remove('evaluating')
+          const rerunBtn = assertionItem.querySelector('.assertion-rerun-btn')
+          if (rerunBtn) {
+            rerunBtn.disabled = false
+            rerunBtn.innerHTML = '↻'
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[UserStories] Single assertion error:', error)
+      if (assertionItem) {
+        assertionItem.classList.remove('evaluating')
+      }
+    }
+  }
+
+  /**
+   * Show assertion failures modal for a story
+   * @param {string} storyId - The story ID
+   */
+  showAssertionFailures(storyId) {
+    const story = this.stories.find(s => s.id === storyId)
+    if (!story || !story.assertionResults) {
+      console.warn('[UserStories] No story or results found for:', storyId)
+      return
+    }
+
+    this.intents.showModal('assertion-failures', {
+      story,
+      results: story.assertionResults,
+      onWaive: (storyId, assertionId, reason) => this.waiveAssertion(storyId, assertionId, reason),
+      onDefer: (storyId, assertionId) => this.deferAssertion(storyId, assertionId),
+      onRerun: (storyId, assertionId) => {
+        if (assertionId) {
+          return this.evaluateSingleAssertion(storyId, assertionId)
+        } else {
+          return this.evaluateStoryAssertions(storyId)
+        }
+      },
+      onClose: () => {
+        // Refresh the story card when modal closes
+        this.render(this.stories)
+      }
+    })
+  }
+
+  /**
+   * Waive an assertion failure
+   * @param {string} storyId - The story ID
+   * @param {string} assertionId - The assertion ID
+   * @param {string} reason - The reason for waiving
+   */
+  async waiveAssertion(storyId, assertionId, reason) {
+    if (!window.api?.waiveAssertion) {
+      // Store locally if API not available
+      const story = this.stories.find(s => s.id === storyId)
+      if (story) {
+        if (!story.waivedAssertions) story.waivedAssertions = []
+        story.waivedAssertions.push({
+          assertionId,
+          reason,
+          waivedAt: new Date().toISOString()
+        })
+        // Update story through intents
+        this.intents.updateUserStory(storyId, { waivedAssertions: story.waivedAssertions })
+      }
+      return
+    }
+
+    try {
+      await window.api.waiveAssertion(storyId, assertionId, reason)
+    } catch (error) {
+      console.error('[UserStories] Failed to waive assertion:', error)
+    }
+  }
+
+  /**
+   * Defer an assertion to fix later
+   * @param {string} storyId - The story ID
+   * @param {string} assertionId - The assertion ID
+   */
+  async deferAssertion(storyId, assertionId) {
+    if (!window.api?.deferAssertion) {
+      // Store locally if API not available
+      const story = this.stories.find(s => s.id === storyId)
+      if (story) {
+        if (!story.deferredAssertions) story.deferredAssertions = []
+        story.deferredAssertions.push({
+          assertionId,
+          deferredAt: new Date().toISOString()
+        })
+        // Update story through intents
+        this.intents.updateUserStory(storyId, { deferredAssertions: story.deferredAssertions })
+      }
+      return
+    }
+
+    try {
+      await window.api.deferAssertion(storyId, assertionId)
+    } catch (error) {
+      console.error('[UserStories] Failed to defer assertion:', error)
+    }
+  }
+
+  /**
+   * Show evaluation error state on a story's assertions section
+   * @param {string} storyId - The story ID
+   * @param {string} errorMessage - The error message
+   */
+  showEvaluationError(storyId, errorMessage) {
+    this.evaluatingStories.delete(storyId)
+    this.evaluationProgress.delete(storyId)
+
+    const assertionsSection = this.listContainer?.querySelector(
+      `.story-assertions[data-story-id="${storyId}"]`
+    )
+    if (!assertionsSection) return
+
+    const summaryEl = assertionsSection.querySelector('.assertions-summary')
+    if (summaryEl) {
+      summaryEl.className = 'assertions-summary assertions-error'
+      summaryEl.innerHTML = `<span class="assertion-icon error">!</span> Error: ${errorMessage}`
+    }
+
+    // Re-show the verify button
+    const verifyBtn = assertionsSection.querySelector('.assertions-verify-btn')
+    if (verifyBtn) {
+      verifyBtn.style.display = ''
+    }
+  }
+
+  /**
+   * Render inspection assertions section for a story card
+   * @param {Object} story - The user story object
+   * @returns {string} HTML for the assertions section
+   */
+  renderInspectionAssertions(story) {
+    const assertions = story.inspectionAssertions || []
+    if (assertions.length === 0) return ''
+
+    const results = story.assertionResults
+    const hasResults = results && results.results && results.results.length > 0
+    const COLLAPSE_THRESHOLD = 3
+    const isEvaluating = this.evaluatingStories?.has(story.id)
+
+    // Build summary info
+    let summaryHtml = ''
+    let statusClass = 'assertions-pending'
+    let hasFailures = false
+
+    if (isEvaluating) {
+      const progress = this.evaluationProgress?.get(story.id) || { current: 0, total: assertions.length }
+      summaryHtml = `<span class="assertions-summary assertions-evaluating">
+        <span class="eval-spinner"></span>
+        Evaluating ${progress.current}/${progress.total}...
+      </span>`
+    } else if (hasResults) {
+      const { passed, failed, total } = results.summary
+      const allPassed = failed === 0 && passed === total
+      hasFailures = failed > 0
+      statusClass = allPassed ? 'assertions-passed' : 'assertions-failed'
+      summaryHtml = `<span class="assertions-summary ${statusClass}">${passed}/${total} passed</span>`
+    } else {
+      summaryHtml = `<span class="assertions-summary assertions-pending">Not verified</span>`
+    }
+
+    // Determine if list should be collapsed by default
+    const shouldCollapse = assertions.length > COLLAPSE_THRESHOLD
+
+    // Show verify button when not currently evaluating
+    const verifyButton = !isEvaluating ? `
+      <button class="assertions-verify-btn"
+              data-story-id="${story.id}"
+              title="${hasResults ? 'Re-verify assertions' : 'Verify assertions'}"
+              aria-label="${hasResults ? 'Re-verify assertions' : 'Verify assertions'}">
+        ${hasResults ? '↻' : '▶'}
+      </button>
+    ` : ''
+
+    // Show "View Failures" button when there are failures
+    const viewFailuresButton = hasFailures ? `
+      <button class="assertions-failures-btn"
+              data-story-id="${story.id}"
+              title="View failure details"
+              aria-label="View failure details">
+        View ${results.summary.failed} failure${results.summary.failed !== 1 ? 's' : ''}
+      </button>
+    ` : ''
+
+    return `
+      <div class="story-assertions ${statusClass}${hasFailures ? ' has-failures' : ''}" data-story-id="${story.id}">
+        <div class="assertions-header">
+          <span class="assertions-count">${assertions.length} inspection assertion${assertions.length !== 1 ? 's' : ''}</span>
+          ${summaryHtml}
+          ${viewFailuresButton}
+          ${verifyButton}
+        </div>
+        <ul class="assertions-list ${shouldCollapse ? 'collapsed' : ''}">
+          ${assertions.map(a => this.renderAssertionItem(a, results, story.id)).join('')}
+        </ul>
+      </div>
+    `
+  }
+
+  /**
+   * Render a single assertion item
+   * @param {Object} assertion - The assertion object
+   * @param {Object|null} results - Assertion results if available
+   * @param {string} storyId - The parent story ID
+   * @returns {string} HTML for the assertion item
+   */
+  renderAssertionItem(assertion, results, storyId) {
+    // Find the result for this assertion if available
+    let resultStatus = null
+    let resultDetails = null
+    if (results && results.results) {
+      const result = results.results.find(r => r.assertionId === assertion.id)
+      if (result) {
+        resultStatus = result.status
+        resultDetails = result.details
+      }
+    }
+
+    // Format the type for display (e.g., FILE_EXISTS -> File Exists)
+    const typeDisplay = assertion.type
+      .split('_')
+      .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+      .join(' ')
+
+    // Determine status class and icon
+    let statusClass = 'assertion-pending'
+    let statusIcon = '<span class="assertion-icon pending">○</span>'
+    let rerunButton = ''
+
+    if (resultStatus === 'passed') {
+      statusClass = 'assertion-passed'
+      statusIcon = '<span class="assertion-icon passed">✓</span>'
+    } else if (resultStatus === 'failed') {
+      statusClass = 'assertion-failed'
+      statusIcon = '<span class="assertion-icon failed">✗</span>'
+      // Add re-run button for failed assertions
+      rerunButton = `
+        <button class="assertion-rerun-btn"
+                data-story-id="${storyId}"
+                data-assertion-id="${assertion.id}"
+                title="Re-run this assertion"
+                aria-label="Re-run assertion">↻</button>
+      `
+    } else if (resultStatus === 'error') {
+      statusClass = 'assertion-error'
+      statusIcon = '<span class="assertion-icon error">!</span>'
+      rerunButton = `
+        <button class="assertion-rerun-btn"
+                data-story-id="${storyId}"
+                data-assertion-id="${assertion.id}"
+                title="Re-run this assertion"
+                aria-label="Re-run assertion">↻</button>
+      `
+    }
+
+    // Build failure details tooltip if available
+    let detailsAttr = ''
+    if (resultDetails && resultStatus === 'failed') {
+      const expected = resultDetails.expected || ''
+      const actual = resultDetails.actual || ''
+      const suggestion = resultDetails.suggestion || ''
+      const detailsText = [
+        expected ? `Expected: ${expected}` : '',
+        actual ? `Actual: ${actual}` : '',
+        suggestion ? `Fix: ${suggestion}` : ''
+      ].filter(Boolean).join(' | ')
+      if (detailsText) {
+        detailsAttr = `data-failure-details="${this.escapeHtml(detailsText)}"`
+      }
+    }
+
+    return `
+      <li class="assertion-item ${statusClass}" data-assertion-id="${assertion.id}" ${detailsAttr}>
+        ${statusIcon}
+        <span class="assertion-type">${typeDisplay}</span>
+        <span class="assertion-message">${this.escapeHtml(assertion.message)}</span>
+        <span class="assertion-target" title="${this.escapeHtml(assertion.target)}">${this.escapeHtml(this.truncatePath(assertion.target))}</span>
+        ${rerunButton}
+      </li>
+    `
+  }
+
+  /**
+   * Truncate a path for display, keeping the filename
+   * @param {string} path - The file path
+   * @returns {string} Truncated path
+   */
+  truncatePath(path) {
+    if (!path || path.length <= 30) return path
+    const parts = path.split(/[/\\]/)
+    if (parts.length <= 2) return path
+    return `.../${parts.slice(-2).join('/')}`
+  }
+
+  /**
    * Format status for display
    */
   formatStatus(status) {
@@ -1304,7 +1879,18 @@ export class UserStoriesComponent {
    */
   formatDate(timestamp) {
     if (!timestamp) return ''
-    const date = new Date(timestamp)
+    // Handle various formats: number, numeric string (possibly with .0), or ISO string
+    let date
+    if (typeof timestamp === 'string' && /^\d+(\.\d+)?$/.test(timestamp)) {
+      // Numeric string like "1767506718283.0" - parse as number
+      date = new Date(parseFloat(timestamp))
+    } else if (typeof timestamp === 'number') {
+      date = new Date(timestamp)
+    } else {
+      // ISO string or other format
+      date = new Date(timestamp)
+    }
+    if (isNaN(date.getTime())) return ''
     return date.toLocaleDateString()
   }
 
@@ -1330,5 +1916,15 @@ export class UserStoriesComponent {
     // Clear any pending timers
     clearTimeout(this.searchDebounceTimer)
     clearTimeout(this.resizeDebounceTimer)
+
+    // Clean up assertion evaluation IPC listeners
+    this.evaluationCleanups.forEach(cleanup => {
+      if (typeof cleanup === 'function') {
+        cleanup()
+      }
+    })
+    this.evaluationCleanups = []
+    this.evaluatingStories.clear()
+    this.evaluationProgress.clear()
   }
 }

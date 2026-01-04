@@ -162,6 +162,367 @@ class PuffinApp {
   }
 
   /**
+   * Show a modal for assertion generation progress
+   */
+  showAssertionGenerationModal() {
+    // Remove any existing modal
+    this.hideAssertionGenerationModal()
+
+    const modal = document.createElement('div')
+    modal.id = 'assertion-generation-modal'
+    modal.className = 'assertion-generation-modal'
+    modal.innerHTML = `
+      <div class="assertion-generation-content">
+        <div class="assertion-generation-spinner"></div>
+        <h3>Generating Inspection Assertions</h3>
+        <p class="assertion-generation-status">Analyzing stories and implementation plan...</p>
+        <p class="assertion-generation-hint">Claude is creating testable assertions for each story based on the approved plan.</p>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Subscribe to progress updates
+    if (window.puffin?.state?.onAssertionGenerationProgress) {
+      this._assertionProgressUnsubscribe = window.puffin.state.onAssertionGenerationProgress((data) => {
+        const statusEl = modal.querySelector('.assertion-generation-status')
+        if (statusEl && data.message) {
+          statusEl.textContent = data.message
+        }
+      })
+    }
+  }
+
+  /**
+   * Hide the assertion generation modal
+   */
+  hideAssertionGenerationModal() {
+    // Unsubscribe from progress updates
+    if (this._assertionProgressUnsubscribe) {
+      this._assertionProgressUnsubscribe()
+      this._assertionProgressUnsubscribe = null
+    }
+
+    const modal = document.getElementById('assertion-generation-modal')
+    if (modal) {
+      modal.remove()
+    }
+  }
+
+  /**
+   * Show modal for iterating on the sprint plan with clarifying answers
+   */
+  showPlanIterationModal() {
+    const sprint = this.state.activeSprint
+    if (!sprint) {
+      this.showToast('No active sprint', 'warning')
+      return
+    }
+
+    // Remove any existing modal
+    this.hidePlanIterationModal()
+
+    const modal = document.createElement('div')
+    modal.id = 'plan-iteration-modal'
+    modal.className = 'plan-iteration-modal modal-overlay'
+    modal.innerHTML = `
+      <div class="plan-iteration-content modal-content">
+        <div class="modal-header">
+          <h3>Iterate on Sprint Plan</h3>
+          <button class="modal-close-btn" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="plan-iteration-hint">
+            Review the current plan and provide clarifying answers or additional requirements.
+            Claude will generate a revised plan based on your feedback.
+          </p>
+          <div class="form-group">
+            <label for="plan-clarifications">Your clarifications and answers:</label>
+            <textarea
+              id="plan-clarifications"
+              class="plan-clarifications-input"
+              rows="8"
+              placeholder="Enter your clarifying answers, additional requirements, or questions here...
+
+Example:
+- For the authentication feature, use JWT tokens instead of sessions
+- The sidebar should be collapsible with a toggle button
+- Please include error handling for network failures"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn secondary plan-iteration-cancel">Cancel</button>
+          <button class="btn primary plan-iteration-submit">Resubmit Plan</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Event handlers
+    const closeBtn = modal.querySelector('.modal-close-btn')
+    const cancelBtn = modal.querySelector('.plan-iteration-cancel')
+    const submitBtn = modal.querySelector('.plan-iteration-submit')
+    const textarea = modal.querySelector('#plan-clarifications')
+
+    const closeModal = () => this.hidePlanIterationModal()
+
+    closeBtn.addEventListener('click', closeModal)
+    cancelBtn.addEventListener('click', closeModal)
+
+    // Close on overlay click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal()
+    })
+
+    // Submit handler
+    submitBtn.addEventListener('click', () => {
+      const clarifications = textarea.value.trim()
+      if (!clarifications) {
+        this.showToast('Please enter your clarifications before submitting', 'warning')
+        return
+      }
+
+      // Close modal and trigger plan iteration
+      closeModal()
+      this.intents.iterateSprintPlan(clarifications)
+      this.showToast('Resubmitting plan with your clarifications...', 'info')
+    })
+
+    // Focus the textarea
+    setTimeout(() => textarea.focus(), 100)
+  }
+
+  /**
+   * Hide the plan iteration modal
+   */
+  hidePlanIterationModal() {
+    const modal = document.getElementById('plan-iteration-modal')
+    if (modal) {
+      modal.remove()
+    }
+  }
+
+  /**
+   * Show confirmation dialog asking if user wants to start a code review
+   * @param {Object} sprint - The approved sprint with stories and plan
+   */
+  showCodeReviewConfirmation(sprint) {
+    // Calculate assertion statistics across all sprint stories
+    const assertionStats = this.calculateSprintAssertionStats(sprint)
+    const { total, passed, failed, pending, notEvaluated } = assertionStats
+
+    // Determine recommendation based on assertion results
+    let recommendationClass = 'neutral'
+    let recommendationText = 'Code review recommended for quality assurance.'
+
+    if (failed > 0) {
+      recommendationClass = 'warning'
+      recommendationText = 'Code review strongly recommended - some assertions failed.'
+    } else if (notEvaluated > 0) {
+      recommendationClass = 'caution'
+      recommendationText = 'Some assertions have not been evaluated yet.'
+    } else if (passed === total && total > 0) {
+      recommendationClass = 'success'
+      recommendationText = 'All assertions passed. Code review optional but recommended.'
+    }
+
+    const modal = document.createElement('div')
+    modal.id = 'code-review-confirmation-modal'
+    modal.className = 'code-review-confirmation-modal'
+    modal.innerHTML = `
+      <div class="code-review-confirmation-content">
+        <h3>Start Code Review?</h3>
+
+        <div class="assertion-stats-summary">
+          <h4>Inspection Assertions</h4>
+          <div class="assertion-stats-grid">
+            <div class="stat-item stat-total">
+              <span class="stat-value">${total}</span>
+              <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-item stat-passed">
+              <span class="stat-value">${passed}</span>
+              <span class="stat-label">Passed</span>
+            </div>
+            <div class="stat-item stat-failed">
+              <span class="stat-value">${failed}</span>
+              <span class="stat-label">Failed</span>
+            </div>
+            <div class="stat-item stat-pending">
+              <span class="stat-value">${notEvaluated}</span>
+              <span class="stat-label">Not Evaluated</span>
+            </div>
+          </div>
+          <p class="recommendation ${recommendationClass}">${recommendationText}</p>
+        </div>
+
+        <p class="code-review-hint">Claude will review the implementation for common mistakes and best practices.</p>
+        <div class="code-review-actions">
+          <button class="btn secondary" data-action="skip">Skip</button>
+          <button class="btn primary" data-action="review">Start Review</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Handle button clicks
+    modal.addEventListener('click', async (e) => {
+      const action = e.target.dataset.action
+      if (!action) return
+
+      modal.remove()
+
+      if (action === 'review') {
+        await this.startSprintCodeReview(sprint)
+      }
+    })
+  }
+
+  /**
+   * Calculate assertion statistics across all stories in a sprint
+   * @param {Object} sprint - The sprint with stories
+   * @returns {Object} Stats: { total, passed, failed, pending, notEvaluated }
+   */
+  calculateSprintAssertionStats(sprint) {
+    const stories = sprint.stories || []
+    const backlogStories = this.state?.userStories || []
+
+    let total = 0
+    let passed = 0
+    let failed = 0
+    let pending = 0
+    let notEvaluated = 0
+
+    stories.forEach(story => {
+      // Get assertions from sprint story or backlog
+      const backlogStory = backlogStories.find(s => s.id === story.id)
+      const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
+      const results = story.assertionResults || backlogStory?.assertionResults
+
+      total += assertions.length
+
+      if (!results || !results.results) {
+        // No evaluation results - all are "not evaluated"
+        notEvaluated += assertions.length
+      } else {
+        // Count by status from results
+        const resultMap = new Map()
+        results.results.forEach(r => resultMap.set(r.assertionId, r.status))
+
+        assertions.forEach(assertion => {
+          const status = resultMap.get(assertion.id)
+          if (status === 'passed') {
+            passed++
+          } else if (status === 'failed' || status === 'error') {
+            failed++
+          } else {
+            pending++
+          }
+        })
+      }
+    })
+
+    return { total, passed, failed, pending, notEvaluated }
+  }
+
+  /**
+   * Start a code review for the sprint on the Code Reviews branch
+   * @param {Object} sprint - The sprint with stories and plan
+   */
+  async startSprintCodeReview(sprint) {
+    const stories = sprint.stories || []
+    const plan = sprint.plan || ''
+
+    // Build the code review prompt
+    const storyContext = stories.map((s, i) => {
+      const criteria = (s.acceptanceCriteria || []).map((c, j) => `   ${j + 1}. ${c}`).join('\n')
+      return `### Story ${i + 1}: ${s.title}
+${s.description}
+${criteria ? `\n**Acceptance Criteria:**\n${criteria}` : ''}`
+    }).join('\n\n')
+
+    const reviewPrompt = `## Code Review Request: Sprint Implementation
+
+Please conduct a thorough code review of the implementation for the following user stories. Focus on identifying common implementation mistakes, potential bugs, and areas for improvement.
+
+${storyContext}
+
+---
+
+**Implementation Plan Reference:**
+${plan}
+
+---
+
+**Review Focus Areas:**
+
+1. **Logic Errors**: Look for off-by-one errors, incorrect conditionals, missing edge cases
+2. **Error Handling**: Check for proper error handling and graceful degradation
+3. **Security**: Identify potential security vulnerabilities (XSS, injection, etc.)
+4. **Performance**: Flag any obvious performance issues or inefficiencies
+5. **Code Quality**: Check for code duplication, unclear naming, missing comments
+6. **Best Practices**: Verify adherence to project patterns and conventions
+7. **Testing Gaps**: Identify areas that may need additional test coverage
+
+Please provide specific file locations and line numbers where issues are found, along with recommended fixes.`
+
+    // Submit to Code Reviews branch
+    const branchId = 'code-reviews'
+
+    // Ensure the branch exists
+    if (!this.state.history?.raw?.branches?.[branchId]) {
+      // Create the branch if it doesn't exist
+      this.intents.createBranch({
+        id: branchId,
+        name: 'Code Reviews',
+        description: 'Code review threads for sprint implementations'
+      })
+    }
+
+    // Switch to the code reviews branch
+    this.intents.selectBranch(branchId)
+
+    // Submit the prompt to SAM (adds to history)
+    this.intents.submitPrompt({
+      branchId,
+      content: reviewPrompt,
+      parentId: null
+    })
+
+    // Switch view to prompt if not already there
+    if (this.state.currentView !== 'prompt') {
+      this.intents.switchView('prompt')
+    }
+
+    // Actually submit to Claude CLI
+    if (window.puffin?.claude) {
+      // Check if a CLI process is already running
+      const isRunning = await window.puffin.claude.isRunning()
+      if (isRunning) {
+        console.error('[CODE-REVIEW] Cannot start review: CLI process already running')
+        this.showToast({
+          type: 'error',
+          title: 'Process Already Running',
+          message: 'Please wait for the current process to complete',
+          duration: 5000
+        })
+        return
+      }
+
+      window.puffin.claude.submit({
+        prompt: reviewPrompt,
+        branchId,
+        sessionId: null, // New session for code review
+        project: this.state.config ? {
+          name: this.state.config.name,
+          description: this.state.config.description
+        } : null
+      })
+
+      this.showToast('Code review started on Code Reviews branch', 'info')
+    }
+  }
+
+  /**
    * Initialize the application
    */
   async init() {
@@ -233,7 +594,11 @@ class PuffinApp {
    * Initialize managers with dependencies
    */
   initManagers() {
-    this.modalManager = new ModalManager(this.intents, this.showToast.bind(this))
+    this.modalManager = new ModalManager(
+      this.intents,
+      this.showToast.bind(this),
+      this.showCodeReviewConfirmation.bind(this)
+    )
     this.statePersistence = new StatePersistence(
       () => this.state,
       this.intents,
@@ -390,10 +755,10 @@ class PuffinApp {
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'clearSprint', 'clearSprintWithDetails',
-      'showSprintCloseModal', 'clearPendingSprintPlanning',
+      'createSprint', 'startSprintPlanning', 'approvePlan', 'setSprintPlan', 'iterateSprintPlan',
+      'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
-      'updateSprintStoryStatus', 'clearSprintError', 'toggleCriteriaCompletion',
+      'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'updateStoryAssertionResults', 'toggleCriteriaCompletion',
       // Stuck detection actions
       'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection',
       // Debug actions
@@ -507,6 +872,8 @@ class PuffinApp {
           ['CREATE_SPRINT', actions.createSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['APPROVE_PLAN', actions.approvePlan],
+          ['SET_SPRINT_PLAN', actions.setSprintPlan],
+          ['ITERATE_SPRINT_PLAN', actions.iterateSprintPlan],
           ['CLEAR_SPRINT', actions.clearSprint],
           ['CLEAR_SPRINT_WITH_DETAILS', actions.clearSprintWithDetails],
           ['SHOW_SPRINT_CLOSE_MODAL', actions.showSprintCloseModal],
@@ -515,7 +882,9 @@ class PuffinApp {
           ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation],
           ['COMPLETE_STORY_BRANCH', actions.completeStoryBranch],
           ['UPDATE_SPRINT_STORY_STATUS', actions.updateSprintStoryStatus],
+          ['UPDATE_SPRINT_STORY_ASSERTIONS', actions.updateSprintStoryAssertions],
           ['CLEAR_SPRINT_ERROR', actions.clearSprintError],
+          ['UPDATE_STORY_ASSERTION_RESULTS', actions.updateStoryAssertionResults],
           ['TOGGLE_CRITERIA_COMPLETION', actions.toggleCriteriaCompletion],
           // Stuck detection actions
           ['RECORD_ITERATION_OUTPUT', actions.recordIterationOutput],
@@ -1041,6 +1410,23 @@ class PuffinApp {
         console.error('[SAM-ERROR] completeResponse failed:', err)
       }
 
+      // Capture sprint plan content if we're in planning mode
+      try {
+        const currentState = this.state
+        const sprintStatus = currentState?.activeSprint?.status
+        const hasContent = !!response?.content
+        console.log('[SPRINT] Plan capture check - status:', sprintStatus, 'hasContent:', hasContent, 'contentLength:', response?.content?.length || 0)
+
+        if (sprintStatus === 'planning' && hasContent) {
+          console.log('[SPRINT] Capturing plan content from Claude response, length:', response.content.length)
+          this.intents.setSprintPlan(response.content)
+        } else if (sprintStatus && sprintStatus !== 'planning') {
+          console.log('[SPRINT] Skipping plan capture - sprint status is:', sprintStatus)
+        }
+      } catch (err) {
+        console.error('[SAM-ERROR] setSprintPlan failed:', err)
+      }
+
       // Reset stuck detection when response completes successfully
       try {
         this.intents.resetStuckDetection()
@@ -1127,18 +1513,14 @@ class PuffinApp {
       const unsubStatusSync = window.puffin.state.onStoryStatusSynced((data) => {
         console.log('[STATUS-SYNC] Story status synced:', data.storyId, '->', data.status)
 
-        // Update the local state with the synced data
-        if (data.sprint && this.state.activeSprint) {
-          // Update active sprint in state
-          this.intents.loadActiveSprint(data.sprint)
+        // Update the specific story in userStories via SAM action
+        if (data.story) {
+          this.intents.updateUserStory(data.storyId, data.story)
         }
 
-        if (data.story) {
-          // Update the specific story in userStories
-          const storyIndex = this.state.userStories?.findIndex(s => s.id === data.storyId)
-          if (storyIndex !== -1) {
-            this.intents.updateUserStory(data.storyId, data.story)
-          }
+        // Update sprint story status via SAM action (this updates model.activeSprint.storyProgress)
+        if (data.sprint && this.state?.activeSprint) {
+          this.intents.updateSprintStoryStatus(data.storyId, data.status)
         }
 
         // Show toast for user feedback
@@ -1405,6 +1787,7 @@ class PuffinApp {
     const progressSection = document.getElementById('sprint-progress-section')
     const storiesContainer = document.getElementById('sprint-stories')
     const planBtn = document.getElementById('sprint-plan-btn')
+    const iterateBtn = document.getElementById('sprint-iterate-btn')
     const approveBtn = document.getElementById('sprint-approve-btn')
 
     // No active sprint - show empty state
@@ -1416,6 +1799,7 @@ class PuffinApp {
       if (closeBtn) closeBtn.classList.add('hidden')
       if (progressSection) progressSection.classList.add('hidden')
       if (planBtn) planBtn.classList.add('hidden')
+      if (iterateBtn) iterateBtn.classList.add('hidden')
       if (approveBtn) approveBtn.classList.add('hidden')
       if (storiesContainer) {
         storiesContainer.innerHTML = `
@@ -1441,7 +1825,8 @@ class PuffinApp {
     const sprintProgress = state.sprintProgress
     const backlogStories = state.userStories || []
     if (storiesContainer && sprint.stories) {
-      const showBranchButtons = sprint.status === 'planned' || sprint.status === 'implementing'
+      // Show branch buttons after plan is approved (status becomes 'in-progress' or 'implementing')
+      const showBranchButtons = sprint.status === 'in-progress' || sprint.status === 'implementing'
       const storyProgress = sprint.storyProgress || {}
       const storiesWithProgress = sprintProgress?.stories || []
 
@@ -1489,6 +1874,11 @@ class PuffinApp {
         const completedCriteria = criteriaList.filter(c => c.checked).length
         const criteriaPercentage = totalCriteria > 0 ? Math.round((completedCriteria / totalCriteria) * 100) : 0
 
+        // Get inspection assertions (from sprint story or backlog story)
+        const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
+        const assertionResults = story.assertionResults || backlogStory?.assertionResults
+        const hasAssertions = assertions.length > 0
+
         // Check if this section was expanded before re-render
         const isExpanded = expandedSections.has(story.id)
 
@@ -1527,6 +1917,7 @@ class PuffinApp {
                 </ul>
               </div>
             ` : ''}
+            ${hasAssertions ? this.renderSprintAssertions(story.id, assertions, assertionResults) : ''}
             ${showBranchButtons ? this.renderStoryBranchButtons(story, progress) : ''}
             ${isActiveImplementation ? `
               <div class="cancel-implementation-section">
@@ -1560,9 +1951,22 @@ class PuffinApp {
     }
 
     // Update action buttons based on status
-    if (planBtn && approveBtn) {
-      planBtn.classList.toggle('hidden', sprint.status !== 'created')
-      approveBtn.classList.toggle('hidden', sprint.status !== 'planning')
+    // Plan button: visible when sprint is 'created' (ready to plan)
+    // Iterate/Approve buttons: visible when sprint has stories AND is not yet approved (in-progress)
+    const hasStories = sprint.stories && sprint.stories.length > 0
+    const canPlan = sprint.status === 'created'
+    const canApprove = hasStories && sprint.status !== 'in-progress' && sprint.status !== 'implementing'
+
+    console.log('[SPRINT-BUTTONS] status:', sprint.status, 'hasStories:', hasStories, 'canPlan:', canPlan, 'canApprove:', canApprove)
+
+    if (planBtn) {
+      planBtn.classList.toggle('hidden', !canPlan)
+    }
+    if (iterateBtn) {
+      iterateBtn.classList.toggle('hidden', !canApprove)
+    }
+    if (approveBtn) {
+      approveBtn.classList.toggle('hidden', !canApprove)
     }
 
     // Bind event handlers (only once)
@@ -1572,7 +1976,18 @@ class PuffinApp {
       // Close button - shows modal for title/description capture
       if (closeBtn) {
         closeBtn.addEventListener('click', () => {
-          this.intents.showModal('sprint-close', { sprint: this.state.activeSprint })
+          const sprint = this.state.activeSprint
+          const userStories = this.state.userStories || []
+
+          // Pre-fetch git status and commit message asynchronously (non-blocking)
+          // The modal will display the results when ready
+          if (this.modalManager) {
+            this.modalManager.preCheckGitStatus()
+            this.modalManager.preGenerateSprintCommitMessage(sprint, userStories)
+          }
+
+          // Show modal immediately - data will be ready or loading
+          this.intents.showModal('sprint-close', { sprint })
         })
       }
 
@@ -1583,11 +1998,87 @@ class PuffinApp {
         })
       }
 
+      // Iterate button - shows modal to refine the plan with clarifications
+      if (iterateBtn) {
+        iterateBtn.addEventListener('click', () => {
+          this.showPlanIterationModal()
+        })
+      }
+
       // Approve button
       if (approveBtn) {
-        approveBtn.addEventListener('click', () => {
+        approveBtn.addEventListener('click', async () => {
+          // Get the current sprint state before approving
+          const sprint = this.state.activeSprint
+          if (!sprint || !sprint.stories || sprint.stories.length === 0) {
+            this.showToast('No stories in sprint to approve.', 'warning')
+            return
+          }
+
+          // Log plan state for debugging
+          console.log('[SPRINT] Approve clicked - plan:', sprint.plan ? `${sprint.plan.length} chars` : 'null')
+
+          // Warn if no plan exists (user can still proceed)
+          if (!sprint.plan) {
+            console.log('[SPRINT] No plan captured - assertions will be generated without implementation context')
+          }
+
+          // Approve the plan (updates status to in-progress)
           this.intents.approvePlan()
-          this.showToast('Plan approved! Ready for implementation.', 'success')
+
+          // Show assertion generation modal
+          this.showAssertionGenerationModal()
+
+          try {
+            // Generate assertions for all stories (plan is optional)
+            const result = await window.puffin.state.generateSprintAssertions(
+              sprint.stories,
+              sprint.plan || ''  // Pass empty string if plan is null
+            )
+
+            this.hideAssertionGenerationModal()
+
+            if (result.success) {
+              // Update model state with new assertions via SAM actions
+              for (const [storyId, assertions] of Object.entries(result.assertions)) {
+                // Dispatch action to update model.activeSprint.stories (for sprint UI)
+                this.intents.updateSprintStoryAssertions(storyId, assertions)
+                // Dispatch action to update model.userStories (for backlog UI)
+                this.intents.updateUserStory(storyId, { inspectionAssertions: assertions })
+              }
+
+              // Fallback: Refresh stories from database to ensure UI is in sync
+              // This handles cases where the in-memory update might fail
+              try {
+                const storiesResult = await window.puffin.state.getUserStories()
+                if (storiesResult.success && Array.isArray(storiesResult.stories) && storiesResult.stories.length > 0) {
+                  console.log('[SPRINT] Refreshing stories from database after assertion generation:', storiesResult.stories.length, 'stories')
+                  this.intents.loadUserStories(storiesResult.stories)
+                }
+              } catch (refreshError) {
+                console.warn('[SPRINT] Failed to refresh stories from database:', refreshError)
+              }
+
+              this.showToast(
+                `Plan approved! Generated ${result.totalAssertions} inspection assertions.`,
+                'success'
+              )
+
+              // Note: Code review happens after sprint close, not here
+            } else {
+              this.showToast(
+                `Plan approved, but assertion generation failed: ${result.error}`,
+                'warning'
+              )
+            }
+          } catch (error) {
+            this.hideAssertionGenerationModal()
+            console.error('[SPRINT] Assertion generation error:', error)
+            this.showToast(
+              `Plan approved, but assertion generation failed: ${error.message}`,
+              'warning'
+            )
+          }
         })
       }
 
@@ -1679,6 +2170,47 @@ class PuffinApp {
           }
         }
       })
+
+      // Assertions toggle button clicks (expand/collapse)
+      sprintContextPanel.addEventListener('click', (e) => {
+        const toggleBtn = e.target.closest('.assertions-toggle-btn')
+        if (toggleBtn) {
+          const section = toggleBtn.closest('.story-assertions-section')
+          const list = section?.querySelector('.assertions-list')
+          if (section && list) {
+            section.classList.toggle('expanded')
+            list.classList.toggle('expanded')
+          }
+        }
+      })
+
+      // Listen for assertion evaluation completion to update model and refresh UI
+      if (window.puffin?.state?.onAssertionEvaluationComplete) {
+        window.puffin.state.onAssertionEvaluationComplete((data) => {
+          const { storyId, results } = data
+          console.log('[SPRINT] Assertion evaluation complete for story:', storyId)
+          // Update the model with assertion results (both backlog and sprint stories)
+          // SAM render cycle will automatically refresh the sprint panel
+          this.intents.updateStoryAssertionResults(storyId, results)
+        })
+      }
+
+      // Listen for assertion evaluation progress to show spinner
+      if (window.puffin?.state?.onAssertionEvaluationProgress) {
+        window.puffin.state.onAssertionEvaluationProgress((data) => {
+          const { storyId, current, total } = data
+          const section = sprintContextPanel.querySelector(
+            `.story-assertions-section[data-story-id="${storyId}"]`
+          )
+          if (section) {
+            const summary = section.querySelector('.assertions-summary')
+            if (summary) {
+              summary.textContent = `Evaluating ${current}/${total}...`
+              summary.classList.add('evaluating')
+            }
+          }
+        })
+      }
     }
   }
 
@@ -2338,8 +2870,9 @@ Keep it concise but informative. Use markdown formatting.`
   formatSprintStatus(status) {
     const statusMap = {
       'created': 'Created',
-      'planning': 'Planning',
-      'planned': 'Ready for Implementation',
+      'planning': 'Planning...',
+      'planned': 'Ready for Approval',
+      'in-progress': 'In Progress',
       'implementing': 'Implementing'
     }
     return statusMap[status] || status
@@ -2385,6 +2918,103 @@ Keep it concise but informative. Use markdown formatting.`
         }).join('')}
       </div>
     `
+  }
+
+  /**
+   * Render inspection assertions section for a sprint story card
+   * @param {string} storyId - The story ID
+   * @param {Array} assertions - The inspection assertions array
+   * @param {Object} results - The assertion evaluation results (optional)
+   * @returns {string} HTML for the assertions section
+   */
+  renderSprintAssertions(storyId, assertions, results) {
+    if (!assertions || assertions.length === 0) return ''
+
+    const hasResults = results && results.summary
+    let statusClass = 'assertions-pending'
+    let summaryText = 'Not verified'
+    let passedCount = 0
+    let failedCount = 0
+
+    // Build a map of assertion results by ID for quick lookup
+    const resultMap = new Map()
+    if (results && results.results) {
+      results.results.forEach(r => resultMap.set(r.assertionId, r))
+    }
+
+    if (hasResults) {
+      passedCount = results.summary.passed || 0
+      failedCount = results.summary.failed || 0
+      const total = results.summary.total || assertions.length
+
+      if (failedCount > 0) {
+        statusClass = 'assertions-failed'
+        summaryText = `${passedCount}/${total} passed`
+      } else if (passedCount === total) {
+        statusClass = 'assertions-passed'
+        summaryText = `${passedCount}/${total} passed`
+      } else {
+        summaryText = `${passedCount}/${total} verified`
+      }
+    }
+
+    // Render individual assertions list
+    const assertionsListHtml = assertions.map(assertion => {
+      const result = resultMap.get(assertion.id)
+      let itemStatusClass = 'assertion-pending'
+      let itemIcon = '○'
+
+      if (result) {
+        if (result.status === 'passed') {
+          itemStatusClass = 'assertion-passed'
+          itemIcon = '✓'
+        } else if (result.status === 'failed' || result.status === 'error') {
+          itemStatusClass = 'assertion-failed'
+          itemIcon = '✗'
+        }
+      }
+
+      const typeLabel = this.formatAssertionType(assertion.type)
+      const targetDisplay = assertion.target ? this.escapeHtml(assertion.target) : ''
+
+      return `
+        <li class="assertion-item ${itemStatusClass}">
+          <span class="assertion-item-icon">${itemIcon}</span>
+          <div class="assertion-item-content">
+            <span class="assertion-item-type">${typeLabel}</span>
+            ${targetDisplay ? `<span class="assertion-item-target" title="${targetDisplay}">${targetDisplay}</span>` : ''}
+            <span class="assertion-item-message">${this.escapeHtml(assertion.message || '')}</span>
+          </div>
+        </li>
+      `
+    }).join('')
+
+    return `
+      <div class="story-assertions-section ${statusClass}" data-story-id="${storyId}">
+        <button class="assertions-toggle-btn" data-story-id="${storyId}" title="Toggle assertions">
+          <span class="assertions-toggle-icon">▶</span>
+          <span class="assertions-icon">${hasResults ? (failedCount > 0 ? '!' : '✓') : '○'}</span>
+          <span class="assertions-label">Assertions</span>
+          <span class="assertions-summary">${summaryText}</span>
+          <span class="assertions-total">(${assertions.length})</span>
+        </button>
+        <ul class="assertions-list">
+          ${assertionsListHtml}
+        </ul>
+      </div>
+    `
+  }
+
+  /**
+   * Format assertion type for display
+   * @param {string} type - The assertion type (e.g., FILE_EXISTS)
+   * @returns {string} Formatted type label
+   */
+  formatAssertionType(type) {
+    if (!type) return ''
+    return type.split('_').map(word =>
+      word.charAt(0) + word.slice(1).toLowerCase()
+    ).join(' ')
   }
 
   /**

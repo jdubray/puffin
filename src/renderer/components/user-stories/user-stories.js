@@ -926,7 +926,19 @@ export class UserStoriesComponent {
            data-story-id="${story.id}"
            data-story-status="${story.status}"
            ${isDraggable ? 'draggable="true"' : ''}>
-        <div class="story-actions-row">
+        <div class="story-header">
+          <div class="story-header-left">
+            ${isDraggable ? `
+              <span class="drag-handle" title="Drag to change status" aria-label="Drag handle">⋮⋮</span>
+            ` : ''}
+            ${canImplement ? `
+              <label class="story-checkbox-label">
+                <input type="checkbox" class="story-checkbox" ${isSelected ? 'checked' : ''}>
+              </label>
+            ` : ''}
+            <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
+            ${showFallbackDropdown ? this.renderStatusDropdown(story) : ''}
+          </div>
           <div class="story-actions">
             <button class="story-action-btn expand-btn" title="View full details" aria-label="Expand story">⤢</button>
             ${canComplete ? `<button class="story-action-btn complete-btn" title="Mark as completed">✓</button>` : ''}
@@ -935,18 +947,6 @@ export class UserStoriesComponent {
             ${!isArchived ? `<button class="story-action-btn edit-btn" title="Edit story">✎</button>` : ''}
             <button class="story-action-btn delete-btn" title="Delete story">×</button>
           </div>
-        </div>
-        <div class="story-header">
-          ${isDraggable ? `
-            <span class="drag-handle" title="Drag to change status" aria-label="Drag handle">⋮⋮</span>
-          ` : ''}
-          ${canImplement ? `
-            <label class="story-checkbox-label">
-              <input type="checkbox" class="story-checkbox" ${isSelected ? 'checked' : ''}>
-            </label>
-          ` : ''}
-          <span class="story-status ${statusClass}">${this.formatStatus(story.status)}</span>
-          ${showFallbackDropdown ? this.renderStatusDropdown(story) : ''}
         </div>
         <h4 class="story-title">${this.escapeHtml(story.title)}</h4>
         ${story.description ? `<p class="story-description">${this.escapeHtml(story.description)}</p>` : ''}

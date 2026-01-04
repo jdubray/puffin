@@ -252,7 +252,9 @@ export class StatePersistence {
         // For UPDATE_SPRINT_STORY_STATUS: use atomic sync to update both sprint and backlog
         // This ensures status is always consistent between views with no manual refresh needed
         if (normalizedType === 'UPDATE_SPRINT_STORY_STATUS') {
-          const { storyId, status } = action.payload || {}
+          // Handle both payload format and args format (from wrapIntentsForDebugging)
+          const storyId = action.payload?.storyId || action.args?.[0]
+          const status = action.payload?.status || action.args?.[1]
           if (storyId && status) {
             try {
               const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)
@@ -283,7 +285,8 @@ export class StatePersistence {
         }
         // For TOGGLE_CRITERIA_COMPLETION: use atomic sync when story becomes complete
         else if (normalizedType === 'TOGGLE_CRITERIA_COMPLETION') {
-          const { storyId } = action.payload || {}
+          // Handle both payload format and args format (from wrapIntentsForDebugging)
+          const storyId = action.payload?.storyId || action.args?.[0]
           const storyProgress = state.activeSprint?.storyProgress?.[storyId]
 
           console.log('[PERSIST-DEBUG] TOGGLE_CRITERIA_COMPLETION:', {

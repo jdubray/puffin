@@ -11,6 +11,23 @@
  * Now uses config state from .puffin/config.json
  */
 
+// Debounce delay for input changes (ms)
+const INPUT_DEBOUNCE_DELAY = 500
+
+/**
+ * Debounce utility function
+ * @param {Function} fn - Function to debounce
+ * @param {number} delay - Delay in milliseconds
+ * @returns {Function} Debounced function
+ */
+function debounce(fn, delay) {
+  let timeoutId
+  return function (...args) {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => fn.apply(this, args), delay)
+  }
+}
+
 export class ProjectFormComponent {
   constructor(intents) {
     this.intents = intents
@@ -20,6 +37,12 @@ export class ProjectFormComponent {
     this.pluginsList = null
     this.plugins = []
     this._initialized = false // Track if form has been populated
+
+    // Create debounced version of config update to prevent excessive updates during typing
+    this._debouncedUpdateConfig = debounce(() => {
+      const formData = this.getFormData()
+      this.intents.updateConfig(formData)
+    }, INPUT_DEBOUNCE_DELAY)
   }
 
   /**
@@ -240,50 +263,77 @@ export class ProjectFormComponent {
   }
 
   /**
+   * Safely get a form element's value with null check
+   * @param {string} id - Element ID
+   * @param {string} defaultValue - Default value if element is missing
+   * @returns {string} The element value or default
+   */
+  getElementValue(id, defaultValue = '') {
+    const element = document.getElementById(id)
+    if (!element) {
+      console.warn(`[ProjectForm] Missing form element: ${id}`)
+      return defaultValue
+    }
+    return element.value?.trim?.() ?? element.value ?? defaultValue
+  }
+
+  /**
+   * Safely get a checkbox element's checked state
+   * @param {string} id - Element ID
+   * @param {boolean} defaultValue - Default value if element is missing
+   * @returns {boolean} The checkbox state or default
+   */
+  getCheckboxValue(id, defaultValue = false) {
+    const element = document.getElementById(id)
+    return element?.checked ?? defaultValue
+  }
+
+  /**
    * Get form data as object
+   * Uses safe accessors to handle missing elements gracefully
    */
   getFormData() {
     return {
-      name: document.getElementById('project-name-input').value.trim(),
-      description: document.getElementById('project-description').value.trim(),
+      name: this.getElementValue('project-name-input'),
+      description: this.getElementValue('project-description'),
       assumptions: this.assumptions.filter(a => a.trim()),
-      technicalArchitecture: document.getElementById('technical-architecture').value.trim(),
-      dataModel: document.getElementById('data-model').value.trim(),
-      defaultModel: document.getElementById('default-model').value,
+      technicalArchitecture: this.getElementValue('technical-architecture'),
+      dataModel: this.getElementValue('data-model'),
+      defaultModel: this.getElementValue('default-model', 'optus'),
       options: {
-        programmingStyle: document.getElementById('programming-style').value,
-        testingApproach: document.getElementById('testing-approach').value,
-        documentationLevel: document.getElementById('documentation-level').value,
-        errorHandling: document.getElementById('error-handling').value,
+        programmingStyle: this.getElementValue('programming-style', 'hybrid'),
+        testingApproach: this.getElementValue('testing-approach', 'bdd'),
+        documentationLevel: this.getElementValue('documentation-level', 'standard'),
+        errorHandling: this.getElementValue('error-handling', 'exceptions'),
         codeStyle: {
-          naming: document.getElementById('naming-convention').value,
-          comments: document.getElementById('comment-style').value
+          naming: this.getElementValue('naming-convention', 'camelCase'),
+          comments: this.getElementValue('comment-style', 'jsdoc')
         }
       },
       uxStyle: {
-        alignment: document.getElementById('ux-alignment').value,
-        fontFamily: document.getElementById('ux-font-family').value,
-        fontSize: document.getElementById('ux-font-size').value,
-        baselineCss: document.getElementById('ux-baseline-css').value.trim(),
+        alignment: this.getElementValue('ux-alignment', 'left'),
+        fontFamily: this.getElementValue('ux-font-family', 'system-ui'),
+        fontSize: this.getElementValue('ux-font-size', '16px'),
+        baselineCss: this.getElementValue('ux-baseline-css'),
         colorPalette: {
-          primary: document.getElementById('ux-color-primary').value,
-          secondary: document.getElementById('ux-color-secondary').value,
-          accent: document.getElementById('ux-color-accent').value,
-          background: document.getElementById('ux-color-background').value,
-          text: document.getElementById('ux-color-text').value,
-          error: document.getElementById('ux-color-error').value
+          primary: this.getElementValue('ux-color-primary', '#007bff'),
+          secondary: this.getElementValue('ux-color-secondary', '#6c757d'),
+          accent: this.getElementValue('ux-color-accent', '#28a745'),
+          background: this.getElementValue('ux-color-background', '#ffffff'),
+          text: this.getElementValue('ux-color-text', '#212529'),
+          error: this.getElementValue('ux-color-error', '#dc3545')
         }
       },
-      debugMode: document.getElementById('debug-mode-checkbox')?.checked || false
+      debugMode: this.getCheckboxValue('debug-mode-checkbox')
     }
   }
 
   /**
    * Handle input changes (auto-update config)
+   * Uses debouncing to prevent excessive updates during rapid typing
    */
   handleInputChange() {
-    const formData = this.getFormData()
-    this.intents.updateConfig(formData)
+    this._debouncedUpdateConfig()
   }
 
   /**
@@ -415,6 +465,43 @@ export class ProjectFormComponent {
   }
 
   /**
+   * Validate plugin icon for safe DOM insertion.
+   * Accepts: emoji characters, short text labels (1-4 chars like "JS", "TS")
+   * Rejects: HTML, scripts, long strings
+   * @param {string} icon - The icon to validate
+   * @returns {string} Safe icon or default fallback
+   */
+  validatePluginIcon(icon) {
+    const DEFAULT_ICON = '🔧'
+
+    if (!icon || typeof icon !== 'string') {
+      return DEFAULT_ICON
+    }
+
+    // Trim and limit length (max 8 chars to allow emoji sequences or short text)
+    const trimmed = icon.trim()
+    if (trimmed.length === 0 || trimmed.length > 8) {
+      return DEFAULT_ICON
+    }
+
+    // Check for dangerous characters (HTML/script injection)
+    if (/<|>|&|javascript:|data:|on\w+=/i.test(trimmed)) {
+      console.warn(`[ProjectForm] SECURITY: Rejected unsafe plugin icon: ${icon}`)
+      return DEFAULT_ICON
+    }
+
+    // Allow emoji pattern (Unicode emoji ranges) or alphanumeric text (1-4 chars)
+    const isEmoji = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Modifier_Base}\p{Emoji_Presentation}]+$/u.test(trimmed)
+    const isShortText = /^[A-Za-z0-9]{1,4}$/.test(trimmed)
+
+    if (isEmoji || isShortText) {
+      return trimmed
+    }
+
+    return DEFAULT_ICON
+  }
+
+  /**
    * Format date for display
    */
   formatDate(timestamp) {
@@ -476,12 +563,20 @@ export class ProjectFormComponent {
       item.className = `plugin-item ${plugin.enabled === false ? 'disabled' : ''}`
       item.dataset.pluginId = plugin.id
 
-      const icon = plugin.icon || '🔧'
+      // Validate icon for security (prevents XSS via malicious icon content)
+      const icon = this.validatePluginIcon(plugin.icon)
       const version = plugin.version || '1.0.0'
       const description = plugin.description || 'No description available'
 
-      item.innerHTML = `
-        <div class="plugin-item-icon">${icon}</div>
+      // Build structure - icon uses textContent for extra safety
+      const iconDiv = document.createElement('div')
+      iconDiv.className = 'plugin-item-icon'
+      iconDiv.textContent = icon
+
+      // Rest of item uses innerHTML with escaped content
+      const contentWrapper = document.createElement('div')
+      contentWrapper.className = 'plugin-item-wrapper'
+      contentWrapper.innerHTML = `
         <div class="plugin-item-content">
           <div class="plugin-item-header">
             <span class="plugin-item-name">${this.escapeHtml(plugin.name)}</span>
@@ -506,6 +601,12 @@ export class ProjectFormComponent {
           </button>
         </div>
       `
+
+      item.appendChild(iconDiv)
+      // Append children from wrapper to item
+      while (contentWrapper.firstChild) {
+        item.appendChild(contentWrapper.firstChild)
+      }
 
       this.pluginsList.appendChild(item)
     })
@@ -848,9 +949,11 @@ export class ProjectFormComponent {
       }
 
       if (result.success && result.manifest) {
+        // Validate icon for security before display
+        const validatedIcon = this.validatePluginIcon(result.manifest.icon)
         preview.innerHTML = `
           <div class="plugin-preview-info">
-            <span class="plugin-preview-name">${result.manifest.icon || '🔧'} ${this.escapeHtml(result.manifest.name)}</span>
+            <span class="plugin-preview-name">${this.escapeHtml(validatedIcon)} ${this.escapeHtml(result.manifest.name)}</span>
             <span class="plugin-preview-desc">${this.escapeHtml(result.manifest.description || 'No description')}</span>
           </div>
         `

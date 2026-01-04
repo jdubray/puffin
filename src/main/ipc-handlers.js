@@ -14,13 +14,18 @@ const { GitService } = require('./git-service')
 const ClaudeMdGenerator = require('./claude-md-generator')
 const { AssertionEvaluator } = require('./evaluators/assertion-evaluator')
 const { AssertionGenerator } = require('./generators/assertion-generator')
+const { getTempImageService } = require('./services')
 
 let puffinState = null
 let claudeService = null
 let developerProfile = null
 let gitService = null
 let claudeMdGenerator = null
+let tempImageService = null
 let projectPath = null
+
+// Maximum allowed image file size (50MB)
+const MAX_IMAGE_SIZE = 50 * 1024 * 1024
 
 /**
  * Setup all IPC handlers
@@ -58,6 +63,9 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
 
   // Shell handlers
   setupShellHandlers(ipcMain)
+
+  // Image attachment handlers
+  setupImageHandlers(ipcMain)
 }
 
 /**
@@ -2249,6 +2257,136 @@ function setupPluginStyleHandlers(ipcMain, pluginManager) {
       console.error('[IPC] plugin:get-all-style-paths error:', error)
       return { success: false, error: error.message }
     }
+  })
+}
+
+/**
+ * Image attachment handlers
+ * Manages temp image files for prompt attachments
+ */
+function setupImageHandlers(ipcMain) {
+  // Initialize temp image service when state is initialized
+  ipcMain.handle('image:init', async () => {
+    try {
+      if (!puffinState?.puffinPath) {
+        return { success: false, error: 'Project not initialized' }
+      }
+
+      tempImageService = getTempImageService(puffinState.puffinPath)
+
+      // Cleanup old temp files on init (older than 24 hours)
+      await tempImageService.cleanupOldFiles(24)
+
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC:image:init] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Save an image from buffer data
+  ipcMain.handle('image:save', async (event, { buffer, extension, originalName }) => {
+    try {
+      if (!tempImageService) {
+        // Try to initialize if not already
+        if (puffinState?.puffinPath) {
+          tempImageService = getTempImageService(puffinState.puffinPath)
+        } else {
+          return { success: false, error: 'Image service not initialized' }
+        }
+      }
+
+      // Convert array back to Buffer (IPC serialization)
+      const imageBuffer = Buffer.from(buffer)
+
+      // Validate file size (security: prevent disk exhaustion)
+      if (imageBuffer.length > MAX_IMAGE_SIZE) {
+        const sizeMB = (imageBuffer.length / (1024 * 1024)).toFixed(2)
+        return {
+          success: false,
+          error: `Image too large (${sizeMB}MB). Maximum size is 50MB.`
+        }
+      }
+
+      const result = await tempImageService.saveImage(imageBuffer, extension, originalName)
+
+      return {
+        success: true,
+        id: result.id,
+        filePath: result.filePath,
+        fileName: result.fileName,
+        originalName: result.originalName
+      }
+    } catch (error) {
+      console.error('[IPC:image:save] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Delete a single image
+  ipcMain.handle('image:delete', async (event, { filePath }) => {
+    try {
+      if (!tempImageService) {
+        return { success: false, error: 'Image service not initialized' }
+      }
+
+      const deleted = await tempImageService.deleteImage(filePath)
+      return { success: deleted }
+    } catch (error) {
+      console.error('[IPC:image:delete] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Delete multiple images (called after prompt submission)
+  ipcMain.handle('image:deleteMultiple', async (event, { filePaths }) => {
+    try {
+      if (!tempImageService) {
+        return { success: false, error: 'Image service not initialized' }
+      }
+
+      const result = await tempImageService.deleteImages(filePaths)
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC:image:deleteMultiple] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Clear all temp images
+  ipcMain.handle('image:clearAll', async () => {
+    try {
+      if (!tempImageService) {
+        return { success: true, deleted: 0 }
+      }
+
+      const result = await tempImageService.clearAll()
+      return { success: true, ...result }
+    } catch (error) {
+      console.error('[IPC:image:clearAll] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // List all temp images
+  ipcMain.handle('image:list', async () => {
+    try {
+      if (!tempImageService) {
+        return { success: true, images: [] }
+      }
+
+      const images = await tempImageService.listImages()
+      return { success: true, images }
+    } catch (error) {
+      console.error('[IPC:image:list] Error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get supported image extensions
+  ipcMain.handle('image:getSupportedExtensions', async () => {
+    const { SUPPORTED_IMAGE_EXTENSIONS } = require('./services')
+    return { success: true, extensions: SUPPORTED_IMAGE_EXTENSIONS }
   })
 }
 

@@ -442,6 +442,39 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * Image attachment operations
+   * Manages temp images for prompt attachments
+   */
+  image: {
+    // Initialize the image service (called after state init)
+    init: () => ipcRenderer.invoke('image:init'),
+
+    // Save an image to temp directory
+    // buffer: ArrayBuffer, extension: string (e.g., '.png')
+    save: (buffer, extension, originalName = null) =>
+      ipcRenderer.invoke('image:save', {
+        buffer: Array.from(new Uint8Array(buffer)),
+        extension,
+        originalName
+      }),
+
+    // Delete a single image by file path
+    delete: (filePath) => ipcRenderer.invoke('image:delete', { filePath }),
+
+    // Delete multiple images (called after prompt submission)
+    deleteMultiple: (filePaths) => ipcRenderer.invoke('image:deleteMultiple', { filePaths }),
+
+    // Clear all temp images
+    clearAll: () => ipcRenderer.invoke('image:clearAll'),
+
+    // List all temp images
+    list: () => ipcRenderer.invoke('image:list'),
+
+    // Get supported image extensions
+    getSupportedExtensions: () => ipcRenderer.invoke('image:getSupportedExtensions')
+  },
+
+  /**
    * App lifecycle
    */
   app: {

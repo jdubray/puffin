@@ -21,6 +21,8 @@ export class ModalManager {
     // Transient state for editable commit message
     this._userEditedCommitMessage = null // User's edited message (persists across toggle)
     this._hasUserEditedMessage = false // Track if user has manually edited
+    // Callback to update commit message area when pre-generation completes
+    this._commitMessageUpdateCallback = null
   }
 
   /**
@@ -118,11 +120,18 @@ export class ModalManager {
     this._pendingCommitMessage = null
 
     try {
+      // Yield to allow the modal to render with loading state first
+      await new Promise(resolve => setTimeout(resolve, 0))
+
       const message = this.generateSprintCommitMessage(sprint, userStories)
       this._pendingCommitMessage = message
       return message
     } finally {
       this._commitMessageGenerating = false
+      // Trigger re-render of commit message area if callback is registered
+      if (this._commitMessageUpdateCallback) {
+        this._commitMessageUpdateCallback()
+      }
     }
   }
 
@@ -507,6 +516,40 @@ export class ModalManager {
       })
     }
 
+    // Register callback to update commit message area when pre-generation completes
+    this._commitMessageUpdateCallback = () => {
+      const container = document.getElementById('commit-message-container')
+      if (!container) return
+
+      // Only update if we have a pending message and user hasn't edited
+      if (this._pendingCommitMessage && !this._hasUserEditedMessage) {
+        const existingTextarea = document.getElementById('sprint-commit-message')
+        if (existingTextarea) {
+          // Textarea exists, just update value
+          existingTextarea.value = this._pendingCommitMessage
+        } else {
+          // Replace loading spinner with textarea
+          const messageContainer = container.querySelector('.commit-message-container')
+          if (messageContainer) {
+            messageContainer.innerHTML = `
+              <textarea id="sprint-commit-message"
+                        class="commit-message-input"
+                        rows="6"
+                        placeholder="Commit message...">${this.escapeHtml(this._pendingCommitMessage)}</textarea>
+            `
+            // Re-attach input listener
+            const newTextarea = document.getElementById('sprint-commit-message')
+            if (newTextarea) {
+              newTextarea.addEventListener('input', (e) => {
+                this._hasUserEditedMessage = true
+                this._userEditedCommitMessage = e.target.value
+              })
+            }
+          }
+        }
+      }
+    }
+
     // Commit checkbox toggle handler
     const commitCheckbox = document.getElementById('sprint-commit-checkbox')
     const commitMessageContainer = document.getElementById('commit-message-container')
@@ -546,6 +589,7 @@ export class ModalManager {
       this._pendingCommitMessage = null
       this._userEditedCommitMessage = null
       this._hasUserEditedMessage = false
+      this._commitMessageUpdateCallback = null
       this.intents.hideModal()
     })
 
@@ -583,6 +627,7 @@ export class ModalManager {
         this._pendingCommitMessage = null
         this._userEditedCommitMessage = null
         this._hasUserEditedMessage = false
+        this._commitMessageUpdateCallback = null
 
         // Call clearSprint with title and description (archive sprint data)
         this.intents.clearSprintWithDetails(sprintTitle, sprintDescription)

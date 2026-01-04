@@ -18,9 +18,18 @@ const {
   SprintNotFoundError
 } = require('./sprint-service')
 
+const {
+  TempImageService,
+  getTempImageService,
+  SUPPORTED_EXTENSIONS: SUPPORTED_IMAGE_EXTENSIONS
+} = require('./temp-image-service')
+
 module.exports = {
   SprintService,
   ActiveSprintExistsError,
   InvalidStoryIdsError,
-  SprintNotFoundError
+  SprintNotFoundError,
+  TempImageService,
+  getTempImageService,
+  SUPPORTED_IMAGE_EXTENSIONS
 }

@@ -1732,7 +1732,8 @@ Please provide specific file locations and line numbers where issues are found, 
     const sprintProgress = state.sprintProgress
     const backlogStories = state.userStories || []
     if (storiesContainer && sprint.stories) {
-      const showBranchButtons = sprint.status === 'planned' || sprint.status === 'implementing'
+      // Show branch buttons after plan is approved (status becomes 'in-progress' or 'implementing')
+      const showBranchButtons = sprint.status === 'in-progress' || sprint.status === 'implementing'
       const storyProgress = sprint.storyProgress || {}
       const storiesWithProgress = sprintProgress?.stories || []
 
@@ -1857,9 +1858,11 @@ Please provide specific file locations and line numbers where issues are found, 
     }
 
     // Update action buttons based on status
+    // Plan button: visible when sprint is 'created' (ready to plan)
+    // Approve button: visible when sprint is 'planned' (Claude finished generating plan)
     if (planBtn && approveBtn) {
       planBtn.classList.toggle('hidden', sprint.status !== 'created')
-      approveBtn.classList.toggle('hidden', sprint.status !== 'planning')
+      approveBtn.classList.toggle('hidden', sprint.status !== 'planned')
     }
 
     // Bind event handlers (only once)
@@ -2739,8 +2742,9 @@ Keep it concise but informative. Use markdown formatting.`
   formatSprintStatus(status) {
     const statusMap = {
       'created': 'Created',
-      'planning': 'Planning',
-      'planned': 'Ready for Implementation',
+      'planning': 'Planning...',
+      'planned': 'Ready for Approval',
+      'in-progress': 'In Progress',
       'implementing': 'Implementing'
     }
     return statusMap[status] || status

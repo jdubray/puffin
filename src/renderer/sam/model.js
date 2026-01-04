@@ -2180,16 +2180,24 @@ export const approvePlanAcceptor = model => proposal => {
 }
 
 // Set the sprint plan content (captured from Claude's planning response)
+// Also transitions status from 'planning' to 'planned' so approve button becomes visible
 export const setSprintPlanAcceptor = model => proposal => {
   if (proposal?.type === 'SET_SPRINT_PLAN') {
     if (model.activeSprint) {
-      // Capture plan regardless of current status - it may arrive after status change
       const previousPlan = model.activeSprint.plan
+      const previousStatus = model.activeSprint.status
+
+      // Transition to 'planned' if currently in 'planning' status
+      const newStatus = previousStatus === 'planning' ? 'planned' : previousStatus
+
       model.activeSprint = {
         ...model.activeSprint,
-        plan: proposal.payload.plan
+        plan: proposal.payload.plan,
+        status: newStatus
       }
-      console.log('[SPRINT] Plan content captured, length:', proposal.payload.plan?.length || 0, 'previous:', previousPlan?.length || 0)
+      console.log('[SPRINT] Plan content captured, length:', proposal.payload.plan?.length || 0,
+        'previous:', previousPlan?.length || 0,
+        'status:', previousStatus, '->', newStatus)
     } else {
       console.warn('[SPRINT] Cannot set plan - no active sprint')
     }
@@ -2209,8 +2217,8 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
     const { storyId, branchType } = proposal.payload
     const sprint = model.activeSprint
 
-    if (!sprint || (sprint.status !== 'planned' && sprint.status !== 'implementing')) {
-      console.warn('[SPRINT] Cannot start implementation - sprint not in planned or implementing state')
+    if (!sprint || (sprint.status !== 'in-progress' && sprint.status !== 'implementing')) {
+      console.warn('[SPRINT] Cannot start implementation - sprint not in in-progress or implementing state, current:', sprint?.status)
       return
     }
 

@@ -391,6 +391,7 @@ export class HistoryTreeComponent {
       'pending': 'status-pending',
       'planning': 'status-planning',
       'planned': 'status-planned',
+      'in-progress': 'status-implementing',  // Treat in-progress same as implementing
       'implementing': 'status-implementing',
       'completed': 'status-completed',
       'failed': 'status-failed'
@@ -406,6 +407,7 @@ export class HistoryTreeComponent {
       'pending': '🟡',
       'planning': '🔵',
       'planned': '🟠',
+      'in-progress': '🔵',  // Treat in-progress same as implementing
       'implementing': '🔵',
       'completed': '🟢',
       'failed': '🔴'

@@ -1181,10 +1181,21 @@
 .sprint-status-badge.planning {
   background: var(--color-warning);
   color: var(--bg-primary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .sprint-status-badge.planned {
   background: var(--color-success);
+  color: white;
+}
+
+.sprint-status-badge.in-progress {
+  background: var(--color-primary);
   color: white;
 }
 

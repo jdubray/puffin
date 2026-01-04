@@ -3353,23 +3353,30 @@
   margin-left: auto;
 }
 
-/* User Stories Layout - Two Column with Sprint History Panel */
+/* User Stories Layout - Five Column Grid (20% each) */
 .user-stories-layout {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 20% 60% 20%;
   height: 100%;
   padding: 0 !important;
   gap: 0;
 }
 
-/* Sprint History Left Panel - Uses swimlane layout like prompt view */
+/* Sprint History Left Panel - Fixed 20% width */
 .sprint-history-panel {
-  transition: flex-basis 0.2s ease, min-width 0.2s ease;
+  grid-column: 1;
+  width: 100%;
+  transition: width 0.2s ease, min-width 0.2s ease;
 }
 
 .sprint-history-panel.collapsed {
-  flex: 0 0 48px !important;
+  width: 48px !important;
   min-width: 48px !important;
+}
+
+/* When sprint panel is collapsed, expand backlog to fill space */
+.user-stories-layout:has(.sprint-history-panel.collapsed) {
+  grid-template-columns: 48px 1fr 20%;
 }
 
 .sprint-history-panel.collapsed .sprint-panel-header .sprint-title,
@@ -3928,14 +3935,35 @@
   font-size: 0.75rem;
 }
 
-/* Main Backlog Area */
+/* Main Backlog Area - Center 60% (3 swimlanes at 20% each) */
 .backlog-main {
-  flex: 1;
+  grid-column: 2;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 1.5rem;
+  padding: 1rem;
   min-width: 0;
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+}
+
+/* Right Reserved Panel - 20% for future use */
+.backlog-right-panel {
+  grid-column: 3;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.reserved-panel-content {
+  flex: 1;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .user-stories-header {

@@ -1199,9 +1199,15 @@ Please provide specific file locations and line numbers where issues are found, 
       // Capture sprint plan content if we're in planning mode
       try {
         const currentState = this.sam.getState()
-        if (currentState?.activeSprint?.status === 'planning' && response?.content) {
+        const sprintStatus = currentState?.activeSprint?.status
+        const hasContent = !!response?.content
+        console.log('[SPRINT] Plan capture check - status:', sprintStatus, 'hasContent:', hasContent, 'contentLength:', response?.content?.length || 0)
+
+        if (sprintStatus === 'planning' && hasContent) {
           console.log('[SPRINT] Capturing plan content from Claude response, length:', response.content.length)
           this.intents.setSprintPlan(response.content)
+        } else if (sprintStatus && sprintStatus !== 'planning') {
+          console.log('[SPRINT] Skipping plan capture - sprint status is:', sprintStatus)
         }
       } catch (err) {
         console.error('[SAM-ERROR] setSprintPlan failed:', err)
@@ -1757,19 +1763,22 @@ Please provide specific file locations and line numbers where issues are found, 
 
           // Get the current sprint state
           const sprint = this.state.activeSprint
-          if (!sprint || !sprint.stories || !sprint.plan) {
+          if (!sprint || !sprint.stories || sprint.stories.length === 0) {
             this.showToast('Plan approved! Ready for implementation.', 'success')
             return
           }
+
+          // Log plan state for debugging
+          console.log('[SPRINT] Approve clicked - plan:', sprint.plan ? `${sprint.plan.length} chars` : 'null')
 
           // Show assertion generation modal
           this.showAssertionGenerationModal()
 
           try {
-            // Generate assertions for all stories
+            // Generate assertions for all stories (plan is optional)
             const result = await window.puffin.state.generateSprintAssertions(
               sprint.stories,
-              sprint.plan
+              sprint.plan || ''  // Pass empty string if plan is null
             )
 
             this.hideAssertionGenerationModal()

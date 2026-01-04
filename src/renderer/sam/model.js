@@ -2137,13 +2137,13 @@ export const clearSprintWithDetailsAcceptor = model => proposal => {
   }
 }
 
-// Approve the sprint plan - transitions sprint to 'planned' status
+// Approve the sprint plan - transitions sprint to 'in-progress' status
 export const approvePlanAcceptor = model => proposal => {
   if (proposal?.type === 'APPROVE_PLAN') {
     if (model.activeSprint) {
       model.activeSprint = {
         ...model.activeSprint,
-        status: 'planned',
+        status: 'in-progress',  // Plan approved, ready for implementation
         planApprovedAt: proposal.payload.timestamp
       }
     }
@@ -2153,12 +2153,16 @@ export const approvePlanAcceptor = model => proposal => {
 // Set the sprint plan content (captured from Claude's planning response)
 export const setSprintPlanAcceptor = model => proposal => {
   if (proposal?.type === 'SET_SPRINT_PLAN') {
-    if (model.activeSprint && model.activeSprint.status === 'planning') {
+    if (model.activeSprint) {
+      // Capture plan regardless of current status - it may arrive after status change
+      const previousPlan = model.activeSprint.plan
       model.activeSprint = {
         ...model.activeSprint,
         plan: proposal.payload.plan
       }
-      console.log('[SPRINT] Plan content captured, length:', proposal.payload.plan?.length || 0)
+      console.log('[SPRINT] Plan content captured, length:', proposal.payload.plan?.length || 0, 'previous:', previousPlan?.length || 0)
+    } else {
+      console.warn('[SPRINT] Cannot set plan - no active sprint')
     }
   }
 }

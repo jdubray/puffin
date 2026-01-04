@@ -393,31 +393,50 @@ export class StatePersistence {
 
       // Persist user stories and history when adding to backlog from derivation
       if (normalizedType === 'ADD_STORIES_TO_BACKLOG') {
-        // Persist history (we added a prompt entry)
-        await window.puffin.state.updateHistory(state.history.raw)
+        // Persist history (we added a prompt entry) - wrapped in try-catch so story persistence still runs
+        try {
+          await window.puffin.state.updateHistory(state.history.raw)
+        } catch (historyError) {
+          console.error('[PERSIST-DEBUG] History update failed, continuing with story persistence:', historyError)
+        }
 
-        // Get story IDs from action payload
-        const newStoryIds = action.payload?.storyIds || []
-        console.log('[PERSIST-DEBUG] ADD_STORIES_TO_BACKLOG - storyIds from payload:', newStoryIds)
+        // Get story IDs from action - check both payload format and args format
+        // payload format: { type, payload: { storyIds } } - from action creators
+        // args format: { type, args: [storyIds] } - from lastAction wrapper
+        const newStoryIds = action.payload?.storyIds || action.args?.[0] || []
+        console.log('[PERSIST-DEBUG] ADD_STORIES_TO_BACKLOG - storyIds:', newStoryIds, 'source:', action.payload?.storyIds ? 'payload' : action.args?.[0] ? 'args' : 'none')
 
         if (newStoryIds.length > 0) {
           const newStories = state.userStories.filter(s => newStoryIds.includes(s.id))
-          console.log('[PERSIST-DEBUG] Found stories to persist:', newStories.length)
+          console.log('[PERSIST-DEBUG] Found stories to persist:', newStories.length, 'of', newStoryIds.length, 'requested')
+          console.log('[PERSIST-DEBUG] Total stories in state:', state.userStories.length)
 
+          if (newStories.length === 0) {
+            console.error('[PERSIST-DEBUG] CRITICAL: Stories not found in state.userStories!', {
+              requestedIds: newStoryIds,
+              availableIds: state.userStories.map(s => s.id)
+            })
+          }
+
+          let persistedCount = 0
           for (const story of newStories) {
             try {
-              await window.puffin.state.addUserStory(story)
-              console.log('[PERSIST-DEBUG] Added story to backlog:', story.id, story.title)
+              const result = await window.puffin.state.addUserStory(story)
+              console.log('[PERSIST-DEBUG] Added story to database:', story.id, story.title, 'result:', result)
+              persistedCount++
             } catch (e) {
+              console.error('[PERSIST-DEBUG] addUserStory failed:', e.message)
               // Story might already exist, update instead
               try {
                 await window.puffin.state.updateUserStory(story.id, story)
                 console.log('[PERSIST-DEBUG] Updated existing story:', story.id)
+                persistedCount++
               } catch (e2) {
                 console.error('[PERSIST-DEBUG] Failed to persist story:', story.id, e2)
               }
             }
           }
+          console.log('[PERSIST-DEBUG] Successfully persisted', persistedCount, 'of', newStories.length, 'stories')
         } else {
           console.warn('[PERSIST-DEBUG] No storyIds in action payload - stories may not persist!')
         }
@@ -445,7 +464,7 @@ export class StatePersistence {
 
       // Persist user story status when manually updated in sprint
       if (normalizedType === 'UPDATE_SPRINT_STORY_STATUS') {
-        const storyId = action.payload?.storyId
+        const storyId = action.payload?.storyId || action.args?.[0]
         if (storyId) {
           const story = state.userStories?.find(s => s.id === storyId)
           if (story) {

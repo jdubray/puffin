@@ -209,6 +209,113 @@ class PuffinApp {
   }
 
   /**
+   * Show confirmation dialog asking if user wants to start a code review
+   * @param {Object} sprint - The approved sprint with stories and plan
+   */
+  showCodeReviewConfirmation(sprint) {
+    const modal = document.createElement('div')
+    modal.id = 'code-review-confirmation-modal'
+    modal.className = 'code-review-confirmation-modal'
+    modal.innerHTML = `
+      <div class="code-review-confirmation-content">
+        <h3>Start Code Review?</h3>
+        <p>Would you like to start a code review thread for this sprint?</p>
+        <p class="code-review-hint">Claude will review the implementation for common mistakes and best practices.</p>
+        <div class="code-review-actions">
+          <button class="btn secondary" data-action="skip">Skip</button>
+          <button class="btn primary" data-action="review">Start Review</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    // Handle button clicks
+    modal.addEventListener('click', async (e) => {
+      const action = e.target.dataset.action
+      if (!action) return
+
+      modal.remove()
+
+      if (action === 'review') {
+        await this.startSprintCodeReview(sprint)
+      }
+    })
+  }
+
+  /**
+   * Start a code review for the sprint on the Code Reviews branch
+   * @param {Object} sprint - The sprint with stories and plan
+   */
+  async startSprintCodeReview(sprint) {
+    const stories = sprint.stories || []
+    const plan = sprint.plan || ''
+
+    // Build the code review prompt
+    const storyContext = stories.map((s, i) => {
+      const criteria = (s.acceptanceCriteria || []).map((c, j) => `   ${j + 1}. ${c}`).join('\n')
+      return `### Story ${i + 1}: ${s.title}
+${s.description}
+${criteria ? `\n**Acceptance Criteria:**\n${criteria}` : ''}`
+    }).join('\n\n')
+
+    const reviewPrompt = `## Code Review Request: Sprint Implementation
+
+Please conduct a thorough code review of the implementation for the following user stories. Focus on identifying common implementation mistakes, potential bugs, and areas for improvement.
+
+${storyContext}
+
+---
+
+**Implementation Plan Reference:**
+${plan}
+
+---
+
+**Review Focus Areas:**
+
+1. **Logic Errors**: Look for off-by-one errors, incorrect conditionals, missing edge cases
+2. **Error Handling**: Check for proper error handling and graceful degradation
+3. **Security**: Identify potential security vulnerabilities (XSS, injection, etc.)
+4. **Performance**: Flag any obvious performance issues or inefficiencies
+5. **Code Quality**: Check for code duplication, unclear naming, missing comments
+6. **Best Practices**: Verify adherence to project patterns and conventions
+7. **Testing Gaps**: Identify areas that may need additional test coverage
+
+Please provide specific file locations and line numbers where issues are found, along with recommended fixes.`
+
+    // Submit to Code Reviews branch
+    const branchId = 'code-reviews'
+
+    // Ensure the branch exists
+    if (!this.state.history?.raw?.branches?.[branchId]) {
+      // Create the branch if it doesn't exist
+      this.intents.createBranch({
+        id: branchId,
+        name: 'Code Reviews',
+        description: 'Code review threads for sprint implementations'
+      })
+    }
+
+    // Switch to the code reviews branch
+    this.intents.setActiveBranch(branchId)
+
+    // Submit the prompt
+    this.intents.submitPrompt({
+      branchId,
+      content: reviewPrompt,
+      parentId: null
+    })
+
+    // Notify the user
+    this.showToast('Code review started on Code Reviews branch', 'info')
+
+    // Switch view to prompt if not already there
+    if (this.state.currentView !== 'prompt') {
+      this.intents.setView('prompt')
+    }
+  }
+
+  /**
    * Initialize the application
    */
   async init() {
@@ -1680,6 +1787,9 @@ class PuffinApp {
                 `Plan approved! Generated ${result.totalAssertions} inspection assertions.`,
                 'success'
               )
+
+              // Ask if user wants to trigger a code review
+              this.showCodeReviewConfirmation(sprint)
             } else {
               this.showToast(
                 `Plan approved, but assertion generation failed: ${result.error}`,

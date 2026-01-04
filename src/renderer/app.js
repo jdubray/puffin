@@ -311,7 +311,7 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Switch view to prompt if not already there
     if (this.state.currentView !== 'prompt') {
-      this.intents.setView('prompt')
+      this.intents.switchView('prompt')
     }
   }
 

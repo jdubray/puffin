@@ -250,7 +250,7 @@ class PuffinState {
     const archivedStories = this.getArchivedStories()
     const activeSprint = this.getActiveSprint()
 
-    return {
+    const state = {
       projectPath: this.projectPath,
       projectName: path.basename(this.projectPath),
       config: this.config,
@@ -264,6 +264,39 @@ class PuffinState {
       gitOperations: this.gitOperations,
       claudePlugins: this.claudePlugins,
       database: this.getDatabaseStatus()
+    }
+
+    // Ensure state is IPC-serializable by removing any non-clonable values
+    // (functions, class instances with methods, circular references, etc.)
+    try {
+      return JSON.parse(JSON.stringify(state))
+    } catch (error) {
+      console.error('[PUFFIN-STATE] State serialization failed:', error.message)
+      // Try to identify which part of the state is failing
+      const keys = Object.keys(state)
+      for (const key of keys) {
+        try {
+          JSON.stringify(state[key])
+        } catch (keyError) {
+          console.error(`[PUFFIN-STATE] Serialization failed for key '${key}':`, keyError.message)
+        }
+      }
+      // Return a minimal safe state if serialization fails
+      return {
+        projectPath: this.projectPath,
+        projectName: path.basename(this.projectPath),
+        config: {},
+        history: { activeBranch: 'specifications', branches: {} },
+        userStories: [],
+        archivedStoriesCount: 0,
+        activeSprint: null,
+        sprintHistory: [],
+        storyGenerations: [],
+        uiGuidelines: null,
+        gitOperations: [],
+        claudePlugins: [],
+        database: { enabled: false, reason: 'serialization-error' }
+      }
     }
   }
 

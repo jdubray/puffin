@@ -41,19 +41,17 @@
     },
     "files": [
       "src/**/*",
+      "plugins/**/*",
       "package.json"
     ],
     "mac": {
-      "category": "public.app-category.developer-tools",
-      "icon": "src/renderer/img/logo.png"
+      "category": "public.app-category.developer-tools"
     },
     "win": {
-      "target": "nsis",
-      "icon": "src/renderer/img/logo.png"
+      "target": "nsis"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "src/renderer/img/logo.png"
+      "target": "AppImage"
     }
   }
 }

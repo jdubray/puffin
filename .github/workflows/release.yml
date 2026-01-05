@@ -5,6 +5,9 @@ on:
     tags:
       - 'release/v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -33,9 +36,7 @@ jobs:
         run: npm ci
 
       - name: Build for ${{ matrix.platform }}
-        run: npm run package -- --${{ matrix.platform }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run package -- --${{ matrix.platform }} --publish never
 
       - name: Upload Linux artifacts
         if: matrix.platform == 'linux'
@@ -61,8 +62,6 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Download all artifacts

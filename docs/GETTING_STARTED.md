@@ -12,9 +12,11 @@ Puffin is a desktop application that wraps Claude Code CLI with a visual interfa
 
 Download the latest release for your platform:
 
+- **Windows**: [Puffin-0.1.0-win-portable.zip](https://github.com/jdubray/puffin/releases/latest)
 - **Linux**: [Puffin-0.1.0.AppImage](https://github.com/jdubray/puffin/releases/latest)
-- **Windows**: Coming soon
 - **macOS**: Coming soon
+
+For Windows, extract the zip and run `Puffin.exe` directly.
 
 For Linux, make the AppImage executable:
 ```bash

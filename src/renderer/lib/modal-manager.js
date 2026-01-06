@@ -23,6 +23,8 @@ export class ModalManager {
     this._hasUserEditedMessage = false // Track if user has manually edited
     // Callback to update commit message area when pre-generation completes
     this._commitMessageUpdateCallback = null
+    // Callback to re-render git section when status check completes
+    this._gitStatusUpdateCallback = null
   }
 
   /**
@@ -102,6 +104,10 @@ export class ModalManager {
       return this._gitStatus
     } finally {
       this._gitStatusLoading = false
+      // Trigger callback to update git section UI when loading completes
+      if (this._gitStatusUpdateCallback) {
+        this._gitStatusUpdateCallback()
+      }
     }
   }
 
@@ -550,6 +556,131 @@ export class ModalManager {
       }
     }
 
+    // Register callback to re-render git section when status check completes
+    this._gitStatusUpdateCallback = () => {
+      const gitSectionContainer = document.querySelector('.sprint-git-section')
+      if (!gitSectionContainer) return
+
+      // Re-render the entire git section with updated status
+      const gitStatus = this._gitStatus || { isRepo: false, hasChanges: false, branch: null, isMainBranch: false }
+      const showGitSection = gitStatus.isRepo
+      const canCommit = gitStatus.isRepo && gitStatus.hasChanges
+      const commitEnabled = this._sprintCommitEnabled && canCommit
+
+      if (!showGitSection) {
+        // Remove git section if not a repo
+        gitSectionContainer.remove()
+        return
+      }
+
+      // Use pre-generated message, user edits, or generate now
+      let commitMessage = ''
+      if (this._hasUserEditedMessage && this._userEditedCommitMessage !== null) {
+        commitMessage = this._userEditedCommitMessage
+      } else if (this._pendingCommitMessage) {
+        commitMessage = this._pendingCommitMessage
+      }
+
+      const branchWarningHtml = gitStatus.isMainBranch ? `
+        <span class="branch-warning-badge" title="You are on the ${gitStatus.branch} branch">
+          <span class="warning-icon">⚠️</span>
+          On ${gitStatus.branch}
+        </span>
+      ` : ''
+
+      const noChangesHtml = !gitStatus.hasChanges ? `
+        <span class="no-changes-badge">No changes to commit</span>
+      ` : ''
+
+      const changesSummary = gitStatus.hasChanges ? `
+        <span class="changes-summary">
+          ${gitStatus.stagedCount > 0 ? `${gitStatus.stagedCount} staged` : ''}
+          ${gitStatus.stagedCount > 0 && (gitStatus.unstagedCount > 0 || gitStatus.untrackedCount > 0) ? ', ' : ''}
+          ${gitStatus.unstagedCount > 0 ? `${gitStatus.unstagedCount} modified` : ''}
+          ${gitStatus.unstagedCount > 0 && gitStatus.untrackedCount > 0 ? ', ' : ''}
+          ${gitStatus.untrackedCount > 0 ? `${gitStatus.untrackedCount} untracked` : ''}
+        </span>
+      ` : ''
+
+      const isGenerating = this._commitMessageGenerating
+
+      gitSectionContainer.innerHTML = `
+        <div class="git-commit-header">
+          <label class="checkbox-label ${!canCommit ? 'disabled' : ''}">
+            <input type="checkbox"
+                   id="sprint-commit-checkbox"
+                   ${commitEnabled ? 'checked' : ''}
+                   ${!canCommit ? 'disabled' : ''}>
+            <span class="checkbox-text">Commit sprint changes</span>
+          </label>
+          ${branchWarningHtml}
+          ${noChangesHtml}
+          ${changesSummary}
+        </div>
+
+        <div class="commit-message-area ${!commitEnabled ? 'hidden' : ''}" id="commit-message-container">
+          <div class="commit-message-header">
+            <label for="sprint-commit-message">Commit message:</label>
+            <button type="button" id="copy-commit-btn" class="btn-icon" title="Copy to clipboard">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+          <div class="commit-message-container">
+            ${isGenerating ? `
+              <div class="commit-generating">
+                <span class="commit-spinner"></span>
+                Generating commit message...
+              </div>
+            ` : `
+              <textarea id="sprint-commit-message"
+                        class="commit-message-input"
+                        rows="6"
+                        placeholder="Commit message...">${this.escapeHtml(commitMessage || '')}</textarea>
+            `}
+          </div>
+        </div>
+      `
+
+      // Re-attach event listeners after re-render
+      const newCommitCheckbox = document.getElementById('sprint-commit-checkbox')
+      const newCommitMessageContainer = document.getElementById('commit-message-container')
+      if (newCommitCheckbox && newCommitMessageContainer) {
+        newCommitCheckbox.addEventListener('change', (e) => {
+          const messageTextarea = document.getElementById('sprint-commit-message')
+          if (messageTextarea && messageTextarea.value) {
+            this._userEditedCommitMessage = messageTextarea.value
+            if (messageTextarea.value !== this._pendingCommitMessage) {
+              this._hasUserEditedMessage = true
+            }
+          }
+          this._sprintCommitEnabled = e.target.checked
+          newCommitMessageContainer.classList.toggle('hidden', !e.target.checked)
+        })
+      }
+
+      // Re-attach copy button handler
+      document.getElementById('copy-commit-btn')?.addEventListener('click', () => {
+        const messageEl = document.getElementById('sprint-commit-message')
+        const message = messageEl?.value || messageEl?.textContent
+        if (message) {
+          navigator.clipboard.writeText(message).then(() => {
+            this.showToast('Commit message copied to clipboard', 'success')
+          }).catch(() => {
+            this.showToast('Failed to copy to clipboard', 'error')
+          })
+        }
+      })
+
+      // Re-attach input listener for commit message
+      const newTextarea = document.getElementById('sprint-commit-message')
+      if (newTextarea) {
+        newTextarea.addEventListener('input', (e) => {
+          this._hasUserEditedMessage = true
+          this._userEditedCommitMessage = e.target.value
+        })
+      }
+    }
+
     // Commit checkbox toggle handler
     const commitCheckbox = document.getElementById('sprint-commit-checkbox')
     const commitMessageContainer = document.getElementById('commit-message-container')
@@ -590,6 +721,7 @@ export class ModalManager {
       this._userEditedCommitMessage = null
       this._hasUserEditedMessage = false
       this._commitMessageUpdateCallback = null
+      this._gitStatusUpdateCallback = null
       this.intents.hideModal()
     })
 
@@ -628,6 +760,7 @@ export class ModalManager {
         this._userEditedCommitMessage = null
         this._hasUserEditedMessage = false
         this._commitMessageUpdateCallback = null
+        this._gitStatusUpdateCallback = null
 
         // Call clearSprint with title and description (archive sprint data)
         this.intents.clearSprintWithDetails(sprintTitle, sprintDescription)

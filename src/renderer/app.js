@@ -1708,10 +1708,14 @@ Please provide specific file locations and line numbers where issues are found, 
    * Update navigation state
    */
   updateNavigation(state) {
+    // Don't highlight built-in nav buttons if a plugin view is active
+    const pluginViewActive = this.sidebarViewManager?.hasActivePluginView()
+
     // Only update built-in nav buttons (not plugin nav buttons which manage their own state)
     document.querySelectorAll('.nav-btn:not(.plugin-nav-btn)').forEach(btn => {
       const view = btn.dataset.view
-      btn.classList.toggle('active', view === state.ui.currentView)
+      // If a plugin view is active, don't mark any built-in nav as active
+      btn.classList.toggle('active', !pluginViewActive && view === state.ui.currentView)
     })
   }
 

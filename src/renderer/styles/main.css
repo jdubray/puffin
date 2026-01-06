@@ -503,6 +503,7 @@ select {
 
 .plugin-sidebar-section.active .plugin-sidebar-icon {
   opacity: 1;
+  color: white;
 }
 
 /* Plugin Sidebar Header (icon + title) */

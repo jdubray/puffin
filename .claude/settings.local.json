@@ -23,7 +23,27 @@
       "Bash(python3:*)",
       "Bash(xargs:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "Bash(/mnt/c/Users/jjdub/code/puffin/.puffin/sprint-history.json )",
+      "Bash(/mnt/c/Users/jjdub/code/puffin/.puffin/active-sprint.json )",
+      "Bash(/mnt/c/Users/jjdub/code/puffin/.puffin/archived-stories.json )",
+      "Bash(/mnt/c/Users/jjdub/code/puffin/.puffin/user-stories.backup.json)",
+      "Bash(npm run package:*)",
+      "Bash(gh release upload:*)",
+      "Bash(gh release create:*)",
+      "Bash(zip:*)",
+      "Bash(powershell.exe -Command \"Compress-Archive -Path ''win-unpacked'' -DestinationPath ''Puffin-0.1.0-win-portable.zip'' -Force\")",
+      "Bash(gh release view:*)",
+      "Bash(cmd.exe /c \"start Puffin.exe\")",
+      "Bash(cmd.exe /c \"Puffin.exe\")",
+      "Bash(npx asar:*)",
+      "Bash(powershell.exe -Command:*)",
+      "Bash(gh release delete-asset:*)",
+      "Bash(gh run view:*)",
+      "Bash(for f in /mnt/c/Users/jjdub/code/puffin/plugins/calendar/renderer/components/*.js)",
+      "Bash(do echo \"Checking $f\")",
+      "Bash(echo:*)",
+      "Bash(done)"
     ]
   }
 }

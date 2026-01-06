@@ -40,40 +40,24 @@ All file operations must be scoped to this project directory and its subdirector
 
 The following stories have been completed and are available for reference:
 
-- **Design Document Directory Scanning**: As a user, I want Puffin to automatically scan the docs/ directory so that available design documents are discovered without manual configuration
-- **Design Document Dropdown Selection**: As a user, I want a dropdown menu populated with design documents from the docs/ directory so that I can easily select and include relevant documentation in my conversation
-- **Design Document Content Inclusion**: As a user, I want to include a selected design document in my prompt context so that Claude has access to relevant specifications during our discussion
-- **Sprint Story Completion Button**: As a user, I want a completion checkmark button on each sprint story card so that I can manually mark stories as complete and sync with the backlog
-- **Sprint Progress Based on Story Completion**: As a user, I want the sprint progress bar to reflect the percentage of completed stories so that I can see overall sprint progress regardless of branch work
-- **Acceptance Criteria Checklist Display**: As a user, I want to see acceptance criteria as a checklist in the sprint story cards so that I can track granular progress within each story
-- **Three-Column Swimlane Layout**: As a user, I want the prompt view to be organized into three vertical swimlanes so that I can see sprint context, conversation, and metadata simultaneously
-- **Left Swimlane - Sprint Context Panel**: As a user, I want the left swimlane to display sprint information and user stories so that I can see the current work context while prompting
-- **Left Swimlane - Story Completion Indicators**: As a user, I want to see completion indicators for each user story so that I can track progress at a glance
-- **Middle Swimlane - Conversation View**: As a user, I want the middle swimlane to contain the existing prompt controls and conversation so that my primary workflow remains unchanged
-- **Right Swimlane - Handoff Summary Display**: As a user, I want the right swimlane to display handoff summaries so that I can see context passed from other threads
-- **Right Swimlane - Thread Statistics**: As a user, I want to see thread statistics in the right swimlane so that I can monitor resource usage and conversation metrics
-- **Default Maximum Iterations Configuration**: As a user, I want the system to default to 10 maximum iterations so that sprint execution has a sensible limit without manual configuration
-- **Auto-Continue Delay Configuration**: As a user, I want a 20 second delay between auto-continues so that I have time to review output before the next iteration begins
-- **Stuck Detection Threshold**: As a user, I want the system to detect when execution is stuck after 3 similar iterations so that I am alerted to potential issues
-- **Sprint Story Limit Enforcement**: As a user, I want the system to reject sprints with more than 4 stories so that I avoid exceeding token limits during execution
-- **Sprint Creation from Selected User Stories**: As a user, I want to select one or more user stories from the Backlog and create a sprint so that I can group related work for implementation
-- **Sprint Header Display in Prompt Window**: As a user, I want to see the selected user stories displayed in a header section at the top of the prompt window so that I have constant visibility of what I'm working on
-- **Sprint Planning Phase with Plan Button**: As a user, I want a 'Plan' button available in the sprint view so that I can initiate the planning phase for the selected user stories
-- **Sprint Plan Review and Modification**: As a user, I want to review and modify the generated plan through follow-up prompts so that I can refine the implementation approach before starting work
-- **Implementation Branch Buttons per User Story**: As a user, I want to see implementation branch buttons below each user story header so that I can start focused implementation work on specific areas
-- **Start Implementation from Branch Button**: As a user, I want to click a branch button to start implementation so that a new turn is added to the current sprint thread with the appropriate context
-- **Sprint State Persistence**: As a user, I want the sprint state to persist so that I can return to a sprint and continue work where I left off
-- **Sprint Progress Tracking per Story**: As a user, I want to see the implementation progress for each user story within the sprint so that I know what work remains
-- **Existing Prompt View Compatibility**: As a user, I want the existing prompt view to continue working as before so that I can still use free-form prompting without creating a sprint
-- **Handoff Persistence Without Expiration**: As a user, I want handoffs to persist indefinitely until I explicitly delete them so that I don't lose context due to automatic expiration
-- **Handoff Summary Updates**: As a user, I want handoff summaries to be updated as I refine my work so that code changes and bug fixes are reflected in the handoff context
-- **Multi-Hop Handoff Chaining**: As a user, I want to chain multiple handoff summaries together so that context is preserved across multiple handoff sequences
-- **Handoff Ready Button in Prompt Area**: As a user, I want a 'Handoff Ready' button to appear below the prompt input so that I can initiate a handoff when I decide the work is ready
-- **Handoff Review Modal**: As a user, I want to review the handoff summary in a modal before completing the handoff so that I can verify the context being passed to the new thread
-- **User-Controlled Handoff Timing**: As a user, I want to control when a handoff occurs regardless of Claude's completion assessment so that I can fix bugs and refine features before handing off
-- **Git Repository Detection**: As a user, I want Puffin to detect when my project is in a Git repository so that Git integration features are available when applicable
-- **Create New Feature Branch**: As a user, I want to create a new feature branch from the current branch so that I can isolate my work for a new feature implementation
-- **Stage and Commit Changes**: As a user, I want to stage and commit my implemented code changes so that I can save my work with a meaningful commit message
-- **Merge Feature Branch to Main**: As a user, I want to merge my feature branch into the main branch so that my completed work is integrated into the primary codebase
-- **Post-Merge Branch Workflow**: As a user, I want Puffin to help me prepare for the next feature after a successful merge so that I can maintain a clean workflow
-- **Git Operation History Log**: As a user, I want to see a log of Git operations performed through Puffin so that I can track what actions have been taken
+- **Calendar Plugin Base Structure**: As a developer, I want a calendar plugin that integrates with Puffin's plugin system so that I can view my development activity organized by date
+- **Week and Month View Toggle**: As a developer, I want to switch between weekly and monthly calendar views so that I can see my work at different time scales
+- **Sprint History Panel on Day Selection**: As a developer, I want to click on a calendar day and see the sprints I worked on in a left panel so that I can review my daily development activity
+- **Sprint User Stories Modal**: As a developer, I want to click on a sprint in the panel and see a modal with its user stories so that I can review the work completed in that sprint
+- **Git Branch History Display on Calendar**: As a developer, I want to see the git branches I worked on displayed on each calendar day so that I can track my version control activity over time
+- **Post-it Notes for Calendar Days**: As a developer, I want to attach post-it notes to any calendar day so that I can add personal reminders, annotations, or context to my development timeline
+- **Fix Path Traversal Vulnerability in Image Delete**: As a developer, I want the deleteImage method to validate file paths so that malicious actors cannot delete arbitrary files outside the temp directory
+- **Add Maximum File Size Validation for Image Upload**: As a developer, I want image uploads to enforce a maximum file size so that disk space cannot be exhausted by oversized files
+- **Fix Paste Handler to Process All Images**: As a developer, I want pasting multiple images to attach all of them so that I don't lose images when pasting from clipboard
+- **Limit Maximum Thumbnail Attachments to Five**: As a developer, I want a maximum of 5 image attachments so that the UI remains manageable and performance is maintained
+- **Fix Pre-generation Race Condition in Sprint Close**: As a developer, I want the commit message pre-generation to properly await completion so that the modal always displays the generated message
+- **Add Debouncing to Project Form Input Handler**: As a developer, I want input changes in the project form to be debounced so that rapid typing doesn't cause excessive updates
+- **Add Null Checks to Project Form getFormData**: As a developer, I want getFormData to safely handle null values so that the application doesn't crash on missing form elements
+- **Validate Plugin Icons Before DOM Insertion**: As a developer, I want plugin icons to be validated before insertion so that malicious or malformed content cannot be injected into the DOM
+- **Drag and Drop Image File to Prompt**: As a developer, I want to drag and drop image files into the prompt input area so that I can easily attach screenshots or images to my Claude prompts
+- **Copy and Paste Image to Prompt**: As a developer, I want to paste images from my clipboard into the prompt input area so that I can quickly attach screenshots without saving them to a file first
+- **Image Attachment Preview and Management**: As a developer, I want to see previews of attached images and manage them before sending my prompt so that I can verify the correct images are included
+- **Auto-generate Commit Message Before Sprint Close Panel**: As a developer, I want a commit message to be auto-generated before the sprint close panel opens so that I can review and edit it immediately without waiting
+- **Code Commit Option in Sprint Close Panel**: As a developer, I want a commit option in the sprint close panel so that I can optionally commit my work when closing a sprint
+- **Editable Commit Message in Sprint Close Panel**: As a developer, I want to view and edit the auto-generated commit message so that I can customize it before committing
+- **Execute Git Commit on Sprint Close Submission**: As a developer, I want the git commit to execute when I submit the sprint close form with commit enabled so that my sprint work is properly versioned

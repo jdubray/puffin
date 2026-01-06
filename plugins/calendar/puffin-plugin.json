@@ -1,0 +1,42 @@
+{
+  "name": "calendar",
+  "version": "1.0.0",
+  "displayName": "Calendar",
+  "description": "Visual calendar view showing sprint and story activity by day",
+  "main": "index.js",
+  "contributes": {
+    "views": [
+      {
+        "id": "calendar-view",
+        "name": "Calendar",
+        "location": "nav",
+        "icon": "📅",
+        "order": 60,
+        "component": "CalendarViewComponent"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onStartup"
+  ],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "CalendarViewComponent",
+        "export": "CalendarViewComponent",
+        "type": "class",
+        "description": "Calendar view showing sprint and story activity"
+      },
+      {
+        "name": "DayCellComponent",
+        "export": "DayCell",
+        "type": "class",
+        "description": "Individual day cell in the calendar"
+      }
+    ],
+    "styles": [
+      "calendar.css"
+    ]
+  }
+}

@@ -1796,6 +1796,11 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
                 }
               }
             }
+            // Handle result type message which contains the final response
+            if (json.type === 'result' && json.result) {
+              progress(`Received result message, length: ${json.result.length}`)
+              resultText = json.result
+            }
           } catch (e) {
             // Ignore parse errors for non-JSON lines
           }
@@ -1815,6 +1820,20 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
         resolved = true
 
         progress(`Process exited with code: ${code}`)
+
+        // Process remaining buffer (may contain the result message)
+        if (buffer.trim()) {
+          try {
+            const json = JSON.parse(buffer)
+            if (json.type === 'result' && json.result) {
+              progress(`Found result in remaining buffer, length: ${json.result.length}`)
+              resultText = json.result
+            }
+          } catch (e) {
+            // Expected: Remaining buffer may not be valid JSON
+          }
+        }
+
         progress(`Result text length: ${resultText.length}`)
 
         if (!resultText.trim()) {

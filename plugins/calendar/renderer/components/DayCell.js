@@ -4,6 +4,7 @@
  * Individual day cell for the calendar grid.
  * Can be used standalone or within CalendarView.
  * Displays activity indicators, git branch pills, and note indicators.
+ * Supports drag and drop for post-it notes.
  */
 
 const NOTE_COLORS = {
@@ -24,6 +25,9 @@ class DayCell {
    * @param {Function} options.onBranchClick - Callback when branch is clicked
    * @param {Function} options.onNoteClick - Callback when note is clicked
    * @param {Function} options.onAddNote - Callback when add note is clicked
+   * @param {Function} options.onNoteDragStart - Callback when note drag starts
+   * @param {Function} options.onNoteDragEnd - Callback when note drag ends
+   * @param {Function} options.onDrop - Callback when note is dropped
    */
   constructor(dayData, options = {}) {
     this.dayData = dayData
@@ -143,9 +147,13 @@ class DayCell {
         <div class="postit-indicator-dot"
              role="listitem"
              tabindex="0"
+             draggable="true"
              data-note-index="${index}"
              data-note-id="${note.id}"
+             data-note-text="${this.escapeAttr(note.text)}"
+             data-note-color="${note.color || 'yellow'}"
              title="${this.escapeAttr(truncatedText)}"
+             aria-label="Draggable note: ${this.escapeAttr(truncatedText)}"
              style="background: ${colorScheme.bg}; border-color: ${colorScheme.border}">
         </div>
       `
@@ -154,8 +162,11 @@ class DayCell {
     if (overflowCount > 0) {
       html += `
         <div class="postit-indicator-overflow"
-             role="listitem"
-             title="${overflowCount} more note(s)">
+             role="button"
+             tabindex="0"
+             data-action="show-all-notes"
+             title="Click to view all ${notes.length} notes"
+             aria-label="Show ${overflowCount} more notes">
           +${overflowCount}
         </div>
       `
@@ -185,7 +196,161 @@ class DayCell {
           this.handleNoteClick(e, dot)
         }
       })
+      // Bind drag events
+      this.bindNoteDragEvents(dot)
     })
+
+    // Overflow indicator
+    const overflowIndicator = this.element.querySelector('.postit-indicator-overflow')
+    if (overflowIndicator) {
+      overflowIndicator.addEventListener('click', (e) => this.handleOverflowClick(e))
+      overflowIndicator.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          this.handleOverflowClick(e)
+        }
+      })
+    }
+
+    // Bind drop target events on this cell
+    this.bindDropEvents()
+  }
+
+  /**
+   * Bind drag events to a note element
+   * @param {HTMLElement} noteEl - Note element
+   */
+  bindNoteDragEvents(noteEl) {
+    noteEl.addEventListener('dragstart', (e) => {
+      const noteId = noteEl.dataset.noteId
+      const noteText = noteEl.dataset.noteText
+      const noteColor = noteEl.dataset.noteColor
+      const dateStr = this.dayData.date
+
+      const note = {
+        id: noteId,
+        text: noteText,
+        color: noteColor
+      }
+
+      // Set drag data
+      const dragData = {
+        noteId,
+        sourceDate: dateStr,
+        text: noteText,
+        color: noteColor
+      }
+      e.dataTransfer.setData('application/x-puffin-note', JSON.stringify(dragData))
+      e.dataTransfer.setData('text/plain', noteText)
+      e.dataTransfer.effectAllowed = 'move'
+
+      // Add dragging class
+      noteEl.classList.add('note-dragging')
+
+      // Callback
+      if (this.options.onNoteDragStart) {
+        this.options.onNoteDragStart(e, note, dateStr)
+      }
+
+      // Dispatch event
+      this.element.dispatchEvent(new CustomEvent('daycell:note-drag-start', {
+        detail: { note, dateStr },
+        bubbles: true
+      }))
+    })
+
+    noteEl.addEventListener('dragend', (e) => {
+      noteEl.classList.remove('note-dragging')
+
+      // Callback
+      if (this.options.onNoteDragEnd) {
+        this.options.onNoteDragEnd(e)
+      }
+
+      // Dispatch event
+      this.element.dispatchEvent(new CustomEvent('daycell:note-drag-end', {
+        bubbles: true
+      }))
+    })
+  }
+
+  /**
+   * Bind drop target events
+   */
+  bindDropEvents() {
+    this.element.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer.types.includes('application/x-puffin-note')) {
+        return
+      }
+
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+
+      // Add visual feedback
+      this.element.classList.add('drop-target-valid')
+    })
+
+    this.element.addEventListener('dragleave', (e) => {
+      const rect = this.element.getBoundingClientRect()
+      const x = e.clientX
+      const y = e.clientY
+
+      if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+        this.element.classList.remove('drop-target-valid', 'drop-target-invalid')
+      }
+    })
+
+    this.element.addEventListener('drop', (e) => {
+      e.preventDefault()
+      this.element.classList.remove('drop-target-valid', 'drop-target-invalid')
+
+      const dataStr = e.dataTransfer.getData('application/x-puffin-note')
+      if (!dataStr) return
+
+      let dragData
+      try {
+        dragData = JSON.parse(dataStr)
+      } catch (err) {
+        return
+      }
+
+      // Callback
+      if (this.options.onDrop) {
+        this.options.onDrop(dragData, this.dayData.date)
+      }
+
+      // Dispatch event
+      this.element.dispatchEvent(new CustomEvent('daycell:note-drop', {
+        detail: {
+          dragData,
+          targetDate: this.dayData.date,
+          dayData: this.dayData
+        },
+        bubbles: true
+      }))
+    })
+  }
+
+  /**
+   * Handle overflow indicator click - triggers day selection to show all notes
+   * @param {Event} e - Click event
+   */
+  handleOverflowClick(e) {
+    e.stopPropagation()
+
+    // Dispatch event to trigger day selection (opens side panel with all notes)
+    this.element.dispatchEvent(new CustomEvent('daycell:overflow-click', {
+      detail: {
+        dayData: this.dayData,
+        noteCount: this.dayData.activity?.notes?.length || 0
+      },
+      bubbles: true
+    }))
+
+    // Also trigger the standard day click to select the day
+    if (this.options.onClick) {
+      this.options.onClick(this.dayData)
+    }
   }
 
   /**

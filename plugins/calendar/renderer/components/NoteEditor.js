@@ -25,6 +25,7 @@ class NoteEditor {
    * @param {string} options.dateStr - Date string (YYYY-MM-DD)
    * @param {Function} options.onSave - Callback when note is saved
    * @param {Function} options.onDelete - Callback when note is deleted
+   * @param {Function} options.onCopy - Callback when note is copied
    * @param {Function} options.onClose - Callback when editor is closed
    * @param {HTMLElement} options.container - Container element (defaults to body)
    */
@@ -33,6 +34,7 @@ class NoteEditor {
     this.dateStr = options.dateStr || ''
     this.onSave = options.onSave || null
     this.onDelete = options.onDelete || null
+    this.onCopy = options.onCopy || null
     this.onClose = options.onClose || null
     this.container = options.container || document.body
 
@@ -117,6 +119,17 @@ class NoteEditor {
           </div>
 
           ${this.isEditing ? `
+            <div class="note-editor-actions-section">
+              <button type="button"
+                      class="note-editor-copy-btn"
+                      title="Copy note (Ctrl+C)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy note
+              </button>
+            </div>
             <div class="note-editor-delete-section">
               <button type="button"
                       class="note-editor-delete-btn"
@@ -225,15 +238,20 @@ class NoteEditor {
       btn.addEventListener('click', () => this.selectColor(btn.dataset.color))
     })
 
-    // Delete section (if editing)
+    // Delete and copy section (if editing)
     if (this.isEditing) {
       const deleteBtn = this.element.querySelector('.note-editor-delete-btn')
       const confirmYes = this.element.querySelector('.note-editor-confirm-yes')
       const confirmNo = this.element.querySelector('.note-editor-confirm-no')
+      const copyBtn = this.element.querySelector('.note-editor-copy-btn')
 
       deleteBtn.addEventListener('click', () => this.toggleDeleteConfirm(true))
       confirmYes.addEventListener('click', () => this.confirmDelete())
       confirmNo.addEventListener('click', () => this.toggleDeleteConfirm(false))
+
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => this.copyNote())
+      }
     }
 
     // Keyboard handling
@@ -333,6 +351,50 @@ class NoteEditor {
 
     this.dispatchEvent('note:delete', { note: this.note, dateStr: this.dateStr })
     this.close()
+  }
+
+  /**
+   * Copy the note to clipboard state
+   */
+  copyNote() {
+    if (!this.note) return
+
+    // Get current text and color from the form (in case user modified them)
+    const noteData = {
+      id: this.note.id,
+      text: this.textArea.value,
+      color: this.selectedColor
+    }
+
+    // Visual feedback on the button
+    const copyBtn = this.element.querySelector('.note-editor-copy-btn')
+    if (copyBtn) {
+      copyBtn.classList.add('copied')
+      copyBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Copied!
+      `
+      setTimeout(() => {
+        copyBtn.classList.remove('copied')
+        copyBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy note
+        `
+      }, 1500)
+    }
+
+    // Callback
+    if (this.onCopy) {
+      this.onCopy(noteData)
+    }
+
+    // Dispatch event
+    this.dispatchEvent('note:copy', { note: noteData, dateStr: this.dateStr })
   }
 
   /**

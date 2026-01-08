@@ -353,10 +353,24 @@
 }
 
 .week-notes-overflow {
-  font-size: 10px;
-  color: var(--color-text-muted, #666);
+  font-size: 11px;
+  color: var(--color-primary, #6c63ff);
   text-align: center;
-  padding: 2px;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+  font-weight: 500;
+}
+
+.week-notes-overflow:hover {
+  background: var(--color-primary-light, rgba(108, 99, 255, 0.1));
+  text-decoration: underline;
+}
+
+.week-notes-overflow:focus {
+  outline: 2px solid var(--color-primary, #6c63ff);
+  outline-offset: 1px;
 }
 
 /* ============================
@@ -412,6 +426,8 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0; /* Allow proper flex sizing */
+  height: 100%; /* Fill parent container */
 }
 
 .week-header {
@@ -434,8 +450,10 @@
 .week-days {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: 1fr; /* Single row that fills available height */
   gap: 4px;
   flex: 1;
+  min-height: 0; /* Allow flex shrinking */
 }
 
 .week-day-cell {
@@ -448,9 +466,10 @@
   border: 1px solid var(--border-color, #3a3a3a);
   border-radius: 6px;
   cursor: pointer;
-  min-height: 180px;
-  flex: 1;
+  min-height: 0; /* Allow flex to control height */
+  flex: 1; /* Fill available vertical space in grid */
   transition: background-color 0.15s, border-color 0.15s, transform 0.1s;
+  overflow-y: auto; /* Allow scrolling if content overflows */
 }
 
 .week-day-cell:hover {
@@ -704,7 +723,7 @@
   }
 
   .week-day-cell {
-    min-height: 120px;
+    min-height: 0; /* Allow flex to control height on mobile too */
     padding: 8px 6px;
   }
 
@@ -1711,13 +1730,25 @@
 
 /* Post-it Overflow Counter */
 .postit-indicator-overflow {
-  font-size: 0.6rem;
-  color: var(--text-secondary, #666);
-  padding: 0 3px;
+  font-size: 0.65rem;
+  color: var(--color-primary, #6c63ff);
+  padding: 1px 4px;
   background: var(--bg-secondary, #f0f0f0);
   border-radius: 3px;
-  line-height: 10px;
-  cursor: default;
+  line-height: 12px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.postit-indicator-overflow:hover {
+  background: var(--color-primary-light, rgba(108, 99, 255, 0.15));
+  transform: scale(1.1);
+}
+
+.postit-indicator-overflow:focus {
+  outline: 2px solid var(--color-primary, #6c63ff);
+  outline-offset: 1px;
 }
 
 /* ==========================================================================
@@ -2337,5 +2368,378 @@
   .note-editor-color-swatch {
     width: 24px;
     height: 24px;
+  }
+}
+
+/* ==========================================================================
+   Toast Notification Styles
+   ========================================================================== */
+
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg-primary, #1e1e1e);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  color: var(--text-primary, #e0e0e0);
+  font-size: 0.875rem;
+  pointer-events: auto;
+  animation: toastSlideIn 0.2s ease-out;
+  max-width: 350px;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.toast.toast-exit {
+  animation: toastSlideOut 0.2s ease-in forwards;
+}
+
+@keyframes toastSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toast-success .toast-icon {
+  color: var(--color-success, #22c55e);
+}
+
+.toast-error .toast-icon {
+  color: var(--color-error, #ef4444);
+}
+
+.toast-warning .toast-icon {
+  color: var(--color-warning, #f59e0b);
+}
+
+.toast-info .toast-icon {
+  color: var(--accent-color, #3b82f6);
+}
+
+.toast-message {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  padding: 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toast-close:hover {
+  background: var(--bg-hover, #3a3a3a);
+  color: var(--text-primary, #e0e0e0);
+}
+
+/* Toast variants border accents */
+.toast-success {
+  border-left: 3px solid var(--color-success, #22c55e);
+}
+
+.toast-error {
+  border-left: 3px solid var(--color-error, #ef4444);
+}
+
+.toast-warning {
+  border-left: 3px solid var(--color-warning, #f59e0b);
+}
+
+.toast-info {
+  border-left: 3px solid var(--accent-color, #3b82f6);
+}
+
+/* ==========================================================================
+   Drag and Drop Styles
+   ========================================================================== */
+
+/* Container state during drag */
+.calendar-drag-active {
+  user-select: none;
+}
+
+/* Dragging note states */
+.note-dragging {
+  opacity: 0.5;
+  cursor: grabbing !important;
+}
+
+/* Week view note draggable cursor */
+.week-postit-note[draggable="true"] {
+  cursor: grab;
+}
+
+.week-postit-note[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Month view indicator draggable cursor */
+.postit-indicator-dot[draggable="true"] {
+  cursor: grab;
+}
+
+.postit-indicator-dot[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Drop target valid state */
+.drop-target-valid {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border-color: var(--color-success, #22c55e) !important;
+  border-style: dashed !important;
+}
+
+.drop-target-valid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: dropTargetPulse 1s ease-in-out infinite;
+}
+
+@keyframes dropTargetPulse {
+  0%, 100% {
+    box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.3);
+  }
+  50% {
+    box-shadow: inset 0 0 0 3px rgba(34, 197, 94, 0.5);
+  }
+}
+
+/* Drop target invalid state */
+.drop-target-invalid {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: var(--color-error, #ef4444) !important;
+  border-style: dashed !important;
+  cursor: not-allowed;
+}
+
+/* Ensure position relative for ::before pseudo element */
+.week-day-cell,
+.month-day {
+  position: relative;
+}
+
+/* Drag ghost/preview enhancement */
+.week-postit-note.note-dragging,
+.postit-indicator-dot.note-dragging {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive drag and drop */
+@media (max-width: 600px) {
+  .toast-container {
+    bottom: 10px;
+    right: 10px;
+    left: 10px;
+  }
+
+  .toast {
+    max-width: none;
+  }
+}
+
+/* ==========================================================================
+   Copy and Paste Styles
+   ========================================================================== */
+
+/* Container state when a note is copied */
+.has-copied-note {
+  /* Visual indicator that a note is in clipboard */
+}
+
+/* Focused note for keyboard shortcuts */
+.note-focused {
+  outline: 2px solid var(--color-primary, #6c63ff) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(108, 99, 255, 0.2);
+}
+
+/* Copied note animation */
+.note-copied {
+  animation: noteCopiedPulse 0.4s ease-out;
+}
+
+@keyframes noteCopiedPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.4);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 8px rgba(108, 99, 255, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(108, 99, 255, 0);
+  }
+}
+
+/* Week view note copied animation - preserve rotation */
+.week-postit-note.note-copied {
+  animation: weekNoteCopiedPulse 0.4s ease-out;
+}
+
+@keyframes weekNoteCopiedPulse {
+  0% {
+    transform: rotate(-0.5deg) scale(1);
+    box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 0 rgba(108, 99, 255, 0.4);
+  }
+  50% {
+    transform: rotate(-0.5deg) scale(1.05);
+    box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 8px rgba(108, 99, 255, 0);
+  }
+  100% {
+    transform: rotate(-0.5deg) scale(1);
+    box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.15), 0 0 0 0 rgba(108, 99, 255, 0);
+  }
+}
+
+/* Note Editor Copy Button Section */
+.note-editor-actions-section {
+  padding-top: 12px;
+  margin-bottom: 16px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.note-editor-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  background: var(--bg-secondary, #f8f8f8);
+  color: var(--text-secondary, #666);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.note-editor-copy-btn:hover {
+  background: var(--bg-hover, #e8e8e8);
+  border-color: var(--border-hover, #ccc);
+  color: var(--text-primary, #333);
+}
+
+.note-editor-copy-btn:focus {
+  outline: 2px solid var(--color-primary, #6c63ff);
+  outline-offset: 1px;
+}
+
+.note-editor-copy-btn:active {
+  transform: scale(0.98);
+}
+
+.note-editor-copy-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Copied state for copy button */
+.note-editor-copy-btn.copied {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: var(--color-success, #22c55e);
+  color: var(--color-success, #22c55e);
+}
+
+.note-editor-copy-btn.copied:hover {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+/* Paste indicator on day cells */
+.paste-target-hint {
+  position: relative;
+}
+
+.paste-target-hint::after {
+  content: 'Ctrl+V to paste';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  background: var(--color-primary, #6c63ff);
+  color: white;
+  font-size: 0.65rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0.9;
+  pointer-events: none;
+  animation: pasteHintFadeIn 0.2s ease-out;
+}
+
+@keyframes pasteHintFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 0.9;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Responsive copy/paste styles */
+@media (max-width: 600px) {
+  .note-editor-copy-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  .note-editor-copy-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .paste-target-hint::after {
+    font-size: 0.6rem;
+    padding: 2px 4px;
   }
 }

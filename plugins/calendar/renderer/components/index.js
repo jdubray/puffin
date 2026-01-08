@@ -16,6 +16,7 @@ import { SprintModal } from './SprintModal.js'
 import { BranchIndicator } from './BranchIndicator.js'
 import { PostItNote } from './PostItNote.js'
 import { NoteEditor, MAX_NOTE_LENGTH, NOTE_COLORS } from './NoteEditor.js'
+import { Toast, ToastManager, toastManager } from './Toast.js'
 
 /**
  * CalendarViewComponent - Plugin view component wrapper
@@ -113,6 +114,9 @@ export {
   NoteEditor,
   MAX_NOTE_LENGTH,
   NOTE_COLORS,
+  Toast,
+  ToastManager,
+  toastManager,
   CalendarViewComponent
 }
 

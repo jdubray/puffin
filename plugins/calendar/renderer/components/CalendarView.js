@@ -8,11 +8,15 @@
 import { NoteEditor } from './NoteEditor.js'
 import { SprintPanel } from './SprintPanel.js'
 import { SprintModal } from './SprintModal.js'
+import { toastManager } from './Toast.js'
 
 const VIEW_TYPES = {
   WEEK: 'week',
   MONTH: 'month'
 }
+
+const MAX_NOTES_PER_DAY = 10
+const DRAG_DATA_TYPE = 'application/x-puffin-note'
 
 class CalendarView {
   /**
@@ -36,6 +40,17 @@ class CalendarView {
     this.notesData = {}
     this.selectedDate = null
     this.currentNoteEditor = null
+
+    // Drag and drop state
+    this.isDragging = false
+    this.draggedNote = null
+    this.dragSourceDate = null
+    this.boundHandleDragKeyDown = this.handleDragKeyDown.bind(this)
+
+    // Copy and paste state
+    this.copiedNote = null
+    this.focusedNoteElement = null
+    this.boundHandleCopyPasteKeyDown = this.handleCopyPasteKeyDown.bind(this)
 
     // Component references
     this.viewToggle = null
@@ -98,6 +113,16 @@ class CalendarView {
 
     // Initialize the current view
     this.initCurrentView()
+
+    // Initialize keyboard shortcuts for copy/paste
+    this.initCopyPasteKeyboard()
+  }
+
+  /**
+   * Initialize keyboard shortcuts for copy/paste
+   */
+  initCopyPasteKeyboard() {
+    document.addEventListener('keydown', this.boundHandleCopyPasteKeyDown)
   }
 
   /**
@@ -671,10 +696,14 @@ class CalendarView {
         <div class="postit-indicator-dot"
              role="listitem"
              tabindex="0"
+             draggable="true"
              data-note-index="${index}"
              data-note-id="${note.id}"
+             data-note-text="${this.escapeAttr(note.text)}"
+             data-note-color="${note.color || 'yellow'}"
              data-date="${dateStr}"
              title="${this.escapeAttr(truncatedText)}"
+             aria-label="Draggable note: ${this.escapeAttr(truncatedText)}"
              style="background: ${colorScheme.bg}; border-color: ${colorScheme.border}">
         </div>
       `
@@ -683,8 +712,12 @@ class CalendarView {
     if (overflowCount > 0) {
       html += `
         <div class="postit-indicator-overflow"
-             role="listitem"
-             title="${overflowCount} more note(s)">
+             role="button"
+             tabindex="0"
+             data-date="${dateStr}"
+             data-action="show-all-notes"
+             title="Click to view all ${notes.length} notes"
+             aria-label="Show ${overflowCount} more notes">
           +${overflowCount}
         </div>
       `
@@ -705,7 +738,7 @@ class CalendarView {
       return ''
     }
 
-    const maxVisible = 2 // Show up to 2 full notes in week view
+    const maxVisible = 5 // Show up to 5 full notes in week view
     const visibleNotes = notes.slice(0, maxVisible)
     const overflowCount = notes.length - maxVisible
 
@@ -719,9 +752,13 @@ class CalendarView {
         <div class="week-postit-note"
              role="button"
              tabindex="0"
+             draggable="true"
              data-note-index="${index}"
              data-note-id="${note.id}"
+             data-note-text="${this.escapeAttr(note.text)}"
+             data-note-color="${note.color || 'yellow'}"
              data-date="${dateStr}"
+             aria-label="Draggable note: ${this.escapeAttr(truncatedText)}"
              style="background: ${colorScheme.bg}; border-left: 3px solid ${colorScheme.border}">
           <span class="week-postit-text">${this.escapeHtml(truncatedText)}</span>
         </div>
@@ -730,7 +767,13 @@ class CalendarView {
 
     if (overflowCount > 0) {
       html += `
-        <div class="week-notes-overflow" title="${overflowCount} more note(s)">
+        <div class="week-notes-overflow"
+             role="button"
+             tabindex="0"
+             data-date="${dateStr}"
+             data-action="show-all-notes"
+             title="Click to view all ${notes.length} notes"
+             aria-label="Show ${overflowCount} more notes">
           +${overflowCount} more
         </div>
       `
@@ -789,6 +832,11 @@ class CalendarView {
           this.handleNoteClick(e, dot)
         }
       })
+      // Focus tracking for copy/paste keyboard shortcuts
+      dot.addEventListener('focus', () => this.setFocusedNote(dot))
+      dot.addEventListener('blur', () => this.setFocusedNote(null))
+      // Drag events for notes
+      this.bindNoteDragEvents(dot)
     })
 
     // Full post-it notes (week view)
@@ -801,7 +849,109 @@ class CalendarView {
           this.handleNoteClick(e, note)
         }
       })
+      // Focus tracking for copy/paste keyboard shortcuts
+      note.addEventListener('focus', () => this.setFocusedNote(note))
+      note.addEventListener('blur', () => this.setFocusedNote(null))
+      // Drag events for notes
+      this.bindNoteDragEvents(note)
     })
+
+    // Overflow indicators (both week and month view)
+    const overflowIndicators = this.viewContainer.querySelectorAll('.week-notes-overflow, .postit-indicator-overflow')
+    overflowIndicators.forEach(indicator => {
+      indicator.addEventListener('click', (e) => this.handleOverflowClick(e, indicator))
+      indicator.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          this.handleOverflowClick(e, indicator)
+        }
+      })
+    })
+
+    // Bind drop target events on day cells
+    this.bindDayDropEvents()
+  }
+
+  /**
+   * Bind drag events to a note element
+   * @param {HTMLElement} noteEl - Note element
+   */
+  bindNoteDragEvents(noteEl) {
+    noteEl.addEventListener('dragstart', (e) => {
+      const noteId = noteEl.dataset.noteId
+      const dateStr = noteEl.dataset.date
+      const noteText = noteEl.dataset.noteText
+      const noteColor = noteEl.dataset.noteColor
+
+      const note = {
+        id: noteId,
+        text: noteText,
+        color: noteColor
+      }
+
+      this.handleNoteDragStart(e, note, dateStr)
+    })
+
+    noteEl.addEventListener('dragend', (e) => {
+      this.handleNoteDragEnd(e)
+    })
+  }
+
+  /**
+   * Bind drop events to day cells
+   */
+  bindDayDropEvents() {
+    const dayCells = this.viewContainer.querySelectorAll('.week-day-cell[data-date], .month-day[data-date]')
+
+    dayCells.forEach(cell => {
+      const dateStr = cell.dataset.date
+      if (!dateStr) return
+
+      cell.addEventListener('dragover', (e) => {
+        this.handleDayDragOver(e, dateStr)
+      })
+
+      cell.addEventListener('dragleave', (e) => {
+        this.handleDayDragLeave(e)
+      })
+
+      cell.addEventListener('drop', (e) => {
+        this.handleDayDrop(e, dateStr)
+      })
+    })
+  }
+
+  /**
+   * Handle overflow indicator click - selects the day to show all notes in panel
+   * @param {Event} e - Click event
+   * @param {HTMLElement} indicator - Clicked overflow indicator element
+   */
+  handleOverflowClick(e, indicator) {
+    e.stopPropagation() // Prevent day cell click
+
+    const dateStr = indicator.dataset.date
+    if (!dateStr) return
+
+    // Simulate day selection to open the side panel with all notes
+    const date = new Date(dateStr + 'T00:00:00')
+    const activity = this.activityData[dateStr] || { hasActivity: false }
+
+    this.handleDaySelect({
+      date: dateStr,
+      dayOfMonth: date.getDate(),
+      dayOfWeek: date.getDay(),
+      activity
+    })
+
+    // Dispatch custom event for overflow click (allows external handling)
+    const event = new CustomEvent('calendar:notes-overflow-clicked', {
+      detail: {
+        dateStr,
+        noteCount: activity.notes?.length || 0
+      },
+      bubbles: true
+    })
+    this.container.dispatchEvent(event)
   }
 
   /**
@@ -856,6 +1006,7 @@ class CalendarView {
       dateStr: dateStr,
       onSave: (noteData, date) => this.handleNoteSave(noteData, date),
       onDelete: (deletedNote) => this.handleNoteDelete(deletedNote, dateStr),
+      onCopy: (noteData) => this.copyNote(noteData),
       onClose: () => {
         this.currentNoteEditor = null
       }
@@ -953,6 +1104,437 @@ class CalendarView {
     }
   }
 
+  // ==========================================================================
+  // Drag and Drop Methods
+  // ==========================================================================
+
+  /**
+   * Handle drag start on a note
+   * @param {DragEvent} e - Drag event
+   * @param {Object} note - Note being dragged
+   * @param {string} dateStr - Source date
+   */
+  handleNoteDragStart(e, note, dateStr) {
+    this.isDragging = true
+    this.draggedNote = note
+    this.dragSourceDate = dateStr
+
+    // Set drag data
+    const dragData = {
+      noteId: note.id,
+      sourceDate: dateStr,
+      text: note.text,
+      color: note.color
+    }
+    e.dataTransfer.setData(DRAG_DATA_TYPE, JSON.stringify(dragData))
+    e.dataTransfer.setData('text/plain', note.text)
+    e.dataTransfer.effectAllowed = 'move'
+
+    // Add dragging class to source element
+    const noteEl = e.target.closest('.week-postit-note, .postit-indicator-dot')
+    if (noteEl) {
+      noteEl.classList.add('note-dragging')
+    }
+
+    // Add drag-active class to container
+    this.container.classList.add('calendar-drag-active')
+
+    // Listen for escape key
+    document.addEventListener('keydown', this.boundHandleDragKeyDown)
+
+    // Dispatch event
+    this.container.dispatchEvent(new CustomEvent('calendar:note-drag-start', {
+      detail: { note, sourceDate: dateStr },
+      bubbles: true
+    }))
+  }
+
+  /**
+   * Handle drag end
+   * @param {DragEvent} e - Drag event
+   */
+  handleNoteDragEnd(e) {
+    // Remove dragging class from source element
+    const noteEl = e.target.closest('.week-postit-note, .postit-indicator-dot')
+    if (noteEl) {
+      noteEl.classList.remove('note-dragging')
+    }
+
+    // Clear drag state
+    this.cleanupDragState()
+  }
+
+  /**
+   * Handle drag over a day cell
+   * @param {DragEvent} e - Drag event
+   * @param {string} dateStr - Target date
+   */
+  handleDayDragOver(e, dateStr) {
+    // Check if we have the right data type
+    if (!e.dataTransfer.types.includes(DRAG_DATA_TYPE)) {
+      return
+    }
+
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+
+    const cell = e.currentTarget
+
+    // Check if this is a valid drop target (not the source)
+    if (dateStr === this.dragSourceDate) {
+      cell.classList.add('drop-target-invalid')
+      cell.classList.remove('drop-target-valid')
+      return
+    }
+
+    // Check max notes limit
+    const activity = this.activityData[dateStr] || {}
+    const noteCount = activity.notes?.length || 0
+
+    if (noteCount >= MAX_NOTES_PER_DAY) {
+      cell.classList.add('drop-target-invalid')
+      cell.classList.remove('drop-target-valid')
+    } else {
+      cell.classList.add('drop-target-valid')
+      cell.classList.remove('drop-target-invalid')
+    }
+  }
+
+  /**
+   * Handle drag leave from a day cell
+   * @param {DragEvent} e - Drag event
+   */
+  handleDayDragLeave(e) {
+    const cell = e.currentTarget
+
+    // Only remove classes if we're leaving the cell entirely
+    const rect = cell.getBoundingClientRect()
+    const x = e.clientX
+    const y = e.clientY
+
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      cell.classList.remove('drop-target-valid', 'drop-target-invalid')
+    }
+  }
+
+  /**
+   * Handle drop on a day cell
+   * @param {DragEvent} e - Drag event
+   * @param {string} targetDate - Target date
+   */
+  async handleDayDrop(e, targetDate) {
+    e.preventDefault()
+
+    const cell = e.currentTarget
+    cell.classList.remove('drop-target-valid', 'drop-target-invalid')
+
+    // Get drag data
+    const dataStr = e.dataTransfer.getData(DRAG_DATA_TYPE)
+    if (!dataStr) return
+
+    let dragData
+    try {
+      dragData = JSON.parse(dataStr)
+    } catch (err) {
+      console.error('[CalendarView] Failed to parse drag data:', err)
+      return
+    }
+
+    const { noteId, sourceDate, text, color } = dragData
+
+    // Validate: not dropping on same day
+    if (sourceDate === targetDate) {
+      return
+    }
+
+    // Validate: target not at max capacity
+    const activity = this.activityData[targetDate] || {}
+    const noteCount = activity.notes?.length || 0
+
+    if (noteCount >= MAX_NOTES_PER_DAY) {
+      toastManager.error(`Maximum ${MAX_NOTES_PER_DAY} notes per day`)
+      return
+    }
+
+    // Move the note
+    await this.moveNote(noteId, sourceDate, targetDate, { text, color })
+  }
+
+  /**
+   * Move a note from one date to another
+   * @param {string} noteId - Note ID
+   * @param {string} sourceDate - Source date
+   * @param {string} targetDate - Target date
+   * @param {Object} noteData - Note data (text, color)
+   */
+  async moveNote(noteId, sourceDate, targetDate, noteData) {
+    try {
+      // Use plugin invoke API to move the note
+      if (window.puffin?.plugins?.invoke) {
+        const result = await window.puffin.plugins.invoke('calendar', 'moveNote', {
+          noteId,
+          sourceDate,
+          targetDate
+        })
+
+        if (result?.success) {
+          toastManager.success('Note moved')
+          await this.loadActivityData()
+
+          // Dispatch event
+          this.container.dispatchEvent(new CustomEvent('calendar:note-moved', {
+            detail: { noteId, sourceDate, targetDate },
+            bubbles: true
+          }))
+          return
+        }
+      }
+
+      // Fallback: delete from source and create at target
+      // Delete from source
+      if (window.puffin?.plugins?.invoke) {
+        await window.puffin.plugins.invoke('calendar', 'deleteNote', {
+          dateStr: sourceDate,
+          noteId
+        })
+
+        // Create at target
+        await window.puffin.plugins.invoke('calendar', 'createNote', {
+          dateStr: targetDate,
+          text: noteData.text,
+          color: noteData.color
+        })
+      }
+
+      toastManager.success('Note moved')
+      await this.loadActivityData()
+
+      // Dispatch event
+      this.container.dispatchEvent(new CustomEvent('calendar:note-moved', {
+        detail: { noteId, sourceDate, targetDate },
+        bubbles: true
+      }))
+    } catch (error) {
+      console.error('[CalendarView] Failed to move note:', error)
+      toastManager.error('Failed to move note')
+    }
+  }
+
+  /**
+   * Handle keydown during drag
+   * @param {KeyboardEvent} e - Keyboard event
+   */
+  handleDragKeyDown(e) {
+    if (e.key === 'Escape' && this.isDragging) {
+      e.preventDefault()
+      this.cancelDrag()
+    }
+  }
+
+  /**
+   * Cancel the current drag operation
+   */
+  cancelDrag() {
+    // Remove visual states from all cells
+    this.container.querySelectorAll('.drop-target-valid, .drop-target-invalid').forEach(el => {
+      el.classList.remove('drop-target-valid', 'drop-target-invalid')
+    })
+
+    // Remove dragging class from any dragged notes
+    this.container.querySelectorAll('.note-dragging').forEach(el => {
+      el.classList.remove('note-dragging')
+    })
+
+    this.cleanupDragState()
+  }
+
+  /**
+   * Clean up drag state
+   */
+  cleanupDragState() {
+    this.isDragging = false
+    this.draggedNote = null
+    this.dragSourceDate = null
+
+    // Remove drag-active class from container
+    this.container.classList.remove('calendar-drag-active')
+
+    // Remove escape key listener
+    document.removeEventListener('keydown', this.boundHandleDragKeyDown)
+  }
+
+  /**
+   * Get the count of notes for a date
+   * @param {string} dateStr - Date string
+   * @returns {number} Note count
+   */
+  getNotesCountForDate(dateStr) {
+    const activity = this.activityData[dateStr] || {}
+    return activity.notes?.length || 0
+  }
+
+  // ==========================================================================
+  // Copy and Paste Methods
+  // ==========================================================================
+
+  /**
+   * Handle keyboard shortcuts for copy/paste
+   * @param {KeyboardEvent} e - Keyboard event
+   */
+  handleCopyPasteKeyDown(e) {
+    // Check if we're in an input/textarea (don't intercept normal typing)
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      return
+    }
+
+    // Copy: Ctrl/Cmd + C
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      if (this.focusedNoteElement) {
+        e.preventDefault()
+        this.copyFocusedNote()
+      }
+    }
+
+    // Paste: Ctrl/Cmd + V
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      if (this.copiedNote && this.selectedDate) {
+        e.preventDefault()
+        this.pasteNote(this.selectedDate)
+      }
+    }
+  }
+
+  /**
+   * Copy a note to the clipboard state
+   * @param {Object} note - Note to copy
+   * @param {HTMLElement} sourceElement - Source element for visual feedback
+   */
+  copyNote(note, sourceElement = null) {
+    this.copiedNote = {
+      text: note.text,
+      color: note.color
+    }
+
+    // Visual feedback
+    if (sourceElement) {
+      sourceElement.classList.add('note-copied')
+      setTimeout(() => {
+        sourceElement.classList.remove('note-copied')
+      }, 300)
+    }
+
+    // Add copied indicator to container
+    this.container.classList.add('has-copied-note')
+
+    toastManager.success('Note copied')
+
+    // Dispatch event
+    this.container.dispatchEvent(new CustomEvent('calendar:note-copied', {
+      detail: { note: this.copiedNote },
+      bubbles: true
+    }))
+  }
+
+  /**
+   * Copy the currently focused note
+   */
+  copyFocusedNote() {
+    if (!this.focusedNoteElement) return
+
+    const noteId = this.focusedNoteElement.dataset.noteId
+    const noteText = this.focusedNoteElement.dataset.noteText
+    const noteColor = this.focusedNoteElement.dataset.noteColor
+
+    const note = {
+      id: noteId,
+      text: noteText,
+      color: noteColor
+    }
+
+    this.copyNote(note, this.focusedNoteElement)
+  }
+
+  /**
+   * Paste the copied note to a target date
+   * @param {string} targetDate - Target date string
+   */
+  async pasteNote(targetDate) {
+    if (!this.copiedNote) {
+      return
+    }
+
+    // Validate: target not at max capacity
+    const activity = this.activityData[targetDate] || {}
+    const noteCount = activity.notes?.length || 0
+
+    if (noteCount >= MAX_NOTES_PER_DAY) {
+      toastManager.error(`Maximum ${MAX_NOTES_PER_DAY} notes per day`)
+      return
+    }
+
+    try {
+      // Create new note at target date
+      if (window.puffin?.plugins?.invoke) {
+        const result = await window.puffin.plugins.invoke('calendar', 'createNote', {
+          dateStr: targetDate,
+          text: this.copiedNote.text,
+          color: this.copiedNote.color
+        })
+
+        if (result?.success) {
+          toastManager.success('Note pasted')
+          await this.loadActivityData()
+
+          // Dispatch event
+          this.container.dispatchEvent(new CustomEvent('calendar:note-pasted', {
+            detail: { note: this.copiedNote, targetDate },
+            bubbles: true
+          }))
+          return
+        }
+      }
+
+      toastManager.error('Failed to paste note')
+    } catch (error) {
+      console.error('[CalendarView] Failed to paste note:', error)
+      toastManager.error('Failed to paste note')
+    }
+  }
+
+  /**
+   * Clear the copied note state
+   */
+  clearCopiedNote() {
+    this.copiedNote = null
+    this.container.classList.remove('has-copied-note')
+  }
+
+  /**
+   * Check if there is a copied note available
+   * @returns {boolean}
+   */
+  hasCopiedNote() {
+    return this.copiedNote !== null
+  }
+
+  /**
+   * Set the focused note element (for keyboard shortcuts)
+   * @param {HTMLElement} element - Note element
+   */
+  setFocusedNote(element) {
+    // Remove previous focus indicator
+    if (this.focusedNoteElement) {
+      this.focusedNoteElement.classList.remove('note-focused')
+    }
+
+    this.focusedNoteElement = element
+
+    // Add focus indicator
+    if (element) {
+      element.classList.add('note-focused')
+    }
+  }
+
   /**
    * Bind click events to day cells
    */
@@ -979,6 +1561,11 @@ class CalendarView {
    * @param {string} view - New view type
    */
   handleViewChange(view) {
+    // Cancel any in-progress drag when switching views
+    if (this.isDragging) {
+      this.cancelDrag()
+    }
+
     this.currentView = view
     this.initCurrentView()
     this.updateTitle()
@@ -1589,6 +2176,10 @@ class CalendarView {
    * Destroy the component
    */
   destroy() {
+    // Remove keyboard listeners
+    document.removeEventListener('keydown', this.boundHandleCopyPasteKeyDown)
+    document.removeEventListener('keydown', this.boundHandleDragKeyDown)
+
     if (this.currentNoteEditor) {
       this.currentNoteEditor.close()
       this.currentNoteEditor = null

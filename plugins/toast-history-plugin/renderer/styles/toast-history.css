@@ -1,0 +1,379 @@
+/**
+ * Toast History Plugin Styles
+ *
+ * Styles for the toast notification history view.
+ */
+
+/* ============================
+   Container
+   ============================ */
+
+.toast-history-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary, #1e1e1e);
+  color: var(--text-primary, #e0e0e0);
+}
+
+.toast-history-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ============================
+   Header
+   ============================ */
+
+.toast-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color, #3a3a3a);
+  background: var(--bg-secondary, #252525);
+  flex-shrink: 0;
+}
+
+.toast-history-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.toast-history-refresh-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  background: var(--bg-tertiary, #2a2a2a);
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.toast-history-refresh-btn:hover {
+  background: var(--bg-hover, #3a3a3a);
+  color: var(--text-primary, #e0e0e0);
+  border-color: var(--border-hover, #4a4a4a);
+}
+
+.toast-history-refresh-btn:focus {
+  outline: 2px solid var(--accent-color, #3b82f6);
+  outline-offset: 1px;
+}
+
+.toast-history-refresh-btn:active {
+  transform: scale(0.95);
+}
+
+/* ============================
+   Loading State
+   ============================ */
+
+.toast-history-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: var(--text-secondary, #888);
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color, #3a3a3a);
+  border-top-color: var(--accent-color, #3b82f6);
+  border-radius: 50%;
+  animation: spinnerRotate 0.8s linear infinite;
+}
+
+@keyframes spinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================
+   Error State
+   ============================ */
+
+.toast-history-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  margin: 16px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: var(--color-error, #ef4444);
+}
+
+.toast-history-error .error-icon {
+  font-size: 1.25rem;
+}
+
+/* ============================
+   Content Area
+   ============================ */
+
+.toast-history-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* ============================
+   Section Styles
+   ============================ */
+
+.toast-history-section {
+  margin-bottom: 16px;
+}
+
+.toast-history-section:last-child {
+  margin-bottom: 0;
+}
+
+.toast-history-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary, #888);
+}
+
+.section-count {
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #666);
+}
+
+.delete-all-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-error, #ef4444);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.delete-all-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.delete-all-btn:focus {
+  outline: 2px solid var(--color-error, #ef4444);
+  outline-offset: 1px;
+}
+
+/* ============================
+   Toast List
+   ============================ */
+
+.toast-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toast-history-list-older {
+  opacity: 0.85;
+}
+
+/* ============================
+   Toast Item
+   ============================ */
+
+.toast-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 8px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.toast-history-item:hover {
+  background: var(--bg-hover, #2a2a2a);
+  border-color: var(--border-hover, #4a4a4a);
+}
+
+.toast-history-item-old {
+  opacity: 0.75;
+}
+
+.toast-history-item-old:hover {
+  opacity: 1;
+}
+
+/* Toast Item Icon */
+.toast-item-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+/* Toast Item Content */
+.toast-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-item-time {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary, #666);
+  margin-bottom: 4px;
+}
+
+.toast-item-message {
+  font-size: 0.875rem;
+  color: var(--text-primary, #e0e0e0);
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+/* Toast Item Actions */
+.toast-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.toast-history-item:hover .toast-item-actions,
+.toast-history-item:focus-within .toast-item-actions {
+  opacity: 1;
+}
+
+.toast-action-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 4px;
+  background: var(--bg-tertiary, #2a2a2a);
+  color: var(--text-secondary, #888);
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.toast-action-btn:hover {
+  background: var(--bg-hover, #3a3a3a);
+  color: var(--text-primary, #e0e0e0);
+  border-color: var(--border-hover, #4a4a4a);
+}
+
+.toast-action-btn:focus {
+  outline: 2px solid var(--accent-color, #3b82f6);
+  outline-offset: 1px;
+}
+
+.toast-action-btn.copy-btn.copied {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: var(--color-success, #22c55e);
+  color: var(--color-success, #22c55e);
+}
+
+.toast-action-btn.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: var(--color-error, #ef4444);
+}
+
+/* ============================
+   Empty State
+   ============================ */
+
+.toast-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary, #888);
+  margin-bottom: 8px;
+}
+
+.empty-message {
+  font-size: 0.875rem;
+  color: var(--text-tertiary, #666);
+}
+
+/* ============================
+   Responsive Styles
+   ============================ */
+
+@media (max-width: 600px) {
+  .toast-history-header {
+    padding: 12px;
+  }
+
+  .toast-history-title {
+    font-size: 1rem;
+  }
+
+  .toast-history-content {
+    padding: 6px;
+  }
+
+  .toast-history-item {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .toast-item-message {
+    font-size: 0.8125rem;
+  }
+
+  .toast-action-btn {
+    width: 26px;
+    height: 26px;
+  }
+
+  .toast-history-empty {
+    padding: 32px 16px;
+  }
+}

@@ -204,6 +204,27 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * Toast History operations
+   * Store and retrieve toast notification history from .puffin/toast-history.json
+   */
+  toastHistory: {
+    // Get all toast history
+    getAll: () => ipcRenderer.invoke('toast-history:getAll'),
+
+    // Add a toast to history
+    add: (toast) => ipcRenderer.invoke('toast-history:add', toast),
+
+    // Delete a toast by ID
+    delete: (toastId) => ipcRenderer.invoke('toast-history:delete', toastId),
+
+    // Delete all toasts before a given timestamp
+    deleteBefore: (timestamp) => ipcRenderer.invoke('toast-history:deleteBefore', timestamp),
+
+    // Clear all toast history
+    clear: () => ipcRenderer.invoke('toast-history:clear')
+  },
+
+  /**
    * Claude CLI operations
    */
   claude: {

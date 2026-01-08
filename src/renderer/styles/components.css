@@ -1180,7 +1180,7 @@
 
 .sprint-status-badge.planning {
   background: var(--color-warning);
-  color: var(--bg-primary);
+  color: white;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -3945,6 +3945,11 @@
 }
 
 /* Sprint Stories Modal */
+.modal:has(.sprint-stories-modal) {
+  min-width: 600px;
+  max-width: 800px;
+}
+
 .sprint-stories-modal {
   display: flex;
   flex-direction: column;
@@ -3978,6 +3983,10 @@
 }
 
 .sprint-story-item {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto auto;
+  gap: 0.5rem;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
   padding: 0.75rem 1rem;
@@ -4015,7 +4024,7 @@
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  flex-wrap: nowrap;
 }
 
 .sprint-story-status-badge {
@@ -4048,10 +4057,12 @@
   font-weight: 500;
   color: var(--text-primary);
   line-height: 1.3;
+  flex: 1;
+  min-width: 0;
 }
 
 .sprint-story-description {
-  margin: 0 0 0.5rem 0;
+  margin: 0;
   font-size: 0.8125rem;
   color: var(--text-secondary);
   line-height: 1.4;
@@ -4126,9 +4137,9 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.8125rem;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
   padding-top: 0.5rem;
-  border-top: 1px solid var(--border-color-light, var(--border-color));
+  border-top: 1px dashed var(--border-color);
 }
 
 .sprint-story-assertions .assertions-label {

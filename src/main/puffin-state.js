@@ -35,6 +35,7 @@ const UI_GUIDELINES_FILE = 'ui-guidelines.json'
 const STYLESHEETS_DIR = 'stylesheets'
 const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directory
 const ACTIVE_SPRINT_FILE = 'active-sprint.json' // JSON backup of active sprint
+const TOAST_HISTORY_FILE = 'toast-history.json' // Toast notification history
 
 class PuffinState {
   constructor() {
@@ -3028,6 +3029,119 @@ class PuffinState {
     } catch {
       return false
     }
+  }
+
+  // ===== TOAST HISTORY OPERATIONS =====
+
+  /**
+   * Get all toast history entries
+   *
+   * @returns {Promise<{version: number, toasts: Array}>} Toast history data
+   */
+  async getToastHistory() {
+    const toastPath = path.join(this.puffinPath, TOAST_HISTORY_FILE)
+    try {
+      const data = await fs.readFile(toastPath, 'utf8')
+      return JSON.parse(data)
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // File doesn't exist yet, return empty history
+        return { version: 1, toasts: [] }
+      }
+      console.error('[PuffinState] Failed to read toast history:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Save toast history to file
+   *
+   * @param {Object} toastHistory - Toast history data
+   * @private
+   */
+  async _saveToastHistory(toastHistory) {
+    const toastPath = path.join(this.puffinPath, TOAST_HISTORY_FILE)
+    await fs.writeFile(toastPath, JSON.stringify(toastHistory, null, 2))
+  }
+
+  /**
+   * Add a toast to history
+   *
+   * @param {Object} toast - Toast to add
+   * @param {string} toast.message - Toast message
+   * @param {string} toast.type - Toast type (success, error, warning, info)
+   * @param {string} [toast.source] - Source of the toast (e.g., 'sprint-manager', 'git-service')
+   * @returns {Promise<Object>} The added toast with id and timestamp
+   */
+  async addToast(toast) {
+    const history = await this.getToastHistory()
+
+    const newToast = {
+      id: `toast-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      timestamp: Date.now(),
+      message: toast.message,
+      type: toast.type || 'info',
+      source: toast.source || 'unknown'
+    }
+
+    history.toasts.push(newToast)
+    await this._saveToastHistory(history)
+
+    return newToast
+  }
+
+  /**
+   * Delete a toast from history by ID
+   *
+   * @param {string} toastId - ID of the toast to delete
+   * @returns {Promise<boolean>} True if toast was found and deleted
+   */
+  async deleteToast(toastId) {
+    const history = await this.getToastHistory()
+    const initialLength = history.toasts.length
+
+    history.toasts = history.toasts.filter(t => t.id !== toastId)
+
+    if (history.toasts.length < initialLength) {
+      await this._saveToastHistory(history)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Delete all toasts before a given timestamp
+   *
+   * @param {number} timestamp - Unix timestamp in milliseconds
+   * @returns {Promise<number>} Number of toasts deleted
+   */
+  async deleteToastsBefore(timestamp) {
+    const history = await this.getToastHistory()
+    const initialLength = history.toasts.length
+
+    history.toasts = history.toasts.filter(t => t.timestamp >= timestamp)
+    const deletedCount = initialLength - history.toasts.length
+
+    if (deletedCount > 0) {
+      await this._saveToastHistory(history)
+    }
+
+    return deletedCount
+  }
+
+  /**
+   * Clear all toast history
+   *
+   * @returns {Promise<number>} Number of toasts cleared
+   */
+  async clearToastHistory() {
+    const history = await this.getToastHistory()
+    const count = history.toasts.length
+
+    history.toasts = []
+    await this._saveToastHistory(history)
+
+    return count
   }
 
   // ===== DATABASE MANAGEMENT OPERATIONS =====

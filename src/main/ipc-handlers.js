@@ -197,7 +197,27 @@ function setupStateHandlers(ipcMain) {
 
   ipcMain.handle('state:addUserStory', async (event, story) => {
     try {
-      const newStory = await puffinState.addUserStory(story)
+      // Create the story first
+      let newStory = await puffinState.addUserStory(story)
+
+      // Auto-generate inspection assertions if not already provided
+      if (!newStory.inspectionAssertions || newStory.inspectionAssertions.length === 0) {
+        try {
+          const generator = new AssertionGenerator()
+          const result = generator.generate(newStory, { includeSuggestions: false })
+
+          if (result.assertions && result.assertions.length > 0) {
+            // Update the story with generated assertions
+            newStory = await puffinState.updateUserStory(newStory.id, {
+              inspectionAssertions: result.assertions
+            })
+            console.log(`[IPC] Auto-generated ${result.assertions.length} assertions for story: ${newStory.title}`)
+          }
+        } catch (genError) {
+          console.warn('[IPC] Failed to auto-generate assertions:', genError.message)
+          // Don't fail the story creation if assertion generation fails
+        }
+      }
 
       // Regenerate CLAUDE.md base (stories are in base context)
       const state = puffinState.getState()
@@ -926,6 +946,63 @@ function setupStateHandlers(ipcMain) {
       return { success: true, ...status }
     } catch (error) {
       console.error('[IPC] Failed to get database status:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ============ Toast History Handlers ============
+
+  // Get all toast history
+  ipcMain.handle('toast-history:getAll', async () => {
+    try {
+      const history = await puffinState.getToastHistory()
+      return { success: true, ...history }
+    } catch (error) {
+      console.error('[IPC] Failed to get toast history:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Add a toast to history
+  ipcMain.handle('toast-history:add', async (event, toast) => {
+    try {
+      const added = await puffinState.addToast(toast)
+      return { success: true, toast: added }
+    } catch (error) {
+      console.error('[IPC] Failed to add toast:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Delete a toast from history
+  ipcMain.handle('toast-history:delete', async (event, toastId) => {
+    try {
+      const deleted = await puffinState.deleteToast(toastId)
+      return { success: true, deleted }
+    } catch (error) {
+      console.error('[IPC] Failed to delete toast:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Delete toasts before a given timestamp
+  ipcMain.handle('toast-history:deleteBefore', async (event, timestamp) => {
+    try {
+      const deletedCount = await puffinState.deleteToastsBefore(timestamp)
+      return { success: true, deletedCount }
+    } catch (error) {
+      console.error('[IPC] Failed to delete toasts:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Clear all toast history
+  ipcMain.handle('toast-history:clear', async () => {
+    try {
+      const clearedCount = await puffinState.clearToastHistory()
+      return { success: true, clearedCount }
+    } catch (error) {
+      console.error('[IPC] Failed to clear toast history:', error)
       return { success: false, error: error.message }
     }
   })

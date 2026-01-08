@@ -40,6 +40,10 @@ All file operations must be scoped to this project directory and its subdirector
 
 The following stories have been completed and are available for reference:
 
+- **Create Toast History Plugin Base Structure**: As a developer, I want a toast history plugin with proper structure so that toast notifications can be tracked and displayed
+- **Implement Toast Persistence Storage**: As a developer, I want toasts to be stored in a file so that they persist across application restarts
+- **Display Toast History for Last 24 Hours**: As a developer, I want to view all toasts from the last 24 hours so that I can review recent notifications
+- **Delete Toasts Older Than 24 Hours**: As a developer, I want to delete toasts older than 24 hours so that I can clean up outdated notifications
 - **Drag and Drop Post-it Notes Between Days**: As a developer, I want to drag and drop post-it notes from one calendar day to another so that I can quickly reschedule or reorganize my notes without manual editing
 - **Copy and Paste Post-it Notes Between Days**: As a developer, I want to copy and paste post-it notes so that I can duplicate notes across multiple days without retyping the content
 - **Increase Post-it Note Display Capacity**: As a developer, I want to see more than 2 post-it notes displayed on calendar days so that I can view all my notes without truncation

@@ -209,6 +209,7 @@ class ToastManager {
    * @returns {Toast}
    */
   error(message, options = {}) {
+    console.error('[Toast Error]', message)
     return this.show(message, 'error', options)
   }
 
@@ -219,6 +220,7 @@ class ToastManager {
    * @returns {Toast}
    */
   warning(message, options = {}) {
+    console.warn('[Toast Warning]', message)
     return this.show(message, 'warning', options)
   }
 

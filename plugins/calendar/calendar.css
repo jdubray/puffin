@@ -1229,9 +1229,10 @@
 
 /* Story Item */
 .sprint-story-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto auto;
+  gap: 0.5rem;
   padding: 14px 16px;
   background: var(--bg-secondary, #252525);
   border: 1px solid var(--border-color, #3a3a3a);
@@ -1399,9 +1400,6 @@
     padding-right: 16px;
   }
 
-  .sprint-story-item {
-    flex-wrap: wrap;
-  }
 
   .sprint-story-badge {
     margin-top: 8px;

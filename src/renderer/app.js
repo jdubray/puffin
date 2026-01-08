@@ -94,6 +94,13 @@ class PuffinApp {
       return
     }
 
+    // Log errors and warnings to console for debugging
+    if (type === 'error') {
+      console.error('[Toast Error]', title, message || '')
+    } else if (type === 'warning') {
+      console.warn('[Toast Warning]', title, message || '')
+    }
+
     if (!this.toastContainer) {
       this.toastContainer = document.getElementById('toast-container')
     }

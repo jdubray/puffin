@@ -1,25 +1,13 @@
 {
   "name": "toast-history-plugin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "displayName": "Notifications",
-  "description": "Track and display toast notification history",
+  "description": "Display toast notification history (storage via core API)",
   "main": "index.js",
   "author": "Puffin",
   "license": "MIT",
   "keywords": ["toast", "notifications", "history", "alerts"],
   "extensionPoints": {
-    "actions": [
-      "getToastHistory",
-      "addToast",
-      "deleteToast",
-      "deleteOldToasts"
-    ],
-    "ipcHandlers": [
-      "toast-history:get-all",
-      "toast-history:add",
-      "toast-history:delete",
-      "toast-history:delete-before"
-    ],
     "components": ["toast-history-view"]
   },
   "contributes": {

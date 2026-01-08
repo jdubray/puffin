@@ -54,7 +54,7 @@ export class ToastHistoryComponent {
   }
 
   /**
-   * Load toast history from plugin backend
+   * Load toast history from core API
    */
   async loadToasts() {
     this.loading = true
@@ -62,8 +62,8 @@ export class ToastHistoryComponent {
     this.render()
 
     try {
-      const result = await window.puffin.plugins.invoke('toast-history-plugin', 'get-all')
-      this.toasts = result || []
+      const result = await window.puffin.toastHistory.getAll()
+      this.toasts = result?.toasts || []
       this.loading = false
       this.render()
     } catch (err) {
@@ -387,7 +387,7 @@ export class ToastHistoryComponent {
     if (!toastId) return
 
     try {
-      await window.puffin.plugins.invoke('toast-history-plugin', 'delete', { toastId })
+      await window.puffin.toastHistory.delete(toastId)
       // Remove from local state and re-render
       this.toasts = this.toasts.filter(t => t.id !== toastId)
       this.render()
@@ -409,7 +409,7 @@ export class ToastHistoryComponent {
 
     try {
       const cutoff = Date.now() - TWENTY_FOUR_HOURS
-      await window.puffin.plugins.invoke('toast-history-plugin', 'delete-before', { timestamp: cutoff })
+      await window.puffin.toastHistory.deleteBefore(cutoff)
       // Remove from local state and re-render
       this.toasts = this.toasts.filter(t => t.timestamp >= cutoff)
       this.render()

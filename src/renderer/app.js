@@ -140,7 +140,38 @@ class PuffinApp {
       setTimeout(() => this.removeToast(toast), duration)
     }
 
+    // Persist toast to history (non-blocking)
+    // This intercepts all toast creation and logs to storage automatically
+    this.persistToastToHistory(type, title, message)
+
     return toast
+  }
+
+  /**
+   * Persist a toast to history storage
+   * Non-blocking - failures don't affect toast display
+   * @param {string} type - Toast type (error, success, warning, info)
+   * @param {string} title - Toast title/message
+   * @param {string|null} message - Optional detailed message
+   * @private
+   */
+  persistToastToHistory(type, title, message) {
+    // Guard: Check if preload API is available
+    if (!window.puffin?.toastHistory?.add) {
+      return
+    }
+
+    // Combine title and message for storage
+    const fullMessage = message ? `${title}: ${message}` : title
+
+    window.puffin.toastHistory.add({
+      message: fullMessage,
+      type: type,
+      source: 'app'
+    }).catch(err => {
+      // Log but don't disrupt toast display
+      console.warn('[TOAST] Failed to persist toast to history:', err.message)
+    })
   }
 
   /**

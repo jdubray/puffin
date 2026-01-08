@@ -2423,6 +2423,39 @@ class PuffinState {
   }
 
   /**
+   * Delete a sprint without archiving to history
+   * Used for zero-progress sprints that user wants to discard
+   * Returns all stories to 'pending' status
+   *
+   * @param {string} sprintId - Sprint ID to delete
+   * @returns {boolean} True if deletion succeeded
+   * @throws {Error} If database not initialized
+   */
+  deleteSprint(sprintId) {
+    if (!this.database.isInitialized() || !this.database.sprints) {
+      throw new Error('Database not initialized - cannot delete sprint')
+    }
+
+    console.log(`[PUFFIN-STATE] Deleting sprint without archiving: ${sprintId}`)
+
+    // Use repository's delete method which handles:
+    // 1. Reset all stories to 'pending' status
+    // 2. Remove sprint_stories relationships
+    // 3. Delete the sprint (no archive)
+    const result = this.database.sprints.delete(sprintId)
+
+    if (result) {
+      // Invalidate cache
+      this.invalidateCache(['activeSprint'])
+      console.log(`[PUFFIN-STATE] Sprint deleted successfully: ${sprintId}`)
+    } else {
+      console.warn(`[PUFFIN-STATE] Sprint not found for deletion: ${sprintId}`)
+    }
+
+    return result
+  }
+
+  /**
    * Get sprint history with optional filters
    * @param {Object} options - Filter options
    */

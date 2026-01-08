@@ -400,6 +400,17 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Delete sprint without archiving (for zero-progress sprints)
+  // Returns all stories to pending status
+  ipcMain.handle('state:deleteSprint', async (event, sprintId) => {
+    try {
+      const result = puffinState.deleteSprint(sprintId)
+      return { success: result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // ============ Inspection Assertion Evaluation ============
 
   // Evaluate assertions for a user story

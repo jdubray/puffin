@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('puffin', {
     archiveSprintToHistory: (sprint) => ipcRenderer.invoke('state:archiveSprintToHistory', sprint),
     getSprintHistory: (options) => ipcRenderer.invoke('state:getSprintHistory', options),
     getArchivedSprint: (sprintId) => ipcRenderer.invoke('state:getArchivedSprint', sprintId),
+    deleteSprint: (sprintId) => ipcRenderer.invoke('state:deleteSprint', sprintId),
 
     // Inspection assertion evaluation
     evaluateStoryAssertions: (storyId) => ipcRenderer.invoke('state:evaluateStoryAssertions', storyId),

@@ -363,16 +363,37 @@ export class ModalManager {
   }
 
   /**
+   * Check if a sprint has any progress (completed or in-progress stories)
+   * @param {Object} sprint - Sprint object with storyProgress
+   * @returns {boolean} True if any story is completed or in-progress
+   */
+  hasAnySprintProgress(sprint) {
+    const storyProgress = sprint?.storyProgress || {}
+    return Object.values(storyProgress).some(p =>
+      p.status === 'completed' || p.status === 'in-progress'
+    )
+  }
+
+  /**
    * Render sprint close modal - prompts for title and description
+   * Shows different UI for zero-progress sprints vs sprints with work done
    */
   renderSprintClose(title, content, actions, data, state) {
-    title.textContent = 'Close Sprint'
-
     const sprint = data?.sprint || state.activeSprint
-    const userStories = state.userStories || []
     const storyCount = sprint?.stories?.length || 0
     const completedCount = Object.values(sprint?.storyProgress || {})
       .filter(p => p.status === 'completed').length
+    const hasProgress = this.hasAnySprintProgress(sprint)
+
+    // Show zero-progress UI if no stories completed AND no stories in-progress
+    if (!hasProgress && storyCount > 0) {
+      this.renderZeroProgressSprintClose(title, content, actions, sprint, storyCount)
+      return
+    }
+
+    // Normal close flow for sprints with progress
+    title.textContent = 'Close Sprint'
+    const userStories = state.userStories || []
 
     // Generate default title from date
     const now = new Date()
@@ -814,6 +835,368 @@ export class ModalManager {
         document.getElementById('sprint-close-confirm-btn')?.click()
       }
     })
+  }
+
+  /**
+   * Render zero-progress sprint close modal
+   * Shows alternative UI when sprint has no completed or in-progress stories
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} sprint - Sprint object
+   * @param {number} storyCount - Number of stories in sprint
+   */
+  renderZeroProgressSprintClose(title, content, actions, sprint, storyCount) {
+    title.textContent = 'Close Sprint'
+
+    content.innerHTML = `
+      <div class="sprint-close-content zero-progress">
+        <div class="zero-progress-alert">
+          <span class="zero-progress-icon" aria-hidden="true">⚠️</span>
+          <span class="zero-progress-message">This sprint has no completed work</span>
+        </div>
+
+        <div class="sprint-close-summary">
+          <span class="summary-stat">
+            <strong>0</strong> of <strong>${storyCount}</strong> stories completed
+          </span>
+          <span class="summary-stat secondary">
+            No implementation tasks started
+          </span>
+        </div>
+
+        <div class="zero-progress-prompt">
+          <p>What would you like to do with this sprint?</p>
+        </div>
+      </div>
+    `
+
+    // Three-button layout: [Keep Active (primary)] [Close Anyway] [Delete (danger)]
+    actions.innerHTML = `
+      <div class="zero-progress-actions">
+        <button class="btn primary" id="zero-progress-keep-btn">
+          Keep Active
+        </button>
+        <button class="btn secondary" id="zero-progress-close-btn">
+          Close Anyway
+        </button>
+        <button class="btn danger" id="zero-progress-delete-btn">
+          Delete
+        </button>
+      </div>
+    `
+
+    // Event listeners
+    document.getElementById('zero-progress-keep-btn').addEventListener('click', () => {
+      this.intents.hideModal()
+      this.showToast('Sprint kept active', 'info')
+    })
+
+    document.getElementById('zero-progress-close-btn').addEventListener('click', () => {
+      // Show the normal close modal with title/description form
+      // Re-render with a flag to skip zero-progress check
+      this._bypassZeroProgressCheck = true
+      const titleEl = document.querySelector('.modal-title')
+      const contentEl = document.querySelector('.modal-content')
+      const actionsEl = document.querySelector('.modal-actions')
+
+      if (titleEl && contentEl && actionsEl) {
+        // Get state from the current modal data
+        const state = { activeSprint: sprint, userStories: [] }
+        this.renderNormalSprintClose(titleEl, contentEl, actionsEl, { sprint }, state)
+      }
+      this._bypassZeroProgressCheck = false
+    })
+
+    document.getElementById('zero-progress-delete-btn').addEventListener('click', () => {
+      // Show delete confirmation modal
+      this.renderSprintDeleteConfirm(
+        document.querySelector('.modal-title'),
+        document.querySelector('.modal-content'),
+        document.querySelector('.modal-actions'),
+        sprint,
+        storyCount
+      )
+    })
+
+    // Focus the primary button for keyboard accessibility
+    setTimeout(() => {
+      document.getElementById('zero-progress-keep-btn')?.focus()
+    }, 100)
+  }
+
+  /**
+   * Render the normal sprint close form (title, description, commit options)
+   * Called when user clicks "Close Anyway" from zero-progress modal
+   */
+  renderNormalSprintClose(title, content, actions, data, state) {
+    title.textContent = 'Close Sprint'
+
+    const sprint = data?.sprint || state.activeSprint
+    const userStories = state.userStories || []
+    const storyCount = sprint?.stories?.length || 0
+    const completedCount = Object.values(sprint?.storyProgress || {})
+      .filter(p => p.status === 'completed').length
+
+    // Generate default title from date
+    const now = new Date()
+    const defaultTitle = `Sprint ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+
+    // Get commit message - prefer user edits, then pre-generated, then generate now
+    let commitMessage
+    const isGenerating = this._commitMessageGenerating
+
+    if (this._hasUserEditedMessage && this._userEditedCommitMessage !== null) {
+      commitMessage = this._userEditedCommitMessage
+    } else if (this._pendingCommitMessage) {
+      commitMessage = this._pendingCommitMessage
+    } else if (!isGenerating) {
+      commitMessage = this.generateSprintCommitMessage(sprint, userStories)
+    }
+
+    // Get git status (pre-fetched or defaults)
+    const gitStatus = this._gitStatus || { isRepo: false, hasChanges: false, branch: null, isMainBranch: false }
+    const gitStatusLoading = this._gitStatusLoading
+    const showGitSection = gitStatus.isRepo
+    const canCommit = gitStatus.isRepo && gitStatus.hasChanges
+    const commitEnabled = this._sprintCommitEnabled && canCommit
+
+    // Build git commit section HTML (simplified for Close Anyway flow)
+    let gitSectionHtml = ''
+    if (gitStatusLoading) {
+      gitSectionHtml = `
+        <div class="form-group sprint-git-section">
+          <div class="git-status-loading">
+            <span class="commit-spinner"></span>
+            Checking git status...
+          </div>
+        </div>
+      `
+    } else if (showGitSection) {
+      const noChangesHtml = !gitStatus.hasChanges ? `
+        <span class="no-changes-badge">No changes to commit</span>
+      ` : ''
+
+      gitSectionHtml = `
+        <div class="form-group sprint-git-section">
+          <div class="git-commit-header">
+            <label class="checkbox-label ${!canCommit ? 'disabled' : ''}">
+              <input type="checkbox"
+                     id="sprint-commit-checkbox"
+                     ${commitEnabled ? 'checked' : ''}
+                     ${!canCommit ? 'disabled' : ''}>
+              <span class="checkbox-text">Commit sprint changes</span>
+            </label>
+            ${noChangesHtml}
+          </div>
+
+          <div class="commit-message-area ${!commitEnabled ? 'hidden' : ''}" id="commit-message-container">
+            <div class="commit-message-header">
+              <label for="sprint-commit-message">Commit message:</label>
+            </div>
+            <div class="commit-message-container">
+              ${isGenerating ? `
+                <div class="commit-generating">
+                  <span class="commit-spinner"></span>
+                  Generating commit message...
+                </div>
+              ` : `
+                <textarea id="sprint-commit-message"
+                          class="commit-message-input"
+                          rows="4"
+                          placeholder="Commit message...">${this.escapeHtml(commitMessage || '')}</textarea>
+              `}
+            </div>
+          </div>
+        </div>
+      `
+    }
+
+    content.innerHTML = `
+      <div class="sprint-close-content">
+        <div class="sprint-close-summary">
+          <span class="summary-stat">
+            <strong>${completedCount}</strong> of <strong>${storyCount}</strong> stories completed
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label for="sprint-close-title">Sprint Title <span class="required">*</span></label>
+          <input type="text"
+                 id="sprint-close-title"
+                 class="sprint-close-input"
+                 placeholder="e.g., Authentication Feature Sprint"
+                 value="${this.escapeHtml(defaultTitle)}"
+                 maxlength="100"
+                 required>
+          <small class="form-hint">A short, memorable name for this sprint</small>
+        </div>
+
+        <div class="form-group">
+          <label for="sprint-close-description">Description <span class="optional">(optional)</span></label>
+          <textarea id="sprint-close-description"
+                    class="sprint-close-textarea"
+                    placeholder="Brief summary of what was accomplished..."
+                    rows="3"
+                    maxlength="500"></textarea>
+        </div>
+
+        ${gitSectionHtml}
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="sprint-close-cancel-btn">Cancel</button>
+      <button class="btn primary" id="sprint-close-confirm-btn">Close Sprint</button>
+    `
+
+    // Simplified event handlers for Close Anyway flow
+    const commitCheckbox = document.getElementById('sprint-commit-checkbox')
+    const commitMessageContainer = document.getElementById('commit-message-container')
+    if (commitCheckbox && commitMessageContainer) {
+      commitCheckbox.addEventListener('change', (e) => {
+        this._sprintCommitEnabled = e.target.checked
+        commitMessageContainer.classList.toggle('hidden', !e.target.checked)
+      })
+    }
+
+    document.getElementById('sprint-close-cancel-btn').addEventListener('click', () => {
+      this._pendingCommitMessage = null
+      this._userEditedCommitMessage = null
+      this._hasUserEditedMessage = false
+      this.intents.hideModal()
+    })
+
+    document.getElementById('sprint-close-confirm-btn').addEventListener('click', async () => {
+      const titleInput = document.getElementById('sprint-close-title')
+      const descriptionInput = document.getElementById('sprint-close-description')
+      const confirmBtn = document.getElementById('sprint-close-confirm-btn')
+
+      const sprintTitle = titleInput?.value?.trim()
+      const sprintDescription = descriptionInput?.value?.trim() || ''
+
+      if (!sprintTitle) {
+        titleInput?.focus()
+        this.showToast('Please enter a sprint title', 'error')
+        return
+      }
+
+      const commitCheckbox = document.getElementById('sprint-commit-checkbox')
+      const commitMessageTextarea = document.getElementById('sprint-commit-message')
+      const shouldCommit = commitCheckbox?.checked && !commitCheckbox?.disabled
+      const commitMessage = commitMessageTextarea?.value?.trim()
+
+      const closedSprint = { ...sprint, title: sprintTitle, description: sprintDescription }
+
+      if (confirmBtn) {
+        confirmBtn.disabled = true
+        confirmBtn.textContent = shouldCommit ? 'Closing & Committing...' : 'Closing...'
+      }
+
+      try {
+        this._pendingCommitMessage = null
+        this._userEditedCommitMessage = null
+        this._hasUserEditedMessage = false
+
+        this.intents.closeSprint(closedSprint)
+
+        if (shouldCommit && commitMessage) {
+          const commitResult = await window.puffin.git.stageFiles(['.'])
+          if (commitResult.success) {
+            const result = await window.puffin.git.commit(commitMessage)
+            if (result.success) {
+              this.intents.hideModal()
+              this.showToast('Sprint closed and changes committed', 'success')
+            } else {
+              this.intents.hideModal()
+              this.showToast(`Sprint closed but commit failed: ${result.error}`, 'warning')
+            }
+          }
+        } else {
+          this.intents.hideModal()
+          this.showToast('Sprint closed successfully', 'success')
+        }
+      } catch (error) {
+        console.error('[MODAL] Sprint close error:', error)
+        this.intents.hideModal()
+        this.showToast(`Sprint closed but an error occurred: ${error.message}`, 'warning')
+      }
+    })
+
+    // Focus the title input
+    setTimeout(() => {
+      document.getElementById('sprint-close-title')?.focus()
+    }, 100)
+  }
+
+  /**
+   * Render sprint delete confirmation modal
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} sprint - Sprint to delete
+   * @param {number} storyCount - Number of stories in sprint
+   */
+  renderSprintDeleteConfirm(title, content, actions, sprint, storyCount) {
+    title.textContent = 'Delete Sprint?'
+
+    // Generate sprint name for display
+    const now = new Date()
+    const sprintName = sprint?.title ||
+      `Sprint ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+
+    content.innerHTML = `
+      <div class="sprint-delete-confirm-content">
+        <div class="delete-warning-alert">
+          <span class="warning-icon" aria-hidden="true">⚠️</span>
+          <span class="warning-message">This action cannot be undone.</span>
+        </div>
+
+        <p class="delete-description">
+          The sprint "<strong>${this.escapeHtml(sprintName)}</strong>" will be permanently deleted.
+        </p>
+
+        <ul class="delete-consequences">
+          <li>
+            <span class="consequence-icon">📋</span>
+            <strong>${storyCount}</strong> user ${storyCount === 1 ? 'story' : 'stories'} will return to the pending story pool
+          </li>
+          <li>
+            <span class="consequence-icon">📊</span>
+            The sprint will <strong>NOT</strong> appear in your sprint history
+          </li>
+        </ul>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="sprint-delete-cancel-btn">Cancel</button>
+      <button class="btn danger" id="sprint-delete-confirm-btn">Delete Sprint</button>
+    `
+
+    // Event listeners
+    document.getElementById('sprint-delete-cancel-btn').addEventListener('click', () => {
+      // Go back to zero-progress modal
+      const titleEl = document.querySelector('.modal-title')
+      const contentEl = document.querySelector('.modal-content')
+      const actionsEl = document.querySelector('.modal-actions')
+
+      if (titleEl && contentEl && actionsEl) {
+        this.renderZeroProgressSprintClose(titleEl, contentEl, actionsEl, sprint, storyCount)
+      }
+    })
+
+    document.getElementById('sprint-delete-confirm-btn').addEventListener('click', () => {
+      // Trigger the delete sprint action
+      this.intents.deleteSprint()
+      this.intents.hideModal()
+      this.showToast('Sprint deleted - stories returned to pending', 'info')
+    })
+
+    // Focus the cancel button for safety (user must explicitly click delete)
+    setTimeout(() => {
+      document.getElementById('sprint-delete-cancel-btn')?.focus()
+    }, 100)
   }
 
   /**

@@ -125,7 +125,7 @@ export class StatePersistence {
       'ADD_STORIES_TO_BACKLOG',
       // Sprint actions
       'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN', 'ITERATE_SPRINT_PLAN',
-      'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
+      'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS', 'DELETE_SPRINT',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
       'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
       // Story generation tracking
@@ -228,8 +228,16 @@ export class StatePersistence {
             const newestStory = state.userStories[state.userStories.length - 1]
             if (newestStory) {
               try {
-                await window.puffin.state.addUserStory(newestStory)
-                console.log('[PERSIST-DEBUG] User story added:', newestStory.id)
+                const result = await window.puffin.state.addUserStory(newestStory)
+                console.log('[PERSIST-DEBUG] User story added:', newestStory.id, 'result:', result)
+                // Update in-memory state with auto-generated assertions from IPC handler
+                if (result.success && result.story?.inspectionAssertions?.length > 0) {
+                  const index = state.userStories.findIndex(s => s.id === result.story.id)
+                  if (index !== -1) {
+                    state.userStories[index].inspectionAssertions = result.story.inspectionAssertions
+                    console.log('[PERSIST-DEBUG] Updated in-memory story with auto-generated assertions:', result.story.inspectionAssertions.length)
+                  }
+                }
               } catch (e) {
                 // Story might already exist, try updating
                 await window.puffin.state.updateUserStory(newestStory.id, newestStory)
@@ -244,7 +252,7 @@ export class StatePersistence {
 
       // Persist sprint state changes (including criteria progress, story status, and assertions)
       if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
-           'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS',
+           'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS', 'DELETE_SPRINT',
            'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
            'UPDATE_SPRINT_STORY_ASSERTIONS'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
@@ -441,6 +449,48 @@ export class StatePersistence {
             console.error('[PERSIST-DEBUG] Failed to refresh user stories:', e)
           }
         }
+
+        // For DELETE_SPRINT: delete sprint without archiving, reset all stories to pending
+        if (normalizedType === 'DELETE_SPRINT') {
+          console.log('[PERSIST-DEBUG] DELETE_SPRINT - Deleting sprint without archiving')
+          console.log('[PERSIST-DEBUG] _sprintToDelete:', state._sprintToDelete)
+          console.log('[PERSIST-DEBUG] _resetToPendingStoryIds:', state._resetToPendingStoryIds)
+
+          // Delete the sprint from database (no archival)
+          if (state._sprintToDelete) {
+            console.log('[PERSIST-DEBUG] Deleting sprint:', state._sprintToDelete)
+            try {
+              await window.puffin.state.deleteSprint(state._sprintToDelete)
+              console.log('[PERSIST-DEBUG] Sprint deleted successfully')
+            } catch (e) {
+              console.error('[PERSIST-DEBUG] Failed to delete sprint:', e)
+            }
+          }
+
+          // Reset all stories to pending status
+          if (state._resetToPendingStoryIds?.length > 0) {
+            console.log('[PERSIST-DEBUG] Resetting stories to pending:', state._resetToPendingStoryIds)
+            for (const storyId of state._resetToPendingStoryIds) {
+              try {
+                await window.puffin.state.updateUserStory(storyId, { status: 'pending' })
+                console.log('[PERSIST-DEBUG] Reset story status to pending:', storyId)
+              } catch (e) {
+                console.error('[PERSIST-DEBUG] Failed to reset story status:', storyId, e)
+              }
+            }
+          }
+
+          // Refresh user stories from disk to ensure UI is in sync
+          try {
+            const storiesResult = await window.puffin.state.getUserStories()
+            if (storiesResult.success && Array.isArray(storiesResult.stories)) {
+              this.intents.loadUserStories(storiesResult.stories)
+              console.log('[PERSIST-DEBUG] User stories refreshed after delete:', storiesResult.stories.length, 'stories')
+            }
+          } catch (e) {
+            console.error('[PERSIST-DEBUG] Failed to refresh user stories:', e)
+          }
+        }
       }
 
       // Persist user stories and history when adding to backlog from derivation
@@ -471,11 +521,17 @@ export class StatePersistence {
           }
 
           let persistedCount = 0
+          const storiesWithGeneratedAssertions = []
           for (const story of newStories) {
             try {
               const result = await window.puffin.state.addUserStory(story)
               console.log('[PERSIST-DEBUG] Added story to database:', story.id, story.title, 'result:', result)
               persistedCount++
+              // Track stories that got auto-generated assertions from the IPC handler
+              if (result.success && result.story?.inspectionAssertions?.length > 0) {
+                storiesWithGeneratedAssertions.push(result.story)
+                console.log('[PERSIST-DEBUG] Story has auto-generated assertions:', result.story.inspectionAssertions.length)
+              }
             } catch (e) {
               console.error('[PERSIST-DEBUG] addUserStory failed:', e.message)
               // Story might already exist, update instead
@@ -489,6 +545,18 @@ export class StatePersistence {
             }
           }
           console.log('[PERSIST-DEBUG] Successfully persisted', persistedCount, 'of', newStories.length, 'stories')
+
+          // If any stories got auto-generated assertions, update the in-memory state
+          if (storiesWithGeneratedAssertions.length > 0) {
+            console.log('[PERSIST-DEBUG] Updating in-memory state with', storiesWithGeneratedAssertions.length, 'stories that have generated assertions')
+            for (const updatedStory of storiesWithGeneratedAssertions) {
+              const index = state.userStories.findIndex(s => s.id === updatedStory.id)
+              if (index !== -1) {
+                state.userStories[index].inspectionAssertions = updatedStory.inspectionAssertions
+                console.log('[PERSIST-DEBUG] Updated in-memory story with assertions:', updatedStory.id, updatedStory.inspectionAssertions.length)
+              }
+            }
+          }
         } else {
           console.warn('[PERSIST-DEBUG] No storyIds in action payload - stories may not persist!')
         }

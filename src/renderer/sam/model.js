@@ -1215,6 +1215,7 @@ export const addStoriesToBacklogAcceptor = model => proposal => {
         title: story.title,
         description: story.description,
         acceptanceCriteria: story.acceptanceCriteria,
+        inspectionAssertions: story.inspectionAssertions || [],
         status: 'pending',
         implementedOn: [],
         createdAt: Date.now(),
@@ -2168,6 +2169,44 @@ export const clearSprintWithDetailsAcceptor = model => proposal => {
 
     console.log('[CLEAR_SPRINT] Sprint close complete. model.userStories count:', model.userStories?.length || 0)
     console.log('[CLEAR_SPRINT] Completed stories:', completedStoryIds.length, 'Reset to pending:', resetToPendingStoryIds.length)
+  }
+}
+
+// Delete sprint without archiving (for zero-progress sprints)
+// Returns ALL stories to pending status, does not archive to history
+export const deleteSprintAcceptor = model => proposal => {
+  if (proposal?.type === 'DELETE_SPRINT') {
+    const sprint = model.activeSprint
+    if (!sprint) return
+
+    const { timestamp } = proposal.payload
+
+    console.log('[DELETE_SPRINT] Starting sprint deletion. Sprint ID:', sprint.id)
+    console.log('[DELETE_SPRINT] Sprint stories:', sprint.stories?.length || 0)
+
+    // Get all story IDs from the sprint
+    const storyIdsToReset = sprint.stories?.map(s => s.id) || []
+
+    // Reset ALL stories to pending (regardless of their current status)
+    for (const storyId of storyIdsToReset) {
+      const userStory = model.userStories?.find(s => s.id === storyId)
+      if (userStory) {
+        userStory.status = 'pending'
+        userStory.updatedAt = timestamp
+      }
+    }
+
+    // Track sprint for deletion (NOT archival)
+    model._sprintToDelete = sprint.id
+    model._resetToPendingStoryIds = storyIdsToReset
+
+    // Clear the active sprint
+    model.activeSprint = null
+
+    // Also clear the active implementation story
+    model.activeImplementationStory = null
+
+    console.log('[DELETE_SPRINT] Sprint deletion complete. Stories reset to pending:', storyIdsToReset.length)
   }
 }
 
@@ -3213,6 +3252,7 @@ export const acceptors = [
   startSprintPlanningAcceptor,
   clearSprintAcceptor,
   clearSprintWithDetailsAcceptor,
+  deleteSprintAcceptor,
   approvePlanAcceptor,
   setSprintPlanAcceptor,
   iterateSprintPlanAcceptor,

@@ -863,6 +863,61 @@ class SprintRepository extends BaseRepository {
   }
 
   /**
+   * Delete a sprint without archiving to history
+   * Used for zero-progress sprints that user wants to discard
+   *
+   * This method:
+   * 1. Resets ALL sprint stories to 'pending' status
+   * 2. Removes sprint_stories relationships
+   * 3. Deletes the sprint from sprints table
+   * 4. Does NOT add to sprint_history
+   *
+   * @param {string} id - Sprint ID to delete
+   * @returns {boolean} True if deletion succeeded, false if sprint not found
+   * @throws {Error} If transaction fails (automatically rolled back)
+   */
+  delete(id) {
+    console.log(`[SQL-TRACE] SPRINT_DELETE: id=${id}`)
+
+    const db = this.getDb()
+    const existing = this.findById(id)
+
+    if (!existing) {
+      console.log(`[SQL-TRACE] SPRINT_DELETE ABORTED: sprint ${id} not found`)
+      return false
+    }
+
+    console.log(`[SQL-TRACE] SPRINT_DELETE: sprint found, status=${existing.status}`)
+
+    return this.immediateTransaction(() => {
+      const storyIds = this.getStoryIds(id)
+
+      console.log(`[SQL-TRACE] SPRINT_DELETE: resetting ${storyIds.length} stories to pending`)
+
+      // Reset ALL stories to 'pending' status (not just incomplete ones)
+      if (storyIds.length > 0) {
+        this._updateStoryStatuses(storyIds, 'pending')
+      }
+
+      // Remove sprint-story relationships
+      const deleteRelSql = 'DELETE FROM sprint_stories WHERE sprint_id = ?'
+      this.traceQuery('DELETE_SPRINT_STORIES', deleteRelSql, [id], () => {
+        db.prepare(deleteRelSql).run(id)
+      })
+
+      // Delete the sprint (NOT archived to sprint_history)
+      const deleteSprintSql = 'DELETE FROM sprints WHERE id = ?'
+      const result = this.traceQuery('DELETE_SPRINT', deleteSprintSql, [id], () => {
+        return db.prepare(deleteSprintSql).run(id)
+      })
+
+      console.log(`[SQL-TRACE] SPRINT_DELETE COMPLETE: sprint ${id} deleted, ${storyIds.length} stories returned to pending`)
+
+      return result.changes > 0
+    })
+  }
+
+  /**
    * Find archived sprints
    *
    * @param {Object} [options] - Query options

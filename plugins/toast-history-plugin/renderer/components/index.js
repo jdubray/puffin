@@ -4,8 +4,10 @@
  * Exports all renderer components for the toast history plugin.
  */
 
-export { ToastHistoryComponent } from './ToastHistoryComponent.js'
+import { ToastHistoryComponent } from './ToastHistoryComponent.js'
 
-export default {
-  ToastHistoryComponent
-}
+// Named export
+export { ToastHistoryComponent }
+
+// Default export (matches calendar plugin pattern)
+export default ToastHistoryComponent

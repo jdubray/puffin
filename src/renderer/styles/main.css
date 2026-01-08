@@ -348,6 +348,21 @@ select {
   background: var(--bg-hover);
 }
 
+.btn.danger {
+  background: var(--color-error);
+  color: white;
+  border: 1px solid var(--color-error);
+}
+
+.btn.danger:hover {
+  background: #c53030;
+  border-color: #c53030;
+}
+
+.btn.danger:focus {
+  box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.3);
+}
+
 .btn.small {
   padding: 0.375rem 0.75rem;
   font-size: 0.8125rem;

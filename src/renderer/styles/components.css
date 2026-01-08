@@ -3944,6 +3944,136 @@
   color: var(--text-muted);
 }
 
+/* Zero Progress Sprint Close Modal */
+.sprint-close-content.zero-progress {
+  text-align: center;
+}
+
+.zero-progress-alert {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
+}
+
+.zero-progress-icon {
+  font-size: 1.25rem;
+}
+
+.zero-progress-message {
+  font-weight: 500;
+  color: #d69e2e;
+  font-size: 0.9375rem;
+}
+
+.sprint-close-content.zero-progress .sprint-close-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem;
+}
+
+.sprint-close-summary .summary-stat.secondary {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.zero-progress-prompt {
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.zero-progress-prompt p {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.zero-progress-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.zero-progress-actions .btn {
+  min-width: 100px;
+}
+
+/* Sprint Delete Confirmation Modal */
+.sprint-delete-confirm-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.delete-warning-alert {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: rgba(229, 62, 62, 0.1);
+  border: 1px solid rgba(229, 62, 62, 0.3);
+  border-radius: var(--radius-sm);
+}
+
+.delete-warning-alert .warning-icon {
+  font-size: 1.25rem;
+}
+
+.delete-warning-alert .warning-message {
+  font-weight: 500;
+  color: var(--color-error);
+  font-size: 0.9375rem;
+}
+
+.delete-description {
+  text-align: center;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.delete-description strong {
+  color: var(--text-primary);
+}
+
+.delete-consequences {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--bg-tertiary);
+  padding: 1rem;
+  border-radius: var(--radius-sm);
+}
+
+.delete-consequences li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.delete-consequences .consequence-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.delete-consequences strong {
+  color: var(--text-primary);
+}
+
 /* Sprint Stories Modal */
 .modal:has(.sprint-stories-modal) {
   min-width: 600px;

@@ -864,6 +864,15 @@ export const clearSprintWithDetails = (title, description = '') => ({
   }
 })
 
+// Delete sprint without archiving (for zero-progress sprints)
+// Returns all stories to pending status
+export const deleteSprint = () => ({
+  type: 'DELETE_SPRINT',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
 // Show sprint close modal
 export const showSprintCloseModal = () => ({
   type: 'SHOW_MODAL',

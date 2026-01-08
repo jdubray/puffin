@@ -5,6 +5,8 @@
  * Shows up to 3 branches with overflow indicator for additional branches.
  */
 
+import { escapeHtml, escapeAttr } from '../../utils/escape.js'
+
 const MAX_VISIBLE_BRANCHES = 3
 
 class BranchIndicator {
@@ -20,6 +22,11 @@ class BranchIndicator {
     this.onBranchClick = options.onBranchClick || null
     this.getBranchColor = options.getBranchColor || this.defaultGetBranchColor.bind(this)
     this.element = null
+
+    // Track event listeners for cleanup
+    this.boundListeners = []
+    this.documentListeners = []
+    this.currentPopover = null
 
     this.create()
   }
@@ -69,6 +76,10 @@ class BranchIndicator {
    * Render branch indicators
    */
   render() {
+    // Clean up existing listeners before re-rendering
+    this.cleanupListeners()
+    this.closePopover()
+
     if (!this.branches || this.branches.length === 0) {
       this.element.innerHTML = ''
       this.element.style.display = 'none'
@@ -148,12 +159,36 @@ class BranchIndicator {
   }
 
   /**
+   * Clean up all tracked event listeners
+   */
+  cleanupListeners() {
+    // Remove element listeners
+    this.boundListeners.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler)
+    })
+    this.boundListeners = []
+
+    // Remove document listeners
+    this.documentListeners.forEach(({ event, handler }) => {
+      document.removeEventListener(event, handler)
+    })
+    this.documentListeners = []
+  }
+
+  /**
    * Bind event listeners
    */
   bindEvents() {
     this.element.querySelectorAll('.branch-pill').forEach(pill => {
-      pill.addEventListener('click', (e) => this.handleClick(e, pill))
-      pill.addEventListener('keydown', (e) => this.handleKeyDown(e, pill))
+      const clickHandler = (e) => this.handleClick(e, pill)
+      const keydownHandler = (e) => this.handleKeyDown(e, pill)
+
+      pill.addEventListener('click', clickHandler)
+      pill.addEventListener('keydown', keydownHandler)
+
+      // Track for cleanup
+      this.boundListeners.push({ element: pill, event: 'click', handler: clickHandler })
+      this.boundListeners.push({ element: pill, event: 'keydown', handler: keydownHandler })
     })
   }
 
@@ -201,20 +236,36 @@ class BranchIndicator {
   }
 
   /**
+   * Close the current popover and clean up its listeners
+   */
+  closePopover() {
+    if (this.currentPopover && this.currentPopover.parentNode) {
+      this.currentPopover.remove()
+    }
+    this.currentPopover = null
+
+    // Remove document listeners associated with the popover
+    this.documentListeners.forEach(({ event, handler }) => {
+      document.removeEventListener(event, handler)
+    })
+    this.documentListeners = []
+  }
+
+  /**
    * Show overflow popover with all branches
    * @param {HTMLElement} trigger - Trigger element
    */
   showOverflowPopover(trigger) {
-    // Remove existing popover
-    const existing = document.querySelector('.branch-overflow-popover')
-    if (existing) {
-      existing.remove()
-    }
+    // Close any existing popover first
+    this.closePopover()
 
     const popover = document.createElement('div')
     popover.className = 'branch-overflow-popover'
     popover.setAttribute('role', 'listbox')
     popover.setAttribute('aria-label', 'Additional branches')
+
+    // Store reference for cleanup
+    this.currentPopover = popover
 
     const overflowBranches = this.branches.slice(MAX_VISIBLE_BRANCHES)
 
@@ -255,9 +306,9 @@ class BranchIndicator {
     popover.style.left = `${left}px`
     popover.style.top = `${top}px`
 
-    // Bind popover events
+    // Bind popover item click events
     popover.querySelectorAll('.branch-popover-item').forEach(item => {
-      item.addEventListener('click', (e) => {
+      const itemClickHandler = (e) => {
         const branchIndex = parseInt(item.dataset.branchIndex, 10)
         const branch = this.branches[branchIndex]
 
@@ -265,27 +316,35 @@ class BranchIndicator {
           this.onBranchClick(branch, e)
         }
 
-        popover.remove()
-      })
+        this.closePopover()
+      }
+
+      item.addEventListener('click', itemClickHandler)
+      // Track popover item listeners for cleanup
+      this.boundListeners.push({ element: item, event: 'click', handler: itemClickHandler })
     })
 
     // Close on outside click
     const closeHandler = (e) => {
       if (!popover.contains(e.target) && !trigger.contains(e.target)) {
-        popover.remove()
-        document.removeEventListener('click', closeHandler)
+        this.closePopover()
       }
     }
-    setTimeout(() => document.addEventListener('click', closeHandler), 0)
 
     // Close on escape
     const escHandler = (e) => {
       if (e.key === 'Escape') {
-        popover.remove()
-        document.removeEventListener('keydown', escHandler)
+        this.closePopover()
         trigger.focus()
       }
     }
+
+    // Track document listeners for cleanup
+    this.documentListeners.push({ event: 'click', handler: closeHandler })
+    this.documentListeners.push({ event: 'keydown', handler: escHandler })
+
+    // Add document listeners with slight delay for click handler
+    setTimeout(() => document.addEventListener('click', closeHandler), 0)
     document.addEventListener('keydown', escHandler)
   }
 
@@ -312,10 +371,7 @@ class BranchIndicator {
    * @returns {string}
    */
   escapeHtml(text) {
-    if (!text) return ''
-    const div = document.createElement('div')
-    div.textContent = text
-    return div.innerHTML
+    return escapeHtml(text)
   }
 
   /**
@@ -324,29 +380,25 @@ class BranchIndicator {
    * @returns {string}
    */
   escapeAttr(text) {
-    if (!text) return ''
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
+    return escapeAttr(text)
   }
 
   /**
-   * Destroy the component
+   * Destroy the component and clean up all resources
    */
   destroy() {
-    // Remove any popovers
-    const popover = document.querySelector('.branch-overflow-popover')
-    if (popover) {
-      popover.remove()
-    }
+    // Clean up all tracked event listeners
+    this.cleanupListeners()
 
+    // Close and remove popover
+    this.closePopover()
+
+    // Remove the main element
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element)
     }
     this.element = null
+    this.branches = []
   }
 }
 
@@ -378,18 +430,19 @@ BranchIndicator.renderInline = function(branches, options = {}) {
     html += `
       <div class="branch-pill"
            role="listitem"
-           title="${name}"
+           title="${escapeAttr(name)}"
            style="--branch-color: ${color}">
-        <span class="branch-pill-text">${displayName}</span>
+        <span class="branch-pill-text">${escapeHtml(displayName)}</span>
       </div>
     `
   })
 
   if (overflowCount > 0) {
+    const overflowTooltip = branches.slice(maxVisible).map(b => b.name || b).join(', ')
     html += `
       <div class="branch-pill branch-pill-overflow"
            role="listitem"
-           title="${branches.slice(maxVisible).map(b => b.name || b).join(', ')}">
+           title="${escapeAttr(overflowTooltip)}">
         <span class="branch-pill-text">+${overflowCount}</span>
       </div>
     `

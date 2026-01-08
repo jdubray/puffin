@@ -43,6 +43,8 @@ The following stories have been completed and are available for reference:
 - **Drag and Drop Post-it Notes Between Days**: As a developer, I want to drag and drop post-it notes from one calendar day to another so that I can quickly reschedule or reorganize my notes without manual editing
 - **Copy and Paste Post-it Notes Between Days**: As a developer, I want to copy and paste post-it notes so that I can duplicate notes across multiple days without retyping the content
 - **Increase Post-it Note Display Capacity**: As a developer, I want to see more than 2 post-it notes displayed on calendar days so that I can view all my notes without truncation
+- **Fix XSS Vulnerability in BranchIndicator.renderInline**: As a developer, I want the BranchIndicator.renderInline method to escape HTML in branch names so that malicious branch names cannot execute arbitrary scripts
+- **Fix Memory Leak in BranchIndicator Popover Event Listeners**: As a developer, I want the BranchIndicator component to properly clean up event listeners so that memory leaks do not occur when components are destroyed while popovers are open
 - **Calendar Plugin Base Structure**: As a developer, I want a calendar plugin that integrates with Puffin's plugin system so that I can view my development activity organized by date
 - **Week and Month View Toggle**: As a developer, I want to switch between weekly and monthly calendar views so that I can see my work at different time scales
 - **Sprint History Panel on Day Selection**: As a developer, I want to click on a calendar day and see the sprints I worked on in a left panel so that I can review my daily development activity

@@ -355,15 +355,17 @@ class NoteEditor {
 
   /**
    * Copy the note to clipboard state
+   * Copies the original saved note data, not unsaved form modifications
    */
   copyNote() {
     if (!this.note) return
 
-    // Get current text and color from the form (in case user modified them)
+    // Copy the original saved note data to avoid copying unsaved modifications
+    // This ensures users can only copy content that actually exists in storage
     const noteData = {
       id: this.note.id,
-      text: this.textArea.value,
-      color: this.selectedColor
+      text: this.note.text,
+      color: this.note.color || 'yellow'
     }
 
     // Visual feedback on the button

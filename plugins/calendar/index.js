@@ -59,6 +59,7 @@ const CalendarPlugin = {
     context.registerIpcHandler('createNote', this.handleCreateNote.bind(this))
     context.registerIpcHandler('updateNote', this.handleUpdateNote.bind(this))
     context.registerIpcHandler('deleteNote', this.handleDeleteNote.bind(this))
+    context.registerIpcHandler('moveNote', this.handleMoveNote.bind(this))
     context.registerIpcHandler('getNotesForRange', this.handleGetNotesForRange.bind(this))
 
     // Register actions for programmatic access
@@ -373,6 +374,49 @@ const CalendarPlugin = {
   },
 
   /**
+   * Move a note from one date to another
+   * @param {string} noteId - Note ID
+   * @param {string} sourceDate - Source date (YYYY-MM-DD)
+   * @param {string} targetDate - Target date (YYYY-MM-DD)
+   * @returns {Promise<Object>} Result with moved note
+   */
+  async moveNote(noteId, sourceDate, targetDate) {
+    const notes = await this.getAllNotes()
+
+    // Find the note in source date
+    if (!notes[sourceDate]) {
+      return { success: false, error: 'Source date not found' }
+    }
+
+    const noteIndex = notes[sourceDate].findIndex(n => n.id === noteId)
+    if (noteIndex === -1) {
+      return { success: false, error: 'Note not found' }
+    }
+
+    // Get the note and remove from source
+    const note = notes[sourceDate].splice(noteIndex, 1)[0]
+
+    // Clean up empty source date
+    if (notes[sourceDate].length === 0) {
+      delete notes[sourceDate]
+    }
+
+    // Add to target date
+    if (!notes[targetDate]) {
+      notes[targetDate] = []
+    }
+
+    note.updatedAt = new Date().toISOString()
+    notes[targetDate].push(note)
+
+    await this.saveAllNotes(notes)
+
+    this.context.log.debug(`Moved note ${noteId} from ${sourceDate} to ${targetDate}`)
+
+    return { success: true, note }
+  },
+
+  /**
    * Get notes for a date range
    * @param {string} startDate - Start date (YYYY-MM-DD)
    * @param {string} endDate - End date (YYYY-MM-DD)
@@ -426,6 +470,10 @@ const CalendarPlugin = {
 
   async handleDeleteNote({ dateStr, noteId }) {
     return this.deleteNote(dateStr, noteId)
+  },
+
+  async handleMoveNote({ noteId, sourceDate, targetDate }) {
+    return this.moveNote(noteId, sourceDate, targetDate)
   },
 
   async handleGetNotesForRange({ startDate, endDate }) {

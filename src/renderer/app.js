@@ -66,13 +66,34 @@ class PuffinApp {
 
   /**
    * Show a toast notification
-   * @param {Object} options - Toast options
-   * @param {string} options.type - 'error' | 'success' | 'warning' | 'info'
-   * @param {string} options.title - Toast title
-   * @param {string} options.message - Toast message
-   * @param {number} options.duration - Duration in ms (default: 5000, 0 = persistent)
+   * Supports two call signatures:
+   *   showToast({ type, title, message, duration }) - full options object
+   *   showToast(message, type, duration) - simple string message
+   *
+   * @param {Object|string} optionsOrMessage - Toast options object or message string
+   * @param {string} typeArg - Type when using string signature: 'error' | 'success' | 'warning' | 'info'
+   * @param {number} durationArg - Duration when using string signature
    */
-  showToast({ type = 'info', title, message, duration = 5000 }) {
+  showToast(optionsOrMessage, typeArg = 'info', durationArg = 3000) {
+    // Handle both signatures: object { type, title, message, duration } or string (message, type, duration)
+    let type, title, message, duration
+    if (typeof optionsOrMessage === 'string') {
+      // String signature: showToast(message, type, duration)
+      type = typeArg
+      title = optionsOrMessage
+      message = null
+      duration = durationArg
+    } else if (typeof optionsOrMessage === 'object' && optionsOrMessage !== null) {
+      // Object signature: showToast({ type, title, message, duration })
+      type = optionsOrMessage.type || 'info'
+      title = optionsOrMessage.title
+      message = optionsOrMessage.message
+      duration = optionsOrMessage.duration !== undefined ? optionsOrMessage.duration : 5000
+    } else {
+      console.warn('[TOAST] Invalid showToast argument:', optionsOrMessage)
+      return
+    }
+
     if (!this.toastContainer) {
       this.toastContainer = document.getElementById('toast-container')
     }
@@ -3208,27 +3229,6 @@ Keep it concise but informative. Use markdown formatting.`
     }
   }
 
-  /**
-   * Show a toast notification
-   */
-  showToast(message, type = 'info', duration = 3000) {
-    const container = document.getElementById('toast-container')
-    if (!container) return
-
-    const toast = document.createElement('div')
-    toast.className = `toast ${type}`
-    toast.textContent = message
-
-    toast.addEventListener('click', () => toast.remove())
-    toast.style.cursor = 'pointer'
-    toast.title = 'Click to dismiss'
-
-    container.appendChild(toast)
-
-    setTimeout(() => {
-      toast.remove()
-    }, duration)
-  }
 
   /**
    * Escape HTML for safe rendering

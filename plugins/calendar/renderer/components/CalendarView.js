@@ -922,7 +922,7 @@ class CalendarView {
   }
 
   /**
-   * Handle overflow indicator click - selects the day to show all notes in panel
+   * Handle overflow indicator click - shows all notes for the day
    * @param {Event} e - Click event
    * @param {HTMLElement} indicator - Clicked overflow indicator element
    */
@@ -932,26 +932,144 @@ class CalendarView {
     const dateStr = indicator.dataset.date
     if (!dateStr) return
 
-    // Simulate day selection to open the side panel with all notes
-    const date = new Date(dateStr + 'T00:00:00')
     const activity = this.activityData[dateStr] || { hasActivity: false }
+    const notes = activity.notes || []
 
-    this.handleDaySelect({
-      date: dateStr,
-      dayOfMonth: date.getDate(),
-      dayOfWeek: date.getDay(),
-      activity
-    })
+    // Show all notes in a list modal
+    this.showNotesListModal(dateStr, notes)
 
     // Dispatch custom event for overflow click (allows external handling)
     const event = new CustomEvent('calendar:notes-overflow-clicked', {
       detail: {
         dateStr,
-        noteCount: activity.notes?.length || 0
+        noteCount: notes.length
       },
       bubbles: true
     })
     this.container.dispatchEvent(event)
+  }
+
+  /**
+   * Show a modal listing all notes for a day
+   * @param {string} dateStr - Date string (YYYY-MM-DD)
+   * @param {Array} notes - Array of notes
+   */
+  showNotesListModal(dateStr, notes) {
+    // Remove existing modal if present
+    const existingModal = this.container.querySelector('.notes-list-modal-overlay')
+    if (existingModal) {
+      existingModal.remove()
+    }
+
+    const date = new Date(dateStr + 'T00:00:00')
+    const dateDisplay = date.toLocaleDateString('default', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+
+    const overlay = document.createElement('div')
+    overlay.className = 'notes-list-modal-overlay'
+    overlay.setAttribute('role', 'dialog')
+    overlay.setAttribute('aria-modal', 'true')
+    overlay.setAttribute('aria-labelledby', 'notes-list-title')
+
+    overlay.innerHTML = `
+      <div class="notes-list-modal-backdrop" aria-hidden="true"></div>
+      <div class="notes-list-modal">
+        <div class="notes-list-modal-header">
+          <div>
+            <h3 id="notes-list-title">All Notes</h3>
+            <span class="notes-list-modal-date">${this.escapeHtml(dateDisplay)}</span>
+          </div>
+          <button class="notes-list-modal-close" type="button" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="notes-list-modal-content">
+          ${notes.map((note, index) => {
+            const colorScheme = CalendarView.NOTE_COLORS[note.color] || CalendarView.NOTE_COLORS.yellow
+            return `
+              <div class="notes-list-item"
+                   tabindex="0"
+                   role="button"
+                   data-note-index="${index}"
+                   data-note-id="${note.id}"
+                   style="background: ${colorScheme.bg}; border-left: 4px solid ${colorScheme.border}">
+                <span class="notes-list-item-text">${this.escapeHtml(note.text)}</span>
+              </div>
+            `
+          }).join('')}
+        </div>
+        <div class="notes-list-modal-footer">
+          <button type="button" class="notes-list-add-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add note
+          </button>
+        </div>
+      </div>
+    `
+
+    this.container.appendChild(overlay)
+
+    // Bind events
+    const closeBtn = overlay.querySelector('.notes-list-modal-close')
+    const backdrop = overlay.querySelector('.notes-list-modal-backdrop')
+    const addBtn = overlay.querySelector('.notes-list-add-btn')
+
+    const closeModal = () => {
+      overlay.classList.add('notes-list-modal-closing')
+      setTimeout(() => overlay.remove(), 150)
+    }
+
+    closeBtn.addEventListener('click', closeModal)
+    backdrop.addEventListener('click', closeModal)
+
+    // Handle Escape key
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        closeModal()
+        document.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+
+    // Handle add note button
+    addBtn.addEventListener('click', () => {
+      closeModal()
+      this.openNoteEditor(dateStr, null)
+    })
+
+    // Handle note item clicks
+    overlay.querySelectorAll('.notes-list-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const noteIndex = parseInt(item.dataset.noteIndex, 10)
+        const note = notes[noteIndex]
+        if (note) {
+          closeModal()
+          this.openNoteEditor(dateStr, note)
+        }
+      })
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          item.click()
+        }
+      })
+    })
+
+    // Focus first item
+    const firstItem = overlay.querySelector('.notes-list-item')
+    if (firstItem) {
+      firstItem.focus()
+    }
   }
 
   /**
@@ -1175,16 +1293,14 @@ class CalendarView {
       return
     }
 
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-
     const cell = e.currentTarget
 
     // Check if this is a valid drop target (not the source)
     if (dateStr === this.dragSourceDate) {
+      e.dataTransfer.dropEffect = 'none'
       cell.classList.add('drop-target-invalid')
       cell.classList.remove('drop-target-valid')
-      return
+      return // Don't call preventDefault - disallows drop
     }
 
     // Check max notes limit
@@ -1192,9 +1308,14 @@ class CalendarView {
     const noteCount = activity.notes?.length || 0
 
     if (noteCount >= MAX_NOTES_PER_DAY) {
+      e.dataTransfer.dropEffect = 'none'
       cell.classList.add('drop-target-invalid')
       cell.classList.remove('drop-target-valid')
+      // Don't call preventDefault - disallows drop
     } else {
+      // Only allow drop on valid targets
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
       cell.classList.add('drop-target-valid')
       cell.classList.remove('drop-target-invalid')
     }
@@ -1237,6 +1358,7 @@ class CalendarView {
       dragData = JSON.parse(dataStr)
     } catch (err) {
       console.error('[CalendarView] Failed to parse drag data:', err)
+      toastManager.error('Failed to move note - please try again')
       return
     }
 
@@ -1456,10 +1578,17 @@ class CalendarView {
 
   /**
    * Paste the copied note to a target date
-   * @param {string} targetDate - Target date string
+   * @param {string} targetDate - Target date string (YYYY-MM-DD)
    */
   async pasteNote(targetDate) {
     if (!this.copiedNote) {
+      return
+    }
+
+    // Validate date format (YYYY-MM-DD)
+    if (!targetDate || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      console.error('[CalendarView] Invalid target date format:', targetDate)
+      toastManager.error('Invalid date - please select a valid day')
       return
     }
 

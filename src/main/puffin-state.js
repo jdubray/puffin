@@ -34,6 +34,7 @@ const GUI_DESIGNS_DIR = 'gui-definitions'
 const UI_GUIDELINES_FILE = 'ui-guidelines.json'
 const STYLESHEETS_DIR = 'stylesheets'
 const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directory
+const ACTIVE_SPRINT_FILE = 'active-sprint.json' // JSON backup of active sprint
 
 class PuffinState {
   constructor() {

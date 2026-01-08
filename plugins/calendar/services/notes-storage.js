@@ -173,11 +173,13 @@ function createNote(dateStr, text, color, notesData = {}) {
 
   // Get existing notes for the date
   const existingNotes = notesData[dateStr] || []
-  let warning = null
 
-  // Check note limit
+  // Enforce note limit - reject if at maximum
   if (existingNotes.length >= MAX_NOTES_PER_DAY) {
-    warning = `You have many notes for this day (${existingNotes.length}). Consider consolidating.`
+    return {
+      success: false,
+      error: `Maximum ${MAX_NOTES_PER_DAY} notes per day. Please delete a note first.`
+    }
   }
 
   // Create new note

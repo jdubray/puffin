@@ -38,6 +38,11 @@ export class ToastHistoryComponent {
     this.toasts = []
     this.loading = true
     this.error = null
+
+    // Track event listeners for cleanup (prevents memory leaks on re-render)
+    this.boundListeners = []
+    // Track active timeouts for cleanup
+    this.copyFeedbackTimeouts = []
   }
 
   /**
@@ -101,6 +106,9 @@ export class ToastHistoryComponent {
    * Render the component
    */
   render() {
+    // Clean up existing listeners before re-rendering to prevent memory leaks
+    this.cleanupListeners()
+
     if (this.loading) {
       this.container.innerHTML = `
         <div class="toast-history-view">
@@ -311,25 +319,42 @@ export class ToastHistoryComponent {
   }
 
   /**
+   * Clean up all tracked event listeners
+   * Called before re-rendering to prevent memory leaks
+   */
+  cleanupListeners() {
+    this.boundListeners.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler)
+    })
+    this.boundListeners = []
+  }
+
+  /**
    * Bind event listeners
    */
   bindEvents() {
     this.bindRefreshEvent()
 
-    // Copy button events
+    // Copy button events - track each listener
     this.container.querySelectorAll('[data-action="copy"]').forEach(btn => {
-      btn.addEventListener('click', (e) => this.handleCopy(e))
+      const handler = (e) => this.handleCopy(e)
+      btn.addEventListener('click', handler)
+      this.boundListeners.push({ element: btn, event: 'click', handler })
     })
 
-    // Delete button events
+    // Delete button events - track each listener
     this.container.querySelectorAll('[data-action="delete"]').forEach(btn => {
-      btn.addEventListener('click', (e) => this.handleDelete(e))
+      const handler = (e) => this.handleDelete(e)
+      btn.addEventListener('click', handler)
+      this.boundListeners.push({ element: btn, event: 'click', handler })
     })
 
-    // Delete all old button
+    // Delete all old button - track listener
     const deleteAllBtn = this.container.querySelector('[data-action="delete-all-old"]')
     if (deleteAllBtn) {
-      deleteAllBtn.addEventListener('click', () => this.handleDeleteAllOld())
+      const handler = () => this.handleDeleteAllOld()
+      deleteAllBtn.addEventListener('click', handler)
+      this.boundListeners.push({ element: deleteAllBtn, event: 'click', handler })
     }
   }
 
@@ -339,7 +364,9 @@ export class ToastHistoryComponent {
   bindRefreshEvent() {
     const refreshBtn = this.container.querySelector('.toast-history-refresh-btn')
     if (refreshBtn) {
-      refreshBtn.addEventListener('click', () => this.loadToasts())
+      const handler = () => this.loadToasts()
+      refreshBtn.addEventListener('click', handler)
+      this.boundListeners.push({ element: refreshBtn, event: 'click', handler })
     }
   }
 
@@ -372,10 +399,16 @@ export class ToastHistoryComponent {
     const originalText = btn.innerHTML
     btn.innerHTML = '✓'
     btn.classList.add('copied')
-    setTimeout(() => {
+
+    // Track timeout for cleanup on component destruction
+    const timeoutId = setTimeout(() => {
       btn.innerHTML = originalText
       btn.classList.remove('copied')
+      // Remove from tracking array after execution
+      this.copyFeedbackTimeouts = this.copyFeedbackTimeouts.filter(id => id !== timeoutId)
     }, 2000)
+
+    this.copyFeedbackTimeouts.push(timeoutId)
   }
 
   /**
@@ -456,6 +489,14 @@ export class ToastHistoryComponent {
    * Destroy the component
    */
   destroy() {
+    // Clear all tracked timeouts to prevent callbacks after destruction
+    this.copyFeedbackTimeouts.forEach(id => clearTimeout(id))
+    this.copyFeedbackTimeouts = []
+
+    // Remove all tracked event listeners
+    this.cleanupListeners()
+
+    // Clear DOM
     this.container.innerHTML = ''
   }
 }

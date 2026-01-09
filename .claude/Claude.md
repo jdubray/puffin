@@ -40,6 +40,7 @@ All file operations must be scoped to this project directory and its subdirector
 
 The following stories have been completed and are available for reference:
 
+- **Fix Event Listener Memory Leak in ToastHistoryComponent**: As a developer, I want event listeners in ToastHistoryComponent to be properly cleaned up so that memory leaks do not occur on re-renders
 - **Consolidate Toast History Architecture**: As a developer, I want the toast history plugin to delegate to core IPC handlers so that there is a single source of truth for toast storage
 - **Implement Toast Creation Interception**: As a developer, I want toast creation to be automatically intercepted and logged so that all toasts are persisted without manual intervention
 - **Fix Toast History IPC Channel Alignment**: As a developer, I want consistent IPC channel names between plugin and core handlers so that toast history operations work correctly

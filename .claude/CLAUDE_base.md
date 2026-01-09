@@ -48,6 +48,7 @@ The following stories have been completed and are available for reference:
 - **Display Toast History for Last 24 Hours**: As a developer, I want to view all toasts from the last 24 hours so that I can review recent notifications
 - **Delete Toasts Older Than 24 Hours**: As a developer, I want to delete toasts older than 24 hours so that I can clean up outdated notifications
 - **Copy Toast Content to Clipboard**: As a developer, I want to copy toast content to clipboard so that I can paste it elsewhere for debugging
+- **Delete Unfinished Sprint Option**: As a developer, I want the option to delete a sprint with no progress so that I can remove sprints I've decided not to work on without cluttering my sprint history
 - **Keep Sprint Active Option**: As a developer, I want the option to keep an unfinished sprint active so that I can continue working on it at a later time
 - **Return User Stories to Pending Pool on Sprint Delete**: As a developer, I want incomplete user stories to return to the pending story pool when I delete a sprint so that I can assign them to a new sprint later
 - **Handle Zero Progress Sprint Close**: As a developer, I want the sprint close panel to detect when no implementation tasks have been completed (0% progress) so that I can be prompted with appropriate options for unstarted or incomplete sprints

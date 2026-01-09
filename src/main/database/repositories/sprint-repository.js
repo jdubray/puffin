@@ -985,27 +985,6 @@ class SprintRepository extends BaseRepository {
     }
   }
 
-  // ===== DELETE OPERATIONS =====
-
-  /**
-   * Delete a sprint (and its story relationships)
-   *
-   * Uses immediateTransaction for atomic deletion.
-   *
-   * @param {string} id - Sprint ID
-   * @returns {boolean} True if deleted
-   * @throws {Error} If transaction fails (automatically rolled back)
-   */
-  delete(id) {
-    const db = this.getDb()
-
-    return this.immediateTransaction(() => {
-      // Foreign key cascade will handle sprint_stories
-      const result = db.prepare('DELETE FROM sprints WHERE id = ?').run(id)
-      return result.changes > 0
-    })
-  }
-
   /**
    * Delete an archived sprint
    *

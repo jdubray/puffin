@@ -1674,7 +1674,6 @@ ${content}`
       if (progressCallback) progressCallback(msg)
     }
 
-    progress('Starting inspection assertion generation...')
 
     const systemPrompt = `You are generating inspection assertions for user stories. These assertions will be automatically evaluated against the codebase to verify implementation.
 
@@ -1742,7 +1741,7 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
-        '--max-turns', '1',
+        '--max-turns', '40',  // Allow multiple turns for tool use
         '-'
       ]
 
@@ -1750,7 +1749,7 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
       const spawnOptions = this.getSpawnOptions(cwd)
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
 
-      progress('Spawning Claude CLI...')
+      progress(`Generating assertions for ${stories.length} stories...`)
 
       const proc = spawn('claude', args, spawnOptions)
 
@@ -1766,7 +1765,7 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
       let resultText = ''
       let resolved = false
 
-      // Timeout after 2 minutes
+      // Timeout after 5 minutes (multi-turn with tool use takes longer)
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true
@@ -1774,11 +1773,10 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
           progress('ERROR: Timeout')
           resolve({ success: false, error: 'Assertion generation timed out' })
         }
-      }, 120000)
+      }, 300000)
 
       proc.stdin.write(fullPrompt)
       proc.stdin.end()
-      progress('Prompt sent, waiting for response...')
 
       proc.stdout.on('data', (chunk) => {
         buffer += chunk.toString()
@@ -1789,17 +1787,26 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
           if (!line.trim()) continue
           try {
             const json = JSON.parse(line)
+
+            // Extract text from assistant messages
             if (json.type === 'assistant' && json.message?.content) {
-              for (const block of json.message.content) {
-                if (block.type === 'text') {
+              const content = json.message.content
+              const blocks = Array.isArray(content) ? content : [content]
+              for (const block of blocks) {
+                if (block.type === 'text' && block.text) {
                   resultText += block.text
+                } else if (typeof block === 'string') {
+                  resultText += block
                 }
               }
             }
             // Handle result type message which contains the final response
             if (json.type === 'result' && json.result) {
-              progress(`Received result message, length: ${json.result.length}`)
               resultText = json.result
+            }
+            // Handle content_block_delta for streaming responses
+            if (json.type === 'content_block_delta' && json.delta?.text) {
+              resultText += json.delta.text
             }
           } catch (e) {
             // Ignore parse errors for non-JSON lines
@@ -1819,22 +1826,25 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
         if (resolved) return
         resolved = true
 
-        progress(`Process exited with code: ${code}`)
-
         // Process remaining buffer (may contain the result message)
         if (buffer.trim()) {
           try {
             const json = JSON.parse(buffer)
             if (json.type === 'result' && json.result) {
-              progress(`Found result in remaining buffer, length: ${json.result.length}`)
               resultText = json.result
             }
+            if (json.type === 'assistant' && json.message?.content) {
+              const blocks = Array.isArray(json.message.content) ? json.message.content : [json.message.content]
+              for (const block of blocks) {
+                if (block.type === 'text' && block.text) {
+                  resultText += block.text
+                }
+              }
+            }
           } catch (e) {
-            // Expected: Remaining buffer may not be valid JSON
+            // Buffer may not be valid JSON
           }
         }
-
-        progress(`Result text length: ${resultText.length}`)
 
         if (!resultText.trim()) {
           resolve({ success: false, error: 'No response received from Claude' })
@@ -1843,10 +1853,22 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
 
         // Try to parse the JSON response
         try {
-          // Clean up the response - remove markdown code blocks if present
+          // Clean up the response - extract JSON from markdown code blocks or raw text
           let cleanedResult = resultText.trim()
-          if (cleanedResult.startsWith('```')) {
+
+          // Try to extract JSON from markdown code block first
+          const jsonBlockMatch = cleanedResult.match(/```(?:json)?\s*([\s\S]*?)```/)
+          if (jsonBlockMatch) {
+            cleanedResult = jsonBlockMatch[1].trim()
+          } else if (cleanedResult.startsWith('```')) {
+            // Fallback: remove code block markers
             cleanedResult = cleanedResult.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+          } else {
+            // Try to find JSON object in the text (starts with { ends with })
+            const jsonMatch = cleanedResult.match(/\{[\s\S]*\}/)
+            if (jsonMatch) {
+              cleanedResult = jsonMatch[0]
+            }
           }
 
           const assertions = JSON.parse(cleanedResult)

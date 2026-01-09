@@ -350,6 +350,9 @@ export class ModalManager {
       case 'assertion-failures':
         this.renderAssertionFailures(modalTitle, modalContent, modalActions, modal.data)
         break
+      case 'alert':
+        this.renderAlert(modalTitle, modalContent, modalActions, modal.data)
+        break
       default:
         console.warn('Unknown modal type:', modal.type)
         // Provide a way to close unknown modals
@@ -896,9 +899,9 @@ export class ModalManager {
       // Show the normal close modal with title/description form
       // Re-render with a flag to skip zero-progress check
       this._bypassZeroProgressCheck = true
-      const titleEl = document.querySelector('.modal-title')
-      const contentEl = document.querySelector('.modal-content')
-      const actionsEl = document.querySelector('.modal-actions')
+      const titleEl = document.getElementById('modal-title')
+      const contentEl = document.getElementById('modal-content')
+      const actionsEl = document.getElementById('modal-actions')
 
       if (titleEl && contentEl && actionsEl) {
         // Get state from the current modal data
@@ -911,9 +914,9 @@ export class ModalManager {
     document.getElementById('zero-progress-delete-btn').addEventListener('click', () => {
       // Show delete confirmation modal
       this.renderSprintDeleteConfirm(
-        document.querySelector('.modal-title'),
-        document.querySelector('.modal-content'),
-        document.querySelector('.modal-actions'),
+        document.getElementById('modal-title'),
+        document.getElementById('modal-content'),
+        document.getElementById('modal-actions'),
         sprint,
         storyCount
       )
@@ -1177,9 +1180,9 @@ export class ModalManager {
     // Event listeners
     document.getElementById('sprint-delete-cancel-btn').addEventListener('click', () => {
       // Go back to zero-progress modal
-      const titleEl = document.querySelector('.modal-title')
-      const contentEl = document.querySelector('.modal-content')
-      const actionsEl = document.querySelector('.modal-actions')
+      const titleEl = document.getElementById('modal-title')
+      const contentEl = document.getElementById('modal-content')
+      const actionsEl = document.getElementById('modal-actions')
 
       if (titleEl && contentEl && actionsEl) {
         this.renderZeroProgressSprintClose(titleEl, contentEl, actionsEl, sprint, storyCount)
@@ -2962,6 +2965,33 @@ export class ModalManager {
       } else if (e.key === 'Escape') {
         prompt.querySelector('.cancel-waive-btn').click()
       }
+    })
+  }
+
+  /**
+   * Render a generic alert modal
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - Alert data { title, message, confirmLabel }
+   */
+  renderAlert(title, content, actions, data) {
+    const { title: alertTitle, message, confirmLabel } = data || {}
+
+    title.textContent = alertTitle || 'Alert'
+
+    content.innerHTML = `
+      <div class="alert-modal-content">
+        <p class="alert-message">${this.escapeHtml(message || 'An alert occurred.')}</p>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn primary" id="alert-confirm-btn">${this.escapeHtml(confirmLabel || 'OK')}</button>
+    `
+
+    document.getElementById('alert-confirm-btn')?.addEventListener('click', () => {
+      this.intents.hideModal()
     })
   }
 

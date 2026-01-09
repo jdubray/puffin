@@ -4,6 +4,22 @@
 1. [Overview](#overview)
 2. [Getting Started](#getting-started)
 3. [Core Features](#core-features)
+   - [Project Configuration](#project-configuration)
+   - [Branched Conversation Management](#branched-conversation-management)
+   - [Prompt Editor & Submission](#prompt-editor--submission)
+   - [Real-Time Response Viewing](#real-time-response-viewing)
+   - [GUI Designer](#gui-designer)
+   - [Backlog Management](#backlog-management)
+   - [AI-Powered Story Derivation](#ai-powered-story-derivation)
+   - [Architecture Documentation](#architecture-documentation)
+   - [Puffin Plugins](#puffin-plugins)
+   - [Claude Code Plugins and Skills](#claude-code-plugins-and-skills)
+   - [Calendar Plugin](#calendar-plugin)
+   - [Toast History Plugin](#toast-history-plugin)
+   - [Image Attachments for Prompts](#image-attachments-for-prompts)
+   - [Sprint Close with Git Commit](#sprint-close-with-git-commit)
+   - [Sprint Management Enhancements](#sprint-management-enhancements)
+   - [CLI Output Monitoring](#cli-output-monitoring)
 4. [User Interface](#user-interface)
 5. [Workflows](#workflows)
 6. [Advanced Features](#advanced-features)
@@ -510,6 +526,25 @@ Puffin ships with four built-in plugins that are automatically loaded on startup
   - Quick document access
 - **Access**: Click "Docs" in the navigation bar
 
+**5. Calendar** 📅
+- **Purpose**: Track development activity over time with a visual calendar view
+- **Features**:
+  - Week and month view toggle
+  - Sprint history display for selected days
+  - Git branch activity tracking
+  - Post-it notes for annotations
+  - Drag-and-drop note organization
+- **Access**: Click "Calendar" in the navigation bar
+
+**6. Toast History** 🔔
+- **Purpose**: View and manage notification history
+- **Features**:
+  - 24-hour notification history
+  - Copy notification content to clipboard
+  - Delete old notifications
+  - Type-based filtering (success, error, warning, info)
+- **Access**: Click "Notifications" in the navigation bar
+
 #### Plugin Architecture
 
 Plugins in Puffin follow a consistent structure:
@@ -573,6 +608,287 @@ You can create your own Claude Code plugins by:
 2. Adding a `manifest.json` with plugin metadata
 3. Adding a `skill.md` with the skill content (markdown format)
 4. Enabling the plugin in your configuration
+
+---
+
+### Calendar Plugin
+
+Track your development activity over time with an interactive calendar view that integrates sprints, git history, and personal notes.
+
+![Calendar View](screenshots/calendar-view.png)
+
+#### Week and Month View Toggle
+
+Switch between different time perspectives to see your work at various scales:
+
+- **Week View**: Shows 7 days with detailed daily information
+- **Month View**: Shows the full month grid with compact indicators
+- **Auto-responsive**: Automatically switches based on screen width (1200px breakpoint)
+- **Persistent Preference**: Your view choice is remembered across sessions
+
+#### Sprint History Panel
+
+Click any calendar day to see sprint activity in a left panel:
+
+- **Archived Sprints**: Sprints closed on that date
+- **Active Sprints**: Sprints that were active during that date
+- **Activity Indicators**: Visual markers showing sprint progress
+- **Collapsible Panel**: Save screen space by collapsing the panel (state persists)
+- **Sprint Details**: Click a sprint to open the sprint modal with user stories
+
+#### Git Branch History Display
+
+See which git branches you worked on for each calendar day:
+
+- **Branch Pills**: Colored indicators for each branch
+- **Branch Popover**: Click to see full branch details
+- **Activity Tracking**: Shows branches with commits on that date
+- **Overflow Indicator**: "+N" badge when many branches are present
+
+#### Post-it Notes for Calendar Days
+
+Attach personal notes and reminders to any calendar day:
+
+![Post-it Notes](screenshots/postit-notes.png)
+
+**Creating Notes:**
+- Click the "+" button on any day cell
+- Enter your note text
+- Choose from 6 colors: yellow, pink, blue, green, orange, purple
+- Notes display with a handwriting-style appearance
+
+**Managing Notes:**
+- **Edit**: Click a note to modify its content or color
+- **Delete**: Use the delete button in the note editor
+- **Limit**: Up to 10 notes per day with overflow indicator
+
+#### Drag and Drop Notes Between Days
+
+Quickly reorganize your notes by dragging them to different days:
+
+1. Click and hold a post-it note
+2. Drag to the target day
+3. Release to move the note
+4. Visual feedback shows valid drop targets
+
+#### Copy and Paste Notes
+
+Duplicate notes across multiple days:
+
+- **Copy**: `Ctrl+C` (or `Cmd+C` on Mac) while a note is selected
+- **Paste**: `Ctrl+V` (or `Cmd+V`) on the target day
+- Preserves note content and color
+- Visual feedback confirms copy/paste operations
+
+---
+
+### Toast History Plugin
+
+View and manage your notification history with the Toast History plugin.
+
+![Toast History](screenshots/toast-history.png)
+
+#### Notification Tracking
+
+All toast notifications in Puffin are automatically logged:
+
+- **Success** ✓: Operation completed successfully (green)
+- **Error** ✗: Something went wrong (red)
+- **Warning** ⚠: Attention needed (orange)
+- **Info** ℹ: General information (blue)
+
+#### 24-Hour History View
+
+Notifications are organized into two sections:
+
+- **Last 24 Hours**: Recent notifications with full details
+- **Older**: Notifications older than 24 hours (collapsible)
+
+#### Managing Notifications
+
+**Copy to Clipboard:**
+- Click the 📋 button on any notification
+- Copies formatted text: `[TYPE] TIMESTAMP\nMESSAGE`
+- Visual checkmark confirms successful copy
+
+**Delete Old Notifications:**
+- Click 🗑 on individual old notifications
+- Use "Delete All" to remove all notifications older than 24 hours
+- Confirmation dialog prevents accidental deletion
+
+**Refresh:**
+- Click the ↻ button to reload notification history
+- Useful after background operations
+
+---
+
+### Image Attachments for Prompts
+
+Attach images to your prompts for visual context when communicating with Claude.
+
+![Image Attachments](screenshots/image-attachments.png)
+
+#### Drag and Drop Images
+
+1. Drag image files from your file explorer
+2. Drop them onto the prompt textarea
+3. Visual drop zone indicator shows when dragging over
+4. Multiple images can be dropped at once
+
+**Supported Formats:** PNG, JPG, JPEG, WebP
+
+#### Paste Images from Clipboard
+
+1. Copy an image (screenshot, from browser, etc.)
+2. Focus the prompt textarea
+3. Press `Ctrl+V` (or `Cmd+V` on Mac)
+4. Images are extracted and attached automatically
+
+#### Image Preview and Management
+
+**Thumbnail Gallery:**
+- Attached images appear as 60×60px thumbnails below the prompt
+- Filename displayed for identification
+- Click thumbnail to view full-size preview
+
+**Full-Size Preview:**
+- Click any thumbnail to open large preview modal
+- Filename displayed below image
+- Click outside or press Escape to close
+
+**Remove Images:**
+- Click the × button on any thumbnail to remove it
+- Removed images are deleted from temporary storage
+
+#### Attachment Limits
+
+- **Maximum 5 images** per prompt
+- **Maximum 50MB** per image file
+- Error message displayed if limits exceeded
+
+#### How Images Are Sent to Claude
+
+When you submit a prompt with images:
+1. Images are saved to temporary storage (`.puffin/temp-images/`)
+2. Image paths are included with the prompt
+3. Claude receives the visual context with your text
+4. Temporary files are cleaned up automatically after 24 hours
+
+---
+
+### Sprint Close with Git Commit
+
+Optionally commit your code changes when closing a sprint for a clean development workflow.
+
+![Sprint Close Commit](screenshots/sprint-close-commit.png)
+
+#### Auto-Generated Commit Messages
+
+When closing a sprint, Puffin automatically generates a conventional commit message:
+
+**Format:**
+```
+feat(scope): complete "Sprint Title" (N/M stories)
+
+Completed:
+- Story 1 title
+- Story 2 title
+
+Incomplete:
+- Story 3 title (if any)
+```
+
+**Scope Detection:**
+- `ui`: Sprint focused on UI/frontend work
+- `backend`: API and server-side work
+- `test`: Testing-focused sprints
+- `fix`: Bug fix sprints
+- `sprint`: Generic scope for mixed work
+
+#### Using the Commit Feature
+
+1. **Click "Close Sprint"** on your active sprint
+2. **Review the Summary**: See completed vs incomplete stories
+3. **Enable Commit** (if git changes detected):
+   - Check "Commit sprint changes"
+   - Review the auto-generated message
+   - Edit the message if needed
+4. **Submit**: Sprint closes and git commit executes
+
+#### Editing the Commit Message
+
+- The commit message textarea shows the generated message
+- Click to edit and customize as needed
+- Your edits are preserved if you toggle the commit checkbox
+- Use the copy button to copy the message to clipboard
+
+#### Git Status Detection
+
+The commit option only appears when:
+- The project is a git repository
+- There are uncommitted changes (staged, unstaged, or untracked)
+- Git is available on the system
+
+**Status Display:**
+- Shows current branch name
+- Displays count of changed files
+- Indicates if working tree is clean
+
+#### Error Handling
+
+- Git errors don't prevent sprint closure
+- If commit fails, sprint still closes successfully
+- Warning toast notifies you of commit failure
+- Full error details logged to console
+
+---
+
+### Sprint Management Enhancements
+
+Enhanced sprint lifecycle management with options for incomplete and abandoned sprints.
+
+#### Handling Zero-Progress Sprints
+
+When closing a sprint with no completed work, Puffin offers specialized options:
+
+![Zero Progress Sprint](screenshots/zero-progress-sprint.png)
+
+**Detection:**
+- Triggered when no stories are completed or in-progress
+- Shows alert: "This sprint has no completed work"
+- Displays: "0 of N stories completed, No implementation tasks started"
+
+**Options:**
+
+1. **Keep Active** 🔄
+   - Sprint remains open for future work
+   - No changes to story assignments
+   - Toast confirms: "Sprint kept active"
+
+2. **Delete** 🗑
+   - Removes the sprint entirely
+   - Stories return to pending pool
+   - Sprint won't appear in history
+   - Requires confirmation
+
+#### Delete Sprint Confirmation
+
+When deleting a sprint, a confirmation dialog ensures you understand the consequences:
+
+- **Warning Icon**: Clear visual indicator
+- **Impact List**:
+  - "N user stories will return to pending pool"
+  - "Sprint will NOT appear in history"
+- **Irreversible**: "This action cannot be undone"
+- **Safety Default**: Cancel button is focused
+
+#### Stories Return to Pending Pool
+
+When a sprint is deleted:
+- All assigned stories return to "Pending" status
+- Stories are immediately available for new sprints
+- Story history and content preserved
+- No data loss except sprint association
 
 ---
 
@@ -830,11 +1146,13 @@ All Puffin data is stored in the `.puffin/` directory within your target project
 ├── architecture.md          # Architecture documentation
 ├── puffin.db                # SQLite database (user stories, sprints, etc.)
 ├── ui-guidelines.json       # Design system settings
+├── toast-history.json       # Toast notification history
 ├── gui-definitions/         # Saved GUI designs
 │   ├── main-layout.json
 │   └── user-profile.json
 ├── gui-designs/             # GUI design files
 ├── plugins/                 # Claude Code plugins/skills
+├── temp-images/             # Temporary image attachments (auto-cleaned)
 └── stylesheets/             # CSS stylesheet storage
 ```
 
@@ -1017,6 +1335,9 @@ For Claude CLI issues:
 |----------|--------|---------|
 | `Ctrl+Shift+D` | Toggle SAM Debugger | Global |
 | `Ctrl/Cmd+Enter` | Submit Prompt | Prompt Editor |
+| `Ctrl/Cmd+V` | Paste Image | Prompt Editor |
+| `Ctrl/Cmd+C` | Copy Post-it Note | Calendar |
+| `Ctrl/Cmd+V` | Paste Post-it Note | Calendar |
 | `Escape` | Close Modal | Modal Dialogs |
 | `Delete`/`Backspace` | Delete Element | GUI Designer |
 | `Tab`/`Shift+Tab` | Navigate Focus | Forms |
@@ -1087,17 +1408,25 @@ Puffin uses Electron with modern web technologies:
 **Backlog**: Collection of user stories waiting to be implemented
 **Branch**: Organized conversation topic in Puffin
 **Branch-Specific Context**: Dynamic context injected into prompts based on active branch (UI guidelines, architecture docs, etc.)
+**Calendar Plugin**: Plugin for viewing development activity over time with sprints, branches, and notes
 **Claude Code Plugin**: A skill package that injects context into Claude's prompts for specific tasks
+**Conventional Commits**: Commit message format used for auto-generated sprint commits (e.g., `feat(scope): message`)
 **GUI Definition**: Saved visual design that can be reused
+**Image Attachment**: Image file attached to a prompt for visual context (max 5 per prompt)
+**Post-it Note**: Personal note attached to a calendar day for reminders and annotations
 **Puffin Plugin**: An extension that adds views, commands, or functionality to Puffin itself
 **SAM Pattern**: State-Action-Model architecture pattern used by Puffin
 **Session ID**: Unique identifier for conversation continuity with Claude
 **Skill**: Context content (markdown) injected into CLAUDE.md to enhance Claude's capabilities
+**Sprint Close**: Process of archiving a sprint with optional git commit
 **SQLite**: Lightweight database engine used by Puffin for persistent storage
 **Start Implementation**: Action that generates an implementation prompt for selected stories
+**Toast History**: Plugin that tracks and displays all notification history
+**Toast Notification**: Temporary popup message showing success, error, warning, or info status
 **Tool Execution**: When Claude uses tools like file reading, writing, or bash commands
 **User Story**: Structured requirement describing user needs and acceptance criteria
+**Zero-Progress Sprint**: Sprint with no completed or in-progress stories, eligible for deletion
 
 ---
 
-*This manual covers Puffin version 1.1.0. For the latest updates and features, check the GitHub repository and release notes.*
+*This manual covers Puffin version 1.2.0. For the latest updates and features, check the GitHub repository and release notes.*

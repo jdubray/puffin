@@ -7,6 +7,8 @@
 
 const { dialog, shell } = require('electron')
 const { marked } = require('marked')
+const fs = require('fs')
+const path = require('path')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
 const { DeveloperProfileManager } = require('./developer-profile')
@@ -26,6 +28,29 @@ let projectPath = null
 
 // Maximum allowed image file size (50MB)
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024
+
+// Windows reserved filenames that can cause git issues
+const WINDOWS_RESERVED_NAMES = ['nul', 'con', 'prn', 'aux', 'com1', 'com2', 'com3', 'com4', 'lpt1', 'lpt2', 'lpt3']
+
+/**
+ * Clean up Windows reserved filenames from the project root
+ * These files can be accidentally created and prevent git operations
+ */
+function cleanupWindowsReservedFiles() {
+  if (!projectPath) return
+
+  for (const name of WINDOWS_RESERVED_NAMES) {
+    const filePath = path.join(projectPath, name)
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+        console.log(`[GIT-CLEANUP] Removed Windows reserved file: ${name}`)
+      }
+    } catch (e) {
+      // Ignore errors - file might be locked or not exist
+    }
+  }
+}
 
 /**
  * Setup all IPC handlers
@@ -404,7 +429,7 @@ function setupStateHandlers(ipcMain) {
   // Returns all stories to pending status
   ipcMain.handle('state:deleteSprint', async (event, sprintId) => {
     try {
-      const result = puffinState.deleteSprint(sprintId)
+      const result = await puffinState.deleteSprint(sprintId)
       return { success: result }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1658,6 +1683,9 @@ function setupGitHandlers(ipcMain) {
   // Stage files
   ipcMain.handle('git:stageFiles', async (event, files) => {
     try {
+      // Clean up Windows reserved files before staging
+      cleanupWindowsReservedFiles()
+
       const result = await gitService.stageFiles(files)
       if (result.success) {
         return { success: true, staged: result.staged }
@@ -1684,6 +1712,9 @@ function setupGitHandlers(ipcMain) {
   // Create a commit
   ipcMain.handle('git:commit', async (event, { message, sessionId }) => {
     try {
+      // Clean up Windows reserved files before commit
+      cleanupWindowsReservedFiles()
+
       const result = await gitService.commit(message)
       if (result.success) {
         // Log the operation with session link if provided

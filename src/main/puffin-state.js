@@ -2431,7 +2431,7 @@ class PuffinState {
    * @returns {boolean} True if deletion succeeded
    * @throws {Error} If database not initialized
    */
-  deleteSprint(sprintId) {
+  async deleteSprint(sprintId) {
     if (!this.database.isInitialized() || !this.database.sprints) {
       throw new Error('Database not initialized - cannot delete sprint')
     }
@@ -2447,6 +2447,19 @@ class PuffinState {
     if (result) {
       // Invalidate cache
       this.invalidateCache(['activeSprint'])
+
+      // Also clear the JSON backup file
+      const sprintPath = path.join(this.puffinPath, ACTIVE_SPRINT_FILE)
+      try {
+        await fs.unlink(sprintPath)
+        console.log(`[PUFFIN-STATE] Cleared active-sprint.json backup`)
+      } catch (e) {
+        // Ignore if file doesn't exist
+        if (e.code !== 'ENOENT') {
+          console.warn(`[PUFFIN-STATE] Failed to clear active-sprint.json: ${e.message}`)
+        }
+      }
+
       console.log(`[PUFFIN-STATE] Sprint deleted successfully: ${sprintId}`)
     } else {
       console.warn(`[PUFFIN-STATE] Sprint not found for deletion: ${sprintId}`)

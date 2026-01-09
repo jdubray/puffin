@@ -86,8 +86,9 @@ class PuffinApp {
     } else if (typeof optionsOrMessage === 'object' && optionsOrMessage !== null) {
       // Object signature: showToast({ type, title, message, duration })
       type = optionsOrMessage.type || 'info'
-      title = optionsOrMessage.title
-      message = optionsOrMessage.message
+      // If no title but message provided, use message as title (backwards compat)
+      title = optionsOrMessage.title || optionsOrMessage.message || ''
+      message = optionsOrMessage.title ? optionsOrMessage.message : null
       duration = optionsOrMessage.duration !== undefined ? optionsOrMessage.duration : 5000
     } else {
       console.warn('[TOAST] Invalid showToast argument:', optionsOrMessage)
@@ -1585,9 +1586,11 @@ Please provide specific file locations and line numbers where issues are found, 
 
         // Show toast for user feedback
         const statusLabel = data.status === 'completed' ? 'complete' : 'in progress'
+        const storyTitle = data.story?.title || 'Story'
         this.showToast({
           type: 'success',
-          message: `Story marked as ${statusLabel}`,
+          title: storyTitle,
+          message: `Marked as ${statusLabel}`,
           duration: 2000
         })
       })

@@ -99,6 +99,9 @@ export function computeState(model) {
     _completedStoryIdsToSync: model._completedStoryIdsToSync || [],
     _resetToPendingStoryIds: model._resetToPendingStoryIds || [],
 
+    // Sprint deletion state (for DELETE_SPRINT persistence)
+    _sprintToDelete: model._sprintToDelete || null,
+
     // Sprint history state
     sprintHistory: model.sprintHistory || [],
     selectedSprintFilter: model.selectedSprintFilter || null,

@@ -196,6 +196,27 @@
               </fieldset>
 
               <fieldset class="options-fieldset">
+                <legend>Coding Standards</legend>
+                <div class="form-group">
+                  <label for="coding-standard-language">Language Template</label>
+                  <select id="coding-standard-language">
+                    <option value="none">None (No coding standard)</option>
+                    <option value="javascript">JavaScript/TypeScript</option>
+                    <option value="python">Python</option>
+                    <option value="java">Java</option>
+                    <option value="c">C</option>
+                    <option value="cpp">C++</option>
+                  </select>
+                  <small class="form-hint">Select a language to populate the coding standard template below.</small>
+                </div>
+                <div class="form-group">
+                  <label for="coding-standard-content">Coding Standard Rules</label>
+                  <textarea id="coding-standard-content" rows="12" placeholder="Select a language above to populate with defaults, or write your own coding standards..."></textarea>
+                  <small class="form-hint">Customize the coding standards that Claude will follow. These will be included in all branch contexts.</small>
+                </div>
+              </fieldset>
+
+              <fieldset class="options-fieldset">
                 <legend>UX Style Guidelines</legend>
 
                 <div class="options-grid">

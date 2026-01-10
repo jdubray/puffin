@@ -1758,6 +1758,10 @@ class PuffinState {
       if (!config.uxStyle) {
         config.uxStyle = this.getDefaultUxStyle()
       }
+      // Ensure codingStandard exists for older configs
+      if (!config.codingStandard) {
+        config.codingStandard = { language: 'none', content: '' }
+      }
       return config
     } catch {
       // Create default config
@@ -1778,6 +1782,10 @@ class PuffinState {
           }
         },
         uxStyle: this.getDefaultUxStyle(),
+        codingStandard: {
+          language: 'none',
+          content: ''
+        },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }

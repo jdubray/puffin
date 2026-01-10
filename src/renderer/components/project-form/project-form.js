@@ -14,6 +14,148 @@
 // Debounce delay for input changes (ms)
 const INPUT_DEBOUNCE_DELAY = 500
 
+// Default coding standard templates for each language
+const CODING_STANDARD_DEFAULTS = {
+  javascript: `# JavaScript/TypeScript Coding Standards
+
+When reviewing or generating JavaScript/TypeScript code, follow these rules:
+
+## File Naming
+- **Source files:** Use kebab-case (e.g., \`user-service.js\`, \`api-client.ts\`)
+- **Component files:** Use kebab-case (e.g., \`user-profile.js\`, \`data-table.tsx\`)
+- **Test files:** Use \`.test.js\` or \`.spec.js\` suffix (e.g., \`user-service.test.js\`)
+
+## Variable Naming
+- **Variables:** camelCase (e.g., \`userName\`, \`isActive\`, \`totalCount\`)
+- **Constants:** UPPER_SNAKE_CASE for true constants (e.g., \`MAX_RETRIES\`, \`API_BASE_URL\`)
+- **Boolean variables:** Prefix with \`is\`, \`has\`, \`can\`, \`should\` (e.g., \`isLoading\`, \`hasError\`)
+
+## Function Naming
+- **Functions:** camelCase (e.g., \`calculateTotal()\`, \`fetchUserData()\`)
+- **Event handlers:** Prefix with \`handle\` or \`on\` (e.g., \`handleClick\`, \`onSubmit\`)
+
+## Class/Constructor Naming
+- **Classes:** PascalCase (e.g., \`UserService\`, \`DataProcessor\`, \`ApiClient\`)
+- **Interfaces (TS):** PascalCase (e.g., \`IUserService\` or \`UserService\`)
+
+## Private Members
+- **Private fields:** Prefix with underscore (e.g., \`_privateData\`, \`_internalState\`)`,
+
+  python: `# Python Coding Standards (PEP 8)
+
+When reviewing or generating Python code, follow these rules:
+
+## File Naming
+- **Source files:** Use snake_case (e.g., \`user_service.py\`, \`api_client.py\`)
+- **Package directories:** Use snake_case (e.g., \`data_processing/\`, \`utils/\`)
+- **Test files:** Use \`test_\` prefix (e.g., \`test_user_service.py\`)
+
+## Variable Naming
+- **Variables:** snake_case (e.g., \`user_name\`, \`is_active\`, \`total_count\`)
+- **Constants:** UPPER_SNAKE_CASE (e.g., \`MAX_RETRIES\`, \`API_BASE_URL\`)
+- **Protected variables:** Single underscore prefix (e.g., \`_internal_data\`)
+- **Private variables:** Double underscore prefix (e.g., \`__private_data\`)
+
+## Function Naming
+- **Functions:** snake_case (e.g., \`calculate_total()\`, \`fetch_user_data()\`)
+- **Private functions:** Prefix with underscore (e.g., \`_validate_input()\`)
+
+## Class Naming
+- **Classes:** PascalCase (e.g., \`UserService\`, \`DataProcessor\`, \`ApiClient\`)
+- **Exception classes:** PascalCase with \`Error\` suffix (e.g., \`ValidationError\`)`,
+
+  java: `# Java Coding Standards
+
+When reviewing or generating Java code, follow these rules:
+
+## File Naming
+- **Source files:** PascalCase matching the public class name (e.g., \`UserService.java\`)
+- **One public class per file:** File name must match the public class name exactly
+- **Test files:** Class name with \`Test\` suffix (e.g., \`UserServiceTest.java\`)
+
+## Package Naming
+- **Packages:** All lowercase, dot-separated (e.g., \`com.example.service\`)
+
+## Variable Naming
+- **Local variables:** camelCase (e.g., \`userName\`, \`isActive\`, \`totalCount\`)
+- **Constants:** UPPER_SNAKE_CASE with \`static final\` (e.g., \`MAX_RETRIES\`)
+- **Boolean variables:** Prefix with \`is\`, \`has\`, \`can\` (e.g., \`isEnabled\`)
+
+## Method Naming
+- **Methods:** camelCase (e.g., \`calculateTotal()\`, \`getUserById()\`)
+- **Getters:** \`get\` prefix (e.g., \`getName()\`, \`getId()\`)
+- **Setters:** \`set\` prefix (e.g., \`setName()\`, \`setId()\`)
+- **Boolean getters:** \`is\` or \`has\` prefix (e.g., \`isActive()\`)
+
+## Class/Interface Naming
+- **Classes:** PascalCase (e.g., \`UserService\`, \`OrderProcessor\`)
+- **Interfaces:** PascalCase (e.g., \`Comparable\`, \`UserRepository\`)`,
+
+  c: `# C Coding Standards
+
+When reviewing or generating C code, follow these rules:
+
+## File Naming
+- **Source files:** snake_case with \`.c\` extension (e.g., \`user_service.c\`)
+- **Header files:** snake_case with \`.h\` extension (e.g., \`user_service.h\`)
+
+## Header Guards
+- **Format:** UPPER_SNAKE_CASE with \`_H\` suffix
+\`\`\`c
+#ifndef USER_SERVICE_H
+#define USER_SERVICE_H
+// content
+#endif
+\`\`\`
+
+## Variable Naming
+- **Local variables:** snake_case (e.g., \`user_count\`, \`buffer_size\`)
+- **Global variables:** snake_case with \`g_\` prefix (e.g., \`g_config\`)
+- **Static variables:** snake_case with \`s_\` prefix (e.g., \`s_initialized\`)
+
+## Constant/Macro Naming
+- **Macros:** UPPER_SNAKE_CASE (e.g., \`MAX_BUFFER_SIZE\`)
+- **Enum values:** UPPER_SNAKE_CASE (e.g., \`STATUS_OK\`)
+
+## Function Naming
+- **Functions:** snake_case (e.g., \`calculate_total()\`, \`parse_input()\`)
+- **Module prefix:** Use module name prefix (e.g., \`user_create()\`, \`user_destroy()\`)
+
+## Type Naming
+- **Structs:** snake_case with \`_t\` suffix (e.g., \`user_data_t\`)
+- **Typedefs:** snake_case with \`_t\` suffix (e.g., \`callback_fn_t\`)`,
+
+  cpp: `# C++ Coding Standards
+
+When reviewing or generating C++ code, follow these rules:
+
+## File Naming
+- **Source files:** snake_case or PascalCase with \`.cpp\` extension
+- **Header files:** Same base name with \`.h\` or \`.hpp\` extension
+- **Be consistent** within a project
+
+## Header Guards
+- **Prefer \`#pragma once\`** for modern compilers
+
+## Namespace Naming
+- **Namespaces:** all_lowercase or snake_case (e.g., \`myproject\`)
+- **Avoid \`using namespace\` in headers**
+
+## Variable Naming
+- **Local variables:** snake_case or camelCase (e.g., \`user_count\` or \`userCount\`)
+- **Member variables:** Prefix with \`m_\` or suffix with \`_\` (e.g., \`m_data\` or \`data_\`)
+- **Constants:** UPPER_SNAKE_CASE or kPascalCase (e.g., \`MAX_SIZE\` or \`kMaxSize\`)
+
+## Function/Method Naming
+- **Functions:** snake_case or camelCase (e.g., \`calculate_total()\` or \`calculateTotal()\`)
+- **Getters/Setters:** \`get\`/\`set\` prefix or just property name
+
+## Class/Type Naming
+- **Classes:** PascalCase (e.g., \`UserService\`, \`DataProcessor\`)
+- **Interfaces:** PascalCase with optional \`I\` prefix (e.g., \`ISerializable\`)
+- **Template parameters:** Single letter or PascalCase (e.g., \`T\`, \`Container\`)`
+}
+
 /**
  * Debounce utility function
  * @param {Function} fn - Function to debounce
@@ -100,6 +242,14 @@ export class ProjectFormComponent {
     // Color input synchronization (color picker <-> text input)
     this.bindColorInputs()
 
+    // Coding standard language dropdown - populates textarea with defaults
+    const codingStandardSelect = document.getElementById('coding-standard-language')
+    if (codingStandardSelect) {
+      codingStandardSelect.addEventListener('change', () => {
+        this.handleCodingStandardLanguageChange()
+      })
+    }
+
     // Input changes trigger config update
     const inputs = this.form.querySelectorAll('input, textarea, select')
     inputs.forEach(input => {
@@ -137,6 +287,24 @@ export class ProjectFormComponent {
         })
       }
     })
+  }
+
+  /**
+   * Handle coding standard language dropdown change
+   * Populates the textarea with the default template for the selected language
+   */
+  handleCodingStandardLanguageChange() {
+    const language = this.getElementValue('coding-standard-language', 'none')
+    const textarea = document.getElementById('coding-standard-content')
+
+    if (textarea && language !== 'none' && CODING_STANDARD_DEFAULTS[language]) {
+      textarea.value = CODING_STANDARD_DEFAULTS[language]
+    } else if (textarea && language === 'none') {
+      // Clear textarea when "None" is selected
+      textarea.value = ''
+    }
+
+    this.handleInputChange()
   }
 
   /**
@@ -231,6 +399,13 @@ export class ProjectFormComponent {
     this.setColorInput('ux-color-text', colorPalette.text || '#1a1a2e')
     this.setColorInput('ux-color-error', colorPalette.error || '#f56565')
 
+    // Coding Standard
+    const codingStandard = config.codingStandard || {}
+    const codingLangSelect = document.getElementById('coding-standard-language')
+    const codingContentTextarea = document.getElementById('coding-standard-content')
+    if (codingLangSelect) codingLangSelect.value = codingStandard.language || 'none'
+    if (codingContentTextarea) codingContentTextarea.value = codingStandard.content || ''
+
     // Assumptions
     this.assumptions = config.assumptions || []
     this.renderAssumptions()
@@ -323,6 +498,10 @@ export class ProjectFormComponent {
           text: this.getElementValue('ux-color-text', '#212529'),
           error: this.getElementValue('ux-color-error', '#dc3545')
         }
+      },
+      codingStandard: {
+        language: this.getElementValue('coding-standard-language', 'none'),
+        content: this.getElementValue('coding-standard-content', '')
       },
       debugMode: this.getCheckboxValue('debug-mode-checkbox')
     }

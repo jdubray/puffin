@@ -1664,18 +1664,24 @@ ${content}`
    *
    * @param {Array} stories - Array of user stories with id, title, description, acceptanceCriteria
    * @param {string} plan - The approved sprint plan
+   * @param {string} codingStandard - Optional coding standard content to guide naming conventions
    * @param {Function} progressCallback - Optional callback for progress updates
    * @returns {Promise<{success: boolean, assertions?: Object, error?: string}>}
    *          assertions is a map of storyId -> array of assertions
    */
-  async generateInspectionAssertions(stories, plan, progressCallback = null) {
+  async generateInspectionAssertions(stories, plan, codingStandard = '', progressCallback = null) {
     const progress = (msg) => {
       console.log('[ASSERTION-GEN]', msg)
       if (progressCallback) progressCallback(msg)
     }
 
+    // Build coding standard context if provided
+    const codingStandardContext = codingStandard
+      ? `\nCODING STANDARDS TO FOLLOW:\nWhen generating assertions, ensure file names, function names, and class names align with these coding standards:\n\n${codingStandard}\n`
+      : ''
 
     const systemPrompt = `You are generating inspection assertions for user stories. These assertions will be automatically evaluated against the codebase to verify implementation.
+${codingStandardContext}
 
 CRITICAL INSTRUCTIONS:
 1. Output ONLY a valid JSON object - nothing else

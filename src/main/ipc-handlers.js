@@ -564,8 +564,11 @@ function setupStateHandlers(ipcMain) {
         return { success: false, error: 'Claude service not available' }
       }
 
+      // Get coding standard from config (if configured)
+      const codingStandard = puffinState?.config?.codingStandard?.content || ''
+
       // Generate assertions via Claude
-      const result = await claudeService.generateInspectionAssertions(stories, plan, (msg) => {
+      const result = await claudeService.generateInspectionAssertions(stories, plan, codingStandard, (msg) => {
         // Send progress updates to renderer
         event.sender.send('assertion-generation-progress', { message: msg })
       })

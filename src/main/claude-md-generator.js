@@ -136,6 +136,14 @@ class ClaudeMdGenerator {
       lines.push('')
     }
 
+    // Coding Standards (from user-customizable config)
+    if (config.codingStandard?.content) {
+      lines.push('## Coding Standards')
+      lines.push('')
+      lines.push(config.codingStandard.content)
+      lines.push('')
+    }
+
     // Completed user stories summary (for reference only)
     // Active stories are passed in thread context, not in CLAUDE.md
     const completedStories = (state.userStories || []).filter(

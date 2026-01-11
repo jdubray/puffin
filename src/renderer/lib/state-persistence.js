@@ -244,8 +244,18 @@ export class StatePersistence {
               }
             }
           } else if (normalizedType === 'DELETE_USER_STORY') {
-            // Delete is handled by the IPC call directly, just log
-            console.log('[PERSIST-DEBUG] User story deleted')
+            // Get story ID from action payload
+            const storyId = action.payload?.id
+            if (storyId) {
+              try {
+                await window.puffin.state.deleteUserStory(storyId)
+                console.log('[PERSIST-DEBUG] User story deleted:', storyId)
+              } catch (e) {
+                console.error('[PERSIST-DEBUG] Failed to delete user story:', storyId, e)
+              }
+            } else {
+              console.warn('[PERSIST-DEBUG] DELETE_USER_STORY missing story ID in payload')
+            }
           }
         }
       }

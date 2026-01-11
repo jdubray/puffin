@@ -37,8 +37,9 @@ class ClaudeMdGenerator {
    * @param {Object} state - Full Puffin state
    * @param {string} activeBranch - Currently active branch
    * @param {Function} [getSkillContent] - Optional function(branchId) => string to get plugin skill content
+   * @param {Function} [getAgentContent] - Optional function(branchId) => string to get agent content
    */
-  async generateAll(state, activeBranch, getSkillContent = null) {
+  async generateAll(state, activeBranch, getSkillContent = null, getAgentContent = null) {
     if (!this.projectPath) {
       throw new Error('ClaudeMdGenerator not initialized with project path')
     }
@@ -50,7 +51,8 @@ class ClaudeMdGenerator {
     const branches = ['specifications', 'architecture', 'ui', 'backend', 'deployment']
     for (const branch of branches) {
       const skillContent = getSkillContent ? getSkillContent(branch) : ''
-      await this.generateBranch(branch, state, skillContent)
+      const agentContent = getAgentContent ? getAgentContent(branch) : ''
+      await this.generateBranch(branch, state, skillContent, agentContent)
     }
 
     // Combine into active CLAUDE.md
@@ -169,8 +171,9 @@ class ClaudeMdGenerator {
    * @param {string} branch - Branch name
    * @param {Object} state - Puffin state
    * @param {string} [skillContent=''] - Optional plugin skill content to append
+   * @param {string} [agentContent=''] - Optional agent content to append
    */
-  async generateBranch(branch, state, skillContent = '') {
+  async generateBranch(branch, state, skillContent = '', agentContent = '') {
     let content = ''
 
     switch (branch) {
@@ -196,6 +199,11 @@ class ClaudeMdGenerator {
     // Append assigned plugin skills if any are provided
     if (skillContent) {
       content += '\n' + skillContent + '\n'
+    }
+
+    // Append assigned agents if any are provided
+    if (agentContent) {
+      content += '\n' + agentContent + '\n'
     }
 
     await fs.writeFile(
@@ -531,9 +539,10 @@ class ClaudeMdGenerator {
    * @param {Object} state - Puffin state
    * @param {string} activeBranch - Current active branch
    * @param {string} [skillContent=''] - Optional plugin skill content to append
+   * @param {string} [agentContent=''] - Optional agent content to append
    */
-  async updateBranch(branch, state, activeBranch, skillContent = '') {
-    await this.generateBranch(branch, state, skillContent)
+  async updateBranch(branch, state, activeBranch, skillContent = '', agentContent = '') {
+    await this.generateBranch(branch, state, skillContent, agentContent)
     if (branch === activeBranch) {
       await this.activateBranch(activeBranch)
     }

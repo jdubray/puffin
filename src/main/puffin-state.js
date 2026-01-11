@@ -34,6 +34,7 @@ const GUI_DESIGNS_DIR = 'gui-definitions'
 const UI_GUIDELINES_FILE = 'ui-guidelines.json'
 const STYLESHEETS_DIR = 'stylesheets'
 const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directory
+const CLAUDE_AGENTS_DIR = 'agents' // Puffin-managed agents directory (in .puffin/)
 const ACTIVE_SPRINT_FILE = 'active-sprint.json' // JSON backup of active sprint
 const TOAST_HISTORY_FILE = 'toast-history.json' // Toast notification history
 
@@ -50,6 +51,7 @@ class PuffinState {
     this.uiGuidelines = null
     this.gitOperations = null
     this.claudePlugins = null // Claude Code skill plugins
+    this.claudeAgents = null // Claude Code agents
     this.database = database // SQLite database manager
     this.useSqlite = true // Flag to enable/disable SQLite (for debugging)
     this.sprintService = null // Sprint service layer (initialized after database)
@@ -93,6 +95,7 @@ class PuffinState {
     await this.ensureDirectory(path.join(this.puffinPath, GUI_DESIGNS_DIR))
     await this.ensureDirectory(path.join(this.puffinPath, STYLESHEETS_DIR))
     await this.ensureDirectory(path.join(this.puffinPath, CLAUDE_PLUGINS_DIR))
+    await this.ensureDirectory(path.join(this.puffinPath, CLAUDE_AGENTS_DIR))
 
     // Initialize SQLite database (creates db, runs migrations, migrates JSON)
     if (this.useSqlite) {
@@ -147,6 +150,7 @@ class PuffinState {
     this.uiGuidelines = await this.loadUiGuidelines()
     this.gitOperations = await this.loadGitOperations()
     this.claudePlugins = await this.loadClaudePlugins()
+    this.claudeAgents = await this.loadClaudeAgents()
 
     // Auto-archive completed stories older than 2 weeks
     await this.autoArchiveOldStories()
@@ -262,6 +266,7 @@ class PuffinState {
       uiGuidelines: this.uiGuidelines,
       gitOperations: this.gitOperations,
       claudePlugins: this.claudePlugins,
+      claudeAgents: this.claudeAgents,
       database: this.getDatabaseStatus()
     }
 
@@ -1573,6 +1578,243 @@ class PuffinState {
     })
 
     return `# Assigned Skills\n\n${sections.join('\n\n---\n\n')}`
+  }
+
+  // ============ Claude Code Agent Methods ============
+
+  /**
+   * Get all installed Claude Code agents
+   * @returns {Array} Array of agent objects
+   */
+  getClaudeAgents() {
+    return this.claudeAgents || []
+  }
+
+  /**
+   * Get a specific Claude Code agent by ID
+   * @param {string} agentId - Agent ID (filename without extension)
+   * @returns {Object|null} Agent object or null if not found
+   */
+  getClaudeAgent(agentId) {
+    return this.claudeAgents?.find(a => a.id === agentId) || null
+  }
+
+  /**
+   * Assign an agent to a branch
+   * @param {string} agentId - Agent ID
+   * @param {string} branchId - Branch ID
+   * @returns {Promise<Object>} Updated branch object
+   */
+  async assignAgentToBranch(agentId, branchId) {
+    // Verify agent exists
+    const agent = this.getClaudeAgent(agentId)
+    if (!agent) {
+      throw new Error(`Agent "${agentId}" not found`)
+    }
+
+    // Verify branch exists
+    const branch = this.history.branches[branchId]
+    if (!branch) {
+      throw new Error(`Branch "${branchId}" not found`)
+    }
+
+    // Initialize assignedAgents array if not exists
+    if (!branch.assignedAgents) {
+      branch.assignedAgents = []
+    }
+
+    // Check if already assigned
+    if (branch.assignedAgents.includes(agentId)) {
+      return branch // Already assigned
+    }
+
+    // Add agent to branch
+    branch.assignedAgents.push(agentId)
+    await this.saveHistory()
+
+    console.log(`[PUFFIN-STATE] Assigned agent "${agentId}" to branch "${branchId}"`)
+    return branch
+  }
+
+  /**
+   * Unassign an agent from a branch
+   * @param {string} agentId - Agent ID
+   * @param {string} branchId - Branch ID
+   * @returns {Promise<Object>} Updated branch object
+   */
+  async unassignAgentFromBranch(agentId, branchId) {
+    const branch = this.history.branches[branchId]
+    if (!branch) {
+      throw new Error(`Branch "${branchId}" not found`)
+    }
+
+    if (!branch.assignedAgents) {
+      return branch // No agents assigned
+    }
+
+    const index = branch.assignedAgents.indexOf(agentId)
+    if (index === -1) {
+      return branch // Agent not assigned to this branch
+    }
+
+    branch.assignedAgents.splice(index, 1)
+    await this.saveHistory()
+
+    console.log(`[PUFFIN-STATE] Unassigned agent "${agentId}" from branch "${branchId}"`)
+    return branch
+  }
+
+  /**
+   * Get agents assigned to a branch
+   * @param {string} branchId - Branch ID
+   * @returns {Array} Array of agent objects assigned to the branch
+   */
+  getBranchAgents(branchId) {
+    const branch = this.history.branches[branchId]
+    if (!branch || !branch.assignedAgents) {
+      return []
+    }
+
+    return branch.assignedAgents
+      .map(agentId => this.getClaudeAgent(agentId))
+      .filter(agent => agent !== null)
+  }
+
+  /**
+   * Get combined agent content for a branch
+   * Combines all assigned agent definitions into a single markdown string
+   * @param {string} branchId - Branch ID
+   * @returns {string} Combined agent markdown content
+   */
+  getBranchAgentContent(branchId) {
+    const agents = this.getBranchAgents(branchId)
+    if (agents.length === 0) {
+      return ''
+    }
+
+    const sections = agents.map(agent => {
+      return `## ${agent.name}\n\n${agent.content}`
+    })
+
+    return `# Assigned Agents\n\n${sections.join('\n\n---\n\n')}`
+  }
+
+  /**
+   * Install/upload an agent to the agents directory
+   * @param {Object} agentData - Agent data
+   * @param {string} agentData.id - Unique agent ID (used as filename)
+   * @param {string} agentData.name - Human-readable agent name
+   * @param {string} agentData.description - Agent description
+   * @param {string} agentData.content - Markdown content for the agent
+   * @returns {Promise<Object>} Installed agent object
+   */
+  async installAgent(agentData) {
+    const { id, name, description, content } = agentData
+
+    // Validate required fields
+    if (!id || typeof id !== 'string') {
+      throw new Error('Agent ID is required and must be a string')
+    }
+    if (!name || typeof name !== 'string') {
+      throw new Error('Agent name is required and must be a string')
+    }
+    if (!content || typeof content !== 'string') {
+      throw new Error('Agent content is required and must be a string')
+    }
+
+    // Sanitize agent ID for filesystem
+    const sanitizedId = this.sanitizeFilename(id)
+    const agentPath = path.join(this.puffinPath, CLAUDE_AGENTS_DIR, `${sanitizedId}.md`)
+
+    // Build markdown with frontmatter
+    const markdown = `---
+name: ${name}
+description: ${description || ''}
+---
+
+${content}`
+
+    // Write agent file
+    await fs.writeFile(agentPath, markdown, 'utf-8')
+
+    // Create agent object
+    const agent = {
+      id: sanitizedId,
+      name,
+      description: description || '',
+      content,
+      path: agentPath
+    }
+
+    // Add to in-memory cache
+    if (!this.claudeAgents) {
+      this.claudeAgents = []
+    }
+
+    // Check if agent already exists and update it
+    const existingIndex = this.claudeAgents.findIndex(a => a.id === sanitizedId)
+    if (existingIndex !== -1) {
+      this.claudeAgents[existingIndex] = agent
+    } else {
+      this.claudeAgents.push(agent)
+    }
+
+    console.log(`[PUFFIN-STATE] Installed agent: ${name} (${sanitizedId})`)
+    return agent
+  }
+
+  /**
+   * Uninstall an agent
+   * @param {string} agentId - Agent ID to uninstall
+   * @returns {Promise<boolean>} True if uninstalled
+   */
+  async uninstallAgent(agentId) {
+    const agentIndex = this.claudeAgents?.findIndex(a => a.id === agentId)
+    if (agentIndex === -1 || agentIndex === undefined) {
+      throw new Error(`Agent "${agentId}" not found`)
+    }
+
+    const agent = this.claudeAgents[agentIndex]
+
+    // Remove from all branches first
+    await this.removeAgentFromAllBranches(agentId)
+
+    // Delete agent file
+    try {
+      await fs.unlink(agent.path)
+    } catch (err) {
+      console.warn(`[PUFFIN-STATE] Could not delete agent file: ${err.message}`)
+    }
+
+    // Remove from in-memory cache
+    this.claudeAgents.splice(agentIndex, 1)
+
+    console.log(`[PUFFIN-STATE] Uninstalled agent: ${agent.name} (${agentId})`)
+    return true
+  }
+
+  /**
+   * Remove agent from all branches (used during uninstall)
+   * @param {string} agentId - Agent ID
+   * @private
+   */
+  async removeAgentFromAllBranches(agentId) {
+    let modified = false
+
+    for (const branchId of Object.keys(this.history.branches)) {
+      const branch = this.history.branches[branchId]
+      if (branch.assignedAgents) {
+        const index = branch.assignedAgents.indexOf(agentId)
+        if (index !== -1) {
+          branch.assignedAgents.splice(index, 1)
+          modified = true
+        }
+      }
+    }
+
+    if (modified) {
+      await this.saveHistory()
+    }
   }
 
   /**
@@ -3022,6 +3264,71 @@ class PuffinState {
         return []
       }
       console.error('[PUFFIN-STATE] Error loading Claude plugins:', err.message)
+      return []
+    }
+  }
+
+  /**
+   * Load Claude Code agents from the .puffin/agents directory
+   * Scans .puffin/agents/ for markdown files with agent definitions
+   * Agents have YAML frontmatter with name and description
+   * @private
+   */
+  async loadClaudeAgents() {
+    const agentsDir = path.join(this.puffinPath, CLAUDE_AGENTS_DIR)
+    const agents = []
+
+    try {
+      const entries = await fs.readdir(agentsDir, { withFileTypes: true })
+
+      for (const entry of entries) {
+        // Only process markdown files
+        if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+
+        const agentPath = path.join(agentsDir, entry.name)
+        const agentId = entry.name.replace(/\.md$/, '')
+
+        try {
+          const content = await fs.readFile(agentPath, 'utf-8')
+
+          // Parse YAML frontmatter if present
+          let name = agentId
+          let description = ''
+          let agentContent = content
+
+          const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+          if (frontmatterMatch) {
+            const frontmatter = frontmatterMatch[1]
+            agentContent = frontmatterMatch[2].trim()
+
+            // Parse simple YAML (name and description)
+            const nameMatch = frontmatter.match(/^name:\s*(.+)$/m)
+            const descMatch = frontmatter.match(/^description:\s*(.+)$/m)
+
+            if (nameMatch) name = nameMatch[1].trim()
+            if (descMatch) description = descMatch[1].trim()
+          }
+
+          agents.push({
+            id: agentId,
+            name,
+            description,
+            content: agentContent,
+            path: agentPath
+          })
+        } catch (err) {
+          console.warn(`[PUFFIN-STATE] Failed to load agent "${entry.name}":`, err.message)
+        }
+      }
+
+      console.log(`[PUFFIN-STATE] Loaded ${agents.length} Claude Code agent(s)`)
+      return agents
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        // Agents directory doesn't exist yet
+        return []
+      }
+      console.error('[PUFFIN-STATE] Error loading Claude agents:', err.message)
       return []
     }
   }

@@ -68,7 +68,10 @@ export class ToastHistoryComponent {
 
     try {
       const result = await window.puffin.toastHistory.getAll()
-      this.toasts = result?.toasts || []
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to load notifications')
+      }
+      this.toasts = result.toasts || []
       this.loading = false
       this.render()
     } catch (err) {
@@ -420,12 +423,16 @@ export class ToastHistoryComponent {
     if (!toastId) return
 
     try {
-      await window.puffin.toastHistory.delete(toastId)
+      const result = await window.puffin.toastHistory.delete(toastId)
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to delete notification')
+      }
       // Remove from local state and re-render
       this.toasts = this.toasts.filter(t => t.id !== toastId)
       this.render()
     } catch (err) {
       console.error('[ToastHistoryComponent] Failed to delete toast:', err)
+      this.showActionError(err.message || 'Failed to delete notification')
     }
   }
 
@@ -442,13 +449,69 @@ export class ToastHistoryComponent {
 
     try {
       const cutoff = Date.now() - TWENTY_FOUR_HOURS
-      await window.puffin.toastHistory.deleteBefore(cutoff)
+      const result = await window.puffin.toastHistory.deleteBefore(cutoff)
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to delete old notifications')
+      }
       // Remove from local state and re-render
       this.toasts = this.toasts.filter(t => t.timestamp >= cutoff)
       this.render()
     } catch (err) {
       console.error('[ToastHistoryComponent] Failed to delete old toasts:', err)
+      this.showActionError(err.message || 'Failed to delete old notifications')
     }
+  }
+
+  /**
+   * Show action error inline in the component
+   * Displays a temporary error banner that auto-dismisses
+   * @param {string} message - Error message to display
+   */
+  showActionError(message) {
+    // Remove any existing error banner
+    const existingBanner = this.container.querySelector('.toast-history-action-error')
+    if (existingBanner) {
+      existingBanner.remove()
+    }
+
+    // Create error banner element
+    const banner = document.createElement('div')
+    banner.className = 'toast-history-action-error'
+    banner.setAttribute('role', 'alert')
+    banner.setAttribute('aria-live', 'polite')
+    banner.innerHTML = `
+      <span class="error-icon" aria-hidden="true">⚠</span>
+      <span class="error-message">${this.escapeHtml(message)}</span>
+      <button class="error-dismiss-btn" title="Dismiss" aria-label="Dismiss error">×</button>
+    `
+
+    // Insert at top of content area
+    const content = this.container.querySelector('.toast-history-content')
+    if (content) {
+      content.insertBefore(banner, content.firstChild)
+    } else {
+      // Fallback: insert after header
+      const header = this.container.querySelector('.toast-history-header')
+      if (header) {
+        header.insertAdjacentElement('afterend', banner)
+      }
+    }
+
+    // Bind dismiss button
+    const dismissBtn = banner.querySelector('.error-dismiss-btn')
+    if (dismissBtn) {
+      const dismissHandler = () => banner.remove()
+      dismissBtn.addEventListener('click', dismissHandler)
+      this.boundListeners.push({ element: dismissBtn, event: 'click', handler: dismissHandler })
+    }
+
+    // Auto-dismiss after 5 seconds
+    const timeoutId = setTimeout(() => {
+      if (banner.parentElement) {
+        banner.remove()
+      }
+    }, 5000)
+    this.copyFeedbackTimeouts.push(timeoutId)
   }
 
   /**

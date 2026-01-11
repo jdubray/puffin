@@ -2266,6 +2266,10 @@ export const iterateSprintPlanAcceptor = model => proposal => {
     const sprint = model.activeSprint
     const { clarifications } = proposal.payload
 
+    // Track iteration count for context
+    const iterationCount = (sprint.iterationCount || 0) + 1
+    sprint.iterationCount = iterationCount
+
     // Build iteration prompt with previous plan and clarifications
     const stories = sprint.stories
     const storyDescriptions = stories.map((story, i) => {
@@ -2280,18 +2284,44 @@ export const iterateSprintPlanAcceptor = model => proposal => {
       return desc
     }).join('\n\n')
 
-    const iterationPrompt = `## Sprint Plan Iteration Request
+    // Include previous plan context if available
+    const previousPlanSection = sprint.plan
+      ? `### Previous Implementation Plan (Iteration ${iterationCount - 1}):
+
+${sprint.plan}
+
+---
+
+`
+      : ''
+
+    // Include previous clarifications history if available
+    const previousClarificationsSection = sprint.clarificationHistory?.length > 0
+      ? `### Previous Clarifications:
+
+${sprint.clarificationHistory.map((c, i) => `**Iteration ${i + 1}:**\n${c}`).join('\n\n')}
+
+---
+
+`
+      : ''
+
+    // Store current clarifications in history
+    if (!sprint.clarificationHistory) {
+      sprint.clarificationHistory = []
+    }
+    sprint.clarificationHistory.push(clarifications)
+
+    const iterationPrompt = `## Sprint Plan Iteration Request (Iteration ${iterationCount})
 
 **IMPORTANT: This is a PLANNING ONLY request. Do NOT make any code changes, create files, or modify the codebase. Only analyze and produce a written plan.**
 
-The previous plan needs refinement based on the following clarifications and additional requirements:
-
-### Developer Clarifications:
+${previousPlanSection}${previousClarificationsSection}### Current Developer Clarifications:
 ${clarifications}
 
 ---
 
-Please create an updated implementation plan for these user stories:
+### User Stories Being Planned:
 
 ${storyDescriptions}
 
@@ -2309,7 +2339,7 @@ ${storyDescriptions}
 
 **Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
 
-Please incorporate the clarifications above and provide a comprehensive revised plan.`
+Please incorporate all previous context and the latest clarifications to provide a comprehensive revised plan.`
 
     // Update sprint status back to planning
     sprint.status = 'planning'
@@ -2360,7 +2390,7 @@ Please incorporate the clarifications above and provide a comprehensive revised 
       isIteration: true
     }
 
-    console.log('[SPRINT] Plan iteration started with clarifications, new promptId:', promptId)
+    console.log('[SPRINT] Plan iteration', iterationCount, 'started with clarifications, promptId:', promptId, 'hasPreviousPlan:', !!sprint.plan)
   }
 }
 
@@ -2385,7 +2415,8 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
     const branchMap = {
       'ui': 'ui',
       'backend': 'backend',
-      'fullstack': 'fullstack'
+      'fullstack': 'fullstack',
+      'plugin': 'plugin'
     }
     const targetBranch = branchMap[branchType] || branchType
 
@@ -2909,9 +2940,11 @@ ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
   }
 
   // Include the approved plan if available
+  let planIncluded = false
   if (sprint?.promptId && model) {
     const planPrompt = findPromptById(model, sprint.promptId)
     if (planPrompt?.response?.content) {
+      planIncluded = true
       prompt += `
 ### Approved Implementation Plan
 

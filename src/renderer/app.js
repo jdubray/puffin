@@ -269,6 +269,39 @@ class PuffinApp {
   }
 
   /**
+   * Extract questions from a plan text
+   * @param {string} planText - The plan text to extract questions from
+   * @returns {string[]} Array of questions found in the plan
+   */
+  extractQuestionsFromPlan(planText) {
+    if (!planText) return []
+
+    const questions = []
+    const lines = planText.split('\n')
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      // Skip empty lines and headers
+      if (!trimmed || trimmed.startsWith('#')) continue
+
+      // Look for lines ending with ? (questions)
+      if (trimmed.endsWith('?')) {
+        // Clean up markdown list markers and numbering
+        let question = trimmed
+          .replace(/^[-*•]\s*/, '')           // Remove bullet points
+          .replace(/^\d+\.\s*/, '')           // Remove numbering
+          .replace(/\*\*/g, '')               // Remove bold markers
+          .trim()
+        if (question.length > 10) {  // Skip very short questions
+          questions.push(question)
+        }
+      }
+    }
+
+    return questions
+  }
+
+  /**
    * Show modal for iterating on the sprint plan with clarifying answers
    */
   showPlanIterationModal() {
@@ -281,6 +314,13 @@ class PuffinApp {
     // Remove any existing modal
     this.hidePlanIterationModal()
 
+    // Extract questions from the plan to prepopulate the textarea
+    const questions = this.extractQuestionsFromPlan(sprint.plan)
+    let prepopulatedText = ''
+    if (questions.length > 0) {
+      prepopulatedText = questions.map((q, i) => `${i + 1}. ${q}\n   Answer: `).join('\n\n')
+    }
+
     const modal = document.createElement('div')
     modal.id = 'plan-iteration-modal'
     modal.className = 'plan-iteration-modal modal-overlay'
@@ -292,8 +332,9 @@ class PuffinApp {
         </div>
         <div class="modal-body">
           <p class="plan-iteration-hint">
-            Review the current plan and provide clarifying answers or additional requirements.
-            Claude will generate a revised plan based on your feedback.
+            ${questions.length > 0
+              ? `Found ${questions.length} question${questions.length > 1 ? 's' : ''} in the plan. Fill in your answers below, or add additional clarifications.`
+              : 'Review the current plan and provide clarifying answers or additional requirements.'}
           </p>
           <div class="form-group">
             <label for="plan-clarifications">Your clarifications and answers:</label>
@@ -301,12 +342,7 @@ class PuffinApp {
               id="plan-clarifications"
               class="plan-clarifications-input"
               rows="8"
-              placeholder="Enter your clarifying answers, additional requirements, or questions here...
-
-Example:
-- For the authentication feature, use JWT tokens instead of sessions
-- The sidebar should be collapsible with a toggle button
-- Please include error handling for network failures"></textarea>
+              placeholder="Enter your clarifying answers, additional requirements, or questions here...">${this.escapeHtml(prepopulatedText)}</textarea>
           </div>
         </div>
         <div class="modal-footer">
@@ -2952,7 +2988,8 @@ Keep it concise but informative. Use markdown formatting.`
     const branches = [
       { id: 'ui', label: 'UI', icon: '🎨' },
       { id: 'backend', label: 'Backend', icon: '⚙️' },
-      { id: 'fullstack', label: 'Full Stack', icon: '🔗' }
+      { id: 'fullstack', label: 'Full Stack', icon: '🔗' },
+      { id: 'plugin', label: 'Plugin', icon: '📦' }
     ]
 
     const escapedTitle = this.escapeHtml(story.title).replace(/"/g, '&quot;')

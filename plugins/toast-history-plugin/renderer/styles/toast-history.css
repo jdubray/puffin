@@ -125,6 +125,69 @@
 }
 
 /* ============================
+   Action Error Banner
+   ============================ */
+
+.toast-history-action-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: var(--color-error, #ef4444);
+  font-size: 0.875rem;
+  animation: actionErrorSlideIn 0.2s ease-out;
+}
+
+@keyframes actionErrorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast-history-action-error .error-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.toast-history-action-error .error-message {
+  flex: 1;
+}
+
+.toast-history-action-error .error-dismiss-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-error, #ef4444);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.toast-history-action-error .error-dismiss-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.toast-history-action-error .error-dismiss-btn:focus {
+  outline: 2px solid var(--color-error, #ef4444);
+  outline-offset: 1px;
+}
+
+/* ============================
    Content Area
    ============================ */
 

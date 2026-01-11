@@ -40,6 +40,8 @@ All file operations must be scoped to this project directory and its subdirector
 
 The following stories have been completed and are available for reference:
 
+- **Preserve Previous Plan Context During Iteration**: As a developer, I want the iterate plan prompt to include user stories and the latest plan so that context is not lost when answering follow-up questions across multiple iterations
+- **Add Plugin Implementation Button**: As a developer, I want a Plugin implementation button alongside UI, Backend, and Fullstack so that I can generate implementation plans targeting the Plugin Development branch
 - **Fix Event Listener Memory Leak in ToastHistoryComponent**: As a developer, I want event listeners in ToastHistoryComponent to be properly cleaned up so that memory leaks do not occur on re-renders
 - **Consolidate Toast History Architecture**: As a developer, I want the toast history plugin to delegate to core IPC handlers so that there is a single source of truth for toast storage
 - **Implement Toast Creation Interception**: As a developer, I want toast creation to be automatically intercepted and logged so that all toasts are persisted without manual intervention
@@ -80,3 +82,164 @@ The following stories have been completed and are available for reference:
 - **Editable Commit Message in Sprint Close Panel**: As a developer, I want to view and edit the auto-generated commit message so that I can customize it before committing
 - **Execute Git Commit on Sprint Close Submission**: As a developer, I want the git commit to execute when I submit the sprint close form with commit enabled so that my sprint work is properly versioned
 
+---
+
+## Branch Focus: UI/UX
+
+You are working on the **UI/UX thread**. Focus on:
+- User interface implementation
+- Component design and structure
+- Styling and visual consistency
+- User interactions and feedback
+- Accessibility and responsiveness
+
+### Color Tokens
+
+Use these CSS custom properties for colors:
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--color-primary` | `#6c63ff` | Main brand color |
+| `--color-secondary` | `#16213e` | Secondary accent color |
+| `--color-success` | `#48bb78` | Success state color |
+| `--color-warning` | `#ecc94b` | Warning state color |
+| `--color-error` | `#f56565` | Error state color |
+| `--color-neutral` | `#e6e6e6` | Neutral text color |
+
+### Spacing Scale
+
+- **XS:** `0.25rem` - Extra small spacing
+- **SM:** `0.5rem` - Small spacing
+- **MD:** `0.75rem` - Medium spacing
+- **LG:** `1rem` - Large spacing
+- **XL:** `1.5rem` - Extra large spacing
+- **2XL:** `2rem` - Double extra large spacing
+
+### Border Radii
+
+- **None:** `0`
+- **Small:** `4px`
+- **Medium:** `8px`
+- **Large:** `12px`
+- **Full:** `50%`
+
+### Component Patterns
+
+#### Primary Button
+
+Main call-to-action button with primary styling
+
+**Guidelines:** Use for primary actions like "Save", "Submit", "Create". Limit to one per page section.
+
+**HTML Template:**
+```html
+<button class="btn btn-primary">Button Text</button>
+```
+
+**CSS:**
+```css
+.btn-primary {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-small);
+  padding: var(--spacing-md) var(--spacing-lg);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-dark);
+  transform: translateY(-1px);
+}
+```
+
+### Layout Guidelines
+
+# Layout Guidelines
+
+## Grid System
+- Use consistent spacing and grid structure
+- Maintain proper visual hierarchy
+- Consider responsive design principles
+
+## Alignment
+- Align elements consistently
+- Use proper margins and padding
+- Follow established layout patterns
+
+### Component Guidelines
+
+# Component Guidelines
+
+## Consistency
+- Reusable component patterns
+- Consistent interaction patterns
+- Standard component variants
+
+## States
+- Default, hover, focus, disabled states
+- Loading and error states
+- Active and selected states
+
+### Interaction Guidelines
+
+# Interaction Guidelines
+
+## User Feedback
+- Provide clear feedback for user actions
+- Use appropriate animations and transitions
+- Indicate loading and processing states
+
+## Accessibility
+- Keyboard navigation support
+- Screen reader compatibility
+- Touch-friendly targets for mobile
+
+# Assigned Skills
+
+## frontend-design
+
+---
+name: frontend-design
+description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.
+license: Complete terms in LICENSE.txt
+---
+
+This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.
+
+The user provides frontend requirements: a component, page, application, or interface to build. They may include context about the purpose, audience, or technical constraints.
+
+## Design Thinking
+
+Before coding, understand the context and commit to a BOLD aesthetic direction:
+- **Purpose**: What problem does this interface solve? Who uses it?
+- **Tone**: Pick an extreme: brutally minimal, maximalist chaos, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, editorial/magazine, brutalist/raw, art deco/geometric, soft/pastel, industrial/utilitarian, etc. There are so many flavors to choose from. Use these for inspiration but design one that is true to the aesthetic direction.
+- **Constraints**: Technical requirements (framework, performance, accessibility).
+- **Differentiation**: What makes this UNFORGETTABLE? What's the one thing someone will remember?
+
+**CRITICAL**: Choose a clear conceptual direction and execute it with precision. Bold maximalism and refined minimalism both work - the key is intentionality, not intensity.
+
+Then implement working code (HTML/CSS/JS, React, Vue, etc.) that is:
+- Production-grade and functional
+- Visually striking and memorable
+- Cohesive with a clear aesthetic point-of-view
+- Meticulously refined in every detail
+
+## Frontend Aesthetics Guidelines
+
+Focus on:
+- **Typography**: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics; unexpected, characterful font choices. Pair a distinctive display font with a refined body font.
+- **Color & Theme**: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes.
+- **Motion**: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions. Use scroll-triggering and hover states that surprise.
+- **Spatial Composition**: Unexpected layouts. Asymmetry. Overlap. Diagonal flow. Grid-breaking elements. Generous negative space OR controlled density.
+- **Backgrounds & Visual Details**: Create atmosphere and depth rather than defaulting to solid colors. Add contextual effects and textures that match the overall aesthetic. Apply creative forms like gradient meshes, noise textures, geometric patterns, layered transparencies, dramatic shadows, decorative borders, custom cursors, and grain overlays.
+
+NEVER use generic AI-generated aesthetics like overused font families (Inter, Roboto, Arial, system fonts), cliched color schemes (particularly purple gradients on white backgrounds), predictable layouts and component patterns, and cookie-cutter design that lacks context-specific character.
+
+Interpret creatively and make unexpected choices that feel genuinely designed for the context. No design should be the same. Vary between light and dark themes, different fonts, different aesthetics. NEVER converge on common choices (Space Grotesk, for example) across generations.
+
+**IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
+
+Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.

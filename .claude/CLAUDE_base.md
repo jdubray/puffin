@@ -40,6 +40,8 @@ All file operations must be scoped to this project directory and its subdirector
 
 The following stories have been completed and are available for reference:
 
+- **Preserve Previous Plan Context During Iteration**: As a developer, I want the iterate plan prompt to include user stories and the latest plan so that context is not lost when answering follow-up questions across multiple iterations
+- **Add Plugin Implementation Button**: As a developer, I want a Plugin implementation button alongside UI, Backend, and Fullstack so that I can generate implementation plans targeting the Plugin Development branch
 - **Fix Event Listener Memory Leak in ToastHistoryComponent**: As a developer, I want event listeners in ToastHistoryComponent to be properly cleaned up so that memory leaks do not occur on re-renders
 - **Consolidate Toast History Architecture**: As a developer, I want the toast history plugin to delegate to core IPC handlers so that there is a single source of truth for toast storage
 - **Implement Toast Creation Interception**: As a developer, I want toast creation to be automatically intercepted and logged so that all toasts are persisted without manual intervention

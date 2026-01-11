@@ -9150,8 +9150,8 @@
   background: var(--bg-primary);
   border-radius: 12px;
   width: 90%;
-  max-width: 600px;
-  max-height: 80vh;
+  max-width: 800px;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -9201,7 +9201,7 @@
 
 .plan-clarifications-input {
   width: 100%;
-  min-height: 200px;
+  min-height: 300px;
   padding: 0.75rem;
   border: 1px solid var(--border-color);
   border-radius: 8px;

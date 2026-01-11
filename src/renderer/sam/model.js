@@ -2456,7 +2456,7 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
     }
 
     // Build implementation prompt context (includes approved plan if available)
-    const implementationPrompt = buildStoryImplementationPrompt(story, branchType, sprint, model)
+    const { prompt: implementationPrompt, planIncluded } = buildStoryImplementationPrompt(story, branchType, sprint, model)
 
     // Ensure target branch exists
     if (!model.history.branches[targetBranch]) {
@@ -2494,7 +2494,8 @@ export const startSprintStoryImplementationAcceptor = model => proposal => {
       branchId: targetBranch,
       promptContent: implementationPrompt,
       promptId: promptId,
-      story
+      story,
+      planMissing: !planIncluded
     }
   }
 }
@@ -2966,7 +2967,7 @@ This is part of an approved sprint plan. Please implement this story following t
 
 Please proceed with the implementation.`
 
-  return prompt
+  return { prompt, planIncluded }
 }
 
 /**

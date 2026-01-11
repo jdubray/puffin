@@ -623,6 +623,17 @@ export class StatePersistence {
 
           console.log('[SPRINT-IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingSprintImpl.branchId)
 
+          // Warn if the approved plan is not available
+          if (pendingSprintImpl.planMissing) {
+            console.warn('[SPRINT-IMPLEMENT] Approved plan not found - sprint.promptId may be missing')
+            this.showToast({
+              type: 'warning',
+              title: 'Plan Not Found',
+              message: 'The approved sprint plan was not included in the prompt. The sprint may be missing its plan reference.',
+              duration: 5000
+            })
+          }
+
           // Get session ID from last successful prompt in the target branch
           const targetBranch = state.history.raw?.branches?.[pendingSprintImpl.branchId]
           const lastPromptWithResponse = targetBranch?.prompts

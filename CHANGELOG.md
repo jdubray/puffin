@@ -5,6 +5,36 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.1] - 2026-01-11
+
+### Added
+
+- **Agent Support**: Per-branch agent assignment system
+  - Agents stored in `.puffin/agents/` (Puffin-managed, not auto-discovered by Claude)
+  - Install/uninstall agents via IPC
+  - Assign agents to specific branches for explicit control
+  - Agent content injected into branch-specific CLAUDE.md files
+
+- **Coding Standards Configuration**: Language-specific coding standards
+  - Templates for JavaScript, Python, Java, C, C++
+  - Configurable per-project coding conventions
+
+- **Sprint Plan Context**: Previous plan preserved during iteration
+  - Plan context maintained when iterating on sprint planning
+  - Better continuity in planning workflow
+
+### Changed
+
+- **Sprint Implementation**: Toast warning when approved plan is missing
+  - Notifies user if sprint.promptId is not found
+  - Helps diagnose missing plan context issues
+
+### Fixed
+
+- **User Story Deletion**: Stories now persist after deletion
+  - DELETE_USER_STORY was only updating in-memory model
+  - Now correctly calls IPC to persist to SQLite database
+
 ## [2.9.0] - 2026-01-02
 
 ### Added

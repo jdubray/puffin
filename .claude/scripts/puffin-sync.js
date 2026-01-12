@@ -3,9 +3,14 @@
  * Puffin Sync Script
  *
  * Receives a session summary from Claude Code CLI and writes it to
- * Puffin's history.json under the "improvements" branch.
+ * Puffin's history.json under the specified branch (defaults to "improvements").
  *
- * Usage: echo '{"title":"...", "content":"...", "files":[]}' | node puffin-sync.js
+ * Usage: echo '{"title":"...", "content":"...", "files":[]}' | node puffin-sync.js [branch-name]
+ *
+ * Examples:
+ *   echo '{"title":"Fix bug", "content":"..."}' | node puffin-sync.js
+ *   echo '{"title":"New feature", "content":"..."}' | node puffin-sync.js ui
+ *   echo '{"title":"API changes", "content":"..."}' | node puffin-sync.js backend
  */
 
 const fs = require('fs');
@@ -50,6 +55,11 @@ async function readStdin() {
 
 async function main() {
   try {
+    // Parse command line argument for branch name
+    const argBranch = process.argv[2];
+    const branchId = argBranch ? argBranch.toLowerCase().replace(/\s+/g, '-') : 'improvements';
+    const branchName = argBranch || 'Improvements';
+
     // Find .puffin directory
     const puffinDir = findPuffinDir();
     if (!puffinDir) {
@@ -86,16 +96,32 @@ async function main() {
       process.exit(1);
     }
 
-    // Ensure improvements branch exists
-    if (!history.branches.improvements) {
-      history.branches.improvements = {
-        id: 'improvements',
-        name: 'Improvements',
-        icon: 'code',
-        codeModificationAllowed: true,
-        prompts: []
-      };
-      console.log('Created "Improvements" branch');
+    // Get list of valid branch names
+    const validBranches = Object.keys(history.branches);
+
+    // Validate target branch exists (except for default "improvements" which can be created)
+    if (!history.branches[branchId]) {
+      if (branchId === 'improvements') {
+        // Create improvements branch if it doesn't exist (default behavior)
+        history.branches[branchId] = {
+          id: branchId,
+          name: 'Improvements',
+          icon: 'code',
+          codeModificationAllowed: true,
+          prompts: []
+        };
+        console.log('Created "Improvements" branch');
+      } else {
+        // Invalid branch specified - show error with valid options
+        console.error(`Error: Branch "${argBranch}" not found.`);
+        console.error('');
+        console.error('Valid branches:');
+        validBranches.forEach(b => {
+          const branch = history.branches[b];
+          console.error(`  - ${b}${branch.name !== b ? ` (${branch.name})` : ''}`);
+        });
+        process.exit(1);
+      }
     }
 
     // Create the prompt entry
@@ -123,15 +149,15 @@ async function main() {
       }
     };
 
-    // Add to improvements branch
-    history.branches.improvements.prompts.push(prompt);
+    // Add to target branch
+    history.branches[branchId].prompts.push(prompt);
     history.updatedAt = timestamp;
 
     // Save history
     fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
 
     console.log(`Successfully synced to Puffin: "${summary.title}"`);
-    console.log(`Branch: Improvements`);
+    console.log(`Branch: ${history.branches[branchId].name}`);
     console.log(`Prompt ID: ${promptId}`);
 
   } catch (error) {

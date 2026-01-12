@@ -1,5 +1,6 @@
 ---
 description: Send completed fix/improvement summary to Puffin's Improvements branch
+argument-hint: [branch-name]
 ---
 
 Generate a concise summary of what was accomplished in this Claude Code session:
@@ -12,7 +13,22 @@ Generate a concise summary of what was accomplished in this Claude Code session:
 Format this as a structured summary, then run the puffin-sync script to save it:
 
 ```bash
+node .claude/scripts/puffin-sync.js [branch-name]
+```
+
+**Arguments:**
+- `branch-name` (optional): Target branch for the summary. Defaults to "improvements" if not specified.
+
+**Examples:**
+```bash
+# Default: sync to Improvements branch
 node .claude/scripts/puffin-sync.js
+
+# Sync to UI branch
+node .claude/scripts/puffin-sync.js ui
+
+# Sync to Backend branch
+node .claude/scripts/puffin-sync.js backend
 ```
 
 Pass the summary via stdin as JSON with this structure:

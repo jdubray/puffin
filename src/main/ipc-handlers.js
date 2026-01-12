@@ -163,6 +163,16 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Process sync inbox from CLI (allows refresh without restart)
+  ipcMain.handle('state:processSyncInbox', async () => {
+    try {
+      await puffinState.processSyncInbox()
+      return { success: true, history: puffinState.history }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // Update prompt response
   ipcMain.handle('state:updatePromptResponse', async (event, { branchId, promptId, response }) => {
     try {

@@ -37,6 +37,7 @@ const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directo
 const CLAUDE_AGENTS_DIR = 'agents' // Puffin-managed agents directory (in .puffin/)
 const ACTIVE_SPRINT_FILE = 'active-sprint.json' // JSON backup of active sprint
 const TOAST_HISTORY_FILE = 'toast-history.json' // Toast notification history
+const SYNC_INBOX_FILE = 'sync-inbox.json' // Incoming syncs from CLI
 
 class PuffinState {
   constructor() {
@@ -152,6 +153,9 @@ class PuffinState {
     this.claudePlugins = await this.loadClaudePlugins()
     this.claudeAgents = await this.loadClaudeAgents()
 
+    // Process any pending syncs from CLI
+    await this.processSyncInbox()
+
     // Auto-archive completed stories older than 2 weeks
     await this.autoArchiveOldStories()
 
@@ -238,6 +242,68 @@ class PuffinState {
       // Update JSON backups
       await this._saveUserStoriesToJson(this.getUserStories())
       await this._saveArchivedStoriesToJson(this.getArchivedStories())
+    }
+  }
+
+  /**
+   * Process sync inbox from CLI
+   * Reads sync-inbox.json, adds prompts to appropriate branches, then clears the inbox
+   * @private
+   */
+  async processSyncInbox() {
+    const inboxPath = path.join(this.puffinPath, SYNC_INBOX_FILE)
+
+    let inbox = []
+    try {
+      const content = await fs.readFile(inboxPath, 'utf-8')
+      inbox = JSON.parse(content)
+      if (!Array.isArray(inbox)) inbox = []
+    } catch {
+      // No inbox file exists, nothing to process
+      return
+    }
+
+    if (inbox.length === 0) {
+      return
+    }
+
+    console.log(`[PUFFIN-STATE] Processing ${inbox.length} sync inbox items`)
+
+    for (const item of inbox) {
+      const { branchId, branchName, prompt } = item
+
+      // Create branch if it doesn't exist (e.g., improvements)
+      if (!this.history.branches[branchId]) {
+        this.history.branches[branchId] = {
+          id: branchId,
+          name: branchName || branchId.charAt(0).toUpperCase() + branchId.slice(1),
+          icon: 'code',
+          codeModificationAllowed: true,
+          prompts: []
+        }
+        console.log(`[PUFFIN-STATE] Created branch "${branchName}" for sync`)
+      }
+
+      // Prepend prompt to branch (newest first)
+      this.history.branches[branchId].prompts.unshift({
+        ...prompt,
+        id: prompt.id || this.generateId(),
+        timestamp: prompt.timestamp || new Date().toISOString()
+      })
+
+      console.log(`[PUFFIN-STATE] Synced prompt "${prompt.id}" to branch "${branchId}"`)
+    }
+
+    // Update history timestamp and save
+    this.history.updatedAt = new Date().toISOString()
+    await this.saveHistory()
+
+    // Clear the inbox
+    try {
+      await fs.unlink(inboxPath)
+      console.log('[PUFFIN-STATE] Sync inbox cleared')
+    } catch (err) {
+      console.error('[PUFFIN-STATE] Failed to clear sync inbox:', err.message)
     }
   }
 

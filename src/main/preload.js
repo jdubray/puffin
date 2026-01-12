@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('puffin', {
     // Add a prompt to history
     addPrompt: (branchId, prompt) => ipcRenderer.invoke('state:addPrompt', { branchId, prompt }),
 
+    // Process sync inbox from CLI
+    processSyncInbox: () => ipcRenderer.invoke('state:processSyncInbox'),
+
     // Update a prompt's response
     updatePromptResponse: (branchId, promptId, response) =>
       ipcRenderer.invoke('state:updatePromptResponse', { branchId, promptId, response }),

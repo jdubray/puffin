@@ -68,8 +68,9 @@ async function main() {
     }
 
     const historyPath = path.join(puffinDir, 'history.json');
+    const inboxPath = path.join(puffinDir, 'sync-inbox.json');
 
-    // Read existing history or create new
+    // Read existing history to validate branch
     let history;
     try {
       const content = fs.readFileSync(historyPath, 'utf8');
@@ -100,28 +101,16 @@ async function main() {
     const validBranches = Object.keys(history.branches);
 
     // Validate target branch exists (except for default "improvements" which can be created)
-    if (!history.branches[branchId]) {
-      if (branchId === 'improvements') {
-        // Create improvements branch if it doesn't exist (default behavior)
-        history.branches[branchId] = {
-          id: branchId,
-          name: 'Improvements',
-          icon: 'code',
-          codeModificationAllowed: true,
-          prompts: []
-        };
-        console.log('Created "Improvements" branch');
-      } else {
-        // Invalid branch specified - show error with valid options
-        console.error(`Error: Branch "${argBranch}" not found.`);
-        console.error('');
-        console.error('Valid branches:');
-        validBranches.forEach(b => {
-          const branch = history.branches[b];
-          console.error(`  - ${b}${branch.name !== b ? ` (${branch.name})` : ''}`);
-        });
-        process.exit(1);
-      }
+    if (!history.branches[branchId] && branchId !== 'improvements') {
+      // Invalid branch specified - show error with valid options
+      console.error(`Error: Branch "${argBranch}" not found.`);
+      console.error('');
+      console.error('Valid branches:');
+      validBranches.forEach(b => {
+        const branch = history.branches[b];
+        console.error(`  - ${b}${branch.name !== b ? ` (${branch.name})` : ''}`);
+      });
+      process.exit(1);
     }
 
     // Create the prompt entry
@@ -149,16 +138,31 @@ async function main() {
       }
     };
 
-    // Add to target branch
-    history.branches[branchId].prompts.push(prompt);
-    history.updatedAt = timestamp;
+    // Read existing inbox or create new
+    let inbox = [];
+    try {
+      const inboxContent = fs.readFileSync(inboxPath, 'utf8');
+      inbox = JSON.parse(inboxContent);
+      if (!Array.isArray(inbox)) inbox = [];
+    } catch {
+      // Inbox doesn't exist yet, that's fine
+    }
 
-    // Save history
-    fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
+    // Add to inbox (will be processed by Puffin on next load/refresh)
+    inbox.push({
+      branchId,
+      branchName,
+      prompt,
+      addedAt: timestamp
+    });
 
-    console.log(`Successfully synced to Puffin: "${summary.title}"`);
-    console.log(`Branch: ${history.branches[branchId].name}`);
+    // Save inbox
+    fs.writeFileSync(inboxPath, JSON.stringify(inbox, null, 2));
+
+    console.log(`Successfully queued for Puffin: "${summary.title}"`);
+    console.log(`Branch: ${branchName}`);
     console.log(`Prompt ID: ${promptId}`);
+    console.log('Note: Restart Puffin or refresh to see the synced entry.');
 
   } catch (error) {
     console.error('Error:', error.message);

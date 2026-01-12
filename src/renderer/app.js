@@ -1875,6 +1875,12 @@ Please provide specific file locations and line numbers where issues are found, 
       projectName.textContent = state.projectName || ''
       projectName.title = state.projectPath || ''
     }
+
+    // Update app title with project name from config
+    const appTitle = document.getElementById('app-title')
+    if (appTitle) {
+      appTitle.textContent = state.config?.name || 'Puffin'
+    }
   }
 
   /**

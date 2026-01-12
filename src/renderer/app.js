@@ -1870,12 +1870,6 @@ Please provide specific file locations and line numbers where issues are found, 
    * Update header indicators
    */
   updateHeader(state) {
-    const projectName = document.getElementById('project-name')
-    if (projectName) {
-      projectName.textContent = state.projectName || ''
-      projectName.title = state.projectPath || ''
-    }
-
     // Update app title with project name from config
     const appTitle = document.getElementById('app-title')
     if (appTitle) {

@@ -79,10 +79,12 @@ export class HistoryTreeComponent {
 
     try {
       // Process any pending sync inbox items
-      const result = await window.puffin.state.processSyncInbox()
-      if (result.success && result.history) {
-        // Update history in state
-        this.intents.updateHistory(result.history)
+      await window.puffin.state.processSyncInbox()
+
+      // Reload full state to pick up changes
+      const result = await window.puffin.state.init()
+      if (result.success) {
+        this.intents.loadState(result.state)
       }
     } catch (error) {
       console.error('[HISTORY-TREE] Refresh failed:', error)

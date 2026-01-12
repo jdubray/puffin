@@ -12,6 +12,7 @@ export class HistoryTreeComponent {
     this.historyTree = null
     this.searchInput = null
     this.searchClearBtn = null
+    this.refreshBtn = null
     this.debounceTimer = null
   }
 
@@ -23,6 +24,7 @@ export class HistoryTreeComponent {
     this.historyTree = document.getElementById('history-tree')
     this.searchInput = document.getElementById('thread-search-input')
     this.searchClearBtn = document.getElementById('thread-search-clear')
+    this.refreshBtn = document.getElementById('thread-refresh-btn')
 
     this.bindEvents()
     this.subscribeToState()
@@ -56,6 +58,39 @@ export class HistoryTreeComponent {
       this.searchClearBtn.addEventListener('click', () => {
         this.clearSearch()
       })
+    }
+
+    // Refresh button - process sync inbox
+    if (this.refreshBtn) {
+      this.refreshBtn.addEventListener('click', () => {
+        this.handleRefresh()
+      })
+    }
+  }
+
+  /**
+   * Handle refresh button click - process sync inbox and reload state
+   */
+  async handleRefresh() {
+    if (this.refreshBtn) {
+      this.refreshBtn.classList.add('spinning')
+      this.refreshBtn.disabled = true
+    }
+
+    try {
+      // Process any pending sync inbox items
+      const result = await window.puffin.state.processSyncInbox()
+      if (result.success && result.history) {
+        // Update history in state
+        this.intents.updateHistory(result.history)
+      }
+    } catch (error) {
+      console.error('[HISTORY-TREE] Refresh failed:', error)
+    } finally {
+      if (this.refreshBtn) {
+        this.refreshBtn.classList.remove('spinning')
+        this.refreshBtn.disabled = false
+      }
     }
   }
 

@@ -198,6 +198,50 @@
   opacity: 0.6;
 }
 
+/* Sidebar Section Header */
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 0.5rem;
+}
+
+.sidebar-section-header h3 {
+  margin: 0;
+}
+
+.thread-refresh-btn {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: color 0.15s ease, background 0.15s ease, transform 0.3s ease;
+}
+
+.thread-refresh-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.thread-refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.thread-refresh-btn.spinning {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Thread Search Input */
 .thread-search-container {
   position: relative;

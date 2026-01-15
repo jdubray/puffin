@@ -24,10 +24,8 @@ export class PromptEditorComponent {
     this.deriveUserStories = false
     this.modelSelect = null
     this.defaultModel = 'optus' // Will be updated from project config
-    // Input type tracking (US-3)
-    this.inputTypeGroup = null
-    this.inputTypeSelect = null
-    this.currentImplementationJourneyIds = [] // Active journey IDs for current thread
+    // Thinking budget selector
+    this.thinkingBudgetSelect = null
     // Handoff button
     this.handoffReadyBtn = null
     // Current handoff context (to be injected in next prompt)
@@ -59,9 +57,8 @@ export class PromptEditorComponent {
     this.includeGuiMenu = document.getElementById('include-gui-menu')
     this.deriveStoriesCheckbox = document.getElementById('derive-stories-checkbox')
     this.modelSelect = document.getElementById('thread-model')
-    // Input type tracking (US-3)
-    this.inputTypeGroup = document.getElementById('input-type-group')
-    this.inputTypeSelect = document.getElementById('input-type')
+    // Thinking budget selector
+    this.thinkingBudgetSelect = document.getElementById('thinking-budget')
     // Handoff button
     this.handoffReadyBtn = document.getElementById('handoff-ready-btn')
     // Design documents dropdown
@@ -765,60 +762,6 @@ export class PromptEditorComponent {
 
     // Update response area with conversation history
     this.updateResponseArea(historyState, promptState)
-
-    // Show/hide input type dropdown based on implementation thread context (US-3)
-    this.updateInputTypeVisibility(historyState, storyGenerations)
-  }
-
-  /**
-   * Show input type dropdown only when in an implementation thread
-   */
-  updateInputTypeVisibility(historyState, storyGenerations) {
-    if (!this.inputTypeGroup) return
-
-    // Check if current active prompt is part of an implementation thread
-    const activePromptId = historyState.activePromptId
-    const activeBranch = historyState.activeBranch
-    const rawBranch = historyState.raw?.branches?.[activeBranch]
-
-    let isImplementationThread = false
-    this.currentImplementationJourneyIds = []
-
-    if (activePromptId && rawBranch?.prompts) {
-      // Find the active prompt and check if it or any parent has storyIds
-      const storyIds = this.findStoryIdsForPromptId(activePromptId, rawBranch.prompts)
-      if (storyIds && storyIds.length > 0) {
-        isImplementationThread = true
-
-        // Find active journeys for these stories
-        if (storyGenerations?.implementation_journeys) {
-          this.currentImplementationJourneyIds = storyGenerations.implementation_journeys
-            .filter(j => storyIds.includes(j.story_id) && j.status === 'pending')
-            .map(j => j.id)
-        }
-      }
-    }
-
-    // Toggle visibility
-    this.inputTypeGroup.classList.toggle('hidden', !isImplementationThread)
-  }
-
-  /**
-   * Find storyIds for a prompt by traversing parent chain (client-side version)
-   */
-  findStoryIdsForPromptId(promptId, prompts) {
-    const prompt = prompts.find(p => p.id === promptId)
-    if (!prompt) return null
-
-    // Check if this prompt has storyIds directly
-    if (prompt.storyIds && prompt.storyIds.length > 0) {
-      return prompt.storyIds
-    }
-    // If it has a parent, traverse up the chain
-    if (prompt.parentId) {
-      return this.findStoryIdsForPromptId(prompt.parentId, prompts)
-    }
-    return null
   }
 
   /**
@@ -1132,29 +1075,6 @@ export class PromptEditorComponent {
     // Submit to SAM
     this.intents.submitPrompt(data)
 
-    // Record input type for implementation tracking (US-3)
-    if (this.currentImplementationJourneyIds.length > 0 && this.inputTypeSelect) {
-      const inputType = this.inputTypeSelect.value || 'technical'
-      const contentSummary = content.substring(0, 200) + (content.length > 200 ? '...' : '')
-
-      // Get current turn count (will be incremented when response arrives)
-      const journeys = state.storyGenerations?.implementation_journeys || []
-
-      this.currentImplementationJourneyIds.forEach(journeyId => {
-        const journey = journeys.find(j => j.id === journeyId)
-        const turnNumber = (journey?.turn_count || 0) + 1 // Next turn number
-
-        this.intents.addImplementationInput(journeyId, {
-          turn_number: turnNumber,
-          type: inputType,
-          content_summary: contentSummary
-        })
-      })
-
-      // Reset to default
-      this.inputTypeSelect.value = 'technical'
-    }
-
     // Submit to Claude via IPC
     if (window.puffin) {
       // Get handoff context if present - must check BEFORE determining session
@@ -1206,7 +1126,20 @@ export class PromptEditorComponent {
       // Store image paths for cleanup after submission
       const attachedImagePaths = this.attachedImages.map(img => img.filePath)
 
-      const selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+      // Handle thinking budget - wrap prompt and potentially upgrade model
+      const thinkingBudget = this.thinkingBudgetSelect?.value || 'none'
+      let selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+
+      if (thinkingBudget !== 'none') {
+        finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
+        console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
+
+        // Upgrade to opus for think-harder and superthink
+        if (thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') {
+          selectedModel = 'opus'
+          console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
+        }
+      }
 
       window.puffin.claude.submit({
         prompt: finalPrompt,
@@ -1257,6 +1190,11 @@ export class PromptEditorComponent {
 
     // Clear any pending handoff context
     this.pendingHandoff = null
+
+    // Reset thinking budget to none for new threads
+    if (this.thinkingBudgetSelect) {
+      this.thinkingBudgetSelect.value = 'none'
+    }
 
     // Disable submit button until user types
     this.submitBtn.disabled = true
@@ -1323,10 +1261,24 @@ export class PromptEditorComponent {
 
       console.log('[CONTEXT-DEBUG] Submit mode: NEW thread (fresh conversation)')
 
-      const selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+      // Handle thinking budget - wrap prompt and potentially upgrade model
+      const thinkingBudget = this.thinkingBudgetSelect?.value || 'none'
+      let selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+      let finalPrompt = content
+
+      if (thinkingBudget !== 'none') {
+        finalPrompt = this.wrapPromptWithThinkingBudget(content, thinkingBudget)
+        console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
+
+        // Upgrade to opus for think-harder and superthink
+        if (thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') {
+          selectedModel = 'opus'
+          console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
+        }
+      }
 
       window.puffin.claude.submit({
-        prompt: content,
+        prompt: finalPrompt,
         branchId: state.history.activeBranch,
         sessionId: null, // No session resume - fresh conversation
         // New thread gets full project context
@@ -2196,6 +2148,44 @@ export class PromptEditorComponent {
     } else {
       console.error('[HANDOFF] showHandoffReview intent not found')
     }
+  }
+
+  /**
+   * Wrap prompt with thinking budget instructions
+   * @param {string} prompt - Original prompt
+   * @param {string} budget - Thinking budget level (think, think-hard, think-harder, superthink)
+   * @returns {string} - Wrapped prompt with thinking instructions
+   */
+  wrapPromptWithThinkingBudget(prompt, budget) {
+    const budgetConfig = {
+      'think': {
+        percentage: '25%',
+        instruction: 'Think carefully before responding.'
+      },
+      'think-hard': {
+        percentage: '50%',
+        instruction: 'Think hard about this problem. Take your time to analyze thoroughly before responding.'
+      },
+      'think-harder': {
+        percentage: '75%',
+        instruction: 'Think harder about this. Use extended reasoning to deeply analyze the problem, consider multiple approaches, and provide a well-reasoned response.'
+      },
+      'superthink': {
+        percentage: '100%',
+        instruction: 'Use maximum thinking budget. Engage in extensive deliberation: analyze the problem from multiple angles, consider edge cases, evaluate trade-offs, and provide the most thorough and well-reasoned response possible.'
+      }
+    }
+
+    const config = budgetConfig[budget]
+    if (!config) return prompt
+
+    return `[Thinking Budget: ${config.percentage}]
+
+${config.instruction}
+
+---
+
+${prompt}`
   }
 
   /**

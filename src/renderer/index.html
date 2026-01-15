@@ -432,14 +432,14 @@
                     <input type="checkbox" id="derive-stories-checkbox">
                     <span>Derive User Stories</span>
                   </label>
-                  <div class="prompt-option-group input-type-group hidden" id="input-type-group">
-                    <label for="input-type" class="prompt-select-label">Input Type:</label>
-                    <select id="input-type" class="prompt-model-select" title="Classify this input for tracking">
-                      <option value="technical" selected>Technical</option>
-                      <option value="clarification">Clarification</option>
-                      <option value="correction">Correction</option>
-                      <option value="expansion">Expansion</option>
-                      <option value="approval">Approval</option>
+                  <div class="prompt-option-group" id="thinking-budget-group">
+                    <label for="thinking-budget" class="prompt-select-label">Thinking:</label>
+                    <select id="thinking-budget" class="prompt-model-select" title="Set thinking budget for extended reasoning">
+                      <option value="none" selected>None</option>
+                      <option value="think">Think (25%)</option>
+                      <option value="think-hard">Think Hard (50%)</option>
+                      <option value="think-harder">Think Harder (75%)</option>
+                      <option value="superthink">Superthink (100%)</option>
                     </select>
                   </div>
                 </div>

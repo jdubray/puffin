@@ -48,7 +48,7 @@ class ClaudeMdGenerator {
     await this.generateBase(state)
 
     // Generate branch-specific files
-    const branches = ['specifications', 'architecture', 'ui', 'backend', 'deployment']
+    const branches = ['specifications', 'architecture', 'ui', 'backend', 'deployment', 'bug-fixes', 'fullstack', 'code-reviews', 'improvements']
     for (const branch of branches) {
       const skillContent = getSkillContent ? getSkillContent(branch) : ''
       const agentContent = getAgentContent ? getAgentContent(branch) : ''
@@ -146,21 +146,9 @@ class ClaudeMdGenerator {
       lines.push('')
     }
 
-    // Completed user stories summary (for reference only)
-    // Active stories are passed in thread context, not in CLAUDE.md
-    const completedStories = (state.userStories || []).filter(
-      s => s.status === 'completed' || s.status === 'done'
-    )
-    if (completedStories.length > 0) {
-      lines.push('## Completed User Stories')
-      lines.push('')
-      lines.push('The following stories have been completed and are available for reference:')
-      lines.push('')
-      completedStories.forEach(story => {
-        lines.push(`- **${story.title}**${story.description ? `: ${story.description}` : ''}`)
-      })
-      lines.push('')
-    }
+    // Note: Completed user stories are intentionally NOT included here.
+    // They don't provide actionable context for Claude and consume tokens.
+    // Historical information belongs in project documentation, not CLAUDE.md.
 
     const content = lines.join('\n')
     await fs.writeFile(path.join(this.claudeDir, 'CLAUDE_base.md'), content, 'utf-8')
@@ -191,6 +179,18 @@ class ClaudeMdGenerator {
         break
       case 'deployment':
         content = this.generateDeploymentBranch(state)
+        break
+      case 'bug-fixes':
+        content = this.generateBugFixesBranch(state)
+        break
+      case 'fullstack':
+        content = this.generateFullstackBranch(state)
+        break
+      case 'code-reviews':
+        content = this.generateCodeReviewsBranch(state)
+        break
+      case 'improvements':
+        content = this.generateImprovementsBranch(state)
         break
       default:
         content = this.generateGenericBranch(branch, state)
@@ -439,6 +439,30 @@ class ClaudeMdGenerator {
     lines.push('- Error handling and logging')
     lines.push('- Security and authentication')
     lines.push('')
+    lines.push('## Key Backend Files')
+    lines.push('')
+    lines.push('| Purpose | Location |')
+    lines.push('|---------|----------|')
+    lines.push('| Main entry | `src/main/main.js` |')
+    lines.push('| IPC handlers | `src/main/ipc-handlers.js` |')
+    lines.push('| State management | `src/main/puffin-state.js` |')
+    lines.push('| Claude service | `src/main/claude-service.js` |')
+    lines.push('| Plugin loader | `src/main/plugin-loader.js` |')
+    lines.push('')
+    lines.push('## IPC Handler Pattern')
+    lines.push('')
+    lines.push('```javascript')
+    lines.push('ipcMain.handle(\'namespace:action\', async (event, args) => {')
+    lines.push('  try {')
+    lines.push('    // Validate input')
+    lines.push('    // Perform operation')
+    lines.push('    return { success: true, data: result }')
+    lines.push('  } catch (error) {')
+    lines.push('    return { success: false, error: error.message }')
+    lines.push('  }')
+    lines.push('})')
+    lines.push('```')
+    lines.push('')
 
     // Include data model from architecture if available
     if (state.architecture?.content) {
@@ -471,6 +495,190 @@ class ClaudeMdGenerator {
     lines.push('- Container and orchestration setup')
     lines.push('- Environment configuration')
     lines.push('- Monitoring and logging setup')
+    lines.push('')
+    lines.push('## Deployment Workflow')
+    lines.push('')
+    lines.push('1. **Configure** - Set up environment variables and secrets')
+    lines.push('2. **Build** - Create production artifacts')
+    lines.push('3. **Test** - Run smoke tests and health checks')
+    lines.push('4. **Deploy** - Push to target environment')
+    lines.push('5. **Verify** - Confirm deployment success')
+    lines.push('')
+    lines.push('## Key Considerations')
+    lines.push('')
+    lines.push('- Electron apps require platform-specific builds (Windows, macOS, Linux)')
+    lines.push('- Use electron-builder for packaging')
+    lines.push('- Code signing required for distribution')
+    lines.push('')
+
+    return lines.join('\n')
+  }
+
+  /**
+   * Generate bug-fixes branch context
+   */
+  generateBugFixesBranch(state) {
+    const lines = []
+    lines.push('---')
+    lines.push('')
+    lines.push('## Branch Focus: Bug Fixes')
+    lines.push('')
+    lines.push('You are working on the **bug fixes thread**. Focus on:')
+    lines.push('- Identifying and diagnosing bugs')
+    lines.push('- Root cause analysis')
+    lines.push('- Implementing fixes with minimal side effects')
+    lines.push('- Adding regression tests')
+    lines.push('- Documenting the fix and its rationale')
+    lines.push('')
+    lines.push('Be thorough in testing and consider edge cases.')
+    lines.push('')
+    lines.push('## Bug Fix Workflow')
+    lines.push('')
+    lines.push('1. **Reproduce** - Confirm the bug exists and understand the trigger')
+    lines.push('2. **Locate** - Find the root cause in the codebase')
+    lines.push('3. **Fix** - Make minimal, targeted changes to resolve the issue')
+    lines.push('4. **Test** - Verify fix works and doesn\'t break other functionality')
+    lines.push('5. **Document** - Add comments explaining non-obvious fixes')
+    lines.push('')
+    lines.push('## Debugging Tips')
+    lines.push('')
+    lines.push('- Use `console.log(\'[COMPONENT] message:\', value)` with component prefixes')
+    lines.push('- Check DevTools Console (Ctrl+Shift+I) for renderer process issues')
+    lines.push('- Check terminal output for main process issues')
+    lines.push('- SAM state changes are logged - look for `[SAM]` prefixed messages')
+    lines.push('')
+    lines.push('## Common Bug Categories')
+    lines.push('')
+    lines.push('| Category | Key Files to Check |')
+    lines.push('|----------|-------------------|')
+    lines.push('| State bugs | `src/renderer/sam/model.js` (acceptors) |')
+    lines.push('| IPC issues | `src/main/ipc-handlers.js`, `src/main/preload.js` |')
+    lines.push('| UI glitches | `src/renderer/app.js`, `src/renderer/components/` |')
+    lines.push('| Plugin errors | `plugins/*-plugin/`, `src/main/plugin-loader.js` |')
+    lines.push('')
+
+    return lines.join('\n')
+  }
+
+  /**
+   * Generate fullstack branch context
+   */
+  generateFullstackBranch(state) {
+    const lines = []
+    lines.push('---')
+    lines.push('')
+    lines.push('## Branch Focus: Fullstack')
+    lines.push('')
+    lines.push('You are working on the **fullstack thread**. Focus on:')
+    lines.push('- End-to-end feature implementation')
+    lines.push('- Main process + renderer coordination')
+    lines.push('- IPC communication patterns')
+    lines.push('- State management across processes')
+    lines.push('')
+    lines.push('## IPC Patterns')
+    lines.push('')
+    lines.push('### Request-Response (invoke/handle)')
+    lines.push('```javascript')
+    lines.push('// Main process')
+    lines.push('ipcMain.handle(\'channel:action\', async (event, args) => {')
+    lines.push('  return result')
+    lines.push('})')
+    lines.push('')
+    lines.push('// Renderer')
+    lines.push('const result = await window.puffin.channel.action(args)')
+    lines.push('```')
+    lines.push('')
+    lines.push('### Events (send/on)')
+    lines.push('```javascript')
+    lines.push('// Main process')
+    lines.push('mainWindow.webContents.send(\'channel:event\', data)')
+    lines.push('')
+    lines.push('// Renderer')
+    lines.push('window.puffin.channel.onEvent(callback)')
+    lines.push('```')
+    lines.push('')
+    lines.push('## Key Integration Points')
+    lines.push('')
+    lines.push('| Purpose | File |')
+    lines.push('|---------|------|')
+    lines.push('| IPC handlers | `src/main/ipc-handlers.js` |')
+    lines.push('| Preload bridge | `src/main/preload.js` |')
+    lines.push('| SAM actions | `src/renderer/sam/actions.js` |')
+    lines.push('| SAM model | `src/renderer/sam/model.js` |')
+    lines.push('')
+
+    return lines.join('\n')
+  }
+
+  /**
+   * Generate code-reviews branch context
+   */
+  generateCodeReviewsBranch(state) {
+    const lines = []
+    lines.push('---')
+    lines.push('')
+    lines.push('## Branch Focus: Code Reviews')
+    lines.push('')
+    lines.push('You are working on the **code review thread**. Focus on:')
+    lines.push('- Code quality and maintainability')
+    lines.push('- Security vulnerabilities')
+    lines.push('- Performance issues')
+    lines.push('- Adherence to project conventions')
+    lines.push('- Test coverage gaps')
+    lines.push('')
+    lines.push('## Review Checklist')
+    lines.push('')
+    lines.push('### Security')
+    lines.push('- [ ] No XSS vulnerabilities (escape HTML in user content)')
+    lines.push('- [ ] No command/SQL injection risks')
+    lines.push('- [ ] No path traversal vulnerabilities')
+    lines.push('- [ ] IPC inputs validated')
+    lines.push('')
+    lines.push('### Code Quality')
+    lines.push('- [ ] Error handling for edge cases')
+    lines.push('- [ ] Event listeners properly cleaned up')
+    lines.push('- [ ] No memory leaks (timers, subscriptions)')
+    lines.push('- [ ] Consistent with existing code patterns')
+    lines.push('')
+    lines.push('### Testing')
+    lines.push('- [ ] Unit tests for new functions')
+    lines.push('- [ ] Edge cases covered')
+    lines.push('- [ ] No broken existing tests')
+    lines.push('')
+
+    return lines.join('\n')
+  }
+
+  /**
+   * Generate improvements branch context
+   */
+  generateImprovementsBranch(state) {
+    const lines = []
+    lines.push('---')
+    lines.push('')
+    lines.push('## Branch Focus: Improvements')
+    lines.push('')
+    lines.push('You are working on the **improvements thread**. Focus on:')
+    lines.push('- Performance optimizations')
+    lines.push('- Code refactoring')
+    lines.push('- Developer experience enhancements')
+    lines.push('- Technical debt reduction')
+    lines.push('')
+    lines.push('## Improvement Guidelines')
+    lines.push('')
+    lines.push('- **Measure first** - Profile before and after performance changes')
+    lines.push('- **Stay focused** - Keep refactors targeted, don\'t change unrelated code')
+    lines.push('- **Maintain compatibility** - Avoid breaking existing functionality')
+    lines.push('- **Update tests** - Ensure tests reflect improved code')
+    lines.push('')
+    lines.push('## Common Improvement Areas')
+    lines.push('')
+    lines.push('| Area | Focus |')
+    lines.push('|------|-------|')
+    lines.push('| Performance | Reduce re-renders, optimize loops, lazy loading |')
+    lines.push('| Readability | Clear naming, consistent patterns, better docs |')
+    lines.push('| Maintainability | DRY principles, modular design, clear interfaces |')
+    lines.push('| Developer UX | Better errors, logging, debugging tools |')
     lines.push('')
 
     return lines.join('\n')

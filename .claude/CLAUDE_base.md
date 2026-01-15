@@ -40,6 +40,16 @@ All file operations must be scoped to this project directory and its subdirector
 
 The following stories have been completed and are available for reference:
 
+- **Automated Sprint Implementation Mode Selection**: As a developer, I want to choose between automated and human-controlled implementation after plan approval so that I can let Claude orchestrate the entire sprint without manual intervention
+- **Optimal User Story Implementation Order**: As a developer, I want Claude to determine the optimal order for implementing user stories so that dependencies are respected and implementation flows logically
+- **Branch Assignment for User Stories**: As a developer, I want each user story to be assigned to the appropriate branch type (UI, Backend, Fullstack, or Plugin) so that implementation happens in the correct context
+- **Display Orchestration Plan Before Automated Implementation**: As a developer, I want to see the orchestration plan showing the order and branches for implementation so that I understand what Claude will do before it starts
+- **Sequential Session-Based Implementation**: As a developer, I want Claude to implement each user story in a separate session like a human would so that implementations are clean and isolated
+- **Automated Acceptance Criteria Validation**: As a developer, I want Claude to validate acceptance criteria after each story implementation so that completion status is automatically tracked
+- **Automated Code Review Orchestration**: As a developer, I want Claude to orchestrate a code review after all stories are implemented so that quality issues are identified before sprint completion
+- **Sequential Bug Fix Sessions**: As a developer, I want Claude to create a new session for each bug found and fix them one by one so that fixes are isolated and trackable
+- **Sprint Completion Summary with Statistics**: As a developer, I want to see a summary with statistics when the automated sprint is complete so that I understand the cost and outcomes of the automated implementation
+- **Graceful Automated Sprint Interruption**: As a developer, I want to be able to pause or stop the automated implementation at any point so that I can intervene if something goes wrong
 - **Preserve Previous Plan Context During Iteration**: As a developer, I want the iterate plan prompt to include user stories and the latest plan so that context is not lost when answering follow-up questions across multiple iterations
 - **Add Plugin Implementation Button**: As a developer, I want a Plugin implementation button alongside UI, Backend, and Fullstack so that I can generate implementation plans targeting the Plugin Development branch
 - **Fix Event Listener Memory Leak in ToastHistoryComponent**: As a developer, I want event listeners in ToastHistoryComponent to be properly cleaned up so that memory leaks do not occur on re-renders

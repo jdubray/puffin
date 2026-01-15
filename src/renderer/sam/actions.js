@@ -820,7 +820,7 @@ export const startSprintPlanning = () => ({
   }
 })
 
-// Approve the sprint plan
+// Approve the sprint plan - shows implementation mode selection modal
 export const approvePlan = () => ({
   type: 'APPROVE_PLAN',
   payload: {
@@ -828,7 +828,249 @@ export const approvePlan = () => ({
   }
 })
 
-// Set the sprint plan content (captured from Claude's planning response)
+/**
+ * Select implementation mode for the sprint after plan approval
+ * @param {'automated'|'human'} mode - The implementation mode
+ * @returns {Object} Action with type SELECT_IMPLEMENTATION_MODE
+ */
+export const selectImplementationMode = (mode) => ({
+  type: 'SELECT_IMPLEMENTATION_MODE',
+  payload: {
+    mode,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Start automated implementation after user reviews the orchestration plan
+ * @returns {Object} Action with type START_AUTOMATED_IMPLEMENTATION
+ */
+export const startAutomatedImplementation = () => ({
+  type: 'START_AUTOMATED_IMPLEMENTATION',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Mark a story as started in the orchestration queue
+ * @param {string} storyId - The ID of the story being implemented
+ * @returns {Object} Action with type ORCHESTRATION_STORY_STARTED
+ */
+export const orchestrationStoryStarted = (storyId) => ({
+  type: 'ORCHESTRATION_STORY_STARTED',
+  payload: {
+    storyId,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Mark a story as completed in the orchestration queue
+ * @param {string} storyId - The ID of the completed story
+ * @param {string} sessionId - The Claude session ID used for implementation
+ * @returns {Object} Action with type ORCHESTRATION_STORY_COMPLETED
+ */
+export const orchestrationStoryCompleted = (storyId, sessionId) => ({
+  type: 'ORCHESTRATION_STORY_COMPLETED',
+  payload: {
+    storyId,
+    sessionId,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Update the current orchestration phase
+ * @param {'implementation'|'review'|'bugfix'|'complete'} phase - The new phase
+ * @returns {Object} Action with type UPDATE_ORCHESTRATION_PHASE
+ */
+export const updateOrchestrationPhase = (phase) => ({
+  type: 'UPDATE_ORCHESTRATION_PHASE',
+  payload: {
+    phase,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Pause the automated orchestration after the current story completes
+ * @returns {Object} Action with type PAUSE_ORCHESTRATION
+ */
+export const pauseOrchestration = () => ({
+  type: 'PAUSE_ORCHESTRATION',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Resume a paused orchestration from where it left off
+ * @returns {Object} Action with type RESUME_ORCHESTRATION
+ */
+export const resumeOrchestration = () => ({
+  type: 'RESUME_ORCHESTRATION',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Stop the automated orchestration and preserve completed work
+ * @returns {Object} Action with type STOP_ORCHESTRATION
+ */
+export const stopOrchestration = () => ({
+  type: 'STOP_ORCHESTRATION',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Code Review Actions
+ */
+
+/**
+ * Start the code review phase after all stories are implemented
+ * @returns {Object} Action with type START_CODE_REVIEW
+ */
+export const startCodeReview = () => ({
+  type: 'START_CODE_REVIEW',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Add a single code review finding
+ * @param {Object} finding - The finding object
+ * @param {string} finding.id - Unique finding ID
+ * @param {'critical'|'high'|'medium'|'low'} finding.severity - Severity level
+ * @param {string} finding.location - File path and line number
+ * @param {string} finding.description - Description of the issue
+ * @param {string} [finding.suggestedFix] - Optional suggested fix
+ * @returns {Object} Action with type ADD_CODE_REVIEW_FINDING
+ */
+export const addCodeReviewFinding = (finding) => ({
+  type: 'ADD_CODE_REVIEW_FINDING',
+  payload: {
+    finding,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Set all code review findings in a batch update
+ * @param {Object[]} findings - Array of finding objects
+ * @returns {Object} Action with type SET_CODE_REVIEW_FINDINGS
+ */
+export const setCodeReviewFindings = (findings) => ({
+  type: 'SET_CODE_REVIEW_FINDINGS',
+  payload: {
+    findings,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Complete the code review phase
+ * @param {Object} summary - Review summary statistics
+ * @param {number} summary.totalFindings - Total number of findings
+ * @param {Object} summary.bySeverity - Counts by severity level
+ * @returns {Object} Action with type COMPLETE_CODE_REVIEW
+ */
+export const completeCodeReview = (summary) => ({
+  type: 'COMPLETE_CODE_REVIEW',
+  payload: {
+    summary,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Update the status of a code review finding
+ * @param {string} findingId - The finding ID to update
+ * @param {'pending'|'fixing'|'fixed'|'wont_fix'} status - New status
+ * @param {string} [bugFixSessionId] - Session ID if being fixed
+ * @returns {Object} Action with type UPDATE_FINDING_STATUS
+ */
+export const updateFindingStatus = (findingId, status, bugFixSessionId = null) => ({
+  type: 'UPDATE_FINDING_STATUS',
+  payload: {
+    findingId,
+    status,
+    bugFixSessionId,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Bug Fix Phase Actions
+ */
+
+/**
+ * Start the bug fix phase after code review completes
+ * @returns {Object} Action with type START_BUG_FIX_PHASE
+ */
+export const startBugFixPhase = () => ({
+  type: 'START_BUG_FIX_PHASE',
+  payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Mark a specific finding as currently being fixed
+ * @param {string} findingId - The finding ID being fixed
+ * @returns {Object} Action with type START_FIXING_FINDING
+ */
+export const startFixingFinding = (findingId) => ({
+  type: 'START_FIXING_FINDING',
+  payload: {
+    findingId,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Mark a finding fix as complete
+ * @param {string} findingId - The finding ID that was fixed
+ * @param {string} sessionId - The Claude session ID used for the fix
+ * @param {'fixed'|'partial'|'skipped'} result - The fix result
+ * @returns {Object} Action with type COMPLETE_FIXING_FINDING
+ */
+export const completeFixingFinding = (findingId, sessionId, result) => ({
+  type: 'COMPLETE_FIXING_FINDING',
+  payload: {
+    findingId,
+    sessionId,
+    result,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Complete the bug fix phase
+ * @param {Object} summary - Bug fix summary statistics
+ * @param {number} summary.total - Total findings addressed
+ * @param {number} summary.fixed - Number fully fixed
+ * @param {number} summary.partial - Number partially fixed
+ * @param {number} summary.skipped - Number skipped
+ * @returns {Object} Action with type COMPLETE_BUG_FIX_PHASE
+ */
+export const completeBugFixPhase = (summary) => ({
+  type: 'COMPLETE_BUG_FIX_PHASE',
+  payload: {
+    summary,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Set the sprint plan content captured from Claude's planning response
+ * @param {string} planContent - The plan content from Claude
+ * @returns {Object} Action with type SET_SPRINT_PLAN
+ */
 export const setSprintPlan = (planContent) => ({
   type: 'SET_SPRINT_PLAN',
   payload: {
@@ -837,7 +1079,11 @@ export const setSprintPlan = (planContent) => ({
   }
 })
 
-// Iterate on the sprint plan with clarifying answers
+/**
+ * Iterate on the sprint plan with clarifying answers
+ * @param {string} clarifications - User's clarifying answers and requirements
+ * @returns {Object} Action with type ITERATE_SPRINT_PLAN
+ */
 export const iterateSprintPlan = (clarifications) => ({
   type: 'ITERATE_SPRINT_PLAN',
   payload: {
@@ -992,6 +1238,47 @@ export const toggleCriteriaCompletion = (storyId, criteriaIndex, checked) => ({
   }
 })
 
+// Update acceptance criteria validation status (automated validation result)
+export const updateCriteriaValidation = (storyId, criteriaIndex, status, reason = null) => ({
+  type: 'UPDATE_CRITERIA_VALIDATION',
+  payload: {
+    storyId,
+    criteriaIndex,
+    status, // 'passed' | 'failed' | 'pending'
+    reason, // Failure reason if status is 'failed'
+    timestamp: Date.now()
+  }
+})
+
+// Batch update all acceptance criteria validation results for a story
+export const updateStoryCriteriaValidation = (storyId, validationResults) => ({
+  type: 'UPDATE_STORY_CRITERIA_VALIDATION',
+  payload: {
+    storyId,
+    validationResults, // Array of { criteriaIndex, status, reason }
+    timestamp: Date.now()
+  }
+})
+
+// Mark criteria validation as in progress
+export const startCriteriaValidation = (storyId) => ({
+  type: 'START_CRITERIA_VALIDATION',
+  payload: {
+    storyId,
+    timestamp: Date.now()
+  }
+})
+
+// Mark criteria validation as complete
+export const completeCriteriaValidation = (storyId, summary) => ({
+  type: 'COMPLETE_CRITERIA_VALIDATION',
+  payload: {
+    storyId,
+    summary, // { total, passed, failed }
+    timestamp: Date.now()
+  }
+})
+
 /**
  * Git Integration Actions
  */
@@ -1062,5 +1349,26 @@ export const updateThreadSearchQuery = (query) => ({
   type: 'UPDATE_THREAD_SEARCH_QUERY',
   payload: {
     query
+  }
+})
+
+/**
+ * Sprint Completion Statistics Actions
+ */
+
+// Set sprint completion statistics
+export const setSprintCompletionStats = (stats) => ({
+  type: 'SET_SPRINT_COMPLETION_STATS',
+  payload: {
+    stats, // SprintCompletionStats object
+    timestamp: Date.now()
+  }
+})
+
+// Toggle sprint summary panel expanded/collapsed
+export const toggleSprintSummary = () => ({
+  type: 'TOGGLE_SPRINT_SUMMARY',
+  payload: {
+    timestamp: Date.now()
   }
 })

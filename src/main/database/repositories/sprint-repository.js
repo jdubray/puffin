@@ -929,16 +929,23 @@ class SprintRepository extends BaseRepository {
     const db = this.getDb()
     const { limit = 50, offset } = options
 
+    // Use parameterized query to prevent SQL injection and ensure type safety
+    const params = []
     let sql = 'SELECT * FROM sprint_history ORDER BY closed_at DESC'
 
-    if (limit) {
-      sql += ` LIMIT ${limit}`
-      if (offset) {
-        sql += ` OFFSET ${offset}`
-      }
+    // Ensure limit is a valid positive integer
+    const safeLimit = Math.max(1, Math.floor(Number(limit) || 50))
+    sql += ' LIMIT ?'
+    params.push(safeLimit)
+
+    // Add offset if provided and valid
+    if (offset !== undefined && offset !== null) {
+      const safeOffset = Math.max(0, Math.floor(Number(offset) || 0))
+      sql += ' OFFSET ?'
+      params.push(safeOffset)
     }
 
-    const rows = db.prepare(sql).all()
+    const rows = db.prepare(sql).all(...params)
     return rows.map(row => this._historyRowToSprint(row))
   }
 

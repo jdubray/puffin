@@ -39,6 +39,20 @@ import { styleInjector } from './plugins/style-injector.js'
 import { pluginComponentLoader } from './plugins/plugin-component-loader.js'
 
 /**
+ * Display limit constants for UI rendering
+ */
+const DISPLAY_LIMITS = {
+  /** Maximum incidents to show in summary panel */
+  INCIDENTS_SUMMARY: 5,
+  /** Maximum incidents to show in code review panel */
+  INCIDENTS_CODE_REVIEW: 3,
+  /** Maximum characters for truncated descriptions */
+  DESCRIPTION_LENGTH: 80,
+  /** Maximum files to show in response summary */
+  FILES_MODIFIED: 10
+}
+
+/**
  * Main application class
  */
 class PuffinApp {
@@ -851,10 +865,21 @@ Please provide specific file locations and line numbers where issues are found, 
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'setSprintPlan', 'iterateSprintPlan',
+      'createSprint', 'startSprintPlanning', 'approvePlan', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan',
       'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'deleteSprint',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'updateStoryAssertionResults', 'toggleCriteriaCompletion',
+      // Acceptance criteria validation actions
+      'updateCriteriaValidation', 'updateStoryCriteriaValidation', 'startCriteriaValidation', 'completeCriteriaValidation',
+      // Orchestration actions
+      'orchestrationStoryStarted', 'orchestrationStoryCompleted', 'updateOrchestrationPhase',
+      'pauseOrchestration', 'resumeOrchestration', 'stopOrchestration',
+      // Code review actions
+      'startCodeReview', 'addCodeReviewFinding', 'setCodeReviewFindings', 'completeCodeReview', 'updateFindingStatus',
+      // Bug fix phase actions
+      'startBugFixPhase', 'startFixingFinding', 'completeFixingFinding', 'completeBugFixPhase',
+      // Sprint completion statistics
+      'setSprintCompletionStats', 'toggleSprintSummary',
       // Stuck detection actions
       'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection',
       // Debug actions
@@ -968,6 +993,8 @@ Please provide specific file locations and line numbers where issues are found, 
           ['CREATE_SPRINT', actions.createSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['APPROVE_PLAN', actions.approvePlan],
+          ['SELECT_IMPLEMENTATION_MODE', actions.selectImplementationMode],
+          ['START_AUTOMATED_IMPLEMENTATION', actions.startAutomatedImplementation],
           ['SET_SPRINT_PLAN', actions.setSprintPlan],
           ['ITERATE_SPRINT_PLAN', actions.iterateSprintPlan],
           ['CLEAR_SPRINT', actions.clearSprint],
@@ -983,6 +1010,11 @@ Please provide specific file locations and line numbers where issues are found, 
           ['CLEAR_SPRINT_ERROR', actions.clearSprintError],
           ['UPDATE_STORY_ASSERTION_RESULTS', actions.updateStoryAssertionResults],
           ['TOGGLE_CRITERIA_COMPLETION', actions.toggleCriteriaCompletion],
+          // Acceptance criteria validation actions
+          ['UPDATE_CRITERIA_VALIDATION', actions.updateCriteriaValidation],
+          ['UPDATE_STORY_CRITERIA_VALIDATION', actions.updateStoryCriteriaValidation],
+          ['START_CRITERIA_VALIDATION', actions.startCriteriaValidation],
+          ['COMPLETE_CRITERIA_VALIDATION', actions.completeCriteriaValidation],
           // Stuck detection actions
           ['RECORD_ITERATION_OUTPUT', actions.recordIterationOutput],
           ['RESOLVE_STUCK_STATE', actions.resolveStuckState],
@@ -992,7 +1024,28 @@ Please provide specific file locations and line numbers where issues are found, 
           ['CLEAR_DEBUG_PROMPT', actions.clearDebugPrompt],
           ['SET_DEBUG_MODE', actions.setDebugMode],
           // Active implementation story
-          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory]
+          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory],
+          // Orchestration actions
+          ['ORCHESTRATION_STORY_STARTED', actions.orchestrationStoryStarted],
+          ['ORCHESTRATION_STORY_COMPLETED', actions.orchestrationStoryCompleted],
+          ['UPDATE_ORCHESTRATION_PHASE', actions.updateOrchestrationPhase],
+          ['PAUSE_ORCHESTRATION', actions.pauseOrchestration],
+          ['RESUME_ORCHESTRATION', actions.resumeOrchestration],
+          ['STOP_ORCHESTRATION', actions.stopOrchestration],
+          // Code review actions
+          ['START_CODE_REVIEW', actions.startCodeReview],
+          ['ADD_CODE_REVIEW_FINDING', actions.addCodeReviewFinding],
+          ['SET_CODE_REVIEW_FINDINGS', actions.setCodeReviewFindings],
+          ['COMPLETE_CODE_REVIEW', actions.completeCodeReview],
+          ['UPDATE_FINDING_STATUS', actions.updateFindingStatus],
+          // Bug fix phase actions
+          ['START_BUG_FIX_PHASE', actions.startBugFixPhase],
+          ['START_FIXING_FINDING', actions.startFixingFinding],
+          ['COMPLETE_FIXING_FINDING', actions.completeFixingFinding],
+          ['COMPLETE_BUG_FIX_PHASE', actions.completeBugFixPhase],
+          // Sprint completion statistics actions
+          ['SET_SPRINT_COMPLETION_STATS', actions.setSprintCompletionStats],
+          ['TOGGLE_SPRINT_SUMMARY', actions.toggleSprintSummary]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -1142,6 +1195,9 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Debug view handlers
     this.setupDebugViewHandlers()
+
+    // Orchestration controls - using event delegation to prevent memory leaks
+    this.setupOrchestrationDelegation()
   }
 
   /**
@@ -1971,11 +2027,22 @@ Please provide specific file locations and line numbers where issues are found, 
         const isActiveImplementation = story.id === activeImplementationStoryId
         const implementingClass = isActiveImplementation ? 'story-implementing' : ''
 
-        // Get acceptance criteria with completion state
+        // Get acceptance criteria with completion state and validation status
+        const criteriaProgress = progress?.criteriaProgress || {}
         const criteriaList = computedStory?.acceptanceCriteria || []
         const totalCriteria = criteriaList.length
         const completedCriteria = criteriaList.filter(c => c.checked).length
         const criteriaPercentage = totalCriteria > 0 ? Math.round((completedCriteria / totalCriteria) * 100) : 0
+
+        // Get validation status from story progress
+        const storyValidationStatus = progress?.validationStatus || null
+        const validationSummary = progress?.validationSummary || null
+        const isValidating = storyValidationStatus === 'validating'
+        const validationComplete = storyValidationStatus === 'completed'
+
+        // Count validation results
+        const passedCriteria = criteriaList.filter((c, idx) => criteriaProgress[idx]?.validationStatus === 'passed').length
+        const failedCriteria = criteriaList.filter((c, idx) => criteriaProgress[idx]?.validationStatus === 'failed').length
 
         // Get inspection assertions (from sprint story or backlog story)
         const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
@@ -1985,8 +2052,30 @@ Please provide specific file locations and line numbers where issues are found, 
         // Check if this section was expanded before re-render
         const isExpanded = expandedSections.has(story.id)
 
+        // Get branch assignment for this story (if available)
+        const branchAssignment = sprint.branchAssignments?.[story.id]
+        const branchBadge = branchAssignment ? this.renderBranchBadge(branchAssignment) : ''
+
+        // Get orchestration state for this story (if in automated mode)
+        const orchestration = sprint.orchestration
+        const isOrchestrating = orchestration?.status === 'running' || orchestration?.status === 'paused'
+        const storySession = orchestration?.storySessions?.[story.id]
+        const isOrchestrationCurrent = orchestration?.currentStoryId === story.id
+        const isOrchestrationCompleted = orchestration?.completedStories?.includes(story.id)
+        const orchestrationOrder = sprint.implementationOrder?.indexOf(story.id)
+        const hasOrchestrationOrder = orchestrationOrder !== undefined && orchestrationOrder !== -1
+
+        // Session indicator for orchestration mode
+        const sessionIndicator = this.renderSessionIndicator(storySession, isOrchestrationCurrent, isOrchestrationCompleted, hasOrchestrationOrder ? orchestrationOrder + 1 : null)
+
+        // Combine orchestration and regular implementation states
+        const isCurrentlyImplementing = isActiveImplementation || isOrchestrationCurrent
+        const implementingClassFinal = isCurrentlyImplementing ? 'story-implementing' : ''
+        const orchestrationClass = isOrchestrationCompleted ? 'orchestration-completed' : (isOrchestrationCurrent ? 'orchestration-current' : '')
+
         return `
-          <div class="sprint-story-card ${storyStatusClass} ${implementingClass}" data-story-id="${story.id}">
+          <div class="sprint-story-card ${storyStatusClass} ${implementingClassFinal} ${orchestrationClass}" data-story-id="${story.id}">
+            ${sessionIndicator}
             <div class="story-header-with-indicator">
               <button class="story-complete-btn ${isCompleted ? 'completed' : ''}"
                       data-story-id="${story.id}"
@@ -1994,19 +2083,39 @@ Please provide specific file locations and line numbers where issues are found, 
                 <span class="complete-icon">${isCompleted ? '✓' : '○'}</span>
               </button>
               <h4>${this.escapeHtml(story.title)}</h4>
-              ${isActiveImplementation ? '<span class="implementing-badge">Implementing...</span>' : ''}
+              ${branchBadge}
+              ${isCurrentlyImplementing ? '<span class="implementing-badge">Implementing...</span>' : ''}
             </div>
             <p>${this.escapeHtml(story.description || '')}</p>
             ${totalCriteria > 0 ? `
-              <div class="story-criteria-section${isExpanded ? ' expanded' : ''}" data-story-id="${story.id}">
+              <div class="story-criteria-section${isExpanded ? ' expanded' : ''}${isValidating ? ' validating' : ''}${validationComplete ? ' validation-complete' : ''}" data-story-id="${story.id}">
                 <button class="criteria-toggle-btn" data-story-id="${story.id}" title="Toggle acceptance criteria">
                   <span class="criteria-toggle-icon">▶</span>
                   <span class="criteria-label">Acceptance Criteria</span>
-                  <span class="criteria-count">${completedCriteria}/${totalCriteria}</span>
+                  ${isValidating ? `
+                    <span class="criteria-validating-badge" title="Validating acceptance criteria...">
+                      <span class="validating-spinner"></span>
+                      <span class="validating-text">Validating...</span>
+                    </span>
+                  ` : validationComplete ? `
+                    <span class="criteria-validation-summary ${failedCriteria > 0 ? 'has-failures' : 'all-passed'}" title="${passedCriteria} passed, ${failedCriteria} failed">
+                      <span class="validation-passed">${passedCriteria} passed</span>
+                      ${failedCriteria > 0 ? `<span class="validation-failed">${failedCriteria} failed</span>` : ''}
+                    </span>
+                  ` : `
+                    <span class="criteria-count">${completedCriteria}/${totalCriteria}</span>
+                  `}
                 </button>
                 <ul class="criteria-checklist${isExpanded ? ' expanded' : ''}">
-                  ${criteriaList.map(c => `
-                    <li class="criteria-item ${c.checked ? 'checked' : ''}">
+                  ${criteriaList.map((c, idx) => {
+                    const criteriaState = criteriaProgress[c.index] || {}
+                    const validationStatus = criteriaState.validationStatus
+                    const validationReason = criteriaState.validationReason
+                    const statusClass = validationStatus === 'passed' ? 'validation-passed' :
+                                        validationStatus === 'failed' ? 'validation-failed' : ''
+                    return `
+                    <li class="criteria-item ${c.checked ? 'checked' : ''} ${statusClass}"
+                        ${validationReason ? `data-validation-reason="${this.escapeHtml(validationReason)}"` : ''}>
                       <label class="criteria-checkbox-label">
                         <input type="checkbox"
                                class="criteria-checkbox"
@@ -2014,14 +2123,27 @@ Please provide specific file locations and line numbers where issues are found, 
                                data-criteria-index="${c.index}"
                                ${c.checked ? 'checked' : ''}>
                         <span class="criteria-text">${this.escapeHtml(c.text)}</span>
+                        ${validationStatus ? `
+                          <span class="criteria-validation-indicator ${validationStatus}"
+                                title="${validationStatus === 'passed' ? 'Validated: Passed' : validationStatus === 'failed' ? 'Validated: Failed' + (validationReason ? ' - ' + this.escapeHtml(validationReason) : '') : 'Pending validation'}"
+                                aria-label="Validation status: ${validationStatus}">
+                            ${validationStatus === 'passed' ? '✓' : validationStatus === 'failed' ? '✗' : '○'}
+                          </span>
+                        ` : ''}
                       </label>
+                      ${validationStatus === 'failed' && validationReason ? `
+                        <div class="criteria-failure-reason" role="alert">
+                          <span class="failure-icon">!</span>
+                          <span class="failure-text">${this.escapeHtml(validationReason)}</span>
+                        </div>
+                      ` : ''}
                     </li>
-                  `).join('')}
+                  `}).join('')}
                 </ul>
               </div>
             ` : ''}
             ${hasAssertions ? this.renderSprintAssertions(story.id, assertions, assertionResults) : ''}
-            ${showBranchButtons ? this.renderStoryBranchButtons(story, progress) : ''}
+            ${showBranchButtons ? this.renderStoryBranchButtons(story, progress, branchAssignment) : ''}
             ${isActiveImplementation ? `
               <div class="cancel-implementation-section">
                 <button class="cancel-implementation-btn" data-story-id="${story.id}" title="Cancel implementation">
@@ -2051,14 +2173,72 @@ Please provide specific file locations and line numbers where issues are found, 
         }
       }
 
+      // Render orchestration controls if in automated mode
+      const orchestrationControlsContainer = document.getElementById('orchestration-controls-container')
+      if (orchestrationControlsContainer) {
+        const orchestration = sprint.orchestration
+        if (orchestration && sprint.implementationMode === 'automated') {
+          orchestrationControlsContainer.innerHTML = this.renderOrchestrationControls(orchestration)
+          orchestrationControlsContainer.classList.remove('hidden')
+
+          // Bind orchestration control buttons
+          this.bindOrchestrationControls()
+        } else {
+          orchestrationControlsContainer.innerHTML = ''
+          orchestrationControlsContainer.classList.add('hidden')
+        }
+      }
+
+      // Render code review panel if in review phase or has code review data
+      const codeReviewContainer = document.getElementById('code-review-container')
+      if (codeReviewContainer) {
+        const orchestration = sprint.orchestration
+        const codeReview = sprint.codeReview
+        const bugFix = sprint.bugFix
+        const inReviewPhase = orchestration?.phase === 'review' || orchestration?.phase === 'bugfix'
+
+        if (codeReview || inReviewPhase) {
+          codeReviewContainer.innerHTML = this.renderCodeReviewPanel(codeReview, bugFix, orchestration?.phase)
+          codeReviewContainer.classList.remove('hidden')
+
+          // Bind code review panel event handlers
+          this.bindCodeReviewPanel()
+        } else {
+          codeReviewContainer.innerHTML = ''
+          codeReviewContainer.classList.add('hidden')
+        }
+      }
+
+      // Render sprint completion summary if orchestration is complete or has stats
+      const sprintSummaryContainer = document.getElementById('sprint-summary-container')
+      if (sprintSummaryContainer) {
+        const orchestration = sprint.orchestration
+        const completionStats = sprint.completionStats
+        const isComplete = orchestration?.status === 'complete' || orchestration?.phase === 'complete'
+
+        if (completionStats || isComplete) {
+          sprintSummaryContainer.innerHTML = this.renderSprintCompletionSummary(
+            completionStats,
+            sprint.summaryExpanded || false
+          )
+          sprintSummaryContainer.classList.remove('hidden')
+
+          // Bind sprint summary toggle
+          this.bindSprintSummaryToggle()
+        } else {
+          sprintSummaryContainer.innerHTML = ''
+          sprintSummaryContainer.classList.add('hidden')
+        }
+      }
+
     }
 
     // Update action buttons based on status
     // Plan button: visible when sprint is 'created' (ready to plan)
-    // Iterate/Approve buttons: visible when sprint has stories AND is not yet approved (in-progress)
+    // Iterate/Approve buttons: visible only when sprint status is 'planned' (plan exists, not yet approved)
     const hasStories = sprint.stories && sprint.stories.length > 0
     const canPlan = sprint.status === 'created'
-    const canApprove = hasStories && sprint.status !== 'in-progress' && sprint.status !== 'implementing'
+    const canApprove = hasStories && sprint.status === 'planned'
 
     console.log('[SPRINT-BUTTONS] status:', sprint.status, 'hasStories:', hasStories, 'canPlan:', canPlan, 'canApprove:', canApprove)
 
@@ -2332,6 +2512,750 @@ Please provide specific file locations and line numbers where issues are found, 
       default:
         return '<span class="story-status-indicator status-pending" title="Pending">○</span>'
     }
+  }
+
+  /**
+   * Render a branch assignment badge for a user story
+   * @param {string} branch - Branch type: 'ui', 'backend', 'fullstack', 'plugin'
+   * @returns {string} HTML for the branch badge
+   */
+  renderBranchBadge(branch) {
+    const branchConfig = {
+      ui: { label: 'UI', icon: '🎨', className: 'branch-ui' },
+      backend: { label: 'Backend', icon: '⚙️', className: 'branch-backend' },
+      fullstack: { label: 'Full Stack', icon: '🔗', className: 'branch-fullstack' },
+      plugin: { label: 'Plugin', icon: '📦', className: 'branch-plugin' }
+    }
+
+    const config = branchConfig[branch?.toLowerCase()]
+    if (!config) return ''
+
+    return `<span class="branch-badge ${config.className}"
+                  title="Assigned to ${config.label} branch"
+                  aria-label="Branch: ${config.label}">
+              <span class="branch-icon" aria-hidden="true">${config.icon}</span>
+              <span class="branch-label">${config.label}</span>
+            </span>`
+  }
+
+  /**
+   * Render session indicator for orchestration mode
+   * Shows the session boundary and status for a story in automated implementation
+   * @param {Object} storySession - Session tracking data for this story
+   * @param {boolean} isCurrent - Whether this is the currently executing story
+   * @param {boolean} isCompleted - Whether this story's session has completed
+   * @param {number|null} orderNumber - The order number in implementation sequence
+   * @returns {string} HTML for the session indicator
+   */
+  renderSessionIndicator(storySession, isCurrent, isCompleted, orderNumber) {
+    // Only show indicator if there's orchestration state
+    if (!storySession && !isCurrent && !isCompleted && orderNumber === null) {
+      return ''
+    }
+
+    let statusIcon = ''
+    let statusText = ''
+    let statusClass = ''
+
+    if (isCompleted && storySession?.sessionId) {
+      statusIcon = '✓'
+      statusText = `Session completed`
+      statusClass = 'session-completed'
+    } else if (isCurrent) {
+      statusIcon = '◐'
+      statusText = 'Session in progress...'
+      statusClass = 'session-active'
+    } else if (orderNumber !== null) {
+      statusIcon = orderNumber.toString()
+      statusText = `Queued (step ${orderNumber})`
+      statusClass = 'session-pending'
+    } else {
+      return ''
+    }
+
+    return `
+      <div class="session-indicator ${statusClass}"
+           role="status"
+           aria-label="${statusText}">
+        <span class="session-indicator-icon" aria-hidden="true">${statusIcon}</span>
+        <span class="session-indicator-label">${statusText}</span>
+      </div>
+    `
+  }
+
+  /**
+   * Render orchestration controls (pause/resume/stop) for the sprint panel
+   * @param {Object} orchestration - Current orchestration state
+   * @returns {string} HTML for orchestration controls
+   */
+  renderOrchestrationControls(orchestration) {
+    if (!orchestration) return ''
+
+    const status = orchestration.status
+    const phase = orchestration.phase || 'implementation'
+    const completedCount = orchestration.completedStories?.length || 0
+    const totalCount = orchestration.storyOrder?.length || 0
+
+    // Phase display
+    const phaseLabels = {
+      implementation: 'Implementing',
+      review: 'Code Review',
+      bugfix: 'Bug Fixes',
+      complete: 'Complete'
+    }
+    const phaseLabel = phaseLabels[phase] || phase
+
+    if (status === 'running') {
+      return `
+        <div class="orchestration-controls" role="group" aria-label="Orchestration controls">
+          <div class="orchestration-status">
+            <span class="orchestration-status-icon running" aria-hidden="true">●</span>
+            <span class="orchestration-status-text">${phaseLabel}</span>
+            <span class="orchestration-progress">${completedCount}/${totalCount}</span>
+          </div>
+          <div class="orchestration-buttons">
+            <button class="btn-orchestration pause" id="orchestration-pause-btn"
+                    title="Pause after current story completes"
+                    aria-label="Pause orchestration">
+              <span aria-hidden="true">⏸</span> Pause
+            </button>
+            <button class="btn-orchestration stop" id="orchestration-stop-btn"
+                    title="Stop automation and preserve progress"
+                    aria-label="Stop orchestration">
+              <span aria-hidden="true">⏹</span> Stop
+            </button>
+          </div>
+        </div>
+      `
+    } else if (status === 'paused') {
+      return `
+        <div class="orchestration-controls" role="group" aria-label="Orchestration controls">
+          <div class="orchestration-status">
+            <span class="orchestration-status-icon paused" aria-hidden="true">⏸</span>
+            <span class="orchestration-status-text">Paused</span>
+            <span class="orchestration-progress">${completedCount}/${totalCount}</span>
+          </div>
+          <div class="orchestration-buttons">
+            <button class="btn-orchestration resume" id="orchestration-resume-btn"
+                    title="Resume automated implementation"
+                    aria-label="Resume orchestration">
+              <span aria-hidden="true">▶</span> Resume
+            </button>
+            <button class="btn-orchestration stop" id="orchestration-stop-btn"
+                    title="Stop automation and preserve progress"
+                    aria-label="Stop orchestration">
+              <span aria-hidden="true">⏹</span> Stop
+            </button>
+          </div>
+        </div>
+      `
+    } else if (status === 'stopped') {
+      return `
+        <div class="orchestration-controls" role="group" aria-label="Orchestration controls">
+          <div class="orchestration-status">
+            <span class="orchestration-status-icon stopped" aria-hidden="true">⏹</span>
+            <span class="orchestration-status-text">Stopped</span>
+            <span class="orchestration-progress">${completedCount}/${totalCount} completed</span>
+          </div>
+          <p class="orchestration-notice">Continue manually or close sprint.</p>
+        </div>
+      `
+    } else if (status === 'complete') {
+      return `
+        <div class="orchestration-controls completed" role="status" aria-label="Orchestration complete">
+          <div class="orchestration-status">
+            <span class="orchestration-status-icon complete" aria-hidden="true">✓</span>
+            <span class="orchestration-status-text">Automation Complete</span>
+            <span class="orchestration-progress">${completedCount}/${totalCount}</span>
+          </div>
+        </div>
+      `
+    }
+
+    return ''
+  }
+
+  /**
+   * Setup delegated event handlers for orchestration controls.
+   * Uses event delegation on document to prevent memory leaks from re-renders.
+   * Called once during init, not on every render.
+   */
+  setupOrchestrationDelegation() {
+    // Orchestration control buttons (pause, resume, stop)
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('#orchestration-pause-btn')
+      if (target) {
+        this.intents.pauseOrchestration()
+        return
+      }
+    })
+
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('#orchestration-resume-btn')
+      if (target) {
+        this.intents.resumeOrchestration()
+        return
+      }
+    })
+
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('#orchestration-stop-btn')
+      if (target) {
+        this.intents.stopOrchestration()
+        return
+      }
+    })
+
+    // Sprint summary toggle button
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('#sprint-summary-toggle')
+      if (target) {
+        this.intents.toggleSprintSummary()
+        return
+      }
+    })
+  }
+
+  /**
+   * Bind event handlers for orchestration control buttons
+   * @deprecated Use setupOrchestrationDelegation() instead - kept for backward compatibility
+   */
+  bindOrchestrationControls() {
+    // No-op: Event delegation is now handled by setupOrchestrationDelegation()
+    // This method is kept for backward compatibility but does nothing
+  }
+
+  /**
+   * Render sprint completion summary with statistics
+   * @param {Object} completionStats - Sprint completion statistics
+   * @param {boolean} expanded - Whether the summary is expanded
+   * @returns {string} HTML for completion summary
+   */
+  renderSprintCompletionSummary(completionStats, expanded = false) {
+    if (!completionStats) return ''
+
+    const {
+      totalCost = 0,
+      totalTurns = 0,
+      totalSessions = 0,
+      duration = {},
+      acceptance = {},
+      assertions = {},
+      codeReview = {},
+      incidents = [],
+      overallStatus = 'unknown'
+    } = completionStats
+
+    // Format duration
+    const durationMs = duration.totalMs || 0
+    const durationMinutes = Math.floor(durationMs / 60000)
+    const durationSeconds = Math.floor((durationMs % 60000) / 1000)
+    const durationText = durationMinutes > 0
+      ? `${durationMinutes}m ${durationSeconds}s`
+      : `${durationSeconds}s`
+
+    // Format cost
+    const costText = totalCost > 0 ? `$${totalCost.toFixed(4)}` : '$0.00'
+
+    // Calculate acceptance rate
+    const acceptanceTotal = acceptance.total || 0
+    const acceptancePassed = acceptance.passed || 0
+    const acceptanceFailed = acceptance.failed || 0
+    const acceptanceRate = acceptanceTotal > 0
+      ? Math.round((acceptancePassed / acceptanceTotal) * 100)
+      : 100
+
+    // Calculate assertion rate
+    const assertionsTotal = assertions.total || 0
+    const assertionsPassed = assertions.passed || 0
+    const assertionsFailed = assertions.failed || 0
+    const assertionRate = assertionsTotal > 0
+      ? Math.round((assertionsPassed / assertionsTotal) * 100)
+      : 100
+
+    // Status styling
+    const statusConfig = {
+      success: { icon: '✓', label: 'Success', class: 'success' },
+      partial: { icon: '⚠', label: 'Partial', class: 'warning' },
+      failed: { icon: '✗', label: 'Failed', class: 'error' },
+      unknown: { icon: '?', label: 'Unknown', class: 'muted' }
+    }
+    const statusInfo = statusConfig[overallStatus] || statusConfig.unknown
+
+    // Failed acceptance criteria list
+    const failedCriteria = acceptance.failedList || []
+
+    // Failed assertions list
+    const failedAssertions = assertions.failedList || []
+
+    return `
+      <div class="sprint-completion-summary ${expanded ? 'expanded' : ''}"
+           role="region" aria-label="Sprint completion summary">
+        <button class="summary-header" id="sprint-summary-toggle"
+                aria-expanded="${expanded}" aria-controls="sprint-summary-content"
+                title="Click to ${expanded ? 'collapse' : 'expand'} summary">
+          <div class="summary-status ${statusInfo.class}">
+            <span class="summary-status-icon" aria-hidden="true">${statusInfo.icon}</span>
+            <span class="summary-status-label">Sprint ${statusInfo.label}</span>
+          </div>
+          <div class="summary-quick-stats">
+            <span class="quick-stat" title="Total cost">
+              <span class="stat-icon" aria-hidden="true">💰</span>
+              ${costText}
+            </span>
+            <span class="quick-stat" title="Total turns">
+              <span class="stat-icon" aria-hidden="true">🔄</span>
+              ${totalTurns}
+            </span>
+            <span class="quick-stat" title="Duration">
+              <span class="stat-icon" aria-hidden="true">⏱</span>
+              ${durationText}
+            </span>
+          </div>
+          <span class="summary-toggle-icon" aria-hidden="true">${expanded ? '▼' : '▶'}</span>
+        </button>
+
+        <div id="sprint-summary-content" class="summary-content ${expanded ? '' : 'collapsed'}"
+             role="group" aria-label="Detailed statistics">
+
+          <!-- Statistics Grid -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-card-header">
+                <span class="stat-card-icon" aria-hidden="true">💰</span>
+                <span class="stat-card-title">Total Cost</span>
+              </div>
+              <div class="stat-card-value">${costText}</div>
+              <div class="stat-card-detail">${totalSessions} sessions</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-card-header">
+                <span class="stat-card-icon" aria-hidden="true">🔄</span>
+                <span class="stat-card-title">Total Turns</span>
+              </div>
+              <div class="stat-card-value">${totalTurns}</div>
+              <div class="stat-card-detail">across all sessions</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-card-header">
+                <span class="stat-card-icon" aria-hidden="true">⏱</span>
+                <span class="stat-card-title">Duration</span>
+              </div>
+              <div class="stat-card-value">${durationText}</div>
+              <div class="stat-card-detail">total runtime</div>
+            </div>
+
+            <div class="stat-card ${acceptanceFailed > 0 ? 'has-failures' : ''}">
+              <div class="stat-card-header">
+                <span class="stat-card-icon" aria-hidden="true">✓</span>
+                <span class="stat-card-title">Acceptance</span>
+              </div>
+              <div class="stat-card-value">${acceptanceRate}%</div>
+              <div class="stat-card-detail">${acceptancePassed}/${acceptanceTotal} passed</div>
+            </div>
+          </div>
+
+          ${acceptanceFailed > 0 ? `
+            <!-- Failed Acceptance Criteria -->
+            <div class="failures-section">
+              <h4 class="failures-title">
+                <span class="failures-icon" aria-hidden="true">⚠</span>
+                Failed Acceptance Criteria (${acceptanceFailed})
+              </h4>
+              <ul class="failures-list" role="list">
+                ${failedCriteria.map(item => `
+                  <li class="failure-item">
+                    <span class="failure-story">${this.escapeHtml(item.storyTitle || 'Unknown Story')}</span>
+                    <span class="failure-criterion">${this.escapeHtml(item.criterion || item.description || 'Unknown criterion')}</span>
+                    ${item.reason ? `<span class="failure-reason">${this.escapeHtml(item.reason)}</span>` : ''}
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          ` : ''}
+
+          ${assertionsFailed > 0 ? `
+            <!-- Failed Assertions -->
+            <div class="failures-section">
+              <h4 class="failures-title">
+                <span class="failures-icon" aria-hidden="true">⚠</span>
+                Failed Assertions (${assertionsFailed})
+              </h4>
+              <ul class="failures-list" role="list">
+                ${failedAssertions.map(item => `
+                  <li class="failure-item">
+                    <span class="failure-story">${this.escapeHtml(item.storyTitle || 'Unknown Story')}</span>
+                    <span class="failure-assertion">${this.escapeHtml(item.assertion || item.description || 'Unknown assertion')}</span>
+                    ${item.expected !== undefined ? `
+                      <span class="failure-expected">Expected: ${this.escapeHtml(String(item.expected))}</span>
+                    ` : ''}
+                    ${item.actual !== undefined ? `
+                      <span class="failure-actual">Actual: ${this.escapeHtml(String(item.actual))}</span>
+                    ` : ''}
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          ` : ''}
+
+          ${codeReview.findingsCount > 0 ? `
+            <!-- Code Review Summary -->
+            <div class="code-review-summary-section">
+              <h4 class="section-title">
+                <span class="section-icon" aria-hidden="true">🔍</span>
+                Code Review Results
+              </h4>
+              <div class="code-review-stats">
+                <span class="review-stat">
+                  <span class="review-stat-value">${codeReview.findingsCount}</span>
+                  <span class="review-stat-label">findings</span>
+                </span>
+                <span class="review-stat">
+                  <span class="review-stat-value">${codeReview.fixesAttempted || 0}</span>
+                  <span class="review-stat-label">fixes attempted</span>
+                </span>
+              </div>
+            </div>
+          ` : ''}
+
+          ${incidents.length > 0 ? `
+            <!-- Incidents Summary -->
+            <div class="incidents-summary-section">
+              <h4 class="section-title">
+                <span class="section-icon" aria-hidden="true">📋</span>
+                Incidents (${incidents.length})
+              </h4>
+              <ul class="incidents-list" role="list">
+                ${incidents.slice(0, DISPLAY_LIMITS.INCIDENTS_SUMMARY).map(incident => `
+                  <li class="incident-item ${incident.type}">
+                    <span class="incident-type">${this.formatIncidentType(incident.type)}</span>
+                    <span class="incident-description">${this.escapeHtml(incident.description)}</span>
+                  </li>
+                `).join('')}
+                ${incidents.length > DISPLAY_LIMITS.INCIDENTS_SUMMARY ? `
+                  <li class="incidents-more">+${incidents.length - DISPLAY_LIMITS.INCIDENTS_SUMMARY} more incidents</li>
+                ` : ''}
+              </ul>
+            </div>
+          ` : ''}
+
+        </div>
+      </div>
+    `
+  }
+
+  /**
+   * Bind event handlers for sprint completion summary toggle
+   * @deprecated Use setupOrchestrationDelegation() instead - kept for backward compatibility
+   */
+  bindSprintSummaryToggle() {
+    // No-op: Event delegation is now handled by setupOrchestrationDelegation()
+    // This method is kept for backward compatibility but does nothing
+  }
+
+  /**
+   * Render code review results panel
+   * @param {Object} codeReview - Code review state from sprint
+   * @param {Object} bugFix - Bug fix state from sprint
+   * @param {string} phase - Current orchestration phase
+   * @returns {string} HTML for code review panel
+   */
+  renderCodeReviewPanel(codeReview, bugFix = null, phase = null) {
+    if (!codeReview) return ''
+
+    const status = codeReview.status
+    const findings = codeReview.findings || []
+    const incidents = codeReview.incidents || []
+
+    // Bug fix phase info
+    const inBugFixPhase = phase === 'bugfix'
+    const currentFindingId = bugFix?.currentFindingId
+    const completedFindings = bugFix?.completedFindings || []
+    const bugFixStatus = bugFix?.status
+
+    // Group findings by severity
+    const findingsBySeverity = {
+      critical: findings.filter(f => f.severity === 'critical'),
+      high: findings.filter(f => f.severity === 'high'),
+      medium: findings.filter(f => f.severity === 'medium'),
+      low: findings.filter(f => f.severity === 'low')
+    }
+
+    const totalFindings = findings.length
+    const pendingFindings = findings.filter(f => f.status === 'pending' || !f.status).length
+    const fixingFindings = findings.filter(f => f.status === 'fixing').length
+    const fixedFindings = findings.filter(f => f.status === 'fixed').length
+
+    // Status indicator - adjust for bug fix phase
+    let statusIcon, statusClass, statusLabel
+    if (inBugFixPhase && bugFixStatus === 'in_progress') {
+      statusIcon = '◐'
+      statusClass = 'fixing'
+      statusLabel = 'Fixing Bugs'
+    } else if (bugFixStatus === 'completed') {
+      statusIcon = '✓'
+      statusClass = 'completed'
+      statusLabel = 'Complete'
+    } else if (status === 'in_progress') {
+      statusIcon = '◐'
+      statusClass = 'reviewing'
+      statusLabel = 'Reviewing'
+    } else if (status === 'completed') {
+      statusIcon = '✓'
+      statusClass = 'completed'
+      statusLabel = 'Review Complete'
+    } else {
+      statusIcon = '○'
+      statusClass = 'pending'
+      statusLabel = 'Pending'
+    }
+
+    // Bug fix progress bar
+    const bugFixProgress = inBugFixPhase || bugFixStatus ? this.renderBugFixProgress(bugFix, findings) : ''
+
+    return `
+      <div class="code-review-panel ${inBugFixPhase ? 'in-bugfix-phase' : ''}" role="region" aria-label="Code Review Results">
+        <div class="code-review-header">
+          <div class="code-review-title">
+            <span class="code-review-icon ${statusClass}" aria-hidden="true">${statusIcon}</span>
+            <h4>${inBugFixPhase ? 'Bug Fix Session' : 'Code Review'}</h4>
+            ${status === 'in_progress' && !inBugFixPhase ? '<span class="reviewing-badge">Reviewing...</span>' : ''}
+            ${inBugFixPhase && bugFixStatus === 'in_progress' ? '<span class="fixing-badge">Fixing...</span>' : ''}
+          </div>
+          ${totalFindings > 0 ? `
+            <div class="code-review-summary">
+              <span class="findings-count">${totalFindings} finding${totalFindings !== 1 ? 's' : ''}</span>
+              ${fixedFindings > 0 ? `<span class="findings-fixed">${fixedFindings} fixed</span>` : ''}
+              ${fixingFindings > 0 ? `<span class="findings-fixing">${fixingFindings} fixing</span>` : ''}
+              ${pendingFindings > 0 && !inBugFixPhase ? `<span class="findings-pending">${pendingFindings} pending</span>` : ''}
+            </div>
+          ` : ''}
+        </div>
+        ${bugFixProgress}
+
+        ${incidents.length > 0 ? `
+          <div class="code-review-incidents">
+            <div class="incidents-header">
+              <span class="incidents-icon" aria-hidden="true">⚠</span>
+              <span class="incidents-label">Implementation Incidents</span>
+              <span class="incidents-count">${incidents.length}</span>
+            </div>
+            <ul class="incidents-list" role="list">
+              ${incidents.slice(0, DISPLAY_LIMITS.INCIDENTS_CODE_REVIEW).map(incident => `
+                <li class="incident-item" data-incident-id="${this.escapeHtml(incident.id || '')}">
+                  <span class="incident-type ${this.escapeHtml(incident.type || '')}">${this.formatIncidentType(incident.type)}</span>
+                  <span class="incident-description">${this.escapeHtml(incident.description)}</span>
+                </li>
+              `).join('')}
+              ${incidents.length > DISPLAY_LIMITS.INCIDENTS_CODE_REVIEW ? `
+                <li class="incidents-more">+${incidents.length - DISPLAY_LIMITS.INCIDENTS_CODE_REVIEW} more incidents</li>
+              ` : ''}
+            </ul>
+          </div>
+        ` : ''}
+
+        ${totalFindings > 0 ? `
+          <div class="code-review-findings">
+            ${this.renderFindingsByCategory('Critical', findingsBySeverity.critical, 'critical', currentFindingId)}
+            ${this.renderFindingsByCategory('High', findingsBySeverity.high, 'high', currentFindingId)}
+            ${this.renderFindingsByCategory('Medium', findingsBySeverity.medium, 'medium', currentFindingId)}
+            ${this.renderFindingsByCategory('Low', findingsBySeverity.low, 'low', currentFindingId)}
+          </div>
+        ` : status === 'completed' ? `
+          <div class="code-review-no-findings">
+            <span class="no-findings-icon" aria-hidden="true">✓</span>
+            <span class="no-findings-text">No issues found during code review</span>
+          </div>
+        ` : ''}
+      </div>
+    `
+  }
+
+  /**
+   * Render bug fix progress section
+   * @param {Object} bugFix - Bug fix state
+   * @param {Array} findings - All findings
+   * @returns {string} HTML for bug fix progress
+   */
+  renderBugFixProgress(bugFix, findings) {
+    if (!bugFix) return ''
+
+    const status = bugFix.status
+    const completedCount = bugFix.completedFindings?.length || 0
+    const totalCount = findings.length
+    const currentFindingId = bugFix.currentFindingId
+    const currentFinding = currentFindingId ? findings.find(f => f.id === currentFindingId) : null
+    const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+
+    // Get fix results summary
+    const fixResults = bugFix.fixResults || {}
+    const fixedCount = Object.values(fixResults).filter(r => r.result === 'fixed').length
+    const partialCount = Object.values(fixResults).filter(r => r.result === 'partial').length
+    const skippedCount = Object.values(fixResults).filter(r => r.result === 'skipped').length
+
+    return `
+      <div class="bugfix-progress-section" role="region" aria-label="Bug fix progress">
+        <div class="bugfix-progress-header">
+          <span class="bugfix-progress-label">Bug Fix Progress</span>
+          <span class="bugfix-progress-stats">${completedCount}/${totalCount} (${progressPercent}%)</span>
+        </div>
+        <div class="bugfix-progress-bar" role="progressbar" aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100">
+          <div class="bugfix-progress-fill" style="width: ${progressPercent}%"></div>
+        </div>
+        ${currentFinding ? `
+          <div class="bugfix-current-fix">
+            <span class="current-fix-label">Currently fixing:</span>
+            <div class="current-fix-finding">
+              <span class="current-fix-severity ${currentFinding.severity}">${currentFinding.severity}</span>
+              <span class="current-fix-location">${this.escapeHtml(this.truncateLocation(currentFinding.location))}</span>
+              <span class="current-fix-description">${this.escapeHtml(currentFinding.description?.slice(0, DISPLAY_LIMITS.DESCRIPTION_LENGTH) || '')}${currentFinding.description?.length > DISPLAY_LIMITS.DESCRIPTION_LENGTH ? '...' : ''}</span>
+            </div>
+          </div>
+        ` : ''}
+        ${status === 'completed' ? `
+          <div class="bugfix-summary">
+            <span class="bugfix-summary-item fixed">${fixedCount} fixed</span>
+            ${partialCount > 0 ? `<span class="bugfix-summary-item partial">${partialCount} partial</span>` : ''}
+            ${skippedCount > 0 ? `<span class="bugfix-summary-item skipped">${skippedCount} skipped</span>` : ''}
+          </div>
+        ` : ''}
+      </div>
+    `
+  }
+
+  /**
+   * Render findings for a specific severity category
+   * @param {string} label - Category label
+   * @param {Array} findings - Findings in this category
+   * @param {string} severity - Severity level
+   * @param {string} currentFindingId - ID of finding currently being fixed
+   * @returns {string} HTML for findings category
+   */
+  renderFindingsByCategory(label, findings, severity, currentFindingId = null) {
+    if (!findings || findings.length === 0) return ''
+
+    // Check if current finding is in this category
+    const hasCurrentFinding = currentFindingId && findings.some(f => f.id === currentFindingId)
+
+    return `
+      <div class="findings-category ${severity} ${hasCurrentFinding ? 'has-current-fix' : ''}" role="group" aria-label="${label} severity findings">
+        <button class="findings-category-header"
+                aria-expanded="${hasCurrentFinding ? 'true' : 'false'}"
+                aria-controls="findings-${severity}-list">
+          <span class="category-severity-badge ${severity}">${label}</span>
+          <span class="category-count">${findings.length}</span>
+          ${hasCurrentFinding ? '<span class="category-fixing-badge">Fixing</span>' : ''}
+          <span class="category-toggle" aria-hidden="true">${hasCurrentFinding ? '▼' : '▶'}</span>
+        </button>
+        <ul id="findings-${severity}-list" class="findings-list ${hasCurrentFinding ? '' : 'collapsed'}" role="list">
+          ${findings.map(finding => this.renderFinding(finding, finding.id === currentFindingId)).join('')}
+        </ul>
+      </div>
+    `
+  }
+
+  /**
+   * Render a single finding item
+   * @param {Object} finding - Finding object
+   * @param {boolean} isCurrentFix - Whether this finding is currently being fixed
+   * @returns {string} HTML for finding item
+   */
+  renderFinding(finding, isCurrentFix = false) {
+    const statusIcon = finding.status === 'fixed' ? '✓' :
+                       finding.status === 'fixing' ? '◐' :
+                       finding.status === 'wont_fix' ? '✗' : '○'
+    const statusClass = this.escapeHtml(finding.status || 'pending')
+    const currentFixClass = isCurrentFix ? 'current-fix' : ''
+
+    return `
+      <li class="finding-item ${statusClass} ${currentFixClass}" data-finding-id="${this.escapeHtml(finding.id || '')}">
+        <div class="finding-header">
+          <span class="finding-status-icon ${statusClass}"
+                title="${this.escapeHtml(finding.status || 'Pending')}"
+                aria-label="Status: ${this.escapeHtml(finding.status || 'pending')}">
+            ${statusIcon}
+          </span>
+          <span class="finding-location" title="${this.escapeHtml(finding.location)}">
+            ${this.escapeHtml(this.truncateLocation(finding.location))}
+          </span>
+          ${isCurrentFix ? `
+            <span class="current-fix-badge" title="Currently being fixed">
+              <span class="fixing-pulse"></span>
+              Fixing
+            </span>
+          ` : ''}
+        </div>
+        <div class="finding-description">
+          ${this.escapeHtml(finding.description)}
+        </div>
+        ${finding.suggestedFix ? `
+          <div class="finding-suggested-fix">
+            <span class="suggested-fix-label">Suggested fix:</span>
+            <span class="suggested-fix-text">${this.escapeHtml(finding.suggestedFix)}</span>
+          </div>
+        ` : ''}
+      </li>
+    `
+  }
+
+  /**
+   * Format incident type for display
+   * @param {string} type - Incident type
+   * @returns {string} Formatted type label
+   */
+  formatIncidentType(type) {
+    if (!type) return 'Unknown'
+
+    const labels = {
+      'acceptance_failure': 'Acceptance',
+      'assertion_failure': 'Assertion',
+      'session_error': 'Error'
+    }
+    return labels[type] || type
+  }
+
+  /**
+   * Truncate file location for display
+   * @param {string} location - Full file location
+   * @returns {string} Truncated location
+   */
+  truncateLocation(location) {
+    if (!location) return ''
+    // Show only filename and line number
+    const parts = location.split(/[/\\]/)
+    return parts[parts.length - 1] || location
+  }
+
+  /**
+   * Bind event handlers for code review panel
+   */
+  bindCodeReviewPanel() {
+    const categoryHeaders = document.querySelectorAll('.findings-category-header')
+    categoryHeaders.forEach(header => {
+      header.addEventListener('click', () => {
+        const isExpanded = header.getAttribute('aria-expanded') === 'true'
+        header.setAttribute('aria-expanded', !isExpanded)
+        const listId = header.getAttribute('aria-controls')
+        const list = document.getElementById(listId)
+        if (list) {
+          list.classList.toggle('collapsed', isExpanded)
+        }
+        const toggle = header.querySelector('.category-toggle')
+        if (toggle) {
+          toggle.textContent = isExpanded ? '▶' : '▼'
+        }
+      })
+
+      // Keyboard support
+      header.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          header.click()
+        }
+      })
+    })
   }
 
   /**
@@ -2752,7 +3676,7 @@ Keep it concise but informative. Use markdown formatting.`
 
         // Note files modified
         if (prompt.response.filesModified?.length > 0) {
-          lines.push(`Files modified: ${prompt.response.filesModified.slice(0, 10).join(', ')}`)
+          lines.push(`Files modified: ${prompt.response.filesModified.slice(0, DISPLAY_LIMITS.FILES_MODIFIED).join(', ')}`)
           lines.push('')
         }
       }
@@ -2983,8 +3907,11 @@ Keep it concise but informative. Use markdown formatting.`
 
   /**
    * Render branch buttons for a story card
+   * @param {Object} story - The story object
+   * @param {Object} storyProgress - Progress info for the story
+   * @param {string} assignedBranch - Branch assigned during planning (optional)
    */
-  renderStoryBranchButtons(story, storyProgress) {
+  renderStoryBranchButtons(story, storyProgress, assignedBranch = null) {
     const branches = [
       { id: 'ui', label: 'UI', icon: '🎨' },
       { id: 'backend', label: 'Backend', icon: '⚙️' },
@@ -2994,6 +3921,7 @@ Keep it concise but informative. Use markdown formatting.`
 
     const escapedTitle = this.escapeHtml(story.title).replace(/"/g, '&quot;')
     const branchProgress = storyProgress?.branches || {}
+    const normalizedAssigned = assignedBranch?.toLowerCase()
 
     return `
       <div class="story-branch-buttons">
@@ -3002,20 +3930,27 @@ Keep it concise but informative. Use markdown formatting.`
           const status = progress?.status || 'pending'
           const statusClass = status === 'completed' ? 'completed' : status === 'in_progress' ? 'in-progress' : ''
           const statusIcon = status === 'completed' ? '✓' : status === 'in_progress' ? '◐' : ''
+          const isAssigned = normalizedAssigned === branch.id
+          const assignedClass = isAssigned ? 'assigned' : ''
           const titleText = status === 'completed'
             ? `${branch.label} implementation completed`
             : status === 'in_progress'
             ? `${branch.label} implementation in progress`
+            : isAssigned
+            ? `Start ${branch.label} implementation (recommended)`
             : `Start ${branch.label} implementation for this story`
 
           return `
-            <button class="story-branch-btn ${statusClass}"
+            <button class="story-branch-btn ${statusClass} ${assignedClass}"
                     data-story-id="${story.id}"
                     data-branch="${branch.id}"
                     data-story-title="${escapedTitle}"
-                    title="${titleText}">
+                    ${isAssigned ? 'data-assigned="true"' : ''}
+                    title="${titleText}"
+                    ${isAssigned ? 'aria-label="' + branch.label + ' (recommended branch)"' : ''}>
               <span class="branch-icon">${branch.icon}</span>
               <span class="branch-label">${branch.label}</span>
+              ${isAssigned ? '<span class="assigned-indicator" aria-hidden="true">★</span>' : ''}
               ${statusIcon ? `<span class="branch-status-icon">${statusIcon}</span>` : ''}
             </button>
           `

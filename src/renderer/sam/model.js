@@ -1952,9 +1952,10 @@ export const startSprintPlanningAcceptor = model => proposal => {
     // Update sprint status to planning
     sprint.status = 'planning'
 
-    // Build planning prompt with all story context
+    // Build planning prompt with all story context (including IDs for order tracking)
     const storyDescriptions = stories.map((story, i) => {
       let desc = `### Story ${i + 1}: ${story.title}\n`
+      desc += `**Story ID:** \`${story.id}\`\n`
       if (story.description) {
         desc += `${story.description}\n`
       }
@@ -1964,6 +1965,9 @@ export const startSprintPlanningAcceptor = model => proposal => {
       }
       return desc
     }).join('\n\n')
+
+    // Build story ID reference list for the order/assignment outputs
+    const storyIdList = stories.map(s => `- \`${s.id}\`: ${s.title}`).join('\n')
 
     const planningPrompt = `## Sprint Planning Request
 
@@ -1984,6 +1988,40 @@ ${storyDescriptions}
 5. **Risk Assessment**: Note any potential challenges or risks
 6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
 7. **Open Questions**: List any clarifications needed before implementation
+
+---
+
+## Implementation Order & Branch Assignment Analysis
+
+After completing the implementation plans above, provide the following structured outputs for automated orchestration:
+
+### Story Reference (for your convenience):
+${storyIdList}
+
+### Required Outputs:
+
+**1. Implementation Order** - Analyze dependencies between stories and determine the optimal implementation sequence. Consider:
+- Dependencies (implement prerequisites first)
+- Complexity progression (simpler stories first when no dependencies)
+- Branch grouping (cluster UI stories together, Backend stories together)
+
+Output the recommended order as a single line:
+\`\`\`
+IMPLEMENTATION_ORDER: id1, id2, id3, ...
+\`\`\`
+
+**2. Branch Assignments** - For each story, determine the appropriate implementation branch:
+- **UI**: Visual components, styling, user interactions, frontend-only changes
+- **Backend**: Data processing, APIs, business logic, database changes
+- **Fullstack**: Stories requiring both UI and backend changes
+- **Plugin**: Extensions to the plugin system
+
+Output assignments as a single line:
+\`\`\`
+BRANCH_ASSIGNMENTS: id1=ui, id2=backend, id3=fullstack, ...
+\`\`\`
+
+---
 
 **Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
 
@@ -2210,15 +2248,517 @@ export const deleteSprintAcceptor = model => proposal => {
   }
 }
 
-// Approve the sprint plan - transitions sprint to 'in-progress' status
+// Approve the sprint plan - shows implementation mode selection modal
 export const approvePlanAcceptor = model => proposal => {
   if (proposal?.type === 'APPROVE_PLAN') {
     if (model.activeSprint) {
+      // Store approval timestamp but don't transition yet
+      // Show modal to let user choose implementation mode
       model.activeSprint = {
         ...model.activeSprint,
-        status: 'in-progress',  // Plan approved, ready for implementation
         planApprovedAt: proposal.payload.timestamp
       }
+      // Show implementation mode selection modal
+      model.modal = {
+        type: 'implementation-mode-selection',
+        data: {}
+      }
+    }
+  }
+}
+
+// Valid implementation modes
+const VALID_IMPLEMENTATION_MODES = ['automated', 'human']
+
+// Orchestration status constants
+export const OrchestrationStatus = {
+  IDLE: 'idle',
+  PENDING: 'pending',
+  RUNNING: 'running',
+  PAUSED: 'paused',
+  STOPPED: 'stopped',
+  COMPLETE: 'complete'
+}
+
+// Orchestration phase constants
+export const OrchestrationPhase = {
+  IMPLEMENTATION: 'implementation',
+  REVIEW: 'review',
+  BUGFIX: 'bugfix',
+  COMPLETE: 'complete'
+}
+
+// Finding status constants
+export const FindingStatus = {
+  PENDING: 'pending',
+  FIXING: 'fixing',
+  FIXED: 'fixed',
+  WONT_FIX: 'wont_fix'
+}
+
+// Select implementation mode (automated or human-controlled)
+export const selectImplementationModeAcceptor = model => proposal => {
+  if (proposal?.type === 'SELECT_IMPLEMENTATION_MODE') {
+    if (model.activeSprint) {
+      const { mode, timestamp } = proposal.payload
+
+      // Validate mode is one of the expected values
+      if (!VALID_IMPLEMENTATION_MODES.includes(mode)) {
+        console.error('[SPRINT] Invalid implementation mode:', mode)
+        return
+      }
+
+      model.activeSprint = {
+        ...model.activeSprint,
+        implementationMode: mode,  // 'automated' | 'human'
+        implementationModeSelectedAt: timestamp
+      }
+      console.log('[SPRINT] Implementation mode selected:', mode)
+
+      if (mode === 'automated') {
+        // For automated mode, show orchestration plan modal for review
+        // Don't transition to in-progress yet - wait for user to confirm start
+        // Determine story order from implementationOrder (parsed from plan) or story list
+        const storyOrder = model.activeSprint.implementationOrder ||
+          model.activeSprint.stories?.map(s => s.id) || []
+
+        model.activeSprint.orchestration = {
+          status: OrchestrationStatus.PENDING,  // Will become 'running' when user confirms start
+          currentStoryId: null,
+          completedStories: [],
+          storyOrder,
+          incidents: [],
+          phase: OrchestrationPhase.IMPLEMENTATION
+        }
+        // Show orchestration plan modal
+        model.modal = {
+          visible: true,
+          type: 'orchestration-plan',
+          data: {}
+        }
+      } else {
+        // Human-controlled mode - transition immediately to in-progress
+        model.activeSprint.status = 'in-progress'
+      }
+    }
+  }
+}
+
+// Start automated implementation after user reviews orchestration plan
+export const startAutomatedImplementationAcceptor = model => proposal => {
+  if (proposal?.type === 'START_AUTOMATED_IMPLEMENTATION') {
+    if (model.activeSprint && model.activeSprint.implementationMode === 'automated') {
+      const { timestamp } = proposal.payload
+
+      // Transition sprint to in-progress
+      model.activeSprint.status = 'in-progress'
+      model.activeSprint.automationStartedAt = timestamp
+
+      // Update orchestration status to running
+      if (model.activeSprint.orchestration) {
+        model.activeSprint.orchestration.status = OrchestrationStatus.RUNNING
+        model.activeSprint.orchestration.startedAt = timestamp
+      }
+
+      console.log('[SPRINT] Automated implementation started')
+    }
+  }
+}
+
+// Orchestration story started - marks the current story being implemented
+export const orchestrationStoryStartedAcceptor = model => proposal => {
+  if (proposal?.type === 'ORCHESTRATION_STORY_STARTED') {
+    if (model.activeSprint?.orchestration) {
+      const { storyId, timestamp } = proposal.payload
+      model.activeSprint.orchestration.currentStoryId = storyId
+      model.activeSprint.orchestration.currentStoryStartedAt = timestamp
+
+      // Initialize session tracking for this story if not exists
+      if (!model.activeSprint.orchestration.storySessions) {
+        model.activeSprint.orchestration.storySessions = {}
+      }
+      model.activeSprint.orchestration.storySessions[storyId] = {
+        status: 'in_progress',
+        startedAt: timestamp
+      }
+
+      console.log('[ORCHESTRATION] Story started:', storyId)
+    }
+  }
+}
+
+// Orchestration story completed - marks story as done and records session
+export const orchestrationStoryCompletedAcceptor = model => proposal => {
+  if (proposal?.type === 'ORCHESTRATION_STORY_COMPLETED') {
+    if (model.activeSprint?.orchestration) {
+      const { storyId, sessionId, timestamp } = proposal.payload
+
+      // Add to completed stories list
+      if (!model.activeSprint.orchestration.completedStories) {
+        model.activeSprint.orchestration.completedStories = []
+      }
+      if (!model.activeSprint.orchestration.completedStories.includes(storyId)) {
+        model.activeSprint.orchestration.completedStories.push(storyId)
+      }
+
+      // Update session tracking
+      if (!model.activeSprint.orchestration.storySessions) {
+        model.activeSprint.orchestration.storySessions = {}
+      }
+      model.activeSprint.orchestration.storySessions[storyId] = {
+        status: 'completed',
+        startedAt: model.activeSprint.orchestration.storySessions[storyId]?.startedAt,
+        completedAt: timestamp,
+        sessionId: sessionId
+      }
+
+      // Clear current story if it matches
+      if (model.activeSprint.orchestration.currentStoryId === storyId) {
+        model.activeSprint.orchestration.currentStoryId = null
+        model.activeSprint.orchestration.currentStoryStartedAt = null
+      }
+
+      console.log('[ORCHESTRATION] Story completed:', storyId, 'Session:', sessionId)
+    }
+  }
+}
+
+// Update orchestration phase
+export const updateOrchestrationPhaseAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_ORCHESTRATION_PHASE') {
+    if (model.activeSprint?.orchestration) {
+      const { phase, timestamp } = proposal.payload
+      model.activeSprint.orchestration.phase = phase
+      model.activeSprint.orchestration.phaseChangedAt = timestamp
+
+      // Update status to complete if phase is complete
+      if (phase === OrchestrationPhase.COMPLETE) {
+        model.activeSprint.orchestration.status = OrchestrationStatus.COMPLETE
+        model.activeSprint.orchestration.completedAt = timestamp
+      }
+
+      console.log('[ORCHESTRATION] Phase changed to:', phase)
+    }
+  }
+}
+
+// Pause orchestration
+export const pauseOrchestrationAcceptor = model => proposal => {
+  if (proposal?.type === 'PAUSE_ORCHESTRATION') {
+    if (model.activeSprint?.orchestration && model.activeSprint.orchestration.status === OrchestrationStatus.RUNNING) {
+      const { timestamp } = proposal.payload
+      model.activeSprint.orchestration.status = OrchestrationStatus.PAUSED
+      model.activeSprint.orchestration.pausedAt = timestamp
+      console.log('[ORCHESTRATION] Paused')
+    }
+  }
+}
+
+// Resume orchestration
+export const resumeOrchestrationAcceptor = model => proposal => {
+  if (proposal?.type === 'RESUME_ORCHESTRATION') {
+    if (model.activeSprint?.orchestration && model.activeSprint.orchestration.status === OrchestrationStatus.PAUSED) {
+      const { timestamp } = proposal.payload
+      model.activeSprint.orchestration.status = OrchestrationStatus.RUNNING
+      model.activeSprint.orchestration.resumedAt = timestamp
+      model.activeSprint.orchestration.pausedAt = null
+      console.log('[ORCHESTRATION] Resumed')
+    }
+  }
+}
+
+// Stop orchestration
+export const stopOrchestrationAcceptor = model => proposal => {
+  if (proposal?.type === 'STOP_ORCHESTRATION') {
+    if (model.activeSprint?.orchestration) {
+      const { timestamp } = proposal.payload
+      model.activeSprint.orchestration.status = OrchestrationStatus.STOPPED
+      model.activeSprint.orchestration.stoppedAt = timestamp
+      model.activeSprint.orchestration.currentStoryId = null
+      console.log('[ORCHESTRATION] Stopped')
+    }
+  }
+}
+
+/**
+ * Code Review Acceptors
+ */
+
+// Start code review phase
+export const startCodeReviewAcceptor = model => proposal => {
+  if (proposal?.type === 'START_CODE_REVIEW') {
+    if (model.activeSprint?.orchestration) {
+      const { timestamp } = proposal.payload
+      model.activeSprint.orchestration.phase = OrchestrationPhase.REVIEW
+      model.activeSprint.orchestration.phaseChangedAt = timestamp
+
+      // Initialize code review state
+      if (!model.activeSprint.codeReview) {
+        model.activeSprint.codeReview = {
+          status: 'in_progress',
+          startedAt: timestamp,
+          findings: [],
+          incidents: model.activeSprint.orchestration.incidents || []
+        }
+      } else {
+        model.activeSprint.codeReview.status = 'in_progress'
+        model.activeSprint.codeReview.startedAt = timestamp
+      }
+
+      console.log('[CODE_REVIEW] Started code review phase')
+    }
+  }
+}
+
+// Add a single code review finding
+export const addCodeReviewFindingAcceptor = model => proposal => {
+  if (proposal?.type === 'ADD_CODE_REVIEW_FINDING') {
+    if (model.activeSprint?.codeReview) {
+      const { finding, timestamp } = proposal.payload
+
+      // Ensure findings array exists
+      if (!model.activeSprint.codeReview.findings) {
+        model.activeSprint.codeReview.findings = []
+      }
+
+      // Add the finding with metadata
+      model.activeSprint.codeReview.findings.push({
+        ...finding,
+        status: FindingStatus.PENDING,
+        addedAt: timestamp
+      })
+
+      console.log('[CODE_REVIEW] Added finding:', finding.id, finding.severity)
+    }
+  }
+}
+
+// Set all code review findings (batch update)
+export const setCodeReviewFindingsAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_CODE_REVIEW_FINDINGS') {
+    if (model.activeSprint) {
+      const { findings, timestamp } = proposal.payload
+
+      // Initialize code review if not exists
+      if (!model.activeSprint.codeReview) {
+        model.activeSprint.codeReview = {
+          status: 'in_progress',
+          startedAt: timestamp,
+          findings: [],
+          incidents: model.activeSprint.orchestration?.incidents || []
+        }
+      }
+
+      // Set findings with metadata
+      model.activeSprint.codeReview.findings = findings.map(finding => ({
+        ...finding,
+        status: finding.status || FindingStatus.PENDING,
+        addedAt: timestamp
+      }))
+
+      console.log('[CODE_REVIEW] Set', findings.length, 'findings')
+    }
+  }
+}
+
+// Complete code review phase
+export const completeCodeReviewAcceptor = model => proposal => {
+  if (proposal?.type === 'COMPLETE_CODE_REVIEW') {
+    if (model.activeSprint?.codeReview) {
+      const { summary, timestamp } = proposal.payload
+
+      model.activeSprint.codeReview.status = 'completed'
+      model.activeSprint.codeReview.completedAt = timestamp
+      model.activeSprint.codeReview.summary = summary
+
+      // If there are findings, move to bugfix phase; otherwise, complete
+      const hasFindings = model.activeSprint.codeReview.findings?.length > 0
+      if (hasFindings) {
+        model.activeSprint.orchestration.phase = OrchestrationPhase.BUGFIX
+        model.activeSprint.orchestration.phaseChangedAt = timestamp
+        console.log('[CODE_REVIEW] Completed with findings, moving to bugfix phase')
+      } else {
+        model.activeSprint.orchestration.phase = OrchestrationPhase.COMPLETE
+        model.activeSprint.orchestration.status = OrchestrationStatus.COMPLETE
+        model.activeSprint.orchestration.completedAt = timestamp
+        console.log('[CODE_REVIEW] Completed with no findings, sprint complete')
+      }
+    }
+  }
+}
+
+// Update finding status (for bug fix tracking)
+export const updateFindingStatusAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_FINDING_STATUS') {
+    if (model.activeSprint?.codeReview?.findings) {
+      const { findingId, status, bugFixSessionId, timestamp } = proposal.payload
+
+      const finding = model.activeSprint.codeReview.findings.find(f => f.id === findingId)
+      if (finding) {
+        finding.status = status
+        finding.statusUpdatedAt = timestamp
+        if (bugFixSessionId) {
+          finding.bugFixSessionId = bugFixSessionId
+        }
+        console.log('[CODE_REVIEW] Updated finding status:', findingId, status)
+      }
+    }
+  }
+}
+
+/**
+ * Bug Fix Phase Acceptors
+ */
+
+// Start bug fix phase
+export const startBugFixPhaseAcceptor = model => proposal => {
+  if (proposal?.type === 'START_BUG_FIX_PHASE') {
+    if (model.activeSprint?.orchestration) {
+      const { timestamp } = proposal.payload
+
+      model.activeSprint.orchestration.phase = OrchestrationPhase.BUGFIX
+      model.activeSprint.orchestration.phaseChangedAt = timestamp
+
+      // Initialize bug fix state
+      if (!model.activeSprint.bugFix) {
+        model.activeSprint.bugFix = {
+          status: 'in_progress',
+          startedAt: timestamp,
+          currentFindingId: null,
+          completedFindings: [],
+          fixResults: {}
+        }
+      } else {
+        model.activeSprint.bugFix.status = 'in_progress'
+        model.activeSprint.bugFix.startedAt = timestamp
+      }
+
+      // Sort findings by severity for processing order
+      if (model.activeSprint.codeReview?.findings) {
+        const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 }
+        const sortedFindings = [...model.activeSprint.codeReview.findings]
+          .sort((a, b) => (severityOrder[a.severity] || 4) - (severityOrder[b.severity] || 4))
+        model.activeSprint.bugFix.findingOrder = sortedFindings.map(f => f.id)
+      }
+
+      console.log('[BUG_FIX] Started bug fix phase')
+    }
+  }
+}
+
+// Start fixing a specific finding
+export const startFixingFindingAcceptor = model => proposal => {
+  if (proposal?.type === 'START_FIXING_FINDING') {
+    if (model.activeSprint?.bugFix) {
+      const { findingId, timestamp } = proposal.payload
+
+      model.activeSprint.bugFix.currentFindingId = findingId
+      model.activeSprint.bugFix.currentFixStartedAt = timestamp
+
+      // Update the finding status to 'fixing'
+      if (model.activeSprint.codeReview?.findings) {
+        const finding = model.activeSprint.codeReview.findings.find(f => f.id === findingId)
+        if (finding) {
+          finding.status = FindingStatus.FIXING
+          finding.fixStartedAt = timestamp
+        }
+      }
+
+      console.log('[BUG_FIX] Started fixing finding:', findingId)
+    }
+  }
+}
+
+// Complete fixing a finding
+export const completeFixingFindingAcceptor = model => proposal => {
+  if (proposal?.type === 'COMPLETE_FIXING_FINDING') {
+    if (model.activeSprint?.bugFix) {
+      const { findingId, sessionId, result, timestamp } = proposal.payload
+
+      // Add to completed list
+      if (!model.activeSprint.bugFix.completedFindings) {
+        model.activeSprint.bugFix.completedFindings = []
+      }
+      model.activeSprint.bugFix.completedFindings.push(findingId)
+
+      // Store fix result
+      if (!model.activeSprint.bugFix.fixResults) {
+        model.activeSprint.bugFix.fixResults = {}
+      }
+      model.activeSprint.bugFix.fixResults[findingId] = {
+        sessionId,
+        result,
+        completedAt: timestamp
+      }
+
+      // Clear current finding
+      model.activeSprint.bugFix.currentFindingId = null
+      model.activeSprint.bugFix.currentFixStartedAt = null
+
+      // Update the finding status
+      if (model.activeSprint.codeReview?.findings) {
+        const finding = model.activeSprint.codeReview.findings.find(f => f.id === findingId)
+        if (finding) {
+          finding.status = result === 'fixed' ? FindingStatus.FIXED :
+                          result === 'skipped' ? FindingStatus.WONT_FIX : FindingStatus.PENDING
+          finding.bugFixSessionId = sessionId
+          finding.fixCompletedAt = timestamp
+        }
+      }
+
+      console.log('[BUG_FIX] Completed fixing finding:', findingId, result)
+    }
+  }
+}
+
+// Complete bug fix phase
+export const completeBugFixPhaseAcceptor = model => proposal => {
+  if (proposal?.type === 'COMPLETE_BUG_FIX_PHASE') {
+    if (model.activeSprint?.bugFix) {
+      const { summary, timestamp } = proposal.payload
+
+      model.activeSprint.bugFix.status = 'completed'
+      model.activeSprint.bugFix.completedAt = timestamp
+      model.activeSprint.bugFix.summary = summary
+
+      // Transition orchestration to complete
+      if (model.activeSprint.orchestration) {
+        model.activeSprint.orchestration.phase = OrchestrationPhase.COMPLETE
+        model.activeSprint.orchestration.status = OrchestrationStatus.COMPLETE
+        model.activeSprint.orchestration.completedAt = timestamp
+      }
+
+      console.log('[BUG_FIX] Completed bug fix phase:', summary)
+    }
+  }
+}
+
+/**
+ * Sprint Completion Statistics Acceptors
+ */
+
+// Set sprint completion statistics
+export const setSprintCompletionStatsAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_SPRINT_COMPLETION_STATS') {
+    if (model.activeSprint) {
+      const { stats, timestamp } = proposal.payload
+
+      model.activeSprint.completionStats = {
+        ...stats,
+        calculatedAt: timestamp
+      }
+
+      console.log('[SPRINT] Completion stats set:', stats)
+    }
+  }
+}
+
+// Toggle sprint summary panel expanded/collapsed
+export const toggleSprintSummaryAcceptor = model => proposal => {
+  if (proposal?.type === 'TOGGLE_SPRINT_SUMMARY') {
+    if (model.activeSprint) {
+      model.activeSprint.summaryExpanded = !model.activeSprint.summaryExpanded
+      console.log('[SPRINT] Summary panel toggled:', model.activeSprint.summaryExpanded)
     }
   }
 }
@@ -2230,16 +2770,49 @@ export const setSprintPlanAcceptor = model => proposal => {
     if (model.activeSprint) {
       const previousPlan = model.activeSprint.plan
       const previousStatus = model.activeSprint.status
+      const plan = proposal.payload.plan
 
       // Transition to 'planned' if currently in 'planning' status
       const newStatus = previousStatus === 'planning' ? 'planned' : previousStatus
 
+      // Parse IMPLEMENTATION_ORDER from plan if present
+      let implementationOrder = null
+      const orderMatch = plan?.match(/IMPLEMENTATION_ORDER:\s*([^\n]+)/i)
+      if (orderMatch) {
+        const orderIds = orderMatch[1].split(',').map(id => id.trim()).filter(Boolean)
+        if (orderIds.length > 0) {
+          implementationOrder = orderIds
+          console.log('[SPRINT] Parsed implementation order:', implementationOrder)
+        }
+      }
+
+      // Parse BRANCH_ASSIGNMENTS from plan if present
+      let branchAssignments = null
+      const assignMatch = plan?.match(/BRANCH_ASSIGNMENTS:\s*([^\n]+)/i)
+      if (assignMatch) {
+        branchAssignments = {}
+        const assignments = assignMatch[1].split(',').map(a => a.trim()).filter(Boolean)
+        for (const assignment of assignments) {
+          const [id, branch] = assignment.split('=').map(s => s.trim())
+          if (id && branch) {
+            branchAssignments[id] = branch
+          }
+        }
+        if (Object.keys(branchAssignments).length > 0) {
+          console.log('[SPRINT] Parsed branch assignments:', branchAssignments)
+        } else {
+          branchAssignments = null
+        }
+      }
+
       model.activeSprint = {
         ...model.activeSprint,
-        plan: proposal.payload.plan,
-        status: newStatus
+        plan,
+        status: newStatus,
+        ...(implementationOrder && { implementationOrder }),
+        ...(branchAssignments && { branchAssignments })
       }
-      console.log('[SPRINT] Plan content captured, length:', proposal.payload.plan?.length || 0,
+      console.log('[SPRINT] Plan content captured, length:', plan?.length || 0,
         'previous:', previousPlan?.length || 0,
         'status:', previousStatus, '->', newStatus)
     } else {
@@ -2274,6 +2847,7 @@ export const iterateSprintPlanAcceptor = model => proposal => {
     const stories = sprint.stories
     const storyDescriptions = stories.map((story, i) => {
       let desc = `### Story ${i + 1}: ${story.title}\n`
+      desc += `**Story ID:** \`${story.id}\`\n`
       if (story.description) {
         desc += `${story.description}\n`
       }
@@ -2283,6 +2857,9 @@ export const iterateSprintPlanAcceptor = model => proposal => {
       }
       return desc
     }).join('\n\n')
+
+    // Create story reference list for structured output
+    const storyReferenceList = stories.map(s => `- \`${s.id}\`: ${s.title}`).join('\n')
 
     // Include previous plan context if available
     const previousPlanSection = sprint.plan
@@ -2327,15 +2904,33 @@ ${storyDescriptions}
 
 ---
 
+### Story Reference (for structured output):
+${storyReferenceList}
+
+---
+
 **Planning Requirements:**
 
 1. **Architecture Analysis**: Analyze how these stories fit together and identify shared components or dependencies
-2. **Implementation Order**: Recommend the optimal order to implement these stories
+2. **Implementation Order**: Recommend the optimal order to implement these stories based on dependencies
 3. **Technical Approach**: For each story, outline the key technical decisions and approach
 4. **File Changes**: Identify the main files that will need to be created or modified
 5. **Risk Assessment**: Note any potential challenges or risks
 6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
 7. **Open Questions**: List any remaining clarifications needed
+
+---
+
+**REQUIRED STRUCTURED OUTPUT:**
+
+At the end of your plan, include these machine-parseable lines using ONLY the story IDs listed above:
+
+\`\`\`
+IMPLEMENTATION_ORDER: <story_id_1>, <story_id_2>, <story_id_3>, ...
+BRANCH_ASSIGNMENTS: <story_id_1>=<branch>, <story_id_2>=<branch>, ...
+\`\`\`
+
+Where \`<branch>\` is one of: \`ui\`, \`backend\`, \`fullstack\`, \`plugin\`
 
 **Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
 
@@ -2769,6 +3364,156 @@ export const toggleCriteriaCompletionAcceptor = model => proposal => {
     model._sprintProgressUpdated = true
 
     console.log('[SPRINT] Toggled criteria:', { storyId, criteriaIndex, checked })
+  }
+}
+
+// Update single acceptance criteria validation status (from automated validation)
+export const updateCriteriaValidationAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_CRITERIA_VALIDATION') {
+    const { storyId, criteriaIndex, status, reason, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) {
+      console.warn('[SPRINT] No active sprint for criteria validation update')
+      return
+    }
+
+    // Initialize storyProgress if not exists
+    if (!sprint.storyProgress) {
+      sprint.storyProgress = {}
+    }
+    if (!sprint.storyProgress[storyId]) {
+      sprint.storyProgress[storyId] = { branches: {}, criteriaProgress: {} }
+    }
+    if (!sprint.storyProgress[storyId].criteriaProgress) {
+      sprint.storyProgress[storyId].criteriaProgress = {}
+    }
+
+    // Update or create the criteria validation state
+    const existing = sprint.storyProgress[storyId].criteriaProgress[criteriaIndex] || {}
+    sprint.storyProgress[storyId].criteriaProgress[criteriaIndex] = {
+      ...existing,
+      validationStatus: status,
+      validationReason: reason,
+      validatedAt: timestamp,
+      // Auto-check if passed
+      checked: status === 'passed' ? true : existing.checked,
+      checkedAt: status === 'passed' ? timestamp : existing.checkedAt
+    }
+
+    model._sprintProgressUpdated = true
+    console.log('[SPRINT] Updated criteria validation:', { storyId, criteriaIndex, status })
+  }
+}
+
+// Batch update all acceptance criteria validation results for a story
+export const updateStoryCriteriaValidationAcceptor = model => proposal => {
+  if (proposal?.type === 'UPDATE_STORY_CRITERIA_VALIDATION') {
+    const { storyId, validationResults, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) {
+      console.warn('[SPRINT] No active sprint for story criteria validation')
+      return
+    }
+
+    // Initialize storyProgress if not exists
+    if (!sprint.storyProgress) {
+      sprint.storyProgress = {}
+    }
+    if (!sprint.storyProgress[storyId]) {
+      sprint.storyProgress[storyId] = { branches: {}, criteriaProgress: {} }
+    }
+    if (!sprint.storyProgress[storyId].criteriaProgress) {
+      sprint.storyProgress[storyId].criteriaProgress = {}
+    }
+
+    // Update each criterion's validation status
+    for (const result of validationResults) {
+      const { criteriaIndex, status, reason } = result
+      const existing = sprint.storyProgress[storyId].criteriaProgress[criteriaIndex] || {}
+      sprint.storyProgress[storyId].criteriaProgress[criteriaIndex] = {
+        ...existing,
+        validationStatus: status,
+        validationReason: reason,
+        validatedAt: timestamp,
+        // Auto-check if passed
+        checked: status === 'passed' ? true : existing.checked,
+        checkedAt: status === 'passed' ? timestamp : existing.checkedAt
+      }
+    }
+
+    model._sprintProgressUpdated = true
+    console.log('[SPRINT] Batch updated criteria validation:', { storyId, count: validationResults.length })
+  }
+}
+
+// Start criteria validation for a story (mark as validating)
+export const startCriteriaValidationAcceptor = model => proposal => {
+  if (proposal?.type === 'START_CRITERIA_VALIDATION') {
+    const { storyId, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) return
+
+    if (!sprint.storyProgress) {
+      sprint.storyProgress = {}
+    }
+    if (!sprint.storyProgress[storyId]) {
+      sprint.storyProgress[storyId] = { branches: {}, criteriaProgress: {} }
+    }
+
+    sprint.storyProgress[storyId].validationStatus = 'validating'
+    sprint.storyProgress[storyId].validationStartedAt = timestamp
+
+    model._sprintProgressUpdated = true
+    console.log('[SPRINT] Started criteria validation for story:', storyId)
+  }
+}
+
+// Complete criteria validation for a story
+export const completeCriteriaValidationAcceptor = model => proposal => {
+  if (proposal?.type === 'COMPLETE_CRITERIA_VALIDATION') {
+    const { storyId, summary, timestamp } = proposal.payload
+    const sprint = model.activeSprint
+
+    if (!sprint) return
+
+    if (!sprint.storyProgress) {
+      sprint.storyProgress = {}
+    }
+    if (!sprint.storyProgress[storyId]) {
+      sprint.storyProgress[storyId] = { branches: {}, criteriaProgress: {} }
+    }
+
+    sprint.storyProgress[storyId].validationStatus = 'completed'
+    sprint.storyProgress[storyId].validationCompletedAt = timestamp
+    sprint.storyProgress[storyId].validationSummary = summary
+
+    // Auto-complete story if all criteria passed
+    if (summary && summary.failed === 0 && summary.passed === summary.total) {
+      sprint.storyProgress[storyId].status = 'completed'
+      sprint.storyProgress[storyId].completedAt = timestamp
+
+      // Update story in sprint
+      const sprintStory = sprint.stories?.find(s => s.id === storyId)
+      if (sprintStory) {
+        sprintStory.status = 'completed'
+        sprintStory.completedAt = timestamp
+      }
+
+      // Sync to backlog
+      const backlogStory = model.userStories?.find(s => s.id === storyId)
+      if (backlogStory) {
+        backlogStory.status = 'completed'
+        model._userStoriesUpdated = true
+      }
+
+      console.log('[SPRINT] Auto-completed story after validation passed:', storyId)
+    }
+
+    model._sprintProgressUpdated = true
+    console.log('[SPRINT] Completed criteria validation:', { storyId, summary })
   }
 }
 
@@ -3288,6 +4033,28 @@ export const acceptors = [
   clearSprintWithDetailsAcceptor,
   deleteSprintAcceptor,
   approvePlanAcceptor,
+  selectImplementationModeAcceptor,
+  startAutomatedImplementationAcceptor,
+  orchestrationStoryStartedAcceptor,
+  orchestrationStoryCompletedAcceptor,
+  updateOrchestrationPhaseAcceptor,
+  pauseOrchestrationAcceptor,
+  resumeOrchestrationAcceptor,
+  stopOrchestrationAcceptor,
+  // Code Review
+  startCodeReviewAcceptor,
+  addCodeReviewFindingAcceptor,
+  setCodeReviewFindingsAcceptor,
+  completeCodeReviewAcceptor,
+  updateFindingStatusAcceptor,
+  // Bug Fix Phase
+  startBugFixPhaseAcceptor,
+  startFixingFindingAcceptor,
+  completeFixingFindingAcceptor,
+  completeBugFixPhaseAcceptor,
+  // Sprint Completion Statistics
+  setSprintCompletionStatsAcceptor,
+  toggleSprintSummaryAcceptor,
   setSprintPlanAcceptor,
   iterateSprintPlanAcceptor,
   clearPendingSprintPlanningAcceptor,
@@ -3299,6 +4066,10 @@ export const acceptors = [
   clearSprintErrorAcceptor,
   updateStoryAssertionResultsAcceptor,
   toggleCriteriaCompletionAcceptor,
+  updateCriteriaValidationAcceptor,
+  updateStoryCriteriaValidationAcceptor,
+  startCriteriaValidationAcceptor,
+  completeCriteriaValidationAcceptor,
 
   // Stuck Detection
   recordIterationOutputAcceptor,

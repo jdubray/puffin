@@ -35,3 +35,59 @@ All file operations must be scoped to this project directory and its subdirector
 - **Error Handling:** Exceptions
 - **Naming Convention:** camelCase
 - **Comment Style:** JSDoc
+
+## Completed User Stories
+
+The following stories have been completed and are available for reference:
+
+- **Automated Sprint Implementation Mode Selection**: As a developer, I want to choose between automated and human-controlled implementation after plan approval so that I can let Claude orchestrate the entire sprint without manual intervention
+- **Optimal User Story Implementation Order**: As a developer, I want Claude to determine the optimal order for implementing user stories so that dependencies are respected and implementation flows logically
+- **Branch Assignment for User Stories**: As a developer, I want each user story to be assigned to the appropriate branch type (UI, Backend, Fullstack, or Plugin) so that implementation happens in the correct context
+- **Display Orchestration Plan Before Automated Implementation**: As a developer, I want to see the orchestration plan showing the order and branches for implementation so that I understand what Claude will do before it starts
+- **Sequential Session-Based Implementation**: As a developer, I want Claude to implement each user story in a separate session like a human would so that implementations are clean and isolated
+- **Automated Acceptance Criteria Validation**: As a developer, I want Claude to validate acceptance criteria after each story implementation so that completion status is automatically tracked
+- **Automated Code Review Orchestration**: As a developer, I want Claude to orchestrate a code review after all stories are implemented so that quality issues are identified before sprint completion
+- **Sequential Bug Fix Sessions**: As a developer, I want Claude to create a new session for each bug found and fix them one by one so that fixes are isolated and trackable
+- **Sprint Completion Summary with Statistics**: As a developer, I want to see a summary with statistics when the automated sprint is complete so that I understand the cost and outcomes of the automated implementation
+- **Graceful Automated Sprint Interruption**: As a developer, I want to be able to pause or stop the automated implementation at any point so that I can intervene if something goes wrong
+- **Preserve Previous Plan Context During Iteration**: As a developer, I want the iterate plan prompt to include user stories and the latest plan so that context is not lost when answering follow-up questions across multiple iterations
+- **Add Plugin Implementation Button**: As a developer, I want a Plugin implementation button alongside UI, Backend, and Fullstack so that I can generate implementation plans targeting the Plugin Development branch
+- **Fix Event Listener Memory Leak in ToastHistoryComponent**: As a developer, I want event listeners in ToastHistoryComponent to be properly cleaned up so that memory leaks do not occur on re-renders
+- **Consolidate Toast History Architecture**: As a developer, I want the toast history plugin to delegate to core IPC handlers so that there is a single source of truth for toast storage
+- **Implement Toast Creation Interception**: As a developer, I want toast creation to be automatically intercepted and logged so that all toasts are persisted without manual intervention
+- **Fix Toast History IPC Channel Alignment**: As a developer, I want consistent IPC channel names between plugin and core handlers so that toast history operations work correctly
+- **Create Toast History Plugin Base Structure**: As a developer, I want a toast history plugin with proper structure so that toast notifications can be tracked and displayed
+- **Implement Toast Persistence Storage**: As a developer, I want toasts to be stored in a file so that they persist across application restarts
+- **Display Toast History for Last 24 Hours**: As a developer, I want to view all toasts from the last 24 hours so that I can review recent notifications
+- **Delete Toasts Older Than 24 Hours**: As a developer, I want to delete toasts older than 24 hours so that I can clean up outdated notifications
+- **Copy Toast Content to Clipboard**: As a developer, I want to copy toast content to clipboard so that I can paste it elsewhere for debugging
+- **Delete Unfinished Sprint Option**: As a developer, I want the option to delete a sprint with no progress so that I can remove sprints I've decided not to work on without cluttering my sprint history
+- **Keep Sprint Active Option**: As a developer, I want the option to keep an unfinished sprint active so that I can continue working on it at a later time
+- **Return User Stories to Pending Pool on Sprint Delete**: As a developer, I want incomplete user stories to return to the pending story pool when I delete a sprint so that I can assign them to a new sprint later
+- **Handle Zero Progress Sprint Close**: As a developer, I want the sprint close panel to detect when no implementation tasks have been completed (0% progress) so that I can be prompted with appropriate options for unstarted or incomplete sprints
+- **Drag and Drop Post-it Notes Between Days**: As a developer, I want to drag and drop post-it notes from one calendar day to another so that I can quickly reschedule or reorganize my notes without manual editing
+- **Copy and Paste Post-it Notes Between Days**: As a developer, I want to copy and paste post-it notes so that I can duplicate notes across multiple days without retyping the content
+- **Increase Post-it Note Display Capacity**: As a developer, I want to see more than 2 post-it notes displayed on calendar days so that I can view all my notes without truncation
+- **Fix XSS Vulnerability in BranchIndicator.renderInline**: As a developer, I want the BranchIndicator.renderInline method to escape HTML in branch names so that malicious branch names cannot execute arbitrary scripts
+- **Fix Memory Leak in BranchIndicator Popover Event Listeners**: As a developer, I want the BranchIndicator component to properly clean up event listeners so that memory leaks do not occur when components are destroyed while popovers are open
+- **Calendar Plugin Base Structure**: As a developer, I want a calendar plugin that integrates with Puffin's plugin system so that I can view my development activity organized by date
+- **Week and Month View Toggle**: As a developer, I want to switch between weekly and monthly calendar views so that I can see my work at different time scales
+- **Sprint History Panel on Day Selection**: As a developer, I want to click on a calendar day and see the sprints I worked on in a left panel so that I can review my daily development activity
+- **Sprint User Stories Modal**: As a developer, I want to click on a sprint in the panel and see a modal with its user stories so that I can review the work completed in that sprint
+- **Git Branch History Display on Calendar**: As a developer, I want to see the git branches I worked on displayed on each calendar day so that I can track my version control activity over time
+- **Post-it Notes for Calendar Days**: As a developer, I want to attach post-it notes to any calendar day so that I can add personal reminders, annotations, or context to my development timeline
+- **Fix Path Traversal Vulnerability in Image Delete**: As a developer, I want the deleteImage method to validate file paths so that malicious actors cannot delete arbitrary files outside the temp directory
+- **Add Maximum File Size Validation for Image Upload**: As a developer, I want image uploads to enforce a maximum file size so that disk space cannot be exhausted by oversized files
+- **Fix Paste Handler to Process All Images**: As a developer, I want pasting multiple images to attach all of them so that I don't lose images when pasting from clipboard
+- **Limit Maximum Thumbnail Attachments to Five**: As a developer, I want a maximum of 5 image attachments so that the UI remains manageable and performance is maintained
+- **Fix Pre-generation Race Condition in Sprint Close**: As a developer, I want the commit message pre-generation to properly await completion so that the modal always displays the generated message
+- **Add Debouncing to Project Form Input Handler**: As a developer, I want input changes in the project form to be debounced so that rapid typing doesn't cause excessive updates
+- **Add Null Checks to Project Form getFormData**: As a developer, I want getFormData to safely handle null values so that the application doesn't crash on missing form elements
+- **Validate Plugin Icons Before DOM Insertion**: As a developer, I want plugin icons to be validated before insertion so that malicious or malformed content cannot be injected into the DOM
+- **Drag and Drop Image File to Prompt**: As a developer, I want to drag and drop image files into the prompt input area so that I can easily attach screenshots or images to my Claude prompts
+- **Copy and Paste Image to Prompt**: As a developer, I want to paste images from my clipboard into the prompt input area so that I can quickly attach screenshots without saving them to a file first
+- **Image Attachment Preview and Management**: As a developer, I want to see previews of attached images and manage them before sending my prompt so that I can verify the correct images are included
+- **Auto-generate Commit Message Before Sprint Close Panel**: As a developer, I want a commit message to be auto-generated before the sprint close panel opens so that I can review and edit it immediately without waiting
+- **Code Commit Option in Sprint Close Panel**: As a developer, I want a commit option in the sprint close panel so that I can optionally commit my work when closing a sprint
+- **Editable Commit Message in Sprint Close Panel**: As a developer, I want to view and edit the auto-generated commit message so that I can customize it before committing
+- **Execute Git Commit on Sprint Close Submission**: As a developer, I want the git commit to execute when I submit the sprint close form with commit enabled so that my sprint work is properly versioned

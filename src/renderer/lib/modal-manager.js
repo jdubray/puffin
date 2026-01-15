@@ -353,6 +353,12 @@ export class ModalManager {
       case 'alert':
         this.renderAlert(modalTitle, modalContent, modalActions, modal.data)
         break
+      case 'implementation-mode-selection':
+        this.renderImplementationModeSelection(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'orchestration-plan':
+        this.renderOrchestrationPlan(modalTitle, modalContent, modalActions, modal.data, this.lastState)
+        break
       default:
         console.warn('Unknown modal type:', modal.type)
         // Provide a way to close unknown modals
@@ -1101,7 +1107,7 @@ export class ModalManager {
         this._userEditedCommitMessage = null
         this._hasUserEditedMessage = false
 
-        this.intents.closeSprint(closedSprint)
+        this.intents.clearSprintWithDetails(sprintTitle, sprintDescription)
 
         if (shouldCommit && commitMessage) {
           const commitResult = await window.puffin.git.stageFiles(['.'])
@@ -1118,6 +1124,13 @@ export class ModalManager {
         } else {
           this.intents.hideModal()
           this.showToast('Sprint closed successfully', 'success')
+        }
+
+        // Ask if user wants to trigger a code review after closing
+        if (this.showCodeReviewConfirmation) {
+          setTimeout(() => {
+            this.showCodeReviewConfirmation(closedSprint)
+          }, 500) // Small delay to let modal close
         }
       } catch (error) {
         console.error('[MODAL] Sprint close error:', error)
@@ -2991,6 +3004,212 @@ export class ModalManager {
     `
 
     document.getElementById('alert-confirm-btn')?.addEventListener('click', () => {
+      this.intents.hideModal()
+    })
+  }
+
+  /**
+   * Render the implementation mode selection modal
+   * Appears after plan approval to let user choose automated or human-controlled implementation
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - Modal data (unused, but follows pattern)
+   */
+  renderImplementationModeSelection(title, content, actions, data) {
+    title.textContent = 'Choose Implementation Mode'
+
+    content.innerHTML = `
+      <div class="implementation-mode-selection">
+        <p class="mode-selection-intro">
+          Your sprint plan has been approved. How would you like to proceed with implementation?
+        </p>
+
+        <div class="mode-options">
+          <button class="mode-option-btn" id="mode-automated" aria-describedby="automated-desc">
+            <div class="mode-option-icon" aria-hidden="true">🤖</div>
+            <div class="mode-option-content">
+              <div class="mode-option-label">Automated</div>
+              <div class="mode-option-description" id="automated-desc">
+                Claude orchestrates the entire sprint, implementing stories sequentially with automatic code review and bug fixes.
+              </div>
+            </div>
+          </button>
+
+          <button class="mode-option-btn" id="mode-human" aria-describedby="human-desc">
+            <div class="mode-option-icon" aria-hidden="true">👤</div>
+            <div class="mode-option-content">
+              <div class="mode-option-label">Human-Controlled</div>
+              <div class="mode-option-description" id="human-desc">
+                You manually select which stories to implement and control the pace. Traditional sprint workflow.
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="mode-cancel-btn">Cancel</button>
+    `
+
+    // Bind automated mode button
+    document.getElementById('mode-automated')?.addEventListener('click', () => {
+      this.intents.selectImplementationMode('automated')
+      this.intents.hideModal()
+    })
+
+    // Bind human-controlled mode button
+    document.getElementById('mode-human')?.addEventListener('click', () => {
+      this.intents.selectImplementationMode('human')
+      this.intents.hideModal()
+    })
+
+    // Bind cancel button - reverts to planned state
+    document.getElementById('mode-cancel-btn')?.addEventListener('click', () => {
+      this.intents.hideModal()
+    })
+  }
+
+  /**
+   * Render orchestration plan modal
+   * Shows the implementation order and branch assignments before automated execution begins
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - Modal data
+   * @param {Object} state - Current application state
+   */
+  renderOrchestrationPlan(title, content, actions, data, state) {
+    title.textContent = 'Orchestration Plan'
+
+    const sprint = state?.activeSprint
+    if (!sprint) {
+      content.innerHTML = '<p class="text-muted">No active sprint found.</p>'
+      actions.innerHTML = '<button class="btn secondary" id="orchestration-close-btn">Close</button>'
+      document.getElementById('orchestration-close-btn')?.addEventListener('click', () => {
+        this.intents.hideModal()
+      })
+      return
+    }
+
+    const stories = sprint.stories || []
+    const implementationOrder = sprint.implementationOrder || stories.map(s => s.id)
+    const branchAssignments = sprint.branchAssignments || {}
+
+    // Build ordered story list based on implementation order
+    const orderedStories = implementationOrder
+      .map(id => stories.find(s => s.id === id))
+      .filter(Boolean)
+
+    // If some stories aren't in the order, append them at the end
+    const remainingStories = stories.filter(s => !implementationOrder.includes(s.id))
+    const allOrderedStories = [...orderedStories, ...remainingStories]
+
+    // Calculate session estimates
+    const storyCount = allOrderedStories.length
+    const reviewSessions = 1  // One code review session
+    const bugFixEstimate = 'TBD'  // Depends on review findings
+
+    // Branch config for display
+    const branchConfig = {
+      ui: { label: 'UI', icon: '🎨', className: 'branch-ui' },
+      backend: { label: 'Backend', icon: '⚙️', className: 'branch-backend' },
+      fullstack: { label: 'Full Stack', icon: '🔗', className: 'branch-fullstack' },
+      plugin: { label: 'Plugin', icon: '📦', className: 'branch-plugin' }
+    }
+
+    // Escape HTML helper
+    const escapeHtml = (str) => {
+      if (!str) return ''
+      return str.replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[char])
+    }
+
+    // Render story list
+    const storyListHtml = allOrderedStories.map((story, index) => {
+      const branch = branchAssignments[story.id]?.toLowerCase()
+      const config = branchConfig[branch] || { label: 'Unassigned', icon: '❓', className: 'branch-unassigned' }
+
+      return `
+        <li class="orchestration-story-item" data-story-id="${story.id}">
+          <span class="story-order-number" aria-label="Step ${index + 1}">${index + 1}</span>
+          <span class="orchestration-branch-badge ${config.className}"
+                title="${config.label} branch"
+                aria-label="Branch: ${config.label}">
+            <span class="branch-icon" aria-hidden="true">${config.icon}</span>
+            <span class="branch-label">${config.label}</span>
+          </span>
+          <span class="story-title">${escapeHtml(story.title)}</span>
+        </li>
+      `
+    }).join('')
+
+    content.innerHTML = `
+      <div class="orchestration-plan-content">
+        <p class="orchestration-intro">
+          Review the implementation plan below. Claude will execute stories in this order,
+          followed by code review and bug fixes.
+        </p>
+
+        <div class="orchestration-section">
+          <h4 class="orchestration-section-title">Implementation Order</h4>
+          <ol class="orchestration-story-list" role="list" aria-label="Stories in implementation order">
+            ${storyListHtml}
+          </ol>
+        </div>
+
+        <div class="orchestration-session-estimate">
+          <h4 class="orchestration-section-title">Estimated Sessions</h4>
+          <div class="session-estimate-grid">
+            <div class="estimate-item">
+              <span class="estimate-count">${storyCount}</span>
+              <span class="estimate-label">Implementation${storyCount !== 1 ? 's' : ''}</span>
+            </div>
+            <span class="estimate-separator" aria-hidden="true">+</span>
+            <div class="estimate-item">
+              <span class="estimate-count">${reviewSessions}</span>
+              <span class="estimate-label">Code Review</span>
+            </div>
+            <span class="estimate-separator" aria-hidden="true">+</span>
+            <div class="estimate-item">
+              <span class="estimate-count estimate-tbd">${bugFixEstimate}</span>
+              <span class="estimate-label">Bug Fixes</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="orchestration-notice" role="note">
+          <span class="notice-icon" aria-hidden="true">ℹ️</span>
+          <span class="notice-text">
+            Branch assignments are locked once automation begins.
+            You can pause or stop at any time during execution.
+          </span>
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="orchestration-back-btn">Back</button>
+      <button class="btn primary" id="orchestration-start-btn">
+        <span class="btn-icon" aria-hidden="true">▶</span>
+        Start Automated Implementation
+      </button>
+    `
+
+    // Bind back button - return to mode selection
+    document.getElementById('orchestration-back-btn')?.addEventListener('click', () => {
+      this.intents.showModal({ type: 'implementation-mode-selection' })
+    })
+
+    // Bind start button - begin automated implementation
+    document.getElementById('orchestration-start-btn')?.addEventListener('click', () => {
+      this.intents.startAutomatedImplementation()
       this.intents.hideModal()
     })
   }

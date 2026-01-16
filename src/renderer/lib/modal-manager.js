@@ -357,7 +357,7 @@ export class ModalManager {
         this.renderImplementationModeSelection(modalTitle, modalContent, modalActions, modal.data)
         break
       case 'orchestration-plan':
-        this.renderOrchestrationPlan(modalTitle, modalContent, modalActions, modal.data, this.lastState)
+        this.renderOrchestrationPlan(modalTitle, modalContent, modalActions, modal.data, state)
         break
       default:
         console.warn('Unknown modal type:', modal.type)

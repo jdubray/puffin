@@ -3054,9 +3054,9 @@ export class ModalManager {
     `
 
     // Bind automated mode button
+    // Note: Don't call hideModal() here - the acceptor shows orchestration-plan modal
     document.getElementById('mode-automated')?.addEventListener('click', () => {
       this.intents.selectImplementationMode('automated')
-      this.intents.hideModal()
     })
 
     // Bind human-controlled mode button

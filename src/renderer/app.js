@@ -2241,8 +2241,11 @@ Please provide specific file locations and line numbers where issues are found, 
     const canPlan = sprint.status === 'created'
     const canApprove = hasStories && sprint.status === 'planned' && !sprint.planApprovedAt
     // Show start implementation button when plan is approved but sprint not yet in-progress
-    // This handles the case where app was closed after approving but before selecting mode
-    const canStartImplementation = sprint.status === 'planned' && sprint.planApprovedAt && !sprint.implementationMode
+    // This handles cases where:
+    // - App was closed after approving but before selecting mode
+    // - Sprint status is stuck at 'planning' but planApprovedAt was set
+    const isNotStarted = sprint.status !== 'in-progress' && sprint.status !== 'completed' && sprint.status !== 'closed'
+    const canStartImplementation = sprint.planApprovedAt && !sprint.implementationMode && isNotStarted
 
     console.log('[SPRINT-BUTTONS] status:', sprint.status, 'hasStories:', hasStories, 'canPlan:', canPlan, 'canApprove:', canApprove, 'planApprovedAt:', sprint.planApprovedAt, 'canStartImplementation:', canStartImplementation)
 

@@ -2235,12 +2235,16 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Update action buttons based on status
     // Plan button: visible when sprint is 'created' (ready to plan)
-    // Iterate/Approve buttons: visible only when sprint status is 'planned' (plan exists, not yet approved)
+    // Iterate/Approve buttons: visible only when sprint status is 'planned' AND plan not yet approved
+    // Once planApprovedAt is set, implementation mode was selected - don't show approve again
     const hasStories = sprint.stories && sprint.stories.length > 0
     const canPlan = sprint.status === 'created'
-    const canApprove = hasStories && sprint.status === 'planned'
+    const canApprove = hasStories && sprint.status === 'planned' && !sprint.planApprovedAt
+    // Show start implementation button when plan is approved but sprint not yet in-progress
+    // This handles the case where app was closed after approving but before selecting mode
+    const canStartImplementation = sprint.status === 'planned' && sprint.planApprovedAt && !sprint.implementationMode
 
-    console.log('[SPRINT-BUTTONS] status:', sprint.status, 'hasStories:', hasStories, 'canPlan:', canPlan, 'canApprove:', canApprove)
+    console.log('[SPRINT-BUTTONS] status:', sprint.status, 'hasStories:', hasStories, 'canPlan:', canPlan, 'canApprove:', canApprove, 'planApprovedAt:', sprint.planApprovedAt, 'canStartImplementation:', canStartImplementation)
 
     if (planBtn) {
       planBtn.classList.toggle('hidden', !canPlan)
@@ -2249,7 +2253,14 @@ Please provide specific file locations and line numbers where issues are found, 
       iterateBtn.classList.toggle('hidden', !canApprove)
     }
     if (approveBtn) {
-      approveBtn.classList.toggle('hidden', !canApprove)
+      // Show approve button OR repurpose it as "Start Implementation" when plan is approved
+      if (canStartImplementation) {
+        approveBtn.textContent = 'Start Implementation'
+        approveBtn.classList.remove('hidden')
+      } else {
+        approveBtn.textContent = 'Approve Plan'
+        approveBtn.classList.toggle('hidden', !canApprove)
+      }
     }
 
     // Bind event handlers (only once)
@@ -2288,13 +2299,20 @@ Please provide specific file locations and line numbers where issues are found, 
         })
       }
 
-      // Approve button
+      // Approve button (also handles "Start Implementation" after restart)
       if (approveBtn) {
         approveBtn.addEventListener('click', async () => {
           // Get the current sprint state before approving
           const sprint = this.state.activeSprint
           if (!sprint || !sprint.stories || sprint.stories.length === 0) {
             this.showToast('No stories in sprint to approve.', 'warning')
+            return
+          }
+
+          // Check if this is a "Start Implementation" click (plan already approved after restart)
+          if (sprint.planApprovedAt && !sprint.implementationMode) {
+            console.log('[SPRINT] Start Implementation clicked - showing mode selection modal')
+            this.intents.showModal({ type: 'implementation-mode-selection' })
             return
           }
 

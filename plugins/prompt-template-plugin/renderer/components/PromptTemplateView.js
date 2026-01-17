@@ -34,6 +34,13 @@ export class PromptTemplateView {
     // Modal state
     this.modalOpen = false
     this.editingTemplate = null // null for create, template object for edit
+
+    // Event handler references for cleanup
+    this._modalEscapeHandler = null
+    this._deleteEscapeHandler = null
+
+    // Deletion in-progress flag to prevent closing during delete
+    this._isDeleting = false
   }
 
   /**
@@ -215,8 +222,20 @@ export class PromptTemplateView {
     this.searchDebounceTimer = setTimeout(() => {
       this.searchTerm = term.trim()
       this.filterTemplates()
-      this.updateView()
+      // Only update the cards grid, not the entire view (preserves search input focus)
+      this.updateCardsGrid()
     }, 150)
+  }
+
+  /**
+   * Update only the cards grid without re-rendering the entire view
+   * This preserves focus on the search input during filtering
+   */
+  updateCardsGrid() {
+    const grid = this.container.querySelector('.prompt-template-grid')
+    if (grid) {
+      grid.innerHTML = this.renderCards()
+    }
   }
 
   /**
@@ -259,7 +278,8 @@ export class PromptTemplateView {
     }
 
     // Find the copy button for visual feedback
-    const card = this.container.querySelector(`.prompt-template-card[data-id="${templateId}"]`)
+    // Use CSS.escape to prevent CSS selector injection
+    const card = this.container.querySelector(`.prompt-template-card[data-id="${CSS.escape(templateId)}"]`)
     const copyBtn = card?.querySelector('.copy-btn')
 
     try {
@@ -381,31 +401,34 @@ export class PromptTemplateView {
    * @param {Object} template - Template to delete
    */
   attachDeleteConfirmationListeners(overlay, template) {
-    // Close button
+    // Close button - prevent closing during deletion
     overlay.querySelector('.prompt-template-modal-close')?.addEventListener('click', () => {
-      this.removeDeleteConfirmation()
-    })
-
-    // Cancel button
-    overlay.querySelector('.cancel-delete-btn')?.addEventListener('click', () => {
-      this.removeDeleteConfirmation()
-    })
-
-    // Click outside to close
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) {
+      if (!this._isDeleting) {
         this.removeDeleteConfirmation()
       }
     })
 
-    // Escape key to close
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') {
+    // Cancel button - prevent closing during deletion
+    overlay.querySelector('.cancel-delete-btn')?.addEventListener('click', () => {
+      if (!this._isDeleting) {
         this.removeDeleteConfirmation()
-        document.removeEventListener('keydown', handleEscape)
+      }
+    })
+
+    // Click outside to close - prevent closing during deletion
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay && !this._isDeleting) {
+        this.removeDeleteConfirmation()
+      }
+    })
+
+    // Escape key to close - store reference for cleanup, prevent closing during deletion
+    this._deleteEscapeHandler = (e) => {
+      if (e.key === 'Escape' && !this._isDeleting) {
+        this.removeDeleteConfirmation()
       }
     }
-    document.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', this._deleteEscapeHandler)
 
     // Confirm delete button
     overlay.querySelector('.confirm-delete-btn')?.addEventListener('click', async () => {
@@ -417,6 +440,12 @@ export class PromptTemplateView {
    * Remove the delete confirmation dialog from DOM
    */
   removeDeleteConfirmation() {
+    // Clean up escape key handler
+    if (this._deleteEscapeHandler) {
+      document.removeEventListener('keydown', this._deleteEscapeHandler)
+      this._deleteEscapeHandler = null
+    }
+
     const overlay = document.querySelector('.prompt-template-delete-overlay')
     if (overlay) {
       overlay.remove()
@@ -429,6 +458,10 @@ export class PromptTemplateView {
    * @param {HTMLElement} overlay - Modal overlay element
    */
   async confirmDelete(templateId, overlay) {
+    // Prevent duplicate deletion attempts
+    if (this._isDeleting) return
+    this._isDeleting = true
+
     // Disable buttons to prevent double-click
     const confirmBtn = overlay.querySelector('.confirm-delete-btn')
     const cancelBtn = overlay.querySelector('.cancel-delete-btn')
@@ -453,6 +486,9 @@ export class PromptTemplateView {
 
       console.log('[PromptTemplateView] Delete result:', result)
 
+      // Reset deletion flag before closing (allows removeDeleteConfirmation to proceed)
+      this._isDeleting = false
+
       // Close the confirmation dialog
       this.removeDeleteConfirmation()
 
@@ -461,6 +497,9 @@ export class PromptTemplateView {
 
     } catch (err) {
       console.error('[PromptTemplateView] Failed to delete template:', err)
+
+      // Reset deletion flag on error
+      this._isDeleting = false
 
       // Re-enable buttons
       if (confirmBtn) {
@@ -507,6 +546,12 @@ export class PromptTemplateView {
    * Remove the modal from DOM
    */
   removeModal() {
+    // Clean up escape key handler
+    if (this._modalEscapeHandler) {
+      document.removeEventListener('keydown', this._modalEscapeHandler)
+      this._modalEscapeHandler = null
+    }
+
     const overlay = document.querySelector('.prompt-template-modal-overlay')
     if (overlay) {
       overlay.remove()
@@ -604,14 +649,13 @@ export class PromptTemplateView {
       }
     })
 
-    // Escape key to close
-    const handleEscape = (e) => {
+    // Escape key to close - store reference for cleanup
+    this._modalEscapeHandler = (e) => {
       if (e.key === 'Escape' && this.modalOpen) {
         this.hideModal()
-        document.removeEventListener('keydown', handleEscape)
       }
     }
-    document.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', this._modalEscapeHandler)
 
     // Form submission
     const form = overlay.querySelector('.prompt-template-form')
@@ -854,6 +898,17 @@ export class PromptTemplateView {
     if (this.searchDebounceTimer) {
       clearTimeout(this.searchDebounceTimer)
     }
+
+    // Clean up any dangling event handlers
+    if (this._modalEscapeHandler) {
+      document.removeEventListener('keydown', this._modalEscapeHandler)
+      this._modalEscapeHandler = null
+    }
+    if (this._deleteEscapeHandler) {
+      document.removeEventListener('keydown', this._deleteEscapeHandler)
+      this._deleteEscapeHandler = null
+    }
+
     if (this.container) {
       this.container.innerHTML = ''
       this.container = null

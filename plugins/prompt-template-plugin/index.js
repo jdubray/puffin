@@ -232,17 +232,28 @@ const PromptTemplatePlugin = {
    * @private
    */
   async _writeStorage(templates) {
+    const tempPath = `${this.storagePath}.tmp`
+
     try {
       // Ensure .puffin directory exists
       const dir = path.dirname(this.storagePath)
       await fs.mkdir(dir, { recursive: true })
 
       // Write to temp file first for atomic operation
-      const tempPath = `${this.storagePath}.tmp`
       await fs.writeFile(tempPath, JSON.stringify(templates, null, 2), 'utf8')
 
       // Rename temp to actual file (atomic on most filesystems)
-      await fs.rename(tempPath, this.storagePath)
+      try {
+        await fs.rename(tempPath, this.storagePath)
+      } catch (renameError) {
+        // Clean up temp file on rename failure
+        try {
+          await fs.unlink(tempPath)
+        } catch {
+          // Ignore cleanup errors - best effort
+        }
+        throw renameError
+      }
     } catch (error) {
       this.context.log.error(`Failed to write templates: ${error.message}`)
       throw error
@@ -267,30 +278,52 @@ const PromptTemplatePlugin = {
    * Save a template (create or update)
    * @param {Object} template - Template object with optional id, title, content
    * @returns {Promise<Template>} Saved template with id and lastEdited
+   * @throws {Error} If input validation fails
    */
   async saveTemplate(template) {
+    // Input validation
+    if (!template || typeof template !== 'object' || Array.isArray(template)) {
+      throw new Error('Invalid template data: expected an object')
+    }
+
+    // Validate and sanitize fields
+    const id = typeof template.id === 'string' ? template.id.trim() : null
+    const title = typeof template.title === 'string' ? template.title : ''
+    const content = typeof template.content === 'string' ? template.content : ''
+
+    // Enforce maximum lengths to prevent abuse
+    const MAX_TITLE_LENGTH = 500
+    const MAX_CONTENT_LENGTH = 100000
+
+    if (title.length > MAX_TITLE_LENGTH) {
+      throw new Error(`Title exceeds maximum length of ${MAX_TITLE_LENGTH} characters`)
+    }
+    if (content.length > MAX_CONTENT_LENGTH) {
+      throw new Error(`Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters`)
+    }
+
     const templates = await this._readStorage()
     const now = new Date().toISOString()
 
     let savedTemplate
 
-    if (template.id) {
+    if (id) {
       // Update existing template
-      const index = templates.findIndex(t => t.id === template.id)
+      const index = templates.findIndex(t => t.id === id)
       if (index !== -1) {
         savedTemplate = {
-          id: template.id,
-          title: template.title || templates[index].title,
-          content: template.content !== undefined ? template.content : templates[index].content,
+          id: id,
+          title: title || templates[index].title,
+          content: content !== '' ? content : templates[index].content,
           lastEdited: now
         }
         templates[index] = savedTemplate
       } else {
         // ID provided but not found - treat as new template with that ID
         savedTemplate = {
-          id: template.id,
-          title: template.title || '',
-          content: template.content || '',
+          id: id,
+          title: title,
+          content: content,
           lastEdited: now
         }
         templates.push(savedTemplate)
@@ -299,8 +332,8 @@ const PromptTemplatePlugin = {
       // Create new template with auto-generated ID
       savedTemplate = {
         id: this.generateId(),
-        title: template.title || '',
-        content: template.content || '',
+        title: title,
+        content: content,
         lastEdited: now
       }
       templates.push(savedTemplate)
@@ -316,20 +349,27 @@ const PromptTemplatePlugin = {
    * Delete a template by ID
    * @param {string} id - Template ID to delete
    * @returns {Promise<boolean>} True if deleted successfully
+   * @throws {Error} If input validation fails
    */
   async deleteTemplate(id) {
+    // Input validation
+    if (typeof id !== 'string' || !id.trim()) {
+      throw new Error('Invalid template ID: expected a non-empty string')
+    }
+
+    const sanitizedId = id.trim()
     const templates = await this._readStorage()
     const initialLength = templates.length
-    const filteredTemplates = templates.filter(t => t.id !== id)
+    const filteredTemplates = templates.filter(t => t.id !== sanitizedId)
 
     if (filteredTemplates.length === initialLength) {
       // Template not found
-      this.context.log.warn(`Template not found for deletion: ${id}`)
+      this.context.log.warn(`Template not found for deletion: ${sanitizedId}`)
       return false
     }
 
     await this._writeStorage(filteredTemplates)
-    this.context.log.info(`Template deleted: ${id}`)
+    this.context.log.info(`Template deleted: ${sanitizedId}`)
 
     return true
   }

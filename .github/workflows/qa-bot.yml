@@ -1,0 +1,44 @@
+name: Puffin Q&A Bot
+
+on:
+  discussion:
+    types: [created]
+
+# Only respond to discussions in the Q&A category
+# You'll need to create a "Q&A" category in your repo's Discussions settings
+
+jobs:
+  answer-question:
+    runs-on: ubuntu-latest
+    # Only run for discussions in the Q&A category
+    if: github.event.discussion.category.slug == 'q-a'
+
+    permissions:
+      discussions: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: github-action-bot/qa/package-lock.json
+
+      - name: Install dependencies
+        working-directory: github-action-bot/qa
+        run: npm install
+
+      - name: Answer question
+        working-directory: github-action-bot/qa
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCUSSION_ID: ${{ github.event.discussion.node_id }}
+          DISCUSSION_TITLE: ${{ github.event.discussion.title }}
+          DISCUSSION_BODY: ${{ github.event.discussion.body }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: npm run answer

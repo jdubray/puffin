@@ -1,0 +1,17 @@
+{
+  "name": "puffin-qa-bot",
+  "version": "1.0.0",
+  "description": "GitHub Discussions Q&A bot powered by Claude",
+  "main": "answer-question.js",
+  "type": "module",
+  "scripts": {
+    "answer": "node answer-question.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@octokit/rest": "^21.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

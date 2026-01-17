@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "description": "Prompt harness configuration for Document Editor AI integration",
+
+  "systemPromptTemplate": "## Document Editor Mode\n\nYou are editing a single document: `{filename}`\nFile type: {extension}\n\n### STRICT RULES:\n1. You may ONLY modify the content of this document\n2. You may READ any project file for context but CANNOT write to other files\n3. Before completing, validate the document syntax ({extension} format)\n4. Provide a CONCISE CHANGE SUMMARY (bulleted list of what you changed)\n5. If requirements are unclear, ASK CLARIFYING QUESTIONS\n6. Do NOT provide verbose explanations - focus on the changes\n\n### Current Document Content:\n```{language}\n{content}\n```\n\n{contextFilesSection}\n\n### User's Request:\n{userPrompt}",
+
+  "validationEnabled": true,
+  "validationInstructions": "### Validation Requirements:\nBefore finalizing changes, you MUST validate the document syntax. The system will also run client-side validation after your response.\n\n**For .md (Markdown) files:**\n- Ensure all fenced code blocks are closed (matching ``` or ~~~)\n- Verify link syntax is complete: [text](url) - no missing parentheses or brackets\n- Check that inline code backticks are paired\n- Headers must have a space after # (e.g., '# Title' not '#Title')\n\n**For .json files:**\n- Must be valid JSON parseable by JSON.parse()\n- Check for trailing commas (not allowed in JSON)\n- Ensure all strings use double quotes\n- Verify brackets and braces are balanced\n\n**For .html/.htm files:**\n- All non-void tags must be properly closed\n- Tags must be properly nested (no overlapping like <b><i></b></i>)\n- Void elements (br, hr, img, input, meta, link) don't need closing tags\n- For complete HTML documents, include DOCTYPE, html, head, and body tags\n\n**For .xml files:**\n- All tags must be properly closed or self-closing (/>) \n- Tags are case-sensitive and must match exactly\n- Proper nesting is required\n\n**If validation fails:**\n1. Attempt to fix the syntax errors automatically\n2. If errors cannot be fixed, report them in a ## Validation Errors section\n3. Explain what went wrong and suggest how to resolve it",
+
+  "summaryFormat": "concise",
+  "summaryInstructions": "### Response Format:\nProvide your response in this format:\n\n## Changes Made\n- [List each change as a bullet point]\n- [Be specific but concise]\n\n## Validation Errors (if any)\n[Only include this section if validation found errors that could not be automatically fixed]\n- [List each validation error]\n- [Suggest how to resolve]\n\n## Questions (if any)\n[Only include this section if you need clarification]\n\n## Updated Document\n```{language}\n[The complete updated document content]\n```",
+
+  "defaultModel": "haiku",
+  "allowContextFiles": true,
+  "maxContextFiles": 5,
+
+  "contextFileTemplate": "### Context File: {filename}\n```{language}\n{content}\n```\n",
+
+  "thinkingBudgets": {
+    "none": null,
+    "think": 0.25,
+    "think-hard": 0.50
+  },
+
+  "models": {
+    "haiku": {
+      "id": "haiku",
+      "displayName": "Haiku (Fast)",
+      "description": "Fastest responses, good for simple edits"
+    },
+    "sonnet": {
+      "id": "sonnet",
+      "displayName": "Sonnet",
+      "description": "Balanced speed and quality"
+    },
+    "opus": {
+      "id": "opus",
+      "displayName": "Opus",
+      "description": "Highest quality, best for complex edits"
+    }
+  }
+}

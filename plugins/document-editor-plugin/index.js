@@ -86,6 +86,7 @@ const DocumentEditorPlugin = {
   fileWatchers: new Map(),
   recentFilesPath: null,
   allowedBasePaths: [],
+  harnessConfig: null,
 
   /**
    * Activate the plugin
@@ -127,6 +128,9 @@ const DocumentEditorPlugin = {
     context.registerIpcHandler('addRecentFile', this.addRecentFile.bind(this))
     context.registerIpcHandler('watchFile', this.watchFile.bind(this))
     context.registerIpcHandler('unwatchFile', this.unwatchFile.bind(this))
+    context.registerIpcHandler('getHarnessConfig', this.getHarnessConfig.bind(this))
+    context.registerIpcHandler('loadSession', this.loadSession.bind(this))
+    context.registerIpcHandler('saveSession', this.saveSession.bind(this))
 
     context.log.info('Document Editor plugin activated')
   },
@@ -514,6 +518,135 @@ const DocumentEditorPlugin = {
     }
 
     return { success: true }
+  },
+
+  /**
+   * Get the prompt harness configuration
+   * Loads from config/prompt-harness.json and caches it
+   * @returns {Promise<Object>} Harness configuration
+   */
+  async getHarnessConfig() {
+    // Return cached config if available
+    if (this.harnessConfig) {
+      return { config: this.harnessConfig }
+    }
+
+    try {
+      // Load config from plugin's config directory
+      const configPath = path.join(__dirname, 'config', 'prompt-harness.json')
+      const configData = await fs.readFile(configPath, 'utf-8')
+      this.harnessConfig = JSON.parse(configData)
+
+      this.context.log.info('Loaded prompt harness configuration')
+      return { config: this.harnessConfig }
+    } catch (error) {
+      this.context.log.error('Failed to load harness config:', error.message)
+      return { error: error.message }
+    }
+  },
+
+  /**
+   * Get the sessions directory path
+   * @returns {Promise<string>} Path to sessions directory
+   */
+  async getSessionsDir() {
+    const { app } = require('electron')
+    const userDataPath = app.getPath('userData')
+    const sessionsDir = path.join(userDataPath, 'puffin-plugins', 'document-editor', 'sessions')
+
+    // Ensure directory exists
+    await fs.mkdir(sessionsDir, { recursive: true })
+
+    return sessionsDir
+  },
+
+  /**
+   * Load a session for a document
+   * @param {Object} options - Options including documentPath and sessionHash
+   * @returns {Promise<Object>} Session data or error
+   */
+  async loadSession(options = {}) {
+    const { documentPath, sessionHash } = options
+
+    if (!sessionHash) {
+      return { error: 'Session hash is required' }
+    }
+
+    try {
+      const sessionsDir = await this.getSessionsDir()
+      const sessionPath = path.join(sessionsDir, `${sessionHash}.json`)
+
+      // Check if session file exists
+      try {
+        await fs.access(sessionPath)
+      } catch {
+        // Session doesn't exist yet
+        return { error: 'Session not found' }
+      }
+
+      // Read and parse session
+      const sessionData = await fs.readFile(sessionPath, 'utf-8')
+      const session = JSON.parse(sessionData)
+
+      // Verify session is for the correct document (if path provided)
+      if (documentPath && session.documentPath !== documentPath) {
+        this.context.log.warn(`Session hash collision: expected ${documentPath}, got ${session.documentPath}`)
+        // Return empty error to create new session
+        return { error: 'Session document mismatch' }
+      }
+
+      this.context.log.info(`Loaded session for ${documentPath || sessionHash}`)
+      return { session }
+    } catch (error) {
+      this.context.log.error('Failed to load session:', error.message)
+      return { error: error.message }
+    }
+  },
+
+  /**
+   * Save a session for a document
+   * Uses atomic write pattern (write to temp, then rename)
+   * @param {Object} options - Options including documentPath, sessionHash, and session data
+   * @returns {Promise<Object>} Success status or error
+   */
+  async saveSession(options = {}) {
+    const { sessionHash, session } = options
+
+    if (!sessionHash) {
+      return { success: false, error: 'Session hash is required' }
+    }
+
+    if (!session) {
+      return { success: false, error: 'Session data is required' }
+    }
+
+    try {
+      const sessionsDir = await this.getSessionsDir()
+      const sessionPath = path.join(sessionsDir, `${sessionHash}.json`)
+      const tempPath = `${sessionPath}.tmp`
+
+      // Write to temp file first (atomic write pattern)
+      await fs.writeFile(tempPath, JSON.stringify(session, null, 2), 'utf-8')
+
+      // Rename to final path
+      await fs.rename(tempPath, sessionPath)
+
+      this.context.log.info(`Saved session for ${session.documentPath || sessionHash}`)
+      return { success: true }
+    } catch (error) {
+      this.context.log.error('Failed to save session:', error.message)
+
+      // Clean up temp file if it exists
+      try {
+        const sessionsDir = await this.getSessionsDir()
+        const tempPath = path.join(sessionsDir, `${sessionHash}.json.tmp`)
+        await fs.unlink(tempPath)
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      return { success: false, error: error.message }
+    }
   }
 }
 

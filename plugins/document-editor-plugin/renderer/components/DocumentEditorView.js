@@ -129,6 +129,9 @@ async function loadHighlightJs() {
   }
 }
 
+// Import services
+import { DocumentEditorPromptService, ResponseParser, SessionManager, ChangeTracker } from '../services/index.js'
+
 export class DocumentEditorView {
   /**
    * @param {HTMLElement} element - Container element
@@ -153,7 +156,22 @@ export class DocumentEditorView {
       loading: true,
       error: null,
       responseCollapsed: false,
-      responseContent: ''
+      responseContent: '',
+      // AI prompt state
+      selectedModel: 'haiku',
+      thinkingBudget: 'none',
+      contextFiles: [],           // Array of { type: 'gui'|'doc', path, name, content }
+      isSubmitting: false,
+      promptText: '',
+      // Response handling state (Story 2)
+      responseHistory: [],        // Array of parsed response objects
+      currentResponse: null,      // Most recent response being displayed
+      pendingQuestions: [],       // Questions awaiting answers
+      sessionLoaded: false,       // Whether session has been loaded
+      contentBeforeSubmit: '',    // Content snapshot for diff calculation
+      // Change tracking state (Story 3)
+      highlightChangesEnabled: true,  // Whether change highlights are visible
+      hasTrackedChanges: false        // Whether there are changes to highlight
     }
 
     // Auto-save timer
@@ -173,6 +191,20 @@ export class DocumentEditorView {
 
     // Track event listeners for cleanup
     this.boundListeners = []
+
+    // Initialize prompt service
+    this.promptService = new DocumentEditorPromptService({
+      pluginName: 'document-editor-plugin'
+    })
+
+    // Initialize response parser and session manager (Story 2)
+    this.responseParser = new ResponseParser()
+    this.sessionManager = new SessionManager({
+      pluginName: 'document-editor-plugin'
+    })
+
+    // Initialize change tracker (Story 3)
+    this.changeTracker = new ChangeTracker()
   }
 
   /**
@@ -250,6 +282,17 @@ export class DocumentEditorView {
             </span>
           </div>
           <div class="document-editor-toolbar-right">
+            ${this.state.hasTrackedChanges ? `
+            <div class="document-editor-highlight-controls">
+              <label class="document-editor-highlight-toggle" title="Show/hide change highlights">
+                <input type="checkbox" ${this.state.highlightChangesEnabled ? 'checked' : ''}>
+                <span>Changes</span>
+              </label>
+              <button class="document-editor-btn document-editor-clear-highlights-btn" title="Clear all highlights">
+                <span class="document-editor-btn-icon">✕</span>
+              </button>
+            </div>
+            ` : ''}
             <span class="document-editor-save-indicator"></span>
             <label class="document-editor-autosave-toggle" title="Automatically save changes">
               <input type="checkbox" ${this.state.autoSaveEnabled ? 'checked' : ''}>
@@ -263,17 +306,60 @@ export class DocumentEditorView {
           ${this.renderMainContent()}
         </div>
 
-        <!-- AI Prompt area: Input and Ask button -->
+        <!-- AI Prompt area: Controls, Input, and Send button -->
         <div class="document-editor-prompt-area">
-          <input
-            type="text"
-            class="document-editor-prompt-input"
-            placeholder="Ask AI about this document..."
-            ${!hasFile ? 'disabled' : ''}
-          >
-          <button class="document-editor-btn document-editor-prompt-btn" aria-label="Ask AI about document" ${!hasFile ? 'disabled' : ''}>
-            Ask
-          </button>
+          <!-- Prompt Controls Row -->
+          <div class="document-editor-prompt-controls">
+            <select class="document-editor-model-selector" ${!hasFile || this.state.isSubmitting ? 'disabled' : ''} title="Select AI model">
+              <option value="haiku" ${this.state.selectedModel === 'haiku' ? 'selected' : ''}>Haiku (Fast)</option>
+              <option value="sonnet" ${this.state.selectedModel === 'sonnet' ? 'selected' : ''}>Sonnet</option>
+              <option value="opus" ${this.state.selectedModel === 'opus' ? 'selected' : ''}>Opus</option>
+            </select>
+            <select class="document-editor-thinking-selector" ${!hasFile || this.state.isSubmitting ? 'disabled' : ''} title="Extended thinking budget">
+              <option value="none" ${this.state.thinkingBudget === 'none' ? 'selected' : ''}>No Thinking</option>
+              <option value="think" ${this.state.thinkingBudget === 'think' ? 'selected' : ''}>Think (25%)</option>
+              <option value="think-hard" ${this.state.thinkingBudget === 'think-hard' ? 'selected' : ''}>Think Hard (50%)</option>
+            </select>
+            <div class="document-editor-context-controls">
+              <button class="document-editor-btn document-editor-add-context-btn" ${!hasFile || this.state.isSubmitting ? 'disabled' : ''} title="Add context file">
+                <span class="document-editor-btn-icon">+</span>
+                <span class="document-editor-btn-text">Context</span>
+              </button>
+            </div>
+          </div>
+          <!-- Context File Chips -->
+          ${this.state.contextFiles.length > 0 ? `
+          <div class="document-editor-context-chips">
+            ${this.state.contextFiles.map((file, index) => `
+              <span class="document-editor-context-chip" data-index="${index}" title="${this.escapeHtml(file.path)}">
+                <span class="document-editor-chip-icon">${file.type === 'gui' ? '🎨' : '📄'}</span>
+                <span class="document-editor-chip-name">${this.escapeHtml(file.name)}</span>
+                <button class="document-editor-chip-remove" data-index="${index}" title="Remove context file" ${this.state.isSubmitting ? 'disabled' : ''}>×</button>
+              </span>
+            `).join('')}
+          </div>
+          ` : ''}
+          <!-- Prompt Input Row -->
+          <div class="document-editor-prompt-input-row">
+            <input
+              type="text"
+              class="document-editor-prompt-input"
+              placeholder="Describe changes to make to this document..."
+              value="${this.escapeHtml(this.state.promptText)}"
+              ${!hasFile || this.state.isSubmitting ? 'disabled' : ''}
+            >
+            <button class="document-editor-btn document-editor-prompt-btn ${this.state.isSubmitting ? 'submitting' : ''}"
+                    aria-label="Send prompt to Claude"
+                    ${!hasFile || this.state.isSubmitting ? 'disabled' : ''}>
+              ${this.state.isSubmitting ? `
+                <span class="document-editor-btn-spinner"></span>
+                <span>Sending...</span>
+              ` : `
+                <span class="document-editor-btn-icon">🚀</span>
+                <span class="document-editor-btn-text">Send</span>
+              `}
+            </button>
+          </div>
         </div>
 
         <!-- AI Response area: Collapsible with header -->
@@ -346,17 +432,245 @@ export class DocumentEditorView {
   }
 
   /**
-   * Render AI response content area
+   * Render AI response content area with summaries, questions, and history
    */
   renderResponseContent() {
-    if (!this.state.responseContent) {
+    // Show placeholder if no responses and not submitting
+    if (!this.state.currentResponse && this.state.responseHistory.length === 0 && !this.state.isSubmitting) {
       return `
         <div class="document-editor-response-placeholder">
           AI responses will appear here. Ask a question about your document to get started.
         </div>
       `
     }
-    return `<div class="document-editor-response-text">${this.escapeHtml(this.state.responseContent)}</div>`
+
+    // Show loading state
+    if (this.state.isSubmitting && !this.state.currentResponse) {
+      return `
+        <div class="document-editor-response-loading">
+          <span class="document-editor-response-spinner"></span>
+          <span>Processing your request...</span>
+        </div>
+      `
+    }
+
+    const parts = []
+
+    // Current response (most recent)
+    if (this.state.currentResponse) {
+      parts.push(this.renderSingleResponse(this.state.currentResponse, true))
+    }
+
+    // Response history (older responses)
+    if (this.state.responseHistory.length > 0) {
+      const historyResponses = this.state.currentResponse
+        ? this.state.responseHistory.filter(r => r.id !== this.state.currentResponse.id)
+        : this.state.responseHistory
+
+      if (historyResponses.length > 0) {
+        parts.push(`
+          <div class="document-editor-response-history">
+            <div class="document-editor-history-header">
+              <span class="document-editor-history-title">Previous Responses (${historyResponses.length})</span>
+            </div>
+            <div class="document-editor-history-list">
+              ${historyResponses.map(response => this.renderSingleResponse(response, false)).join('')}
+            </div>
+          </div>
+        `)
+      }
+    }
+
+    return parts.join('') || `
+      <div class="document-editor-response-placeholder">
+        AI responses will appear here. Ask a question about your document to get started.
+      </div>
+    `
+  }
+
+  /**
+   * Render a single response entry
+   * @param {Object} response - Parsed response object
+   * @param {boolean} isCurrent - Whether this is the current (most recent) response
+   * @returns {string} HTML for the response
+   */
+  renderSingleResponse(response, isCurrent) {
+    const collapsed = response.collapsed && !isCurrent
+    const timeStr = this.formatTimestamp(response.timestamp)
+    const hasQuestions = response.questions && response.questions.length > 0
+    const unansweredCount = hasQuestions
+      ? response.questions.filter(q => !q.answered).length
+      : 0
+
+    return `
+      <div class="document-editor-response-entry ${isCurrent ? 'current' : 'history'} ${collapsed ? 'collapsed' : ''}" data-response-id="${response.id}">
+        <div class="document-editor-response-entry-header">
+          <button class="document-editor-response-collapse-btn" data-response-id="${response.id}" title="${collapsed ? 'Expand' : 'Collapse'}">
+            <span class="document-editor-collapse-icon">${collapsed ? '▶' : '▼'}</span>
+          </button>
+          <span class="document-editor-response-prompt" title="${this.escapeHtml(response.prompt)}">
+            ${this.escapeHtml(this.truncateText(response.prompt, 50))}
+          </span>
+          <span class="document-editor-response-time">${timeStr}</span>
+          ${unansweredCount > 0 ? `<span class="document-editor-response-badge">${unansweredCount} question${unansweredCount > 1 ? 's' : ''}</span>` : ''}
+        </div>
+        <div class="document-editor-response-entry-content ${collapsed ? 'hidden' : ''}">
+          ${this.renderChangeSummary(response)}
+          ${hasQuestions ? this.renderQuestions(response) : ''}
+          ${this.renderDiffStats(response.diffStats)}
+        </div>
+      </div>
+    `
+  }
+
+  /**
+   * Render change summary section
+   * @param {Object} response - Response object
+   * @returns {string} HTML for summary
+   */
+  renderChangeSummary(response) {
+    if (!response.summary) return ''
+
+    return `
+      <div class="document-editor-change-summary">
+        <div class="document-editor-summary-label">Changes Made:</div>
+        <div class="document-editor-summary-content">${this.formatSummary(response.summary)}</div>
+      </div>
+    `
+  }
+
+  /**
+   * Format summary text with bullet points
+   * @param {string} summary - Raw summary text
+   * @returns {string} Formatted HTML
+   */
+  formatSummary(summary) {
+    if (!summary) return ''
+
+    // Convert bullet points to HTML list
+    const lines = summary.split('\n').filter(l => l.trim())
+    const hasBullets = lines.some(l => /^[-*]\s/.test(l.trim()))
+
+    if (hasBullets) {
+      const items = lines
+        .filter(l => /^[-*]\s/.test(l.trim()))
+        .map(l => `<li>${this.escapeHtml(l.replace(/^[-*]\s+/, '').trim())}</li>`)
+        .join('')
+      return `<ul class="document-editor-summary-list">${items}</ul>`
+    }
+
+    // Plain text
+    return `<p>${this.escapeHtml(summary)}</p>`
+  }
+
+  /**
+   * Render questions section with answer inputs
+   * @param {Object} response - Response object
+   * @returns {string} HTML for questions
+   */
+  renderQuestions(response) {
+    if (!response.questions || response.questions.length === 0) return ''
+
+    const questionsHtml = response.questions.map(q => `
+      <div class="document-editor-question ${q.answered ? 'answered' : ''}" data-question-id="${q.id}" data-response-id="${response.id}">
+        <div class="document-editor-question-text">
+          <span class="document-editor-question-icon">${q.answered ? '✓' : '?'}</span>
+          ${this.escapeHtml(q.question)}
+        </div>
+        ${q.answered ? `
+          <div class="document-editor-question-answer">
+            <span class="document-editor-answer-label">Your answer:</span>
+            ${this.escapeHtml(q.answer)}
+          </div>
+        ` : `
+          <div class="document-editor-question-input-row">
+            <input
+              type="text"
+              class="document-editor-question-input"
+              placeholder="Type your answer..."
+              data-question-id="${q.id}"
+              data-response-id="${response.id}"
+              ${this.state.isSubmitting ? 'disabled' : ''}
+            >
+            <button
+              class="document-editor-btn document-editor-question-reply-btn"
+              data-question-id="${q.id}"
+              data-response-id="${response.id}"
+              ${this.state.isSubmitting ? 'disabled' : ''}
+            >
+              Reply
+            </button>
+          </div>
+        `}
+      </div>
+    `).join('')
+
+    return `
+      <div class="document-editor-questions-section">
+        <div class="document-editor-questions-label">Questions from Claude:</div>
+        ${questionsHtml}
+      </div>
+    `
+  }
+
+  /**
+   * Render diff statistics
+   * @param {Object} diffStats - Diff statistics object
+   * @returns {string} HTML for stats
+   */
+  renderDiffStats(diffStats) {
+    if (!diffStats) return ''
+
+    const { added, modified, deleted } = diffStats
+    if (added === 0 && modified === 0 && deleted === 0) return ''
+
+    const parts = []
+    if (added > 0) parts.push(`<span class="document-editor-stat-added">+${added}</span>`)
+    if (modified > 0) parts.push(`<span class="document-editor-stat-modified">~${modified}</span>`)
+    if (deleted > 0) parts.push(`<span class="document-editor-stat-deleted">-${deleted}</span>`)
+
+    return `
+      <div class="document-editor-diff-stats">
+        ${parts.join(' ')}
+        <span class="document-editor-stat-label">lines</span>
+      </div>
+    `
+  }
+
+  /**
+   * Format a timestamp for display
+   * @param {string} timestamp - ISO timestamp
+   * @returns {string} Formatted time string
+   */
+  formatTimestamp(timestamp) {
+    if (!timestamp) return ''
+
+    try {
+      const date = new Date(timestamp)
+      const now = new Date()
+      const diffMs = now - date
+      const diffMins = Math.floor(diffMs / 60000)
+      const diffHours = Math.floor(diffMs / 3600000)
+
+      if (diffMins < 1) return 'Just now'
+      if (diffMins < 60) return `${diffMins}m ago`
+      if (diffHours < 24) return `${diffHours}h ago`
+
+      return date.toLocaleDateString()
+    } catch {
+      return ''
+    }
+  }
+
+  /**
+   * Truncate text to a maximum length
+   * @param {string} text - Text to truncate
+   * @param {number} maxLength - Maximum length
+   * @returns {string} Truncated text
+   */
+  truncateText(text, maxLength) {
+    if (!text || text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
   }
 
   /**
@@ -445,20 +759,75 @@ export class DocumentEditorView {
     // AI prompt input - Enter key to submit
     const promptInput = this.container.querySelector('.document-editor-prompt-input')
     if (promptInput) {
-      const handler = (e) => {
+      const keyHandler = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault()
           this.handleAskAI()
         }
       }
-      this.addTrackedListener(promptInput, 'keydown', handler)
+      const inputHandler = (e) => {
+        this.state.promptText = e.target.value
+      }
+      this.addTrackedListener(promptInput, 'keydown', keyHandler)
+      this.addTrackedListener(promptInput, 'input', inputHandler)
     }
 
-    // AI Ask button
+    // AI Send button
     const askBtn = this.container.querySelector('.document-editor-prompt-btn')
     if (askBtn) {
       const handler = () => this.handleAskAI()
       this.addTrackedListener(askBtn, 'click', handler)
+    }
+
+    // Model selector
+    const modelSelector = this.container.querySelector('.document-editor-model-selector')
+    if (modelSelector) {
+      const handler = (e) => {
+        this.state.selectedModel = e.target.value
+        console.log('[DocumentEditorView] Model changed:', this.state.selectedModel)
+      }
+      this.addTrackedListener(modelSelector, 'change', handler)
+    }
+
+    // Thinking budget selector
+    const thinkingSelector = this.container.querySelector('.document-editor-thinking-selector')
+    if (thinkingSelector) {
+      const handler = (e) => {
+        this.state.thinkingBudget = e.target.value
+        console.log('[DocumentEditorView] Thinking budget changed:', this.state.thinkingBudget)
+      }
+      this.addTrackedListener(thinkingSelector, 'change', handler)
+    }
+
+    // Add context file button
+    const addContextBtn = this.container.querySelector('.document-editor-add-context-btn')
+    if (addContextBtn) {
+      const handler = () => this.handleAddContextFile()
+      this.addTrackedListener(addContextBtn, 'click', handler)
+    }
+
+    // Remove context file buttons
+    this.container.querySelectorAll('.document-editor-chip-remove').forEach(btn => {
+      const handler = (e) => {
+        e.stopPropagation()
+        const index = parseInt(e.currentTarget.dataset.index, 10)
+        this.handleRemoveContextFile(index)
+      }
+      this.addTrackedListener(btn, 'click', handler)
+    })
+
+    // Highlight changes toggle (Story 3)
+    const highlightToggle = this.container.querySelector('.document-editor-highlight-toggle input')
+    if (highlightToggle) {
+      const handler = (e) => this.toggleHighlightChanges(e.target.checked)
+      this.addTrackedListener(highlightToggle, 'change', handler)
+    }
+
+    // Clear highlights button (Story 3)
+    const clearHighlightsBtn = this.container.querySelector('.document-editor-clear-highlights-btn')
+    if (clearHighlightsBtn) {
+      const handler = () => this.clearHighlights()
+      this.addTrackedListener(clearHighlightsBtn, 'click', handler)
     }
   }
 
@@ -487,29 +856,487 @@ export class DocumentEditorView {
   /**
    * Handle AI prompt submission
    */
-  handleAskAI() {
+  async handleAskAI() {
     const promptInput = this.container.querySelector('.document-editor-prompt-input')
-    const prompt = promptInput?.value?.trim()
+    const prompt = this.state.promptText?.trim() || promptInput?.value?.trim()
 
-    if (!prompt) return
+    if (!prompt || !this.state.currentFile || this.state.isSubmitting) return
 
-    // Stub - will be implemented in future AI integration
-    // Note: responseContent is escaped in renderResponseContent() before display
-    // Using a structured format to clearly separate static text from user input
-    console.log('[DocumentEditorView] Ask AI:', prompt)
-    this.state.responseContent = `AI integration coming soon. Your question: "${prompt}"`
-    promptInput.value = ''
+    console.log('[DocumentEditorView] Submitting AI prompt:', {
+      prompt,
+      model: this.state.selectedModel,
+      thinkingBudget: this.state.thinkingBudget,
+      contextFiles: this.state.contextFiles.length
+    })
 
-    // Update just the response content, not the entire view
-    const responseContent = this.container.querySelector('.document-editor-response-content')
-    if (responseContent) {
-      responseContent.innerHTML = this.renderResponseContent()
-    }
+    // Store content before submission for diff calculation
+    this.state.contentBeforeSubmit = this.state.content
+
+    // Record baseline for change tracking (Story 3)
+    this.changeTracker.recordBaseline(this.state.content)
+
+    // Set submitting state and update UI
+    this.state.isSubmitting = true
+    this.state.promptText = ''
+    this.updatePromptUI()
 
     // Ensure response area is expanded
     if (this.state.responseCollapsed) {
       this.toggleResponseArea()
     }
+
+    // Update response content to show loading state
+    this.updateResponseContent()
+
+    try {
+      // Submit via the prompt service
+      const result = await this.promptService.submit({
+        filename: this.getDisplayFilename(),
+        filePath: this.state.currentFile,
+        extension: this.state.extension,
+        content: this.state.content,
+        userPrompt: prompt,
+        model: this.state.selectedModel,
+        thinkingBudget: this.state.thinkingBudget,
+        contextFiles: this.state.contextFiles.map(f => ({
+          name: f.name,
+          path: f.path,
+          extension: f.extension,
+          content: f.content
+        })),
+        branchId: 'plugin',
+        sessionId: null
+      })
+
+      // Process the response using ResponseParser
+      await this.processAIResponse(result, prompt)
+
+    } catch (error) {
+      console.error('[DocumentEditorView] AI submission error:', error)
+
+      // Create an error response entry
+      const errorResponse = {
+        id: this.generateResponseId(),
+        timestamp: new Date().toISOString(),
+        prompt,
+        summary: `Error: ${error.message}`,
+        questions: [],
+        fullResponse: error.message,
+        diffStats: { added: 0, modified: 0, deleted: 0 },
+        model: this.state.selectedModel,
+        collapsed: false
+      }
+
+      this.state.currentResponse = errorResponse
+      this.updateResponseContent()
+    } finally {
+      this.state.isSubmitting = false
+      this.updatePromptUI()
+    }
+  }
+
+  /**
+   * Process AI response and update state
+   * @param {Object} result - Raw result from promptService.submit()
+   * @param {string} prompt - Original user prompt
+   */
+  async processAIResponse(result, prompt) {
+    // Extract the response text from the result
+    const rawResponse = result?.response || result?.text || result?.content || ''
+
+    // Parse the response
+    const parsed = this.responseParser.parse(
+      rawResponse,
+      this.state.contentBeforeSubmit,
+      this.state.content
+    )
+
+    // Create response entry
+    const responseEntry = {
+      id: this.generateResponseId(),
+      timestamp: new Date().toISOString(),
+      prompt,
+      summary: parsed.changeSummary,
+      questions: parsed.questions,
+      fullResponse: parsed.fullResponse,
+      diffStats: parsed.diffStats,
+      validationErrors: parsed.validationErrors,
+      model: this.state.selectedModel,
+      collapsed: false
+    }
+
+    // Update current response
+    this.state.currentResponse = responseEntry
+
+    // Add to session manager and persist
+    if (this.sessionManager.isLoaded()) {
+      await this.sessionManager.addResponse(responseEntry)
+      // Update history from session
+      this.state.responseHistory = this.sessionManager.getResponses()
+    } else {
+      // Fallback: add to local history
+      this.state.responseHistory.unshift(responseEntry)
+      if (this.state.responseHistory.length > 50) {
+        this.state.responseHistory = this.state.responseHistory.slice(0, 50)
+      }
+    }
+
+    // Update pending questions
+    this.state.pendingQuestions = parsed.questions.filter(q => !q.answered)
+
+    console.log('[DocumentEditorView] Processed AI response:', {
+      summaryLength: parsed.changeSummary?.length,
+      questionCount: parsed.questions?.length,
+      diffStats: parsed.diffStats
+    })
+
+    // Compute and track changes for highlighting (Story 3)
+    this.computeAndTrackChanges()
+
+    // Update the response area
+    this.updateResponseContent()
+
+    // Attach event listeners for questions
+    this.attachQuestionListeners()
+  }
+
+  /**
+   * Compute changes between baseline and current content (Story 3)
+   * Updates change tracker and state for highlighting
+   */
+  computeAndTrackChanges() {
+    // Compute changes from baseline
+    const changes = this.changeTracker.computeChanges(this.state.content)
+
+    // Update state
+    this.state.hasTrackedChanges = changes.length > 0
+
+    if (this.state.hasTrackedChanges) {
+      const stats = this.changeTracker.getStats()
+      console.log('[DocumentEditorView] Changes detected:', stats)
+
+      // Re-render to show highlight controls in toolbar
+      this.render()
+    } else {
+      // Just update line numbers (no full re-render needed)
+      this.updateLineNumbers()
+    }
+  }
+
+  /**
+   * Generate a unique response ID
+   * @returns {string} UUID-like string
+   */
+  generateResponseId() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0
+      const v = c === 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
+  }
+
+  /**
+   * Attach event listeners for question inputs and reply buttons
+   */
+  attachQuestionListeners() {
+    // Reply buttons
+    this.container.querySelectorAll('.document-editor-question-reply-btn').forEach(btn => {
+      const handler = (e) => {
+        const questionId = e.currentTarget.dataset.questionId
+        const responseId = e.currentTarget.dataset.responseId
+        this.handleQuestionReply(responseId, questionId)
+      }
+      this.addTrackedListener(btn, 'click', handler)
+    })
+
+    // Question inputs - Enter key to submit
+    this.container.querySelectorAll('.document-editor-question-input').forEach(input => {
+      const handler = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          const questionId = e.currentTarget.dataset.questionId
+          const responseId = e.currentTarget.dataset.responseId
+          this.handleQuestionReply(responseId, questionId)
+        }
+      }
+      this.addTrackedListener(input, 'keydown', handler)
+    })
+
+    // Response collapse buttons
+    this.container.querySelectorAll('.document-editor-response-collapse-btn').forEach(btn => {
+      const handler = (e) => {
+        const responseId = e.currentTarget.dataset.responseId
+        this.handleResponseCollapse(responseId)
+      }
+      this.addTrackedListener(btn, 'click', handler)
+    })
+  }
+
+  /**
+   * Handle answering a question
+   * @param {string} responseId - Response ID containing the question
+   * @param {string} questionId - Question ID to answer
+   */
+  async handleQuestionReply(responseId, questionId) {
+    const input = this.container.querySelector(
+      `.document-editor-question-input[data-question-id="${questionId}"]`
+    )
+    if (!input) return
+
+    const answer = input.value.trim()
+    if (!answer) return
+
+    console.log('[DocumentEditorView] Answering question:', { responseId, questionId, answer })
+
+    // Update session manager
+    if (this.sessionManager.isLoaded()) {
+      await this.sessionManager.answerQuestion(responseId, questionId, answer)
+      this.state.responseHistory = this.sessionManager.getResponses()
+    }
+
+    // Update current response if it matches
+    if (this.state.currentResponse?.id === responseId) {
+      const question = this.state.currentResponse.questions?.find(q => q.id === questionId)
+      if (question) {
+        question.answer = answer
+        question.answered = true
+        question.answeredAt = new Date().toISOString()
+      }
+    }
+
+    // Update response in history
+    const historyResponse = this.state.responseHistory.find(r => r.id === responseId)
+    if (historyResponse) {
+      const question = historyResponse.questions?.find(q => q.id === questionId)
+      if (question) {
+        question.answer = answer
+        question.answered = true
+        question.answeredAt = new Date().toISOString()
+      }
+    }
+
+    // Update pending questions
+    this.state.pendingQuestions = this.state.pendingQuestions.filter(q => q.id !== questionId)
+
+    // Re-render response content
+    this.updateResponseContent()
+    this.attachQuestionListeners()
+  }
+
+  /**
+   * Handle collapsing/expanding a response entry
+   * @param {string} responseId - Response ID to toggle
+   */
+  handleResponseCollapse(responseId) {
+    // Toggle in session manager
+    if (this.sessionManager.isLoaded()) {
+      this.sessionManager.toggleResponseCollapsed(responseId)
+    }
+
+    // Toggle in current response
+    if (this.state.currentResponse?.id === responseId) {
+      this.state.currentResponse.collapsed = !this.state.currentResponse.collapsed
+    }
+
+    // Toggle in history
+    const historyResponse = this.state.responseHistory.find(r => r.id === responseId)
+    if (historyResponse) {
+      historyResponse.collapsed = !historyResponse.collapsed
+    }
+
+    // Re-render
+    this.updateResponseContent()
+    this.attachQuestionListeners()
+  }
+
+  /**
+   * Load session when a file is opened
+   */
+  async loadSessionForCurrentFile() {
+    if (!this.state.currentFile) return
+
+    try {
+      const session = await this.sessionManager.loadSession(this.state.currentFile)
+      this.state.sessionLoaded = true
+      this.state.responseHistory = this.sessionManager.getResponses()
+
+      // Set current response to most recent if available
+      if (this.state.responseHistory.length > 0) {
+        this.state.currentResponse = this.state.responseHistory[0]
+      }
+
+      // Update pending questions
+      const unanswered = this.sessionManager.getUnansweredQuestions()
+      this.state.pendingQuestions = unanswered.map(u => u.question)
+
+      console.log('[DocumentEditorView] Loaded session with', this.state.responseHistory.length, 'responses')
+    } catch (error) {
+      console.error('[DocumentEditorView] Error loading session:', error)
+      this.state.sessionLoaded = true
+      this.state.responseHistory = []
+    }
+  }
+
+  /**
+   * Update prompt UI elements without full re-render
+   */
+  updatePromptUI() {
+    const promptInput = this.container.querySelector('.document-editor-prompt-input')
+    const sendBtn = this.container.querySelector('.document-editor-prompt-btn')
+    const modelSelector = this.container.querySelector('.document-editor-model-selector')
+    const thinkingSelector = this.container.querySelector('.document-editor-thinking-selector')
+    const addContextBtn = this.container.querySelector('.document-editor-add-context-btn')
+
+    const hasFile = !!this.state.currentFile
+    const disabled = !hasFile || this.state.isSubmitting
+
+    if (promptInput) {
+      promptInput.disabled = disabled
+      promptInput.value = this.state.promptText
+    }
+
+    if (sendBtn) {
+      sendBtn.disabled = disabled
+      sendBtn.classList.toggle('submitting', this.state.isSubmitting)
+      if (this.state.isSubmitting) {
+        sendBtn.innerHTML = `
+          <span class="document-editor-btn-spinner"></span>
+          <span>Sending...</span>
+        `
+      } else {
+        sendBtn.innerHTML = `
+          <span class="document-editor-btn-icon">🚀</span>
+          <span class="document-editor-btn-text">Send</span>
+        `
+      }
+    }
+
+    if (modelSelector) modelSelector.disabled = disabled
+    if (thinkingSelector) thinkingSelector.disabled = disabled
+    if (addContextBtn) addContextBtn.disabled = disabled
+
+    // Update context chip remove buttons
+    this.container.querySelectorAll('.document-editor-chip-remove').forEach(btn => {
+      btn.disabled = this.state.isSubmitting
+    })
+  }
+
+  /**
+   * Update response content without full re-render
+   */
+  updateResponseContent() {
+    const responseContent = this.container.querySelector('.document-editor-response-content')
+    if (responseContent) {
+      responseContent.innerHTML = this.renderResponseContent()
+    }
+  }
+
+  /**
+   * Handle adding a context file
+   */
+  async handleAddContextFile() {
+    if (this.state.isSubmitting) return
+
+    // Check max context files limit
+    const maxFiles = 5
+    if (this.state.contextFiles.length >= maxFiles) {
+      alert(`Maximum ${maxFiles} context files allowed.`)
+      return
+    }
+
+    try {
+      // Use the open file dialog
+      const result = await window.puffin.plugins.invoke(
+        'document-editor-plugin',
+        'openFile',
+        {}
+      )
+
+      if (result.canceled || result.error) {
+        return
+      }
+
+      // Check if file is already added
+      if (this.state.contextFiles.some(f => f.path === result.path)) {
+        alert('This file is already added as context.')
+        return
+      }
+
+      // Determine file type (gui files typically end in .gui.json or similar)
+      const filename = result.path.split(/[/\\]/).pop()
+      const isGuiFile = filename.includes('.gui.') || filename.endsWith('.gui')
+      const extension = result.path.match(/\.[^.]+$/)?.[0] || ''
+
+      // Add to context files
+      this.state.contextFiles.push({
+        type: isGuiFile ? 'gui' : 'doc',
+        path: result.path,
+        name: filename,
+        extension,
+        content: result.content
+      })
+
+      console.log('[DocumentEditorView] Context file added:', filename)
+
+      // Re-render to show the new chip
+      this.render()
+    } catch (error) {
+      console.error('[DocumentEditorView] Add context file error:', error)
+      alert('Failed to add context file: ' + error.message)
+    }
+  }
+
+  /**
+   * Handle removing a context file
+   * @param {number} index - Index of file to remove
+   */
+  handleRemoveContextFile(index) {
+    if (this.state.isSubmitting) return
+
+    if (index >= 0 && index < this.state.contextFiles.length) {
+      const removed = this.state.contextFiles.splice(index, 1)[0]
+      console.log('[DocumentEditorView] Context file removed:', removed.name)
+
+      // Re-render to update chips
+      this.render()
+    }
+  }
+
+  /**
+   * Toggle change highlighting visibility (Story 3)
+   * @param {boolean} enabled - Whether highlighting should be visible
+   */
+  toggleHighlightChanges(enabled) {
+    this.state.highlightChangesEnabled = enabled
+    this.changeTracker.setHighlightingEnabled(enabled)
+    console.log('[DocumentEditorView] Highlight changes:', enabled ? 'enabled' : 'disabled')
+
+    // Update line numbers and highlight layer
+    this.updateLineNumbers()
+    this.updateHighlightLayer()
+  }
+
+  /**
+   * Clear all change highlights (Story 3)
+   */
+  clearHighlights() {
+    this.changeTracker.clearHighlights()
+    this.state.hasTrackedChanges = false
+    console.log('[DocumentEditorView] Change highlights cleared')
+
+    // Re-render to hide the highlight controls
+    this.render()
+  }
+
+  /**
+   * Update the highlight layer to show change highlighting (Story 3)
+   */
+  updateHighlightLayer() {
+    const highlightLayer = this.container.querySelector('.document-editor-highlight-layer code')
+    if (!highlightLayer) return
+
+    // Re-apply syntax highlighting which will include change classes
+    this.updateHighlighting()
   }
 
   /**
@@ -590,8 +1417,22 @@ export class DocumentEditorView {
       this.state.extension = result.extension
       this.state.isModified = false
 
+      // Reset response state for new document
+      this.state.currentResponse = null
+      this.state.responseHistory = []
+      this.state.pendingQuestions = []
+      this.state.sessionLoaded = false
+
+      // Reset change tracking state (Story 3)
+      this.changeTracker.clearHighlights()
+      this.changeTracker.recordBaseline(result.content || '')
+      this.state.hasTrackedChanges = false
+
       // Start watching for external changes
       await this.watchCurrentFile()
+
+      // Load session for this file
+      await this.loadSessionForCurrentFile()
 
       // Re-render to show editor
       this.render()
@@ -639,8 +1480,22 @@ export class DocumentEditorView {
       this.state.extension = result.extension
       this.state.isModified = false
 
+      // Reset response state for new document
+      this.state.currentResponse = null
+      this.state.responseHistory = []
+      this.state.pendingQuestions = []
+      this.state.sessionLoaded = false
+
+      // Reset change tracking state (Story 3)
+      this.changeTracker.clearHighlights()
+      this.changeTracker.recordBaseline(result.content)
+      this.state.hasTrackedChanges = false
+
       // Start watching for external changes
       await this.watchCurrentFile()
+
+      // Load session for this file
+      await this.loadSessionForCurrentFile()
 
       // Re-render to show editor with content
       this.render()
@@ -833,16 +1688,21 @@ export class DocumentEditorView {
   }
 
   /**
-   * Update line numbers
+   * Update line numbers with optional change markers
    */
   updateLineNumbers() {
     const lineNumbers = this.container.querySelector('.document-editor-line-numbers')
     if (!lineNumbers) return
 
     const lines = (this.state.content || '').split('\n').length
-    lineNumbers.innerHTML = Array.from({ length: lines }, (_, i) =>
-      `<div class="document-editor-line-number">${i + 1}</div>`
-    ).join('')
+    const showChanges = this.state.highlightChangesEnabled && this.changeTracker.hasChanges()
+
+    lineNumbers.innerHTML = Array.from({ length: lines }, (_, i) => {
+      const lineNum = i + 1
+      const changeType = showChanges ? this.changeTracker.getChangeForLine(lineNum) : null
+      const changeClass = changeType ? ` change-${changeType}` : ''
+      return `<div class="document-editor-line-number${changeClass}">${lineNum}</div>`
+    }).join('')
   }
 
   /**

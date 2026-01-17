@@ -17,7 +17,10 @@
       "document-editor:getRecentFiles",
       "document-editor:addRecentFile",
       "document-editor:watchFile",
-      "document-editor:unwatchFile"
+      "document-editor:unwatchFile",
+      "document-editor:getHarnessConfig",
+      "document-editor:loadSession",
+      "document-editor:saveSession"
     ],
     "components": ["document-editor-view"]
   },
@@ -33,7 +36,28 @@
       }
     ],
     "commands": [],
-    "menus": {}
+    "menus": {},
+    "configuration": {
+      "title": "Document Editor",
+      "properties": {
+        "documentEditor.promptHarness": {
+          "type": "object",
+          "description": "AI prompt harness configuration for document-only editing",
+          "default": "config/prompt-harness.json"
+        },
+        "documentEditor.defaultModel": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus"],
+          "default": "haiku",
+          "description": "Default AI model for document editing"
+        },
+        "documentEditor.validationEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable syntax validation before completing edits"
+        }
+      }
+    }
   },
   "activationEvents": [
     "onStartup"

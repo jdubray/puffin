@@ -451,6 +451,8 @@ export const completeResponseAcceptor = model => proposal => {
 
     if (!model.pendingPromptId) {
       console.log('[ACCEPTOR-DEBUG] ERROR: No pendingPromptId! Response will NOT be saved.')
+      // Still clear streamingResponse to prevent stale streaming content from showing
+      model.streamingResponse = ''
       return
     }
 
@@ -719,7 +721,16 @@ export const updateBranchSettingsAcceptor = model => proposal => {
 
 export const selectPromptAcceptor = model => proposal => {
   if (proposal?.type === 'SELECT_PROMPT') {
-    model.history.activePromptId = proposal.payload.promptId
+    const promptId = proposal.payload.promptId
+
+    // Guard against null/undefined promptId - only accept valid selections
+    // This prevents accidental clearing of the prompt view
+    if (promptId === null || promptId === undefined) {
+      console.warn('[SAM-DEBUG] selectPromptAcceptor: Ignoring null/undefined promptId. Current activePromptId preserved:', model.history.activePromptId)
+      return
+    }
+
+    model.history.activePromptId = promptId
     // Navigate to prompt view when selecting a prompt/thread
     model.currentView = 'prompt'
 
@@ -729,8 +740,21 @@ export const selectPromptAcceptor = model => proposal => {
       if (!model.history.lastSelectedPromptPerBranch) {
         model.history.lastSelectedPromptPerBranch = {}
       }
-      model.history.lastSelectedPromptPerBranch[activeBranch] = proposal.payload.promptId
+      model.history.lastSelectedPromptPerBranch[activeBranch] = promptId
     }
+  }
+}
+
+// Explicitly clear prompt selection (for new threads and handoffs)
+export const clearPromptSelectionAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PROMPT_SELECTION') {
+    model.history.activePromptId = null
+    // Also clear from the per-branch cache
+    const activeBranch = model.history.activeBranch
+    if (activeBranch && model.history.lastSelectedPromptPerBranch) {
+      model.history.lastSelectedPromptPerBranch[activeBranch] = null
+    }
+    console.log('[SAM-DEBUG] clearPromptSelectionAcceptor: Cleared activePromptId')
   }
 }
 
@@ -4091,6 +4115,7 @@ export const acceptors = [
   reorderBranchesAcceptor,
   updateBranchSettingsAcceptor,
   selectPromptAcceptor,
+  clearPromptSelectionAcceptor,
   toggleThreadExpandedAcceptor,
   expandThreadToEndAcceptor,
   updateThreadSearchQueryAcceptor,

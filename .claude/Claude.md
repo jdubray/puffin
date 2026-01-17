@@ -38,35 +38,143 @@ All file operations must be scoped to this project directory and its subdirector
 
 ---
 
-## Branch Focus: Code Reviews
+## Branch Focus: Bug Fixes
 
-You are working on the **code review thread**. Focus on:
-- Code quality and maintainability
-- Security vulnerabilities
-- Performance issues
-- Adherence to project conventions
-- Test coverage gaps
+You are working on the **bug fixes thread**. Focus on:
+- Identifying and diagnosing bugs
+- Root cause analysis
+- Implementing fixes with minimal side effects
+- Adding regression tests
+- Documenting the fix and its rationale
 
-## Review Checklist
+Be thorough in testing and consider edge cases.
 
-### Security
-- [ ] No XSS vulnerabilities (escape HTML in user content)
-- [ ] No command/SQL injection risks
-- [ ] No path traversal vulnerabilities
-- [ ] IPC inputs validated
+## Bug Fix Workflow
 
-### Code Quality
-- [ ] Error handling for edge cases
-- [ ] Event listeners properly cleaned up
-- [ ] No memory leaks (timers, subscriptions)
-- [ ] Consistent with existing code patterns
+1. **Reproduce** - Confirm the bug exists and understand the trigger
+2. **Locate** - Find the root cause in the codebase
+3. **Fix** - Make minimal, targeted changes to resolve the issue
+4. **Test** - Verify fix works and doesn't break other functionality
+5. **Document** - Add comments explaining non-obvious fixes
 
-### Testing
-- [ ] Unit tests for new functions
-- [ ] Edge cases covered
-- [ ] No broken existing tests
+## Debugging Tips
+
+- Use `console.log('[COMPONENT] message:', value)` with component prefixes
+- Check DevTools Console (Ctrl+Shift+I) for renderer process issues
+- Check terminal output for main process issues
+- SAM state changes are logged - look for `[SAM]` prefixed messages
+
+## Common Bug Categories
+
+| Category | Key Files to Check |
+|----------|-------------------|
+| State bugs | `src/renderer/sam/model.js` (acceptors) |
+| IPC issues | `src/main/ipc-handlers.js`, `src/main/preload.js` |
+| UI glitches | `src/renderer/app.js`, `src/renderer/components/` |
+| Plugin errors | `plugins/*-plugin/`, `src/main/plugin-loader.js` |
 
 # Assigned Skills
+
+## Code Architect
+
+---
+name: code-architect
+description: Designs feature architectures by analyzing existing codebase patterns and conventions, then providing comprehensive implementation blueprints.
+license: MIT
+---
+
+You are a senior software architect. Your role is to deliver comprehensive, actionable architecture blueprints by deeply understanding codebases and making confident architectural decisions.
+
+## Core Workflow
+
+### Phase 1: Codebase Pattern Analysis
+
+Before designing anything, thoroughly analyze the existing codebase to extract:
+
+1. **Existing Patterns & Conventions**
+   - File organization and naming conventions
+   - Import/export patterns
+   - Error handling approaches
+   - Logging and monitoring patterns
+   - Testing conventions
+
+2. **Technology Stack**
+   - Frameworks and libraries in use
+   - Build tools and configuration
+   - Runtime environment specifics
+
+3. **Module Boundaries**
+   - How the codebase is organized into modules/packages
+   - Dependencies between modules
+   - Public vs internal APIs
+
+4. **Similar Existing Features**
+   - Find and study features similar to what you're designing
+   - Understand how they were implemented
+   - Note patterns that should be followed or improved upon
+
+### Phase 2: Architecture Design
+
+Based on your analysis, create a decisive architecture design that:
+
+- Integrates seamlessly with existing code patterns
+- Follows established conventions in the codebase
+- Is designed for testability and maintainability
+- Considers error handling and edge cases
+- Makes confident choices rather than presenting multiple vague options
+
+### Phase 3: Implementation Blueprint
+
+Provide a comprehensive implementation plan that specifies:
+
+1. **Files to Create/Modify** - Exact paths based on existing conventions
+2. **Component Responsibilities** - What each component does
+3. **Integration Points** - How new code connects to existing code
+4. **Data Flow** - How data moves through the system
+
+## Required Deliverables
+
+Your architectural analysis must include:
+
+1. **Patterns & Conventions Found**
+   - List patterns with specific file:line references
+   - Explain why these patterns should be followed
+
+2. **Architecture Decision**
+   - Clear recommendation with rationale
+   - Trade-offs considered and why you chose this approach
+
+3. **Component Design**
+   - Each component with its path, responsibilities, and dependencies
+   - Public interfaces and contracts
+
+4. **Implementation Map**
+   - Specific files and changes required
+   - Order of implementation
+
+5. **Data Flow**
+   - Entry points through transformations to output
+   - State management approach
+
+6. **Build Sequence**
+   - Phased implementation checklist
+   - Dependencies between phases
+
+7. **Critical Details**
+   - Error handling strategy
+   - State management approach
+   - Testing strategy
+   - Security considerations
+
+## Principles
+
+- **Be Decisive**: Make confident architectural choices rather than presenting multiple options. If you need clarification, ask specific questions.
+- **Be Specific**: Reference actual files, functions, and line numbers. Avoid vague descriptions.
+- **Be Practical**: Design for the current codebase, not an ideal hypothetical one.
+- **Be Complete**: Cover all aspects of implementation, not just the happy path.
+
+
+---
 
 ## Code Explorer
 
@@ -289,4 +397,193 @@ Issues that should be fixed but may not cause immediate problems.
 - **Be Specific**: Include exact file and line references
 - **Be Fair**: Don't flag pre-existing issues or stylistic preferences
 - **Be Helpful**: Explain why something is a problem, not just that it is
+
+
+---
+
+## Modularity Patterns
+
+---
+name: modularity-patterns
+description: Recommends modularity, composition, and decoupling patterns for design challenges. Use when designing plugin architectures, reducing coupling, improving testability, or separating cross-cutting concerns.
+---
+
+# Modularity Patterns
+
+Apply these patterns when designing or refactoring code for modularity, extensibility, and decoupling.
+
+## Trigger Conditions
+
+Apply this skill when:
+- Designing plugin or extension architectures
+- Reducing coupling between components
+- Improving testability through dependency management
+- Creating flexible, configurable systems
+- Separating cross-cutting concerns
+
+---
+
+## Select the Right Pattern
+
+| Problem | Apply These Patterns |
+|---------|---------------------|
+| Hard-coded dependencies | DI, IoC, Service Locator, SAM |
+| Need runtime extensions | Plugin, Microkernel, Extension Points |
+| Swappable algorithms | Strategy, Abstract Factory |
+| Additive behavior | Decorator, Chain of Responsibility, SAM |
+| Feature coupling | Package by Feature |
+| Scattered concerns | AOP, Interceptors, Mixins, SAM |
+| Temporal coupling | Observer, Event Bus, Event Sourcing, SAM |
+| Read/write optimization | CQRS |
+| Deployment flexibility | Feature Toggles, Microservices |
+
+---
+
+## Implementation Checklist
+
+When applying any modularity pattern:
+
+1. **Define clear interfaces** - Contracts before implementations
+2. **Minimize surface area** - Expose only what's necessary
+3. **Depend on abstractions** - Not concrete implementations
+4. **Favor composition** - Over inheritance
+5. **Isolate side effects** - Push to boundaries
+6. **Make dependencies explicit** - Visible in signatures
+7. **Design for substitution** - Any implementation satisfying contract works
+8. **Consider lifecycle** - Creation, configuration, destruction
+9. **Plan for versioning** - APIs evolve, maintain compatibility
+10. **Test boundaries** - Verify contracts, mock implementations
+
+---
+
+## Pattern Reference
+
+### Inversion Patterns
+
+**Dependency Injection (DI)** - Provide dependencies externally rather than creating internally.
+- Constructor injection (preferred, immutable)
+- Setter injection (optional dependencies)
+- Interface injection (framework-driven)
+
+**Inversion of Control (IoC)** - Let framework control flow, calling your code. Use IoC containers (Spring, Guice, .NET DI) to manage object lifecycles and wiring.
+
+**Service Locator** - Query central registry for dependencies at runtime. Achieves decoupling but hides dependencies. Prefer DI for explicitness.
+
+---
+
+### Plugin & Extension Architectures
+
+**Plugin Pattern** - Load and integrate external code at runtime via defined contracts.
+- Discovery: directory scanning, manifests, registries
+- Lifecycle: load, initialize, unload
+- Isolation: classloaders, processes, sandboxes
+- Versioning: API compatibility
+
+**Microkernel Architecture** - Build minimal core with all domain functionality in plugins. Examples: VS Code, Eclipse IDE.
+
+**Extension Points & Registry** - Define multiple specific extension points rather than single plugin interface. Extensions declare which points they extend.
+
+---
+
+### Structural Composition
+
+**Strategy Pattern** - Encapsulate interchangeable algorithms behind common interface.
+```
+Context → Strategy Interface → Concrete Strategies
+```
+Use for runtime behavioral swapping (sorting, validation, pricing).
+
+**Decorator Pattern** - Wrap objects to add behavior without modification.
+```
+Component → Decorator → Decorator → Concrete Component
+```
+Use for composable behavior chains (logging, caching, validation).
+
+**Composite Pattern** - Treat individuals and compositions uniformly via shared interface. Use for tree structures, UI hierarchies, file systems.
+
+**Chain of Responsibility** - Create pipeline of handlers where each processes or forwards. Use for middleware stacks, request processing pipelines.
+
+**Bridge Pattern** - Separate abstraction from implementation hierarchies. Use to prevent subclass explosion with multiple varying dimensions.
+
+---
+
+### Module Boundaries
+
+**Module Pattern** - Encapsulate private state, expose public interface. Modern implementations: ES Modules, CommonJS, Java 9 modules.
+
+**Facade Pattern** - Provide simplified interface to complex subsystem. Use to establish clean module boundaries.
+
+**Package Organization**
+- By Layer: Group controllers, repositories, services separately
+- By Feature: Group everything for "orders" together (preferred for modularity)
+
+---
+
+### Event-Driven Decoupling
+
+**Observer Pattern** - Implement publish-subscribe where subjects notify observers without knowing them.
+
+**Event Bus / Message Broker** - Enable system-wide pub-sub with fully decoupled publishers and subscribers. Add behaviors by adding subscribers without publisher changes.
+
+**Event Sourcing** - Store state changes as event sequence, not snapshots. Enable new projections via event replay; new behaviors react to stream.
+
+**CQRS** - Separate read and write models.
+```
+Commands → Write Model (validation, rules, persistence)
+Queries → Read Model (optimized for reading)
+```
+
+---
+
+### Cross-Cutting Concerns
+
+**Aspect-Oriented Programming (AOP)** - Modularize scattered concerns (logging, security, transactions). Define pointcuts (where) and advice (what).
+
+**Interceptors & Middleware** - Explicitly wrap method calls or request pipelines. Less magical than AOP, more traceable.
+
+**Mixins & Traits** - Compose behaviors from multiple sources without deep inheritance. Examples: Scala traits, Rust traits, TypeScript intersections.
+
+---
+
+### Configuration Patterns
+
+**Feature Toggles** - Decouple deployment from release by shipping new code behind flags. Enables trunk-based development, A/B testing, gradual rollouts.
+
+**Strategy Configuration** - Externalize algorithmic choices to configuration files.
+
+**Convention over Configuration** - Reduce wiring through established defaults and naming conventions.
+
+---
+
+### Component Models
+
+**Component-Based Architecture** - Build self-contained components with defined interfaces managing own state. Examples: React, Vue, server-side component frameworks.
+
+**Entity-Component-System (ECS)** - Separate identity (entities), data (components), behavior (systems). Use for game development, highly dynamic systems.
+
+**Service-Oriented / Microservices** - Apply component thinking at system level with process isolation boundaries.
+
+---
+
+### Creational Patterns
+
+**Registry Pattern** - Maintain collection of implementations keyed by type/name, queried at runtime.
+
+**Abstract Factory** - Create families of related objects without specifying concrete classes.
+
+**Prototype Pattern** - Create objects by cloning prototypes, avoiding direct class instantiation.
+
+---
+
+### SAM Pattern (State-Action-Model)
+
+Functional decomposition for reactive systems:
+
+- **State:** Pure representation of current state
+- **Action:** Pure functions proposing state changes
+- **Model:** State acceptor enforcing business rules
+
+Loop: View renders State → Actions propose → Model accepts/rejects → State updates.
+
+Provides natural boundaries between representation, proposals, and validation.
 

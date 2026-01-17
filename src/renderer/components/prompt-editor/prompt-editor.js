@@ -1205,8 +1205,8 @@ export class PromptEditorComponent {
     // Focus the textarea
     this.textarea.focus()
 
-    // Trigger SAM action to clear active prompt selection
-    this.intents.selectPrompt(null)
+    // Trigger SAM action to explicitly clear active prompt selection
+    this.intents.clearPromptSelection()
   }
 
   /**
@@ -2037,8 +2037,8 @@ export class PromptEditorComponent {
     this.pendingHandoff = handoffData
 
     // Clear any selected prompt (to show empty prompt view)
-    console.log('[HANDOFF] Calling selectPrompt(null)')
-    this.intents.selectPrompt(null)
+    console.log('[HANDOFF] Calling clearPromptSelection()')
+    this.intents.clearPromptSelection()
 
     // Clear the textarea
     this.textarea.value = ''

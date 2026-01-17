@@ -41,8 +41,8 @@ export class ToastHistoryComponent {
 
     // Track event listeners for cleanup (prevents memory leaks on re-render)
     this.boundListeners = []
-    // Track active timeouts for cleanup
-    this.copyFeedbackTimeouts = []
+    // Track active timeouts for cleanup (copy feedback, error banners, etc.)
+    this.activeTimeouts = []
   }
 
   /**
@@ -222,11 +222,12 @@ export class ToastHistoryComponent {
   renderToastItem(toast, isOld) {
     const typeConfig = TOAST_TYPES[toast.type] || TOAST_TYPES.info
     const timeStr = this.formatTime(toast.timestamp)
+    const safeId = this.escapeHtml(toast.id)
 
     return `
       <div class="toast-history-item ${isOld ? 'toast-history-item-old' : ''}"
            role="listitem"
-           data-toast-id="${toast.id}">
+           data-toast-id="${safeId}">
         <div class="toast-item-icon" style="color: ${typeConfig.color}" aria-label="${typeConfig.label}">
           ${typeConfig.icon}
         </div>
@@ -237,7 +238,7 @@ export class ToastHistoryComponent {
         <div class="toast-item-actions">
           <button class="toast-action-btn copy-btn"
                   data-action="copy"
-                  data-toast-id="${toast.id}"
+                  data-toast-id="${safeId}"
                   title="Copy to clipboard"
                   aria-label="Copy notification">
             📋
@@ -245,7 +246,7 @@ export class ToastHistoryComponent {
           ${isOld ? `
             <button class="toast-action-btn delete-btn"
                     data-action="delete"
-                    data-toast-id="${toast.id}"
+                    data-toast-id="${safeId}"
                     title="Delete notification"
                     aria-label="Delete notification">
               🗑
@@ -408,10 +409,10 @@ export class ToastHistoryComponent {
       btn.innerHTML = originalText
       btn.classList.remove('copied')
       // Remove from tracking array after execution
-      this.copyFeedbackTimeouts = this.copyFeedbackTimeouts.filter(id => id !== timeoutId)
+      this.activeTimeouts = this.activeTimeouts.filter(id => id !== timeoutId)
     }, 2000)
 
-    this.copyFeedbackTimeouts.push(timeoutId)
+    this.activeTimeouts.push(timeoutId)
   }
 
   /**
@@ -511,7 +512,7 @@ export class ToastHistoryComponent {
         banner.remove()
       }
     }, 5000)
-    this.copyFeedbackTimeouts.push(timeoutId)
+    this.activeTimeouts.push(timeoutId)
   }
 
   /**
@@ -553,8 +554,8 @@ export class ToastHistoryComponent {
    */
   destroy() {
     // Clear all tracked timeouts to prevent callbacks after destruction
-    this.copyFeedbackTimeouts.forEach(id => clearTimeout(id))
-    this.copyFeedbackTimeouts = []
+    this.activeTimeouts.forEach(id => clearTimeout(id))
+    this.activeTimeouts = []
 
     // Remove all tracked event listeners
     this.cleanupListeners()

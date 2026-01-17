@@ -226,6 +226,12 @@ export const selectPrompt = (promptId) => ({
   }
 })
 
+// Clear the prompt selection (for starting new threads or receiving handoffs)
+export const clearPromptSelection = () => ({
+  type: 'CLEAR_PROMPT_SELECTION',
+  payload: {}
+})
+
 /**
  * User Story Actions
  */

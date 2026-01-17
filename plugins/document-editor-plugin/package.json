@@ -1,0 +1,21 @@
+{
+  "name": "document-editor-plugin",
+  "version": "1.0.0",
+  "description": "Text document editor with syntax highlighting and AI assistance",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": [
+    "puffin",
+    "plugin",
+    "editor",
+    "documents",
+    "syntax-highlighting"
+  ],
+  "peerDependencies": {
+    "electron": ">=20.0.0"
+  },
+  "dependencies": {
+    "highlight.js": "^11.9.0"
+  }
+}

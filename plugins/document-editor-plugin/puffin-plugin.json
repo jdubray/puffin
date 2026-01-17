@@ -1,0 +1,55 @@
+{
+  "name": "document-editor-plugin",
+  "version": "1.0.0",
+  "displayName": "Document Editor",
+  "description": "Text document editor with syntax highlighting and AI assistance",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["editor", "documents", "syntax-highlighting", "ai-assistance"],
+  "extensionPoints": {
+    "actions": [],
+    "ipcHandlers": [
+      "document-editor:createFile",
+      "document-editor:openFile",
+      "document-editor:readFile",
+      "document-editor:saveFile",
+      "document-editor:getRecentFiles",
+      "document-editor:addRecentFile",
+      "document-editor:watchFile",
+      "document-editor:unwatchFile"
+    ],
+    "components": ["document-editor-view"]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "document-editor-view",
+        "name": "Editor",
+        "location": "nav",
+        "icon": "📄",
+        "order": 200,
+        "component": "DocumentEditorView"
+      }
+    ],
+    "commands": [],
+    "menus": {}
+  },
+  "activationEvents": [
+    "onStartup"
+  ],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "DocumentEditorView",
+        "export": "DocumentEditorView",
+        "type": "class",
+        "description": "Main document editor view with syntax highlighting"
+      }
+    ],
+    "styles": [
+      "renderer/styles/document-editor.css"
+    ]
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "prompt-template-plugin",
+  "version": "1.0.0",
+  "displayName": "Prompt Templates",
+  "description": "Manage and reuse prompt templates for Claude interactions",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["prompts", "templates", "productivity"],
+  "extensionPoints": {
+    "actions": [],
+    "ipcHandlers": ["prompt-template:getAll", "prompt-template:save", "prompt-template:delete"],
+    "components": ["prompt-template-view"]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "prompt-template-view",
+        "name": "Templates",
+        "location": "nav",
+        "icon": "📝",
+        "order": 150,
+        "component": "PromptTemplateView"
+      }
+    ],
+    "commands": [],
+    "menus": {}
+  },
+  "activationEvents": [
+    "onStartup"
+  ],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "PromptTemplateView",
+        "export": "PromptTemplateView",
+        "type": "class",
+        "description": "Main prompt templates management view"
+      }
+    ],
+    "styles": [
+      "renderer/styles/prompt-template.css"
+    ]
+  }
+}

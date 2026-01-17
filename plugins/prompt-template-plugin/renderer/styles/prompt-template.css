@@ -1,0 +1,625 @@
+/**
+ * Prompt Template Plugin Styles
+ * Dark theme compatible
+ */
+
+/* ========================================
+   BASE CONTAINER
+   ======================================== */
+
+.prompt-template-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--bg-primary, #1a1a2e);
+  color: var(--text-primary, #e0e0e0);
+}
+
+.prompt-template-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ========================================
+   LOADING STATE
+   ======================================== */
+
+.prompt-template-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  height: 100%;
+  min-height: 300px;
+  color: var(--text-secondary, #888);
+}
+
+.prompt-template-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color, #333);
+  border-top-color: var(--accent-primary, #6c63ff);
+  border-radius: 50%;
+  animation: prompt-template-spin 1s linear infinite;
+}
+
+@keyframes prompt-template-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ========================================
+   ERROR STATE
+   ======================================== */
+
+.prompt-template-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3rem;
+  text-align: center;
+}
+
+.prompt-template-error-icon {
+  font-size: 3rem;
+}
+
+.prompt-template-error h3 {
+  margin: 0;
+  color: var(--color-error, #f56565);
+}
+
+.prompt-template-error p {
+  margin: 0;
+  color: var(--text-secondary, #888);
+}
+
+.prompt-template-retry-btn {
+  padding: 0.5rem 1rem;
+  background: var(--accent-primary, #6c63ff);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background 0.15s ease;
+}
+
+.prompt-template-retry-btn:hover {
+  background: var(--accent-primary-dark, #5a52d5);
+}
+
+/* ========================================
+   HEADER
+   ======================================== */
+
+.prompt-template-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.prompt-template-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.prompt-template-header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* ========================================
+   SEARCH INPUT
+   ======================================== */
+
+.prompt-template-search {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary, #252542);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-primary, #e0e0e0);
+  font-size: 0.875rem;
+  min-width: 200px;
+  transition: border-color 0.15s ease;
+}
+
+.prompt-template-search:focus {
+  outline: none;
+  border-color: var(--accent-primary, #6c63ff);
+}
+
+.prompt-template-search::placeholder {
+  color: var(--text-secondary, #888);
+}
+
+/* ========================================
+   BUTTONS
+   ======================================== */
+
+.prompt-template-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.prompt-template-btn-primary {
+  background: var(--accent-primary, #6c63ff);
+  color: white;
+}
+
+.prompt-template-btn-primary:hover {
+  background: var(--accent-primary-dark, #5a52d5);
+}
+
+.prompt-template-btn-secondary {
+  background: var(--bg-secondary, #252542);
+  color: var(--text-primary, #e0e0e0);
+  border: 1px solid var(--border-color, #333);
+}
+
+.prompt-template-btn-secondary:hover {
+  background: var(--bg-tertiary, #2d2d4a);
+}
+
+.prompt-template-btn-danger {
+  background: var(--color-error, #f56565);
+  color: white;
+}
+
+.prompt-template-btn-danger:hover {
+  background: #e53e3e;
+}
+
+/* ========================================
+   CARD GRID
+   ======================================== */
+
+.prompt-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+/* ========================================
+   EMPTY STATE
+   ======================================== */
+
+.prompt-template-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: var(--text-secondary, #888);
+}
+
+.prompt-template-empty-icon {
+  font-size: 3rem;
+  opacity: 0.5;
+}
+
+.prompt-template-empty h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.prompt-template-empty p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* ========================================
+   TEMPLATE CARD
+   ======================================== */
+
+.prompt-template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--bg-secondary, #252542);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.prompt-template-card:hover {
+  border-color: var(--accent-primary, #6c63ff);
+  transform: translateY(-2px);
+}
+
+.prompt-template-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.prompt-template-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+  word-break: break-word;
+}
+
+.prompt-template-card-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.prompt-template-card-btn {
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.prompt-template-card-btn:hover {
+  opacity: 1;
+  background: var(--bg-tertiary, #2d2d4a);
+}
+
+.prompt-template-card-btn.delete-btn:hover {
+  background: rgba(245, 101, 101, 0.2);
+}
+
+/* Copy button feedback states */
+.prompt-template-card-btn.copy-btn.copied {
+  opacity: 1;
+  background: rgba(72, 187, 120, 0.2);
+  color: var(--color-success, #48bb78);
+}
+
+.prompt-template-card-btn.copy-btn.copy-error {
+  opacity: 1;
+  background: rgba(245, 101, 101, 0.2);
+  color: var(--color-error, #f56565);
+}
+
+.prompt-template-card-preview {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #888);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.prompt-template-card-date {
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #666);
+}
+
+/* ========================================
+   RESPONSIVE ADJUSTMENTS
+   ======================================== */
+
+@media (max-width: 600px) {
+  .prompt-template-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .prompt-template-header-actions {
+    flex-direction: column;
+  }
+
+  .prompt-template-search {
+    min-width: auto;
+    width: 100%;
+  }
+
+  .prompt-template-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================================
+   MODAL OVERLAY
+   ======================================== */
+
+.prompt-template-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 1rem;
+  animation: prompt-template-fade-in 0.15s ease;
+}
+
+@keyframes prompt-template-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ========================================
+   MODAL DIALOG
+   ======================================== */
+
+.prompt-template-modal {
+  background: var(--bg-primary, #1a1a2e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  animation: prompt-template-slide-up 0.2s ease;
+}
+
+@keyframes prompt-template-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.prompt-template-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.prompt-template-modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.prompt-template-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #888);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.prompt-template-modal-close:hover {
+  background: var(--bg-tertiary, #2d2d4a);
+  color: var(--text-primary, #e0e0e0);
+}
+
+/* ========================================
+   MODAL FORM
+   ======================================== */
+
+.prompt-template-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+
+.prompt-template-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.prompt-template-form-group label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.prompt-template-form-group .required {
+  color: var(--color-error, #f56565);
+}
+
+.prompt-template-input,
+.prompt-template-textarea {
+  padding: 0.625rem 0.75rem;
+  background: var(--bg-secondary, #252542);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-primary, #e0e0e0);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.prompt-template-input:focus,
+.prompt-template-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary, #6c63ff);
+  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
+}
+
+.prompt-template-input.error,
+.prompt-template-textarea.error {
+  border-color: var(--color-error, #f56565);
+}
+
+.prompt-template-input.error:focus,
+.prompt-template-textarea.error:focus {
+  box-shadow: 0 0 0 3px rgba(245, 101, 101, 0.15);
+}
+
+.prompt-template-input::placeholder,
+.prompt-template-textarea::placeholder {
+  color: var(--text-tertiary, #666);
+}
+
+.prompt-template-textarea {
+  resize: vertical;
+  min-height: 150px;
+  line-height: 1.5;
+}
+
+.prompt-template-error-msg {
+  font-size: 0.8125rem;
+  color: var(--color-error, #f56565);
+  min-height: 1.25rem;
+  display: none;
+}
+
+.prompt-template-error-msg.visible {
+  display: block;
+}
+
+/* ========================================
+   FORM ACTIONS
+   ======================================== */
+
+.prompt-template-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color, #333);
+  margin-top: 0.5rem;
+}
+
+.prompt-template-form-actions .prompt-template-btn {
+  min-width: 100px;
+}
+
+.prompt-template-form-actions .prompt-template-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   MODAL RESPONSIVE
+   ======================================== */
+
+@media (max-width: 600px) {
+  .prompt-template-modal {
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .prompt-template-modal-overlay {
+    padding: 0;
+  }
+
+  .prompt-template-form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .prompt-template-form-actions .prompt-template-btn {
+    width: 100%;
+  }
+}
+
+/* ========================================
+   DELETE CONFIRMATION MODAL
+   ======================================== */
+
+.prompt-template-delete-modal {
+  max-width: 400px;
+}
+
+.prompt-template-delete-content {
+  padding: 1.25rem;
+}
+
+.prompt-template-delete-content p {
+  margin: 0;
+  color: var(--text-primary, #e0e0e0);
+  line-height: 1.5;
+}
+
+.prompt-template-delete-content p + p {
+  margin-top: 0.75rem;
+}
+
+.prompt-template-delete-content strong {
+  color: var(--text-primary, #e0e0e0);
+  font-weight: 600;
+}
+
+.prompt-template-delete-warning {
+  color: var(--text-secondary, #888) !important;
+  font-size: 0.875rem;
+}
+
+.prompt-template-delete-error {
+  color: var(--color-error, #f56565) !important;
+  font-size: 0.875rem;
+  margin-top: 0.75rem !important;
+  padding: 0.5rem;
+  background: rgba(245, 101, 101, 0.1);
+  border-radius: 4px;
+}
+
+.prompt-template-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.prompt-template-delete-actions .prompt-template-btn {
+  min-width: 90px;
+}
+
+.prompt-template-delete-actions .prompt-template-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   DELETE MODAL RESPONSIVE
+   ======================================== */
+
+@media (max-width: 600px) {
+  .prompt-template-delete-modal {
+    max-width: 100%;
+    margin: 1rem;
+  }
+
+  .prompt-template-delete-actions {
+    flex-direction: column-reverse;
+  }
+
+  .prompt-template-delete-actions .prompt-template-btn {
+    width: 100%;
+  }
+}

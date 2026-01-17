@@ -4737,20 +4737,41 @@ Please proceed with the implementation.`
 
     // Normal completion - reset continuation count and mark story done
     this.orchestrationContinuationCount = 0
-    console.log('[ORCHESTRATION] Story completed:', currentStoryId, 'sessionId:', sessionId)
 
-    // Mark orchestration story as completed (for tracking)
+    console.log('='.repeat(80))
+    console.log('[ORCH-TRACE-1] ====== STORY COMPLETION FLOW START ======')
+    console.log('[ORCH-TRACE-1] Story ID:', currentStoryId)
+    console.log('[ORCH-TRACE-1] Session ID:', sessionId)
+    console.log('[ORCH-TRACE-1] Timestamp:', new Date().toISOString())
+    console.log('='.repeat(80))
+
+    // STEP 1: Mark orchestration story as completed (for internal tracking)
+    console.log('[ORCH-TRACE-2] STEP 1: Calling orchestrationStoryCompleted intent')
+    console.log('[ORCH-TRACE-2] Pre-state completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
     this.intents.orchestrationStoryCompleted(currentStoryId, sessionId)
+    console.log('[ORCH-TRACE-2] Post-call completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
 
-    // Mark the story status as 'completed' via proper intent (triggers persistence)
+    // STEP 2: Mark the story status as 'completed' via proper intent (triggers persistence)
+    console.log('[ORCH-TRACE-3] STEP 2: Calling updateSprintStoryStatus intent')
+    console.log('[ORCH-TRACE-3] Pre-state storyProgress:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
     this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
-    console.log('[ORCHESTRATION] Marked story status as completed:', currentStoryId)
+    console.log('[ORCH-TRACE-3] Post-call storyProgress:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
 
-    // Auto-complete all acceptance criteria for this story
+    // STEP 3: Auto-complete all acceptance criteria for this story
+    console.log('[ORCH-TRACE-4] STEP 3: Calling autoCompleteAcceptanceCriteria')
     this.autoCompleteAcceptanceCriteria(currentStoryId)
 
-    // Trigger assertion evaluation for the completed story
+    // STEP 4: Trigger assertion evaluation for the completed story
+    console.log('[ORCH-TRACE-5] STEP 4: Calling evaluateStoryAssertions')
     this.evaluateStoryAssertions(currentStoryId)
+
+    console.log('='.repeat(80))
+    console.log('[ORCH-TRACE-6] ====== STORY COMPLETION FLOW END ======')
+    console.log('[ORCH-TRACE-6] Final state check:')
+    console.log('[ORCH-TRACE-6] - orchestration.completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
+    console.log('[ORCH-TRACE-6] - storyProgress[storyId]:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
+    console.log('[ORCH-TRACE-6] - Will call checkOrchestrationProgress in 1000ms')
+    console.log('='.repeat(80))
 
     // Check for next story after a small delay
     setTimeout(() => {
@@ -4763,36 +4784,63 @@ Please proceed with the implementation.`
    * @param {string} storyId - The story ID
    */
   autoCompleteAcceptanceCriteria(storyId) {
+    console.log('[ORCH-TRACE-4.1] autoCompleteAcceptanceCriteria called for storyId:', storyId)
+
     const sprint = this.state?.activeSprint
     if (!sprint) {
-      console.log('[ORCHESTRATION] No active sprint for auto-completing criteria')
+      console.log('[ORCH-TRACE-4.1] ABORT: No active sprint')
       return
     }
+
+    console.log('[ORCH-TRACE-4.2] Sprint found:', {
+      sprintId: sprint.id,
+      sprintStatus: sprint.status,
+      storiesCount: sprint.stories?.length,
+      hasStoryProgress: !!sprint.storyProgress
+    })
 
     // Find the story in the sprint
     const story = sprint.stories?.find(s => s.id === storyId)
     if (!story) {
-      console.log('[ORCHESTRATION] Story not found in sprint:', storyId)
+      console.log('[ORCH-TRACE-4.2] ABORT: Story not found in sprint.stories')
+      console.log('[ORCH-TRACE-4.2] Available story IDs:', sprint.stories?.map(s => s.id))
       return
     }
+
+    console.log('[ORCH-TRACE-4.3] Story found:', {
+      storyId: story.id,
+      storyTitle: story.title,
+      hasAcceptanceCriteria: !!story.acceptanceCriteria,
+      criteriaCount: story.acceptanceCriteria?.length || 0,
+      criteriaContent: story.acceptanceCriteria
+    })
 
     const criteria = story.acceptanceCriteria || []
     if (criteria.length === 0) {
-      console.log('[ORCHESTRATION] No acceptance criteria to complete for story:', storyId)
+      console.log('[ORCH-TRACE-4.3] ABORT: No acceptance criteria on story')
       return
     }
 
-    console.log('[ORCHESTRATION] Auto-completing', criteria.length, 'acceptance criteria for story:', storyId)
+    console.log('[ORCH-TRACE-4.4] Starting criteria completion loop, count:', criteria.length)
+    console.log('[ORCH-TRACE-4.4] Pre-loop criteriaProgress:', JSON.stringify(sprint.storyProgress?.[storyId]?.criteriaProgress))
 
     // Toggle each criterion to checked state
-    criteria.forEach((_, index) => {
-      // Check if already completed
+    criteria.forEach((criterion, index) => {
       const progress = sprint.storyProgress?.[storyId]?.criteriaProgress?.[index]
+      console.log(`[ORCH-TRACE-4.5] Criterion ${index}: "${criterion}"`)
+      console.log(`[ORCH-TRACE-4.5] Current progress for criterion ${index}:`, JSON.stringify(progress))
+
       if (!progress?.checked) {
+        console.log(`[ORCH-TRACE-4.5] Calling toggleCriteriaCompletion(${storyId}, ${index}, true)`)
         this.intents.toggleCriteriaCompletion(storyId, index, true)
-        console.log('[ORCHESTRATION] Marked criterion', index, 'as complete for story:', storyId)
+        console.log(`[ORCH-TRACE-4.5] Post-call criteriaProgress[${index}]:`, JSON.stringify(this.state?.activeSprint?.storyProgress?.[storyId]?.criteriaProgress?.[index]))
+      } else {
+        console.log(`[ORCH-TRACE-4.5] Skipping criterion ${index} - already checked`)
       }
     })
+
+    console.log('[ORCH-TRACE-4.6] Criteria completion loop finished')
+    console.log('[ORCH-TRACE-4.6] Final criteriaProgress:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[storyId]?.criteriaProgress))
   }
 
   /**

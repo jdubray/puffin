@@ -2402,16 +2402,28 @@ export const orchestrationStoryStartedAcceptor = model => proposal => {
 // is handled separately via proper intents in app.js
 export const orchestrationStoryCompletedAcceptor = model => proposal => {
   if (proposal?.type === 'ORCHESTRATION_STORY_COMPLETED') {
+    console.log('[MODEL-TRACE-C1] ====== orchestrationStoryCompletedAcceptor ENTER ======')
+    console.log('[MODEL-TRACE-C1] Proposal payload:', JSON.stringify(proposal.payload))
+    console.log('[MODEL-TRACE-C1] Has orchestration:', !!model.activeSprint?.orchestration)
+
     if (model.activeSprint?.orchestration) {
       const { storyId, sessionId, timestamp } = proposal.payload
 
+      console.log('[MODEL-TRACE-C2] Before update completedStories:', model.activeSprint.orchestration.completedStories)
+
       // Add to completed stories list (orchestration tracking)
       if (!model.activeSprint.orchestration.completedStories) {
+        console.log('[MODEL-TRACE-C2] Initializing completedStories array')
         model.activeSprint.orchestration.completedStories = []
       }
       if (!model.activeSprint.orchestration.completedStories.includes(storyId)) {
+        console.log('[MODEL-TRACE-C2] Adding storyId to completedStories:', storyId)
         model.activeSprint.orchestration.completedStories.push(storyId)
+      } else {
+        console.log('[MODEL-TRACE-C2] StoryId already in completedStories, skipping')
       }
+
+      console.log('[MODEL-TRACE-C3] After update completedStories:', model.activeSprint.orchestration.completedStories)
 
       // Update session tracking
       if (!model.activeSprint.orchestration.storySessions) {
@@ -2426,11 +2438,19 @@ export const orchestrationStoryCompletedAcceptor = model => proposal => {
 
       // Clear current story if it matches
       if (model.activeSprint.orchestration.currentStoryId === storyId) {
+        console.log('[MODEL-TRACE-C4] Clearing currentStoryId (was:', storyId, ')')
         model.activeSprint.orchestration.currentStoryId = null
         model.activeSprint.orchestration.currentStoryStartedAt = null
       }
 
-      console.log('[ORCHESTRATION] Story completed:', storyId, 'Session:', sessionId)
+      console.log('[MODEL-TRACE-C5] ====== orchestrationStoryCompletedAcceptor EXIT ======')
+      console.log('[MODEL-TRACE-C5] Final orchestration state:', {
+        completedStories: model.activeSprint.orchestration.completedStories,
+        currentStoryId: model.activeSprint.orchestration.currentStoryId,
+        storyOrder: model.activeSprint.orchestration.storyOrder
+      })
+    } else {
+      console.log('[MODEL-TRACE-C1] ABORT: No orchestration object')
     }
   }
 }
@@ -3189,37 +3209,63 @@ export const completeStoryBranchAcceptor = model => proposal => {
 // Update sprint story status (for manual completion toggle)
 export const updateSprintStoryStatusAcceptor = model => proposal => {
   if (proposal?.type === 'UPDATE_SPRINT_STORY_STATUS') {
+    console.log('[MODEL-TRACE-A1] ====== updateSprintStoryStatusAcceptor ENTER ======')
+    console.log('[MODEL-TRACE-A1] Proposal payload:', JSON.stringify(proposal.payload))
+
     const { storyId, status, timestamp } = proposal.payload
     const sprint = model.activeSprint
 
     if (!sprint) {
-      console.warn('[SPRINT] Cannot update story status - no active sprint')
+      console.warn('[MODEL-TRACE-A1] ABORT: No active sprint')
       return
     }
 
+    console.log('[MODEL-TRACE-A2] Sprint found:', {
+      sprintId: sprint.id,
+      sprintStatus: sprint.status,
+      storiesCount: sprint.stories?.length
+    })
+
     // Find and update the story in the sprint's stories array
     const sprintStory = sprint.stories.find(s => s.id === storyId)
+    console.log('[MODEL-TRACE-A3] Sprint story lookup:', {
+      found: !!sprintStory,
+      storyId,
+      previousStatus: sprintStory?.status
+    })
+
     if (sprintStory) {
       sprintStory.status = status
       sprintStory.updatedAt = timestamp
       if (status === 'completed') {
         sprintStory.completedAt = timestamp
       }
+      console.log('[MODEL-TRACE-A3] Updated sprint story:', {
+        storyId,
+        newStatus: sprintStory.status,
+        updatedAt: sprintStory.updatedAt
+      })
     }
 
     // Initialize storyProgress if not exists
     if (!sprint.storyProgress) {
+      console.log('[MODEL-TRACE-A4] Initializing sprint.storyProgress')
       sprint.storyProgress = {}
     }
 
     // Initialize progress for this story if not exists
     if (!sprint.storyProgress[storyId]) {
+      console.log('[MODEL-TRACE-A4] Initializing storyProgress for storyId:', storyId)
       sprint.storyProgress[storyId] = {
         branches: {}
       }
     }
 
     // Update the story progress status
+    console.log('[MODEL-TRACE-A5] Updating storyProgress[storyId].status:', {
+      previousStatus: sprint.storyProgress[storyId].status,
+      newStatus: status
+    })
     sprint.storyProgress[storyId].status = status
     if (status === 'completed') {
       sprint.storyProgress[storyId].completedAt = timestamp
@@ -3228,13 +3274,18 @@ export const updateSprintStoryStatusAcceptor = model => proposal => {
     }
 
     // Check if all stories in the sprint are completed
+    const storyStatuses = sprint.stories.map(s => ({ id: s.id, status: s.status }))
+    console.log('[MODEL-TRACE-A6] All story statuses:', JSON.stringify(storyStatuses))
     const allStoriesCompleted = sprint.stories.every(story => story.status === 'completed')
+    console.log('[MODEL-TRACE-A6] allStoriesCompleted:', allStoriesCompleted)
 
     if (allStoriesCompleted && sprint.stories.length > 0) {
+      console.log('[MODEL-TRACE-A7] Marking sprint as completed')
       sprint.status = 'completed'
       sprint.completedAt = timestamp
     } else if (sprint.status === 'completed') {
       // If sprint was completed but now a story is marked incomplete
+      console.log('[MODEL-TRACE-A7] Reverting sprint from completed to implementing')
       sprint.status = 'implementing'
       sprint.completedAt = null
     }
@@ -3242,7 +3293,14 @@ export const updateSprintStoryStatusAcceptor = model => proposal => {
     // Trigger persistence
     model._sprintProgressUpdated = true
 
-    console.log('[SPRINT] Updated story status:', { storyId, status, allStoriesCompleted })
+    console.log('[MODEL-TRACE-A8] ====== updateSprintStoryStatusAcceptor EXIT ======')
+    console.log('[MODEL-TRACE-A8] Final state:', {
+      storyId,
+      storyStatus: sprint.stories.find(s => s.id === storyId)?.status,
+      progressStatus: sprint.storyProgress[storyId]?.status,
+      sprintStatus: sprint.status,
+      allStoriesCompleted
+    })
   }
 }
 
@@ -3315,21 +3373,32 @@ export const updateStoryAssertionResultsAcceptor = model => proposal => {
 // Toggle acceptance criteria completion for a story
 export const toggleCriteriaCompletionAcceptor = model => proposal => {
   if (proposal?.type === 'TOGGLE_CRITERIA_COMPLETION') {
+    console.log('[MODEL-TRACE-B1] ====== toggleCriteriaCompletionAcceptor ENTER ======')
+    console.log('[MODEL-TRACE-B1] Proposal payload:', JSON.stringify(proposal.payload))
+
     const { storyId, criteriaIndex, checked, timestamp } = proposal.payload
     const sprint = model.activeSprint
 
     if (!sprint) {
-      console.warn('[SPRINT] No active sprint for criteria toggle')
+      console.warn('[MODEL-TRACE-B1] ABORT: No active sprint')
       return
     }
 
+    console.log('[MODEL-TRACE-B2] Sprint found:', {
+      sprintId: sprint.id,
+      storiesCount: sprint.stories?.length,
+      hasStoryProgress: !!sprint.storyProgress
+    })
+
     // Initialize storyProgress if not exists
     if (!sprint.storyProgress) {
+      console.log('[MODEL-TRACE-B3] Initializing sprint.storyProgress')
       sprint.storyProgress = {}
     }
 
     // Initialize progress for this story if not exists
     if (!sprint.storyProgress[storyId]) {
+      console.log('[MODEL-TRACE-B3] Initializing storyProgress for storyId:', storyId)
       sprint.storyProgress[storyId] = {
         branches: {},
         criteriaProgress: {}
@@ -3338,8 +3407,11 @@ export const toggleCriteriaCompletionAcceptor = model => proposal => {
 
     // Initialize criteriaProgress if not exists
     if (!sprint.storyProgress[storyId].criteriaProgress) {
+      console.log('[MODEL-TRACE-B3] Initializing criteriaProgress for storyId:', storyId)
       sprint.storyProgress[storyId].criteriaProgress = {}
     }
+
+    console.log('[MODEL-TRACE-B4] Before update criteriaProgress:', JSON.stringify(sprint.storyProgress[storyId].criteriaProgress))
 
     // Update the criteria completion state
     sprint.storyProgress[storyId].criteriaProgress[criteriaIndex] = {
@@ -3347,22 +3419,41 @@ export const toggleCriteriaCompletionAcceptor = model => proposal => {
       checkedAt: checked ? timestamp : null
     }
 
+    console.log('[MODEL-TRACE-B4] After update criteriaProgress:', JSON.stringify(sprint.storyProgress[storyId].criteriaProgress))
+
     // Check if all criteria are completed for auto-complete
     const story = sprint.stories.find(s => s.id === storyId)
+    console.log('[MODEL-TRACE-B5] Story lookup for auto-complete check:', {
+      found: !!story,
+      storyId,
+      hasAcceptanceCriteria: !!story?.acceptanceCriteria,
+      criteriaCount: story?.acceptanceCriteria?.length || 0
+    })
+
     if (story && story.acceptanceCriteria?.length > 0) {
       const criteriaProgress = sprint.storyProgress[storyId].criteriaProgress
+      const criteriaCheckResults = story.acceptanceCriteria.map((_, idx) => ({
+        idx,
+        checked: criteriaProgress[idx]?.checked === true
+      }))
+      console.log('[MODEL-TRACE-B6] Criteria check results:', JSON.stringify(criteriaCheckResults))
+
       const allChecked = story.acceptanceCriteria.every((_, idx) =>
         criteriaProgress[idx]?.checked === true
       )
 
+      console.log('[MODEL-TRACE-B6] allChecked:', allChecked, 'currentStatus:', sprint.storyProgress[storyId].status)
+
       // Auto-complete the story if all criteria are checked
       if (allChecked && sprint.storyProgress[storyId].status !== 'completed') {
+        console.log('[MODEL-TRACE-B7] Auto-completing story - all criteria checked')
         sprint.storyProgress[storyId].status = 'completed'
         sprint.storyProgress[storyId].completedAt = timestamp
 
         // Also update the story in the sprint
         const sprintStory = sprint.stories.find(s => s.id === storyId)
         if (sprintStory) {
+          console.log('[MODEL-TRACE-B7] Updating sprintStory status to completed')
           sprintStory.status = 'completed'
           sprintStory.completedAt = timestamp
         }
@@ -3370,18 +3461,26 @@ export const toggleCriteriaCompletionAcceptor = model => proposal => {
         // Sync to backlog (userStories)
         const backlogStory = model.userStories?.find(s => s.id === storyId)
         if (backlogStory) {
+          console.log('[MODEL-TRACE-B7] Updating backlog story status to completed')
           backlogStory.status = 'completed'
           model._userStoriesUpdated = true
         }
 
-        console.log('[SPRINT] Auto-completed story after all criteria checked:', storyId)
+        console.log('[MODEL-TRACE-B7] Story auto-completed:', storyId)
       }
     }
 
     // Trigger persistence
     model._sprintProgressUpdated = true
 
-    console.log('[SPRINT] Toggled criteria:', { storyId, criteriaIndex, checked })
+    console.log('[MODEL-TRACE-B8] ====== toggleCriteriaCompletionAcceptor EXIT ======')
+    console.log('[MODEL-TRACE-B8] Final state:', {
+      storyId,
+      criteriaIndex,
+      checked,
+      criteriaProgress: JSON.stringify(sprint.storyProgress[storyId].criteriaProgress),
+      storyStatus: sprint.storyProgress[storyId].status
+    })
   }
 }
 

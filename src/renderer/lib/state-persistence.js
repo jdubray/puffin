@@ -275,62 +275,75 @@ export class StatePersistence {
            // Bug fix actions
            'START_BUG_FIX_PHASE', 'START_FIXING_FINDING', 'COMPLETE_FIXING_FINDING', 'COMPLETE_BUG_FIX_PHASE'
           ].includes(normalizedType)) {
-        console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
+        console.log('[PERSIST-TRACE-1] ====== Persisting sprint state for action:', normalizedType, '======')
 
         // For UPDATE_SPRINT_STORY_STATUS: use atomic sync to update both sprint and backlog
         // This ensures status is always consistent between views with no manual refresh needed
         if (normalizedType === 'UPDATE_SPRINT_STORY_STATUS') {
+          console.log('[PERSIST-TRACE-2] ====== UPDATE_SPRINT_STORY_STATUS handler ======')
           // Handle both payload format and args format (from wrapIntentsForDebugging)
           const storyId = action.payload?.storyId || action.args?.[0]
           const status = action.payload?.status || action.args?.[1]
+          console.log('[PERSIST-TRACE-2] Extracted values:', { storyId, status, payloadStoryId: action.payload?.storyId, argsStoryId: action.args?.[0] })
+
           if (storyId && status) {
+            console.log('[PERSIST-TRACE-2] Calling syncStoryStatus:', storyId, '->', status)
             try {
               const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)
+              console.log('[PERSIST-TRACE-2] syncStoryStatus result:', syncResult)
               if (syncResult.success) {
-                console.log('[PERSIST-DEBUG] Atomic status sync completed:', storyId, '->', status)
+                console.log('[PERSIST-TRACE-2] Atomic status sync completed:', storyId, '->', status)
                 // The event listener will handle UI refresh automatically
 
                 // Trigger assertion evaluation when story is marked complete
                 if (status === 'completed') {
+                  console.log('[PERSIST-TRACE-2] Triggering assertion evaluation for completed story:', storyId)
                   triggerAssertionEvaluation(storyId, this.showToast).catch(e => {
-                    console.error('[PERSIST-DEBUG] Assertion evaluation failed:', storyId, e)
+                    console.error('[PERSIST-TRACE-2] Assertion evaluation failed:', storyId, e)
                   })
                 }
               } else {
-                console.error('[PERSIST-DEBUG] Atomic status sync failed:', syncResult.error)
+                console.error('[PERSIST-TRACE-2] Atomic status sync failed:', syncResult.error)
                 // Fallback to separate updates if atomic fails
                 await window.puffin.state.updateActiveSprint(state.activeSprint)
               }
             } catch (e) {
-              console.error('[PERSIST-DEBUG] Atomic status sync error:', e)
+              console.error('[PERSIST-TRACE-2] Atomic status sync error:', e)
               // Fallback to separate updates
               await window.puffin.state.updateActiveSprint(state.activeSprint)
             }
           } else {
+            console.log('[PERSIST-TRACE-2] No storyId or status, just updating sprint')
             // No payload, just update sprint
             await window.puffin.state.updateActiveSprint(state.activeSprint)
           }
+          console.log('[PERSIST-TRACE-2] ====== UPDATE_SPRINT_STORY_STATUS handler END ======')
         }
         // For TOGGLE_CRITERIA_COMPLETION: use atomic sync when story becomes complete
         else if (normalizedType === 'TOGGLE_CRITERIA_COMPLETION') {
+          console.log('[PERSIST-TRACE-3] ====== TOGGLE_CRITERIA_COMPLETION handler ======')
           // Handle both payload format and args format (from wrapIntentsForDebugging)
           const storyId = action.payload?.storyId || action.args?.[0]
+          const criteriaIndex = action.payload?.criteriaIndex ?? action.args?.[1]
           const storyProgress = state.activeSprint?.storyProgress?.[storyId]
 
-          console.log('[PERSIST-DEBUG] TOGGLE_CRITERIA_COMPLETION:', {
+          console.log('[PERSIST-TRACE-3] TOGGLE_CRITERIA_COMPLETION:', {
             storyId,
+            criteriaIndex,
             hasStoryProgress: !!storyProgress,
             progressStatus: storyProgress?.status,
-            criteriaProgress: storyProgress?.criteriaProgress
+            criteriaProgress: JSON.stringify(storyProgress?.criteriaProgress)
           })
 
           // First update the sprint
+          console.log('[PERSIST-TRACE-3] Calling updateActiveSprint')
           await window.puffin.state.updateActiveSprint(state.activeSprint)
+          console.log('[PERSIST-TRACE-3] updateActiveSprint completed')
 
           // Then atomically sync if story is now complete or was uncompleted
           if (storyId && storyProgress) {
             const status = storyProgress.status === 'completed' ? 'completed' : 'in-progress'
-            console.log('[PERSIST-DEBUG] Story status for sync:', storyId, '->', status)
+            console.log('[PERSIST-TRACE-3] Story status for sync:', storyId, '->', status)
 
             try {
               const syncResult = await window.puffin.state.syncStoryStatus(storyId, status)

@@ -260,11 +260,21 @@ export class StatePersistence {
         }
       }
 
-      // Persist sprint state changes (including criteria progress, story status, and assertions)
+      // Persist sprint state changes (including criteria progress, story status, assertions, and orchestration)
       if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
            'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS', 'DELETE_SPRINT',
            'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
-           'UPDATE_SPRINT_STORY_ASSERTIONS'].includes(normalizedType)) {
+           'UPDATE_SPRINT_STORY_ASSERTIONS',
+           // Orchestration actions
+           'SELECT_IMPLEMENTATION_MODE', 'START_AUTOMATED_IMPLEMENTATION',
+           'ORCHESTRATION_STORY_STARTED', 'ORCHESTRATION_STORY_COMPLETED',
+           'UPDATE_ORCHESTRATION_PHASE', 'PAUSE_ORCHESTRATION', 'RESUME_ORCHESTRATION', 'STOP_ORCHESTRATION',
+           // Code review actions
+           'START_CODE_REVIEW', 'ADD_CODE_REVIEW_FINDING', 'SET_CODE_REVIEW_FINDINGS',
+           'COMPLETE_CODE_REVIEW', 'UPDATE_FINDING_STATUS',
+           // Bug fix actions
+           'START_BUG_FIX_PHASE', 'START_FIXING_FINDING', 'COMPLETE_FIXING_FINDING', 'COMPLETE_BUG_FIX_PHASE'
+          ].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Persisting sprint state for action:', normalizedType)
 
         // For UPDATE_SPRINT_STORY_STATUS: use atomic sync to update both sprint and backlog
@@ -617,21 +627,17 @@ export class StatePersistence {
 
         // Check if there's a pending story implementation from sprint
         const pendingSprintImpl = state._pendingStoryImplementation
+        console.log('[ORCHESTRATION-PERSIST] Checking for pending story implementation:', {
+          hasPending: !!pendingSprintImpl,
+          storyId: pendingSprintImpl?.storyId,
+          branchType: pendingSprintImpl?.branchType
+        })
         if (pendingSprintImpl) {
-          // CRITICAL: Check if a CLI process is already running
-          if (window.puffin?.claude?.isRunning) {
-            const isRunning = await window.puffin.claude.isRunning()
-            if (isRunning) {
-              console.error('[SPRINT-IMPLEMENT] Cannot start implementation: CLI process already running')
-              // Clear the pending flag to prevent retry loop
-              if (this.intents?.clearPendingStoryImplementation) {
-                this.intents.clearPendingStoryImplementation()
-              }
-              return
-            }
-          }
+          // Note: We don't check isRunning() here because checkOrchestrationProgress
+          // already performs this check before calling startSprintStoryImplementation.
+          // Adding a redundant async check here causes race conditions.
 
-          console.log('[SPRINT-IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingSprintImpl.branchId)
+          console.log('[SPRINT-IMPLEMENT] Submitting implementation prompt to Claude on branch:', pendingSprintImpl.branchId, 'for story:', pendingSprintImpl.storyId)
 
           // Warn if the approved plan is not available
           if (pendingSprintImpl.planMissing) {
@@ -655,6 +661,7 @@ export class StatePersistence {
           // This ensures we get the complete prompt with all context
 
           // Submit to Claude
+          console.log('[ORCHESTRATION-PERSIST] Submitting to Claude now...')
           await window.puffin.claude.submit({
             prompt: pendingSprintImpl.promptContent,
             branchId: pendingSprintImpl.branchId,
@@ -665,6 +672,7 @@ export class StatePersistence {
               description: state.config.description
             } : null
           })
+          console.log('[ORCHESTRATION-PERSIST] Submitted to Claude, clearing pending flag')
 
           // Clear the pending implementation flag
           if (this.intents?.clearPendingStoryImplementation) {

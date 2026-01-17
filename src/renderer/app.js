@@ -8,7 +8,7 @@
  */
 
 import { SAM, appFsm, promptFsm } from './sam/instance.js'
-import { initialModel, acceptors } from './sam/model.js'
+import { initialModel, acceptors, OrchestrationStatus, OrchestrationPhase } from './sam/model.js'
 import { computeState, render } from './sam/state.js'
 import * as actions from './sam/actions.js'
 import { samDebugger } from './sam/debugger.js'
@@ -1015,17 +1015,7 @@ Please provide specific file locations and line numbers where issues are found, 
           ['UPDATE_STORY_CRITERIA_VALIDATION', actions.updateStoryCriteriaValidation],
           ['START_CRITERIA_VALIDATION', actions.startCriteriaValidation],
           ['COMPLETE_CRITERIA_VALIDATION', actions.completeCriteriaValidation],
-          // Stuck detection actions
-          ['RECORD_ITERATION_OUTPUT', actions.recordIterationOutput],
-          ['RESOLVE_STUCK_STATE', actions.resolveStuckState],
-          ['RESET_STUCK_DETECTION', actions.resetStuckDetection],
-          // Debug actions
-          ['STORE_DEBUG_PROMPT', actions.storeDebugPrompt],
-          ['CLEAR_DEBUG_PROMPT', actions.clearDebugPrompt],
-          ['SET_DEBUG_MODE', actions.setDebugMode],
-          // Active implementation story
-          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory],
-          // Orchestration actions
+          // Orchestration actions - MUST match actionNames order
           ['ORCHESTRATION_STORY_STARTED', actions.orchestrationStoryStarted],
           ['ORCHESTRATION_STORY_COMPLETED', actions.orchestrationStoryCompleted],
           ['UPDATE_ORCHESTRATION_PHASE', actions.updateOrchestrationPhase],
@@ -1045,7 +1035,17 @@ Please provide specific file locations and line numbers where issues are found, 
           ['COMPLETE_BUG_FIX_PHASE', actions.completeBugFixPhase],
           // Sprint completion statistics actions
           ['SET_SPRINT_COMPLETION_STATS', actions.setSprintCompletionStats],
-          ['TOGGLE_SPRINT_SUMMARY', actions.toggleSprintSummary]
+          ['TOGGLE_SPRINT_SUMMARY', actions.toggleSprintSummary],
+          // Stuck detection actions
+          ['RECORD_ITERATION_OUTPUT', actions.recordIterationOutput],
+          ['RESOLVE_STUCK_STATE', actions.resolveStuckState],
+          ['RESET_STUCK_DETECTION', actions.resetStuckDetection],
+          // Debug actions
+          ['STORE_DEBUG_PROMPT', actions.storeDebugPrompt],
+          ['CLEAR_DEBUG_PROMPT', actions.clearDebugPrompt],
+          ['SET_DEBUG_MODE', actions.setDebugMode],
+          // Active implementation story
+          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -1073,6 +1073,17 @@ Please provide specific file locations and line numbers where issues are found, 
         // Auto-persist state changes to .puffin/
         if (this.statePersistence) {
           this.statePersistence.persist(actionType, actionInfo)
+        }
+
+        // Trigger orchestration after automated implementation starts
+        if (actionType === 'START_AUTOMATED_IMPLEMENTATION') {
+          const orchState = this.state?.activeSprint?.orchestration
+          console.log('[ORCHESTRATION] Triggered by START_AUTOMATED_IMPLEMENTATION, state:', {
+            orchestrationStatus: orchState?.status,
+            storyOrder: orchState?.storyOrder,
+            currentStoryId: orchState?.currentStoryId
+          })
+          setTimeout(() => this.checkOrchestrationProgress(), 500)
         }
       }
     })
@@ -1594,6 +1605,20 @@ Please provide specific file locations and line numbers where issues are found, 
         console.error('[SAM-ERROR] clearActivity failed:', err)
       }
 
+      // Handle orchestration story completion if automated sprint is running
+      try {
+        const orchState = this.state?.activeSprint?.orchestration
+        console.log('[ORCHESTRATION] About to call handleOrchestrationCompletion:', {
+          hasOrchestration: !!orchState,
+          orchestrationStatus: orchState?.status,
+          currentStoryId: orchState?.currentStoryId,
+          implementationMode: this.state?.activeSprint?.implementationMode
+        })
+        this.handleOrchestrationCompletion(response)
+      } catch (err) {
+        console.error('[SAM-ERROR] handleOrchestrationCompletion failed:', err)
+      }
+
       this.components.cliOutput.setProcessing(false)
     })
     this.claudeListeners.push(unsubComplete)
@@ -1968,6 +1993,24 @@ Please provide specific file locations and line numbers where issues are found, 
           </div>
         `
       }
+      // Clear orchestration controls when no sprint
+      const orchestrationControlsContainer = document.getElementById('orchestration-controls-container')
+      if (orchestrationControlsContainer) {
+        orchestrationControlsContainer.innerHTML = ''
+        orchestrationControlsContainer.classList.add('hidden')
+      }
+      // Clear code review container when no sprint
+      const codeReviewContainer = document.getElementById('code-review-container')
+      if (codeReviewContainer) {
+        codeReviewContainer.innerHTML = ''
+        codeReviewContainer.classList.add('hidden')
+      }
+      // Clear sprint summary container when no sprint
+      const sprintSummaryContainer = document.getElementById('sprint-summary-container')
+      if (sprintSummaryContainer) {
+        sprintSummaryContainer.innerHTML = ''
+        sprintSummaryContainer.classList.add('hidden')
+      }
       return
     }
 
@@ -2173,11 +2216,12 @@ Please provide specific file locations and line numbers where issues are found, 
         }
       }
 
-      // Render orchestration controls if in automated mode
+      // Render orchestration controls if in automated mode (and sprint not closed)
       const orchestrationControlsContainer = document.getElementById('orchestration-controls-container')
       if (orchestrationControlsContainer) {
         const orchestration = sprint.orchestration
-        if (orchestration && sprint.implementationMode === 'automated') {
+        const sprintIsActive = sprint.status !== 'closed' && sprint.status !== 'completed'
+        if (orchestration && sprint.implementationMode === 'automated' && sprintIsActive) {
           orchestrationControlsContainer.innerHTML = this.renderOrchestrationControls(orchestration)
           orchestrationControlsContainer.classList.remove('hidden')
 
@@ -2614,8 +2658,6 @@ Please provide specific file locations and line numbers where issues are found, 
 
     const status = orchestration.status
     const phase = orchestration.phase || 'implementation'
-    const completedCount = orchestration.completedStories?.length || 0
-    const totalCount = orchestration.storyOrder?.length || 0
 
     // Phase display
     const phaseLabels = {
@@ -2626,17 +2668,20 @@ Please provide specific file locations and line numbers where issues are found, 
     }
     const phaseLabel = phaseLabels[phase] || phase
 
+    // Calculate progress based on current phase
+    const progressInfo = this.getOrchestrationProgress(orchestration, phase)
+
     if (status === 'running') {
       return `
         <div class="orchestration-controls" role="group" aria-label="Orchestration controls">
           <div class="orchestration-status">
             <span class="orchestration-status-icon running" aria-hidden="true">●</span>
             <span class="orchestration-status-text">${phaseLabel}</span>
-            <span class="orchestration-progress">${completedCount}/${totalCount}</span>
+            <span class="orchestration-progress">${progressInfo.display}</span>
           </div>
           <div class="orchestration-buttons">
             <button class="btn-orchestration pause" id="orchestration-pause-btn"
-                    title="Pause after current story completes"
+                    title="Pause after current task completes"
                     aria-label="Pause orchestration">
               <span aria-hidden="true">⏸</span> Pause
             </button>
@@ -2653,12 +2698,12 @@ Please provide specific file locations and line numbers where issues are found, 
         <div class="orchestration-controls" role="group" aria-label="Orchestration controls">
           <div class="orchestration-status">
             <span class="orchestration-status-icon paused" aria-hidden="true">⏸</span>
-            <span class="orchestration-status-text">Paused</span>
-            <span class="orchestration-progress">${completedCount}/${totalCount}</span>
+            <span class="orchestration-status-text">Paused (${phaseLabel})</span>
+            <span class="orchestration-progress">${progressInfo.display}</span>
           </div>
           <div class="orchestration-buttons">
             <button class="btn-orchestration resume" id="orchestration-resume-btn"
-                    title="Resume automated implementation"
+                    title="Resume automated ${phaseLabel.toLowerCase()}"
                     aria-label="Resume orchestration">
               <span aria-hidden="true">▶</span> Resume
             </button>
@@ -2676,7 +2721,7 @@ Please provide specific file locations and line numbers where issues are found, 
           <div class="orchestration-status">
             <span class="orchestration-status-icon stopped" aria-hidden="true">⏹</span>
             <span class="orchestration-status-text">Stopped</span>
-            <span class="orchestration-progress">${completedCount}/${totalCount} completed</span>
+            <span class="orchestration-progress">${progressInfo.display}</span>
           </div>
           <p class="orchestration-notice">Continue manually or close sprint.</p>
         </div>
@@ -2687,13 +2732,86 @@ Please provide specific file locations and line numbers where issues are found, 
           <div class="orchestration-status">
             <span class="orchestration-status-icon complete" aria-hidden="true">✓</span>
             <span class="orchestration-status-text">Automation Complete</span>
-            <span class="orchestration-progress">${completedCount}/${totalCount}</span>
+            <span class="orchestration-progress">${progressInfo.display}</span>
           </div>
         </div>
       `
     }
 
     return ''
+  }
+
+  /**
+   * Get progress information based on current orchestration phase
+   * @param {Object} orchestration - Current orchestration state
+   * @param {string} phase - Current phase
+   * @returns {Object} Progress info with display string and counts
+   */
+  getOrchestrationProgress(orchestration, phase) {
+    const sprint = this.state?.activeSprint
+
+    switch (phase) {
+      case 'implementation':
+      case OrchestrationPhase.IMPLEMENTATION: {
+        const completedCount = orchestration.completedStories?.length || 0
+        const totalCount = orchestration.storyOrder?.length || 0
+        return {
+          completed: completedCount,
+          total: totalCount,
+          display: `${completedCount}/${totalCount} stories`
+        }
+      }
+
+      case 'review':
+      case OrchestrationPhase.REVIEW: {
+        const storyCount = orchestration.storyOrder?.length || 0
+        return {
+          completed: storyCount,
+          total: storyCount,
+          display: `${storyCount} stories ✓`
+        }
+      }
+
+      case 'bugfix':
+      case OrchestrationPhase.BUGFIX: {
+        const findings = sprint?.codeReview?.findings || []
+        const completedFindings = sprint?.bugFix?.completedFindings || []
+        const totalFindings = findings.length
+        const completedCount = completedFindings.length
+        return {
+          completed: completedCount,
+          total: totalFindings,
+          display: `${completedCount}/${totalFindings} fixes`
+        }
+      }
+
+      case 'complete':
+      case OrchestrationPhase.COMPLETE: {
+        const storyCount = orchestration.completedStories?.length || 0
+        const findings = sprint?.codeReview?.findings || []
+        const fixedCount = sprint?.bugFix?.completedFindings?.length || 0
+
+        if (findings.length > 0) {
+          return {
+            completed: storyCount,
+            total: storyCount,
+            display: `${storyCount} stories, ${fixedCount} fixes`
+          }
+        }
+        return {
+          completed: storyCount,
+          total: storyCount,
+          display: `${storyCount} stories ✓`
+        }
+      }
+
+      default:
+        return {
+          completed: 0,
+          total: 0,
+          display: ''
+        }
+    }
   }
 
   /**
@@ -2715,6 +2833,8 @@ Please provide specific file locations and line numbers where issues are found, 
       const target = e.target.closest('#orchestration-resume-btn')
       if (target) {
         this.intents.resumeOrchestration()
+        // Trigger phase continuation after state updates
+        setTimeout(() => this.continueOrchestrationAfterResume(), 500)
         return
       }
     })
@@ -4275,6 +4395,926 @@ Keep it concise but informative. Use markdown formatting.`
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
+  }
+
+  /**
+   * Check and advance orchestration progress
+   * Called after automated implementation starts and after each story completes
+   */
+  async checkOrchestrationProgress() {
+    console.log('[ORCHESTRATION] checkOrchestrationProgress called')
+
+    const sprint = this.state?.activeSprint
+    const orchestration = sprint?.orchestration
+
+    console.log('[ORCHESTRATION] checkOrchestrationProgress state:', {
+      hasSprint: !!sprint,
+      sprintStatus: sprint?.status,
+      hasOrchestration: !!orchestration,
+      orchestrationStatus: orchestration?.status,
+      currentStoryId: orchestration?.currentStoryId,
+      implementationMode: sprint?.implementationMode
+    })
+
+    // Only proceed if orchestration is running
+    if (!orchestration || orchestration.status !== OrchestrationStatus.RUNNING) {
+      console.log('[ORCHESTRATION] Not running, skipping check. Status:', orchestration?.status)
+      return
+    }
+
+    // Check if a story is currently being implemented (CLI is busy)
+    try {
+      const isRunning = await window.puffin?.claude?.isRunning?.()
+      console.log('[ORCHESTRATION] CLI running check result:', isRunning)
+      if (isRunning) {
+        console.log('[ORCHESTRATION] Claude CLI is busy, will check again after completion')
+        return
+      }
+    } catch (err) {
+      console.log('[ORCHESTRATION] Could not check if CLI is running:', err.message)
+    }
+
+    // Get stories and their completion status
+    const storyOrder = orchestration.storyOrder || []
+    const completedStories = orchestration.completedStories || []
+
+    console.log('[ORCHESTRATION] Checking progress:', {
+      totalStories: storyOrder.length,
+      completedCount: completedStories.length,
+      storyOrder,
+      completedStories
+    })
+
+    // Find the next story to implement
+    const nextStoryId = storyOrder.find(id => !completedStories.includes(id))
+
+    if (!nextStoryId) {
+      // All stories completed - transition to next phase
+      console.log('[ORCHESTRATION] All stories completed!')
+      this.handleAllStoriesCompleted()
+      return
+    }
+
+    // Find the story details
+    const story = sprint.stories?.find(s => s.id === nextStoryId)
+    if (!story) {
+      console.error('[ORCHESTRATION] Story not found:', nextStoryId)
+      this.intents.stopOrchestration()
+      return
+    }
+
+    // Get branch assignment for this story (default to fullstack)
+    const branchAssignments = sprint.branchAssignments || {}
+    const branchType = branchAssignments[nextStoryId] || 'fullstack'
+
+    console.log('[ORCHESTRATION] Starting next story:', {
+      storyId: nextStoryId,
+      title: story.title,
+      branchType
+    })
+
+    // Mark story as started in orchestration tracking
+    console.log('[ORCHESTRATION] About to call orchestrationStoryStarted with storyId:', nextStoryId)
+    this.intents.orchestrationStoryStarted(nextStoryId)
+    console.log('[ORCHESTRATION] Called orchestrationStoryStarted')
+
+    // Start the story implementation - this sets _pendingStoryImplementation
+    // which will be picked up by state-persistence.js and submitted to Claude
+    console.log('[ORCHESTRATION] Calling startSprintStoryImplementation - persistence layer will handle submission')
+    this.intents.startSprintStoryImplementation(nextStoryId, branchType)
+    console.log('[ORCHESTRATION] Called startSprintStoryImplementation')
+
+    // NOTE: The actual submission to Claude is handled by state-persistence.js
+    // which watches for _pendingStoryImplementation and submits automatically.
+    // We do NOT call submitOrchestrationStory here to avoid double submission.
+
+    this.showToast(`Implementing: ${story.title}`, 'info')
+  }
+
+  /**
+   * Submit an orchestration story to Claude
+   */
+  async submitOrchestrationStory(storyId, branchType, story) {
+    console.log('[ORCHESTRATION] submitOrchestrationStory called:', {
+      storyId,
+      branchType,
+      storyTitle: story?.title
+    })
+
+    const sprint = this.state?.activeSprint
+    const orchestration = sprint?.orchestration
+
+    console.log('[ORCHESTRATION] State at submission:', {
+      hasSprint: !!sprint,
+      sprintStatus: sprint?.status,
+      orchestrationStatus: orchestration?.status,
+      currentStoryId: orchestration?.currentStoryId
+    })
+
+    if (!sprint) {
+      console.error('[ORCHESTRATION] No active sprint for submission')
+      return
+    }
+
+    // Build the implementation prompt
+    const prompt = this.buildOrchestrationPrompt(story, branchType, sprint)
+
+    console.log('[ORCHESTRATION] Submitting story to Claude:', {
+      storyId,
+      branchType,
+      promptLength: prompt.length,
+      promptPreview: prompt.substring(0, 200)
+    })
+
+    // Submit to Claude
+    window.puffin.claude.submit({
+      prompt,
+      branchId: branchType,
+      sessionId: null, // New session for each story
+      project: this.state.config ? {
+        name: this.state.config.name,
+        description: this.state.config.description
+      } : null
+    })
+
+    console.log('[ORCHESTRATION] Story submitted to Claude, waiting for completion')
+    this.showToast(`Implementing: ${story.title}`, 'info')
+  }
+
+  /**
+   * Build the implementation prompt for an orchestration story
+   */
+  buildOrchestrationPrompt(story, branchType, sprint) {
+    // RICE FACT Framework for different branch types
+    const branchRiceFact = {
+      'ui': {
+        role: 'You are a Senior UI/Frontend Developer specializing in user experience, accessibility, and modern frontend patterns.',
+        instruction: 'Implement the user interface components for this user story.',
+        constraints: 'Follow existing design patterns. Ensure accessibility. Do not modify backend logic.'
+      },
+      'backend': {
+        role: 'You are a Senior Backend Developer specializing in API design and server-side architecture.',
+        instruction: 'Implement the backend components for this user story.',
+        constraints: 'Follow existing API patterns. Implement proper error handling. Do not modify UI components.'
+      },
+      'fullstack': {
+        role: 'You are a Senior Full Stack Developer capable of implementing complete features.',
+        instruction: 'Implement the complete end-to-end feature for this user story.',
+        constraints: 'Maintain separation of concerns. Follow existing patterns for both UI and backend.'
+      },
+      'plugin': {
+        role: 'You are a Plugin Developer specializing in Puffin plugin architecture.',
+        instruction: 'Implement this feature as a Puffin plugin following the plugin patterns.',
+        constraints: 'Follow the plugin structure in plugins/. Register with plugin-loader.js.'
+      }
+    }
+
+    const riceFact = branchRiceFact[branchType] || branchRiceFact['fullstack']
+
+    let prompt = `## Sprint Implementation Request
+
+**Role:** ${riceFact.role}
+
+**Instruction:** ${riceFact.instruction}
+
+**Constraints:** ${riceFact.constraints}
+
+---
+
+### User Story: ${story.title}
+
+${story.description || ''}
+`
+
+    if (story.acceptanceCriteria?.length > 0) {
+      prompt += `
+### Acceptance Criteria
+${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+`
+    }
+
+    // Include the approved plan if available
+    if (sprint.plan) {
+      prompt += `
+### Approved Sprint Plan
+
+The following plan was approved. Please follow this guidance:
+
+${sprint.plan.substring(0, 8000)}
+
+---
+
+`
+    }
+
+    prompt += `
+### Implementation Notes
+This is part of an automated sprint implementation. Please implement this story following the established patterns in the codebase.
+
+Please proceed with the implementation.`
+
+    return prompt
+  }
+
+  /**
+   * Handle orchestration story completion
+   * Called when a Claude response completes during orchestration
+   * Automatically continues if max turns was reached
+   */
+  handleOrchestrationCompletion(response) {
+    console.log('[ORCHESTRATION] handleOrchestrationCompletion called with response:', {
+      hasResponse: !!response,
+      sessionId: response?.sessionId,
+      turns: response?.turns,
+      exitCode: response?.exitCode,
+      contentLength: response?.content?.length
+    })
+
+    const sprint = this.state?.activeSprint
+    const orchestration = sprint?.orchestration
+
+    console.log('[ORCHESTRATION] State check:', {
+      hasSprint: !!sprint,
+      sprintStatus: sprint?.status,
+      hasOrchestration: !!orchestration,
+      orchestrationStatus: orchestration?.status,
+      orchestrationPhase: orchestration?.phase,
+      expectedStatus: OrchestrationStatus.RUNNING,
+      statusMatch: orchestration?.status === OrchestrationStatus.RUNNING,
+      implementationMode: sprint?.implementationMode,
+      currentStoryId: orchestration?.currentStoryId,
+      completedStories: orchestration?.completedStories,
+      storyOrder: orchestration?.storyOrder
+    })
+
+    if (!orchestration) {
+      console.log('[ORCHESTRATION] No orchestration object, skipping')
+      return
+    }
+
+    if (orchestration.status !== OrchestrationStatus.RUNNING) {
+      console.log('[ORCHESTRATION] Status is not RUNNING, skipping. Status:', orchestration.status)
+      return
+    }
+
+    // Route to appropriate handler based on current phase
+    const phase = orchestration.phase || OrchestrationPhase.IMPLEMENTATION
+    console.log('[ORCHESTRATION] Current phase:', phase)
+
+    if (phase === OrchestrationPhase.REVIEW) {
+      this.handleCodeReviewCompletion(response)
+      return
+    }
+
+    if (phase === OrchestrationPhase.BUGFIX) {
+      this.handleBugFixCompletion(response)
+      return
+    }
+
+    // Implementation phase - handle story completion
+    const currentStoryId = orchestration.currentStoryId
+    if (!currentStoryId) {
+      console.log('[ORCHESTRATION] No current story to complete - currentStoryId is:', currentStoryId)
+      return
+    }
+
+    const sessionId = response?.sessionId
+    const turns = response?.turns || 0
+    const maxTurns = 40
+
+    console.log('[ORCHESTRATION] Processing completion:', {
+      storyId: currentStoryId,
+      sessionId,
+      turns,
+      maxTurns,
+      willContinue: turns >= maxTurns
+    })
+
+    // Check if max turns was reached - need to auto-continue
+    if (turns >= maxTurns) {
+      // Track continuation count to avoid infinite loops (max 5 continuations)
+      this.orchestrationContinuationCount = (this.orchestrationContinuationCount || 0) + 1
+      const maxContinuations = 5
+
+      if (this.orchestrationContinuationCount > maxContinuations) {
+        console.warn('[ORCHESTRATION] Max continuations reached, marking story as complete')
+        this.orchestrationContinuationCount = 0
+        // Use the same completion flow as normal completion
+        this.intents.orchestrationStoryCompleted(currentStoryId, sessionId)
+        this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
+        this.autoCompleteAcceptanceCriteria(currentStoryId)
+        this.evaluateStoryAssertions(currentStoryId)
+        setTimeout(() => this.checkOrchestrationProgress(), 1000)
+        return
+      }
+
+      console.log('[ORCHESTRATION] Max turns reached, auto-continuing...', {
+        continuationCount: this.orchestrationContinuationCount,
+        maxContinuations
+      })
+
+      // Get the current branch type for continuation
+      const branchAssignments = sprint.branchAssignments || {}
+      const branchType = branchAssignments[currentStoryId] || 'fullstack'
+
+      // Submit a continuation prompt
+      this.showToast(`Continuing story (${this.orchestrationContinuationCount}/${maxContinuations})...`, 'info')
+
+      setTimeout(() => {
+        window.puffin.claude.submit({
+          prompt: 'Please continue with the implementation. Pick up where you left off.',
+          branchId: branchType,
+          sessionId: sessionId, // Resume the same session
+          project: this.state.config ? {
+            name: this.state.config.name,
+            description: this.state.config.description
+          } : null
+        })
+      }, 500)
+
+      return
+    }
+
+    // Normal completion - reset continuation count and mark story done
+    this.orchestrationContinuationCount = 0
+    console.log('[ORCHESTRATION] Story completed:', currentStoryId, 'sessionId:', sessionId)
+
+    // Mark orchestration story as completed (for tracking)
+    this.intents.orchestrationStoryCompleted(currentStoryId, sessionId)
+
+    // Mark the story status as 'completed' via proper intent (triggers persistence)
+    this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
+    console.log('[ORCHESTRATION] Marked story status as completed:', currentStoryId)
+
+    // Auto-complete all acceptance criteria for this story
+    this.autoCompleteAcceptanceCriteria(currentStoryId)
+
+    // Trigger assertion evaluation for the completed story
+    this.evaluateStoryAssertions(currentStoryId)
+
+    // Check for next story after a small delay
+    setTimeout(() => {
+      this.checkOrchestrationProgress()
+    }, 1000)
+  }
+
+  /**
+   * Auto-complete all acceptance criteria for a story during orchestration
+   * @param {string} storyId - The story ID
+   */
+  autoCompleteAcceptanceCriteria(storyId) {
+    const sprint = this.state?.activeSprint
+    if (!sprint) {
+      console.log('[ORCHESTRATION] No active sprint for auto-completing criteria')
+      return
+    }
+
+    // Find the story in the sprint
+    const story = sprint.stories?.find(s => s.id === storyId)
+    if (!story) {
+      console.log('[ORCHESTRATION] Story not found in sprint:', storyId)
+      return
+    }
+
+    const criteria = story.acceptanceCriteria || []
+    if (criteria.length === 0) {
+      console.log('[ORCHESTRATION] No acceptance criteria to complete for story:', storyId)
+      return
+    }
+
+    console.log('[ORCHESTRATION] Auto-completing', criteria.length, 'acceptance criteria for story:', storyId)
+
+    // Toggle each criterion to checked state
+    criteria.forEach((_, index) => {
+      // Check if already completed
+      const progress = sprint.storyProgress?.[storyId]?.criteriaProgress?.[index]
+      if (!progress?.checked) {
+        this.intents.toggleCriteriaCompletion(storyId, index, true)
+        console.log('[ORCHESTRATION] Marked criterion', index, 'as complete for story:', storyId)
+      }
+    })
+  }
+
+  /**
+   * Evaluate inspection assertions for a completed story
+   * @param {string} storyId - The story ID to evaluate
+   */
+  async evaluateStoryAssertions(storyId) {
+    console.log('[ORCHESTRATION] Triggering assertion evaluation for story:', storyId)
+
+    try {
+      if (!window.puffin?.state?.evaluateStoryAssertions) {
+        console.log('[ORCHESTRATION] Assertion evaluation API not available')
+        return
+      }
+
+      // Get story to check if it has assertions
+      const storyResult = await window.puffin.state.getUserStories()
+      if (!storyResult.success) return
+
+      const story = storyResult.stories.find(s => s.id === storyId)
+      if (!story?.inspectionAssertions?.length) {
+        console.log('[ORCHESTRATION] No assertions to evaluate for story:', storyId)
+        return
+      }
+
+      this.showToast(`Verifying ${story.inspectionAssertions.length} assertion(s)...`, 'info')
+
+      const result = await window.puffin.state.evaluateStoryAssertions(storyId)
+      if (result.success) {
+        const { summary } = result.results
+        const statusIcon = summary.failed > 0 ? '⚠️' : '✓'
+        this.showToast(`${statusIcon} Assertions: ${summary.passed}/${summary.total} passed`,
+          summary.failed > 0 ? 'warning' : 'success')
+        console.log('[ORCHESTRATION] Assertion evaluation complete:', summary)
+      }
+    } catch (err) {
+      console.error('[ORCHESTRATION] Assertion evaluation failed:', err)
+    }
+  }
+
+  /**
+   * Continue orchestration after resuming from paused state
+   * Checks the current phase and triggers appropriate continuation
+   */
+  async continueOrchestrationAfterResume() {
+    console.log('[ORCHESTRATION] Continuing after resume')
+
+    const orchestration = this.state?.activeSprint?.orchestration
+    if (!orchestration || orchestration.status !== OrchestrationStatus.RUNNING) {
+      console.log('[ORCHESTRATION] Not in running state after resume, skipping continuation')
+      return
+    }
+
+    // Check if Claude is currently processing
+    try {
+      const isRunning = await window.puffin?.claude?.isRunning?.()
+      if (isRunning) {
+        console.log('[ORCHESTRATION] Claude is busy, will continue when current task completes')
+        return
+      }
+    } catch (err) {
+      console.log('[ORCHESTRATION] Could not check if Claude is running:', err.message)
+    }
+
+    const phase = orchestration.phase || OrchestrationPhase.IMPLEMENTATION
+    console.log('[ORCHESTRATION] Resuming phase:', phase)
+
+    switch (phase) {
+      case OrchestrationPhase.IMPLEMENTATION:
+        // Continue to next story
+        this.checkOrchestrationProgress()
+        break
+
+      case OrchestrationPhase.REVIEW:
+        // Resume code review - check if we need to start or if it's already done
+        if (!this.state.activeSprint?.codeReview?.status ||
+            this.state.activeSprint.codeReview.status === 'in_progress') {
+          this.startAutomatedCodeReview()
+        }
+        break
+
+      case OrchestrationPhase.BUGFIX:
+        // Resume bug fixing - continue with next finding
+        this.startAutomatedBugFix()
+        break
+
+      case OrchestrationPhase.COMPLETE:
+        console.log('[ORCHESTRATION] Already complete, nothing to resume')
+        break
+
+      default:
+        console.warn('[ORCHESTRATION] Unknown phase:', phase)
+    }
+  }
+
+  /**
+   * Handle transition after all stories are completed
+   * Initiates code review phase automatically
+   */
+  async handleAllStoriesCompleted() {
+    console.log('[ORCHESTRATION] All stories completed, transitioning to code review phase')
+
+    const sprint = this.state?.activeSprint
+    if (!sprint) {
+      console.error('[ORCHESTRATION] No active sprint')
+      return
+    }
+
+    // Show toast notification
+    this.showToast('All stories completed! Starting code review...', 'success')
+
+    // Transition to code review phase
+    this.intents.startCodeReview()
+
+    // Start the code review process after a brief delay
+    setTimeout(() => {
+      this.startAutomatedCodeReview()
+    }, 1000)
+  }
+
+  /**
+   * Start automated code review by submitting to Claude
+   */
+  async startAutomatedCodeReview() {
+    console.log('[CODE_REVIEW] Starting automated code review')
+
+    const sprint = this.state?.activeSprint
+    if (!sprint) {
+      console.error('[CODE_REVIEW] No active sprint')
+      return
+    }
+
+    // Check if orchestration is still running (not paused/stopped)
+    const orchestration = sprint.orchestration
+    if (!orchestration || orchestration.status !== OrchestrationStatus.RUNNING) {
+      console.log('[CODE_REVIEW] Orchestration not running, skipping. Status:', orchestration?.status)
+      return
+    }
+
+    // Build the code review prompt
+    const prompt = this.buildCodeReviewPrompt(sprint)
+
+    // Submit to Claude on the fullstack branch for code review
+    try {
+      const targetBranch = this.state.history.raw?.branches?.fullstack
+      const lastPromptWithResponse = targetBranch?.prompts
+        ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
+        ?.pop()
+      const sessionId = lastPromptWithResponse?.response?.sessionId || null
+
+      console.log('[CODE_REVIEW] Submitting review prompt to Claude')
+
+      await window.puffin.claude.submit({
+        prompt,
+        branchId: 'fullstack',
+        sessionId,
+        maxTurns: 20,
+        project: this.state.config ? {
+          name: this.state.config.name,
+          description: this.state.config.description
+        } : null
+      })
+    } catch (err) {
+      console.error('[CODE_REVIEW] Failed to submit code review:', err)
+      this.showToast('Failed to start code review. Click Resume to retry.', 'error')
+
+      // Pause orchestration so user can retry via Resume button
+      this.intents.pauseOrchestration()
+    }
+  }
+
+  /**
+   * Build the code review prompt for Claude
+   */
+  buildCodeReviewPrompt(sprint) {
+    const stories = sprint.stories || []
+    const completedStories = sprint.orchestration?.completedStories || []
+
+    let prompt = `# Code Review Request
+
+You just completed implementing the following user stories for this sprint:
+
+`
+
+    stories.forEach((story, idx) => {
+      const isCompleted = completedStories.includes(story.id)
+      prompt += `## ${idx + 1}. ${story.title}${isCompleted ? ' ✓' : ''}
+${story.description || 'No description'}
+
+`
+      if (story.acceptanceCriteria?.length) {
+        prompt += `**Acceptance Criteria:**
+${story.acceptanceCriteria.map(ac => `- ${ac.description}`).join('\n')}
+
+`
+      }
+    })
+
+    prompt += `## Review Instructions
+
+Please perform a thorough code review of the implementation. Focus on:
+
+1. **Code Quality**: Check for clean code, proper naming, and maintainability
+2. **Security**: Look for potential vulnerabilities (XSS, injection, etc.)
+3. **Performance**: Identify any performance issues or inefficiencies
+4. **Error Handling**: Verify proper error handling and edge cases
+5. **Test Coverage**: Check if tests are implemented and adequate
+
+For each issue found, report in this exact JSON format (one per line):
+
+\`\`\`json
+{"type": "finding", "id": "F001", "severity": "critical|high|medium|low", "category": "security|performance|quality|testing", "file": "path/to/file.js", "line": 42, "description": "Description of the issue", "suggestion": "How to fix it"}
+\`\`\`
+
+After listing all findings, provide a summary:
+
+\`\`\`json
+{"type": "summary", "total": 5, "critical": 1, "high": 2, "medium": 1, "low": 1, "recommendation": "brief overall assessment"}
+\`\`\`
+
+If no issues are found, report:
+\`\`\`json
+{"type": "summary", "total": 0, "recommendation": "Code looks good, no issues found"}
+\`\`\`
+`
+
+    return prompt
+  }
+
+  /**
+   * Handle code review completion
+   * Parse findings from Claude response and transition to bug fix phase if needed
+   */
+  handleCodeReviewCompletion(response) {
+    console.log('[CODE_REVIEW] Handling completion')
+
+    const sprint = this.state?.activeSprint
+    const orchestration = sprint?.orchestration
+
+    if (!orchestration || orchestration.phase !== OrchestrationPhase.REVIEW) {
+      console.log('[CODE_REVIEW] Not in review phase, skipping')
+      return
+    }
+
+    // Parse findings from response content
+    const content = response?.content || ''
+    const findings = this.parseCodeReviewFindings(content)
+
+    console.log('[CODE_REVIEW] Parsed findings:', findings.length)
+
+    // Store the findings first
+    if (findings.length > 0) {
+      this.intents.setCodeReviewFindings(findings)
+    }
+
+    // Build summary statistics
+    const summary = {
+      totalFindings: findings.length,
+      bySeverity: {
+        critical: findings.filter(f => f.severity === 'critical').length,
+        high: findings.filter(f => f.severity === 'high').length,
+        medium: findings.filter(f => f.severity === 'medium').length,
+        low: findings.filter(f => f.severity === 'low').length
+      }
+    }
+
+    // Complete code review phase - acceptor handles phase transition
+    this.intents.completeCodeReview(summary)
+
+    // If there are findings, start bug fix phase automation
+    if (findings.length > 0) {
+      this.showToast(`Code review complete: ${findings.length} findings. Starting bug fixes...`, 'info')
+
+      // Start bug fix phase and begin automated fixing (if still running)
+      setTimeout(() => {
+        // Re-check status before starting bug fix phase
+        const currentStatus = this.state?.activeSprint?.orchestration?.status
+        if (currentStatus !== OrchestrationStatus.RUNNING) {
+          console.log('[CODE_REVIEW] Orchestration no longer running, skipping bug fix phase')
+          return
+        }
+        this.intents.startBugFixPhase()
+        setTimeout(() => this.startAutomatedBugFix(), 1000)
+      }, 1000)
+    } else {
+      // No findings - orchestration already marked complete by acceptor
+      this.showToast('Code review complete: No issues found!', 'success')
+    }
+  }
+
+  /**
+   * Parse code review findings from Claude's response
+   */
+  parseCodeReviewFindings(content) {
+    const findings = []
+
+    // Match JSON finding objects in the response
+    const findingPattern = /\{"type":\s*"finding"[^}]+\}/g
+    const matches = content.match(findingPattern) || []
+
+    for (const match of matches) {
+      try {
+        const finding = JSON.parse(match)
+        if (finding.type === 'finding' && finding.id) {
+          findings.push({
+            id: finding.id,
+            severity: finding.severity || 'medium',
+            category: finding.category || 'quality',
+            file: finding.file || 'unknown',
+            line: finding.line || 0,
+            description: finding.description || 'No description',
+            suggestion: finding.suggestion || ''
+          })
+        }
+      } catch (err) {
+        console.warn('[CODE_REVIEW] Failed to parse finding:', match, err)
+      }
+    }
+
+    return findings
+  }
+
+  /**
+   * Start automated bug fix process
+   */
+  async startAutomatedBugFix() {
+    console.log('[BUG_FIX] Starting automated bug fix')
+
+    const sprint = this.state?.activeSprint
+    const bugFix = sprint?.bugFix
+    const findings = sprint?.codeReview?.findings || []
+
+    // Check if orchestration is still running (not paused/stopped)
+    const orchestration = sprint?.orchestration
+    if (!orchestration || orchestration.status !== OrchestrationStatus.RUNNING) {
+      console.log('[BUG_FIX] Orchestration not running, skipping. Status:', orchestration?.status)
+      return
+    }
+
+    if (!bugFix || findings.length === 0) {
+      console.log('[BUG_FIX] No findings to fix')
+      this.completeBugFixPhase()
+      return
+    }
+
+    // Get the next finding to fix
+    const findingOrder = bugFix.findingOrder || findings.map(f => f.id)
+    const completedFindings = bugFix.completedFindings || []
+    const nextFindingId = findingOrder.find(id => !completedFindings.includes(id))
+
+    if (!nextFindingId) {
+      // All findings processed
+      console.log('[BUG_FIX] All findings processed')
+      this.completeBugFixPhase()
+      return
+    }
+
+    const finding = findings.find(f => f.id === nextFindingId)
+    if (!finding) {
+      console.error('[BUG_FIX] Finding not found:', nextFindingId)
+      return
+    }
+
+    console.log('[BUG_FIX] Fixing finding:', finding.id, finding.severity)
+
+    // Mark finding as being fixed
+    this.intents.startFixingFinding(nextFindingId)
+
+    // Build and submit bug fix prompt
+    const prompt = this.buildBugFixPrompt(finding)
+
+    try {
+      const targetBranch = this.state.history.raw?.branches?.fullstack
+      const lastPromptWithResponse = targetBranch?.prompts
+        ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
+        ?.pop()
+      const sessionId = lastPromptWithResponse?.response?.sessionId || null
+
+      this.showToast(`Fixing: ${finding.description.substring(0, 50)}...`, 'info')
+
+      await window.puffin.claude.submit({
+        prompt,
+        branchId: 'fullstack',
+        sessionId,
+        maxTurns: 10,
+        project: this.state.config ? {
+          name: this.state.config.name,
+          description: this.state.config.description
+        } : null
+      })
+    } catch (err) {
+      console.error('[BUG_FIX] Failed to submit bug fix:', err)
+      this.showToast(`Failed to fix finding ${finding.id}. Skipping...`, 'warning')
+
+      // Mark as skipped and continue (if still running)
+      this.intents.completeFixingFinding(nextFindingId, null, 'skipped')
+      setTimeout(() => {
+        const currentStatus = this.state?.activeSprint?.orchestration?.status
+        if (currentStatus === OrchestrationStatus.RUNNING) {
+          this.startAutomatedBugFix()
+        }
+      }, 1000)
+    }
+  }
+
+  /**
+   * Build bug fix prompt for a specific finding
+   */
+  buildBugFixPrompt(finding) {
+    return `# Bug Fix Request
+
+Please fix the following code review finding:
+
+**ID:** ${finding.id}
+**Severity:** ${finding.severity}
+**Category:** ${finding.category}
+**File:** ${finding.file}${finding.line ? `:${finding.line}` : ''}
+
+**Issue:** ${finding.description}
+
+**Suggested Fix:** ${finding.suggestion || 'Please determine the appropriate fix.'}
+
+## Instructions
+
+1. Read the file and understand the context
+2. Apply the fix for this specific issue
+3. Run any relevant tests to verify the fix
+4. Report whether the fix was successful
+
+After fixing, respond with:
+\`\`\`json
+{"type": "fix_result", "finding_id": "${finding.id}", "status": "fixed|partial|failed", "notes": "brief description of what was done"}
+\`\`\`
+`
+  }
+
+  /**
+   * Handle bug fix completion for a single finding
+   */
+  handleBugFixCompletion(response) {
+    console.log('[BUG_FIX] Handling completion')
+
+    const sprint = this.state?.activeSprint
+    const bugFix = sprint?.bugFix
+    const orchestration = sprint?.orchestration
+
+    if (!orchestration || orchestration.phase !== OrchestrationPhase.BUGFIX) {
+      console.log('[BUG_FIX] Not in bugfix phase, skipping')
+      return
+    }
+
+    const currentFindingId = bugFix?.currentFindingId
+    if (!currentFindingId) {
+      console.log('[BUG_FIX] No current finding')
+      return
+    }
+
+    // Parse the fix result from response
+    const content = response?.content || ''
+    let result = 'fixed' // Default to fixed
+
+    const resultPattern = /\{"type":\s*"fix_result"[^}]+\}/
+    const match = content.match(resultPattern)
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[0])
+        if (parsed.status) {
+          result = parsed.status === 'fixed' ? 'fixed' :
+                   parsed.status === 'partial' ? 'partial' : 'skipped'
+        }
+      } catch (err) {
+        console.warn('[BUG_FIX] Could not parse fix result')
+      }
+    }
+
+    // Mark finding as complete
+    const sessionId = response?.sessionId
+    this.intents.completeFixingFinding(currentFindingId, sessionId, result)
+
+    // Continue to next finding (if still running)
+    setTimeout(() => {
+      // Re-check status before continuing
+      const currentStatus = this.state?.activeSprint?.orchestration?.status
+      if (currentStatus !== OrchestrationStatus.RUNNING) {
+        console.log('[BUG_FIX] Orchestration no longer running, stopping bug fix loop')
+        return
+      }
+      this.startAutomatedBugFix()
+    }, 1000)
+  }
+
+  /**
+   * Complete the bug fix phase and finish orchestration
+   */
+  completeBugFixPhase() {
+    const sprint = this.state?.activeSprint
+    const bugFix = sprint?.bugFix
+    const findings = sprint?.codeReview?.findings || []
+    const completedFindings = bugFix?.completedFindings || []
+
+    // Calculate summary
+    const fixResults = bugFix?.fixResults || {}
+    let fixed = 0, partial = 0, skipped = 0
+
+    for (const findingId of completedFindings) {
+      const result = fixResults[findingId]?.result
+      if (result === 'fixed') fixed++
+      else if (result === 'partial') partial++
+      else skipped++
+    }
+
+    const summary = {
+      total: findings.length,
+      fixed,
+      partial,
+      skipped
+    }
+
+    console.log('[BUG_FIX] Completing phase with summary:', summary)
+
+    this.intents.completeBugFixPhase(summary)
+    this.showToast(`Orchestration complete! Fixed ${fixed}/${findings.length} issues.`, 'success')
   }
 
   /**

@@ -2367,7 +2367,12 @@ export const startAutomatedImplementationAcceptor = model => proposal => {
 
 // Orchestration story started - marks the current story being implemented
 export const orchestrationStoryStartedAcceptor = model => proposal => {
+  console.log('[ORCHESTRATION-ACCEPTOR] orchestrationStoryStartedAcceptor called, proposal type:', proposal?.type)
   if (proposal?.type === 'ORCHESTRATION_STORY_STARTED') {
+    console.log('[ORCHESTRATION-ACCEPTOR] ORCHESTRATION_STORY_STARTED detected, payload:', proposal.payload)
+    console.log('[ORCHESTRATION-ACCEPTOR] activeSprint exists:', !!model.activeSprint)
+    console.log('[ORCHESTRATION-ACCEPTOR] orchestration exists:', !!model.activeSprint?.orchestration)
+
     if (model.activeSprint?.orchestration) {
       const { storyId, timestamp } = proposal.payload
       model.activeSprint.orchestration.currentStoryId = storyId
@@ -2382,18 +2387,25 @@ export const orchestrationStoryStartedAcceptor = model => proposal => {
         startedAt: timestamp
       }
 
-      console.log('[ORCHESTRATION] Story started:', storyId)
+      console.log('[ORCHESTRATION-ACCEPTOR] Story started successfully:', {
+        storyId,
+        currentStoryId: model.activeSprint.orchestration.currentStoryId
+      })
+    } else {
+      console.error('[ORCHESTRATION-ACCEPTOR] Cannot set currentStoryId - orchestration not found')
     }
   }
 }
 
-// Orchestration story completed - marks story as done and records session
+// Orchestration story completed - marks story as done in orchestration tracking
+// Note: This only updates orchestration state. Story completion with criteria
+// is handled separately via proper intents in app.js
 export const orchestrationStoryCompletedAcceptor = model => proposal => {
   if (proposal?.type === 'ORCHESTRATION_STORY_COMPLETED') {
     if (model.activeSprint?.orchestration) {
       const { storyId, sessionId, timestamp } = proposal.payload
 
-      // Add to completed stories list
+      // Add to completed stories list (orchestration tracking)
       if (!model.activeSprint.orchestration.completedStories) {
         model.activeSprint.orchestration.completedStories = []
       }
@@ -2491,6 +2503,10 @@ export const startCodeReviewAcceptor = model => proposal => {
       const { timestamp } = proposal.payload
       model.activeSprint.orchestration.phase = OrchestrationPhase.REVIEW
       model.activeSprint.orchestration.phaseChangedAt = timestamp
+      // Keep orchestration running during code review phase
+      model.activeSprint.orchestration.status = OrchestrationStatus.RUNNING
+      // Clear current story since we're no longer in implementation
+      model.activeSprint.orchestration.currentStoryId = null
 
       // Initialize code review state
       if (!model.activeSprint.codeReview) {
@@ -2618,6 +2634,8 @@ export const startBugFixPhaseAcceptor = model => proposal => {
 
       model.activeSprint.orchestration.phase = OrchestrationPhase.BUGFIX
       model.activeSprint.orchestration.phaseChangedAt = timestamp
+      // Keep orchestration running during bug fix phase
+      model.activeSprint.orchestration.status = OrchestrationStatus.RUNNING
 
       // Initialize bug fix state
       if (!model.activeSprint.bugFix) {

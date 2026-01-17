@@ -764,28 +764,28 @@
   margin: 0 0 0.75rem 0;
 }
 
-/* Thread Stats Grid */
-.stats-grid {
+/* Thread Stats Grid (in metadata panel - single column layout) */
+.metadata-panel .stats-grid {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   background: transparent !important;
 }
 
-.stat-item {
+.metadata-panel .stat-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
   background: transparent !important;
 }
 
-.stat-label {
+.metadata-panel .stat-label {
   font-size: 0.8rem;
   color: var(--text-secondary);
   background: transparent !important;
 }
 
-.stat-value {
+.metadata-panel .stat-value {
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--color-neutral);

@@ -17,6 +17,9 @@ Thumbs.db
 .idea/
 .puffin/
 
+# Generated Claude context (changes per branch)
+.claude/Claude.md
+
 # Environment
 .env
 .env.local

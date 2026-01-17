@@ -146,7 +146,24 @@ function setupStateHandlers(ipcMain) {
   // Update history
   ipcMain.handle('state:updateHistory', async (event, history) => {
     try {
+      // Get existing branches before update
+      const oldState = puffinState.getState()
+      const existingBranches = Object.keys(oldState.history?.branches || {})
+
       const updated = await puffinState.updateHistory(history)
+
+      // Check for new branches and create their CLAUDE files
+      const newBranches = Object.keys(history.branches || {})
+      for (const branchId of newBranches) {
+        if (!existingBranches.includes(branchId)) {
+          console.log(`[IPC] Creating CLAUDE file for new branch: ${branchId}`)
+          const state = puffinState.getState()
+          const skillContent = puffinState.getBranchSkillContent(branchId)
+          const agentContent = puffinState.getBranchAgentContent(branchId)
+          await claudeMdGenerator.generateBranch(branchId, state, skillContent, agentContent)
+        }
+      }
+
       return { success: true, history: updated }
     } catch (error) {
       return { success: false, error: error.message }

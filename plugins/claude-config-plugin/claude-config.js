@@ -97,8 +97,8 @@ class ClaudeConfig {
   }
 
   /**
-   * List all context files based on fixed branch list
-   * Creates empty files for any missing contexts
+   * List all context files by scanning directory and merging with defaults
+   * Creates empty files for any missing default contexts
    * @returns {Promise<Array<{name: string, displayName: string, path: string, exists: boolean}>>}
    */
   async listContextFiles() {
@@ -113,24 +113,44 @@ class ClaudeConfig {
       }
     }
 
+    // Discover all CLAUDE_*.md files from the directory
+    const discoveredBranches = new Set()
+    try {
+      const dirContents = await fs.readdir(claudeDir)
+      for (const filename of dirContents) {
+        const contextName = extractContextName(filename)
+        if (contextName) {
+          discoveredBranches.add(contextName)
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to scan .claude directory: ${err.message}`)
+    }
+
+    // Merge discovered branches with default branches (defaults first, then custom)
+    const allBranches = new Set([...CONTEXT_BRANCHES, ...discoveredBranches])
+
     const files = []
 
-    for (const contextName of CONTEXT_BRANCHES) {
+    for (const contextName of allBranches) {
       const filename = `CLAUDE_${contextName}.md`
       const filePath = path.join(claudeDir, filename)
       let exists = false
+      const isDefault = CONTEXT_BRANCHES.includes(contextName)
 
       try {
         await fs.access(filePath)
         exists = true
       } catch {
-        // File doesn't exist - create empty file
-        try {
-          await fs.writeFile(filePath, '', 'utf-8')
-          this.logger.info(`Created empty context file: ${filename}`)
-          exists = true
-        } catch (writeErr) {
-          this.logger.error(`Failed to create ${filename}: ${writeErr.message}`)
+        // File doesn't exist - only create empty file for default branches
+        if (isDefault) {
+          try {
+            await fs.writeFile(filePath, '', 'utf-8')
+            this.logger.info(`Created empty context file: ${filename}`)
+            exists = true
+          } catch (writeErr) {
+            this.logger.error(`Failed to create ${filename}: ${writeErr.message}`)
+          }
         }
       }
 
@@ -139,11 +159,12 @@ class ClaudeConfig {
         displayName: formatContextName(contextName),
         path: filePath,
         filename,
-        exists
+        exists,
+        isDefault
       })
     }
 
-    this.logger.debug(`Context files ready: ${files.length} branches`)
+    this.logger.debug(`Context files ready: ${files.length} branches (${discoveredBranches.size - CONTEXT_BRANCHES.length} custom)`)
     return files
   }
 

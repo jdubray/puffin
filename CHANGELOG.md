@@ -5,6 +5,48 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-01-17
+
+### Added
+
+- **Automated Sprint Implementation**: Let Claude orchestrate entire sprints autonomously
+  - **Implementation Mode Selection**: After plan approval, choose between automated (Claude orchestrates everything) or human-controlled (manual story-by-story)
+  - **Intelligent Story Ordering**: Claude analyzes dependencies and determines optimal implementation sequence
+  - **Branch Assignment**: Each story automatically assigned to appropriate branch (UI, Backend, Fullstack, Plugin)
+  - **Orchestration Plan Review**: Preview the complete implementation plan before Claude starts
+  - **Sequential Sessions**: Each story implemented in a separate, clean Claude session
+  - **Acceptance Criteria Validation**: Automatic verification after each story implementation
+  - **Code Review Phase**: Automated code review identifies issues after all stories complete
+  - **Bug Fix Sessions**: Sequential sessions to address each finding from code review
+  - **Sprint Completion Summary**: Statistics showing costs, durations, and outcomes
+  - **Graceful Interruption**: Pause or stop automated implementation at any point
+
+- **Orchestration Controls**: New UI components for managing automated sprints
+  - Pause/Resume buttons for temporary interruption
+  - Stop button to switch to human-controlled mode
+  - Real-time progress tracking in Sprint panel
+  - Phase indicators (Implementation → Review → Bug Fix → Complete)
+
+- **Code Review Integration**: Automated quality checks during sprint execution
+  - Findings logged with file location and description
+  - Severity levels: Critical, Warning, Info
+  - Findings queued for bug fix phase
+
+- **Bug Fix Workflow**: Structured approach to addressing code review findings
+  - Each finding gets its own implementation session
+  - Status tracking: Pending, Fixing, Fixed, Won't Fix
+  - Progress visible in Sprint panel
+
+### Changed
+
+- **Plan Approval Flow**: Now shows implementation mode selection modal instead of immediately starting
+- **Sprint Panel**: Enhanced to show orchestration status and controls during automated execution
+- **Sprint Close**: Summary now includes automation statistics when applicable
+
+### Fixed
+
+- **Generated Claude.md**: Added to `.gitignore` as it's dynamically generated per branch
+
 ## [2.11.1] - 2026-01-11
 
 ### Added

@@ -277,6 +277,20 @@ Puffin includes four built-in plugins that add navigation tabs:
 
 ## Latest Features
 
+### Automated Sprint Implementation (v2.12.0)
+Let Claude orchestrate entire sprints autonomously:
+
+- **Implementation Mode Selection**: After plan approval, choose between automated (Claude orchestrates everything) or human-controlled (manual story-by-story)
+- **Intelligent Story Ordering**: Claude analyzes dependencies and determines optimal implementation sequence
+- **Branch Assignment**: Each story is assigned to the appropriate branch (UI, Backend, Fullstack, Plugin)
+- **Orchestration Plan Review**: See the complete implementation plan before Claude starts
+- **Sequential Sessions**: Each story is implemented in a separate, clean session
+- **Acceptance Criteria Validation**: Automatic verification after each story implementation
+- **Code Review Phase**: Automated code review identifies issues after all stories complete
+- **Bug Fix Sessions**: Sequential sessions to address each finding from code review
+- **Completion Statistics**: Summary showing costs, durations, and outcomes
+- **Graceful Interruption**: Pause or stop automated implementation at any point
+
 ### Backlog-Driven Workflow
 The core of Puffin's approach to structured cloding:
 

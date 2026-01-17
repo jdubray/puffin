@@ -11,6 +11,7 @@
    - [GUI Designer](#gui-designer)
    - [Backlog Management](#backlog-management)
    - [AI-Powered Story Derivation](#ai-powered-story-derivation)
+   - [Automated Sprint Implementation](#automated-sprint-implementation)
    - [Architecture Documentation](#architecture-documentation)
    - [Puffin Plugins](#puffin-plugins)
    - [Claude Code Plugins and Skills](#claude-code-plugins-and-skills)
@@ -441,6 +442,160 @@ If stories need changes:
 3. Claude revises the stories based on your input
 4. Review the updated stories
 5. Repeat until satisfied
+
+---
+
+### Automated Sprint Implementation
+
+Let Claude orchestrate entire sprints autonomously, implementing all stories in sequence with built-in code review and bug fixing.
+
+![Automated Sprint](screenshots/automated-sprint.png)
+
+#### Implementation Mode Selection
+
+After approving a sprint plan, choose how implementation proceeds:
+
+**Automated Mode** 🤖
+- Claude orchestrates the entire sprint without intervention
+- Stories are implemented in optimal order
+- Automatic acceptance criteria validation
+- Code review and bug fix phases included
+- Best for well-defined sprints with clear requirements
+
+**Human-Controlled Mode** 👤
+- Traditional story-by-story implementation
+- You control when each story starts
+- Manual review between stories
+- Best for exploratory or complex work
+
+#### Orchestration Plan Review
+
+Before automated implementation starts, review the orchestration plan:
+
+![Orchestration Plan](screenshots/orchestration-plan.png)
+
+**Plan Contents:**
+- **Implementation Order**: Stories sequenced by dependencies and complexity
+- **Branch Assignments**: Each story assigned to UI, Backend, Fullstack, or Plugin
+- **Dependency Analysis**: Visual representation of story dependencies
+- **Estimated Workflow**: Phases from implementation through review
+
+**Branch Types:**
+| Branch | Description |
+|--------|-------------|
+| **UI** | Visual components, styling, frontend-only changes |
+| **Backend** | APIs, business logic, database changes |
+| **Fullstack** | Stories requiring both UI and backend changes |
+| **Plugin** | Extensions to the plugin system |
+
+#### Implementation Phase
+
+During automated implementation:
+
+**Sequential Sessions:**
+- Each story runs in a separate Claude session
+- Clean context prevents cross-contamination
+- Session isolation ensures focused implementation
+
+**Progress Tracking:**
+- Real-time status updates in the Sprint panel
+- Current story highlighted with progress indicator
+- Completed stories marked with checkmarks
+- Cost and duration tracked per story
+
+**Orchestration Controls:**
+- **Pause** ⏸️: Temporarily halt implementation (resume later)
+- **Stop** ⏹️: End automated mode (switch to human-controlled)
+- Controls always visible during automation
+
+#### Acceptance Criteria Validation
+
+After each story implementation, Claude validates acceptance criteria:
+
+**Validation Process:**
+1. Claude reviews the implementation against each criterion
+2. Each criterion is marked: ✅ Pass, ⚠️ Partial, ❌ Fail
+3. Results are recorded in the story's progress
+4. Failed criteria are flagged for review phase
+
+**Automatic Progression:**
+- Stories with all criteria passing continue to next story
+- Partial or failed criteria are noted but don't block progress
+- All issues addressed in the code review phase
+
+#### Code Review Phase
+
+After all stories are implemented, an automated code review runs:
+
+![Code Review](screenshots/code-review.png)
+
+**Review Focus:**
+- Code quality and consistency
+- Potential bugs or edge cases
+- Security considerations
+- Performance concerns
+- Adherence to project patterns
+
+**Findings:**
+- Each issue is logged with file location and description
+- Severity levels: Critical, Warning, Info
+- Findings are queued for the bug fix phase
+
+#### Bug Fix Phase
+
+Issues from code review are addressed in sequential sessions:
+
+**Bug Fix Workflow:**
+1. Each finding gets its own implementation session
+2. Claude fixes the specific issue
+3. Fix is validated before moving to next finding
+4. Progress tracked in the Sprint panel
+
+**Finding Status:**
+- **Pending**: Waiting to be addressed
+- **Fixing**: Currently being worked on
+- **Fixed**: Successfully resolved
+- **Won't Fix**: Intentionally skipped (with reason)
+
+#### Sprint Completion Summary
+
+When all phases complete, a summary is displayed:
+
+![Sprint Summary](screenshots/sprint-summary.png)
+
+**Statistics Included:**
+- **Total Duration**: Time from start to completion
+- **Total Cost**: API costs across all sessions
+- **Stories Completed**: Count and success rate
+- **Criteria Validation**: Pass/partial/fail breakdown
+- **Code Review Findings**: Issues found and fixed
+- **Session Count**: Number of Claude sessions used
+
+**Export Options:**
+- Copy summary to clipboard
+- Include in sprint close commit message
+- Save to sprint history
+
+#### Graceful Interruption
+
+You maintain control throughout automated implementation:
+
+**Pause Implementation:**
+- Click Pause to temporarily stop
+- Current story completes before pausing
+- Resume continues from where you left off
+- State is preserved across app restarts
+
+**Stop Implementation:**
+- Click Stop to end automated mode
+- Transitions to human-controlled mode
+- Completed stories remain completed
+- Continue remaining stories manually
+
+**Error Handling:**
+- If a story fails, automation pauses
+- Review the error and choose to retry or skip
+- Option to switch to human-controlled mode
 
 ---
 
@@ -1405,20 +1560,28 @@ Puffin uses Electron with modern web technologies:
 **3CLI**: Claude Code CLI, the command-line interface for Claude
 **Acceptance Criteria Verification**: Process where Claude explicitly confirms each numbered criterion is met, partial, or blocked
 **Archived**: Status for completed stories older than 2 weeks, stored in a collapsible section
+**Automated Sprint Implementation**: Mode where Claude orchestrates entire sprints autonomously with code review and bug fixing
 **Backlog**: Collection of user stories waiting to be implemented
 **Branch**: Organized conversation topic in Puffin
+**Branch Assignment**: Automatic assignment of stories to UI, Backend, Fullstack, or Plugin branches during automated sprints
 **Branch-Specific Context**: Dynamic context injected into prompts based on active branch (UI guidelines, architecture docs, etc.)
+**Bug Fix Phase**: Automated phase where Claude addresses code review findings in sequential sessions
 **Calendar Plugin**: Plugin for viewing development activity over time with sprints, branches, and notes
 **Claude Code Plugin**: A skill package that injects context into Claude's prompts for specific tasks
+**Code Review Phase**: Automated review phase after story implementation that identifies issues
 **Conventional Commits**: Commit message format used for auto-generated sprint commits (e.g., `feat(scope): message`)
 **GUI Definition**: Saved visual design that can be reused
+**Human-Controlled Mode**: Traditional implementation mode where you control each story's execution
 **Image Attachment**: Image file attached to a prompt for visual context (max 5 per prompt)
+**Implementation Order**: Optimized sequence for story implementation based on dependencies
+**Orchestration Plan**: Preview of automated sprint showing order, branches, and phases
 **Post-it Note**: Personal note attached to a calendar day for reminders and annotations
 **Puffin Plugin**: An extension that adds views, commands, or functionality to Puffin itself
 **SAM Pattern**: State-Action-Model architecture pattern used by Puffin
 **Session ID**: Unique identifier for conversation continuity with Claude
 **Skill**: Context content (markdown) injected into CLAUDE.md to enhance Claude's capabilities
 **Sprint Close**: Process of archiving a sprint with optional git commit
+**Sprint Completion Summary**: Statistics and outcomes displayed after automated sprint finishes
 **SQLite**: Lightweight database engine used by Puffin for persistent storage
 **Start Implementation**: Action that generates an implementation prompt for selected stories
 **Toast History**: Plugin that tracks and displays all notification history
@@ -1429,4 +1592,4 @@ Puffin uses Electron with modern web technologies:
 
 ---
 
-*This manual covers Puffin version 1.2.0. For the latest updates and features, check the GitHub repository and release notes.*
+*This manual covers Puffin version 2.12.0. For the latest updates and features, check the GitHub repository and release notes.*

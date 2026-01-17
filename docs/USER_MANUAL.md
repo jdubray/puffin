@@ -17,6 +17,7 @@
    - [Claude Code Plugins and Skills](#claude-code-plugins-and-skills)
    - [Calendar Plugin](#calendar-plugin)
    - [Toast History Plugin](#toast-history-plugin)
+   - [Prompt Template Plugin](#prompt-template-plugin)
    - [Image Attachments for Prompts](#image-attachments-for-prompts)
    - [Sprint Close with Git Commit](#sprint-close-with-git-commit)
    - [Sprint Management Enhancements](#sprint-management-enhancements)
@@ -700,6 +701,15 @@ Puffin ships with four built-in plugins that are automatically loaded on startup
   - Type-based filtering (success, error, warning, info)
 - **Access**: Click "Notifications" in the navigation bar
 
+**7. Prompt Templates** 📝
+- **Purpose**: Create and reuse prompt templates for Claude interactions
+- **Features**:
+  - Create, edit, and delete templates
+  - Search templates by title or content
+  - Copy template content to clipboard
+  - Project-specific storage
+- **Access**: Click "Templates" in the navigation bar
+
 #### Plugin Architecture
 
 Plugins in Puffin follow a consistent structure:
@@ -874,6 +884,65 @@ Notifications are organized into two sections:
 **Refresh:**
 - Click the ↻ button to reload notification history
 - Useful after background operations
+
+---
+
+### Prompt Template Plugin
+
+Create, manage, and reuse prompt templates for faster Claude interactions.
+
+![Prompt Templates](screenshots/prompt-templates.png)
+
+#### Creating Templates
+
+Save frequently-used prompts as reusable templates:
+
+1. Click the "Templates" tab in the navigation bar
+2. Click "Create New" button
+3. Enter a title and the prompt content
+4. Click "Save" to store the template
+
+**Template Properties:**
+- **Title**: Descriptive name for quick identification
+- **Content**: The full prompt text
+- **Last Edited**: Automatically tracked timestamp
+
+#### Managing Templates
+
+**Search Templates:**
+- Use the search input to filter by title or content
+- Results update as you type
+- Clear search to show all templates
+
+**Edit Templates:**
+- Click the ✏️ edit icon on any template
+- Modify title or content
+- Save changes or cancel
+
+**Delete Templates:**
+- Click the 🗑 delete icon
+- Confirmation prevents accidental deletion
+
+**Copy to Clipboard:**
+- Click the 📋 copy icon to copy template content
+- Paste directly into the prompt editor
+- Visual feedback confirms successful copy
+
+#### Default Templates
+
+The plugin includes starter templates for common use cases:
+
+- Code review requests
+- Bug fix descriptions
+- Feature implementation prompts
+- Documentation generation
+
+#### Storage
+
+Templates are stored in `.puffin/prompt-templates.json` within your project directory, making them:
+- Project-specific (different templates per project)
+- Version-controllable (can be committed to git)
+- Portable (move with your project)
 
 ---
 
@@ -1576,6 +1645,8 @@ Puffin uses Electron with modern web technologies:
 **Implementation Order**: Optimized sequence for story implementation based on dependencies
 **Orchestration Plan**: Preview of automated sprint showing order, branches, and phases
 **Post-it Note**: Personal note attached to a calendar day for reminders and annotations
+**Prompt Template**: Reusable prompt text saved for quick access and consistency
+**Prompt Template Plugin**: Plugin for creating, managing, and reusing prompt templates
 **Puffin Plugin**: An extension that adds views, commands, or functionality to Puffin itself
 **SAM Pattern**: State-Action-Model architecture pattern used by Puffin
 **Session ID**: Unique identifier for conversation continuity with Claude

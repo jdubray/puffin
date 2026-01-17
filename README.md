@@ -55,8 +55,12 @@ You can't "prompt along" a coding agent, just like you can't "prompt along" a de
   <br>
   <br>
   <br>
-  
+
 </p>
+
+## Have Questions?
+
+Ask in our [Q&A Discussions](https://github.com/jdubray/puffin/discussions/categories/q-a) and get AI-powered answers! Our bot uses Claude to respond to questions about Puffin, its features, and how to use it.
 
 ## How It Works
 

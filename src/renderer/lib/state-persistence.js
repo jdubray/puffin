@@ -406,7 +406,8 @@ export class StatePersistence {
 
           // Archive the sprint to history BEFORE clearing
           if (state._sprintToArchive) {
-            console.log('[PERSIST-DEBUG] Archiving sprint to history:', state._sprintToArchive.id)
+            const sprintId = state._sprintToArchive.id
+            console.log('[PERSIST-DEBUG] Archiving sprint to history:', sprintId)
             try {
               await window.puffin.state.archiveSprintToHistory(state._sprintToArchive)
               console.log('[PERSIST-DEBUG] Sprint archived successfully')
@@ -419,6 +420,18 @@ export class StatePersistence {
               }
             } catch (e) {
               console.error('[PERSIST-DEBUG] Failed to archive sprint:', e)
+              // If archival failed, we still need to clear the active sprint from the database
+              // to prevent the "Close active sprint" message from persisting
+              console.log('[PERSIST-DEBUG] Attempting fallback: deleting sprint without archival')
+              try {
+                // Delete the sprint directly - this ensures hasActiveSprint() returns false
+                if (window.puffin.state.deleteSprint) {
+                  await window.puffin.state.deleteSprint(sprintId)
+                  console.log('[PERSIST-DEBUG] Fallback: Sprint deleted successfully (not archived)')
+                }
+              } catch (deleteErr) {
+                console.error('[PERSIST-DEBUG] Fallback delete also failed:', deleteErr)
+              }
             }
           }
 

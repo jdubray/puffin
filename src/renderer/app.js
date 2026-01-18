@@ -671,8 +671,9 @@ Please provide specific file locations and line numbers where issues are found, 
         if (claudeStatus.available) {
           console.log('Claude CLI available:', claudeStatus.version)
         } else {
-          console.warn('Claude CLI not found. Please install it: npm install -g @anthropic-ai/claude-code')
-          this.showToast('Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code', 'warning')
+          // Only log to console - the CLI check can have false negatives on Windows
+          // Actual CLI calls will show their own errors if the CLI is truly unavailable
+          console.warn('Claude CLI check returned unavailable. If claude --version works in terminal, this is a false negative.')
         }
 
         // Initialize app with project path

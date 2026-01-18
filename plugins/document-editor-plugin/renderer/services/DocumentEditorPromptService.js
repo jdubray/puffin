@@ -129,13 +129,15 @@ export class DocumentEditorPromptService {
 You are editing a single document: \`{filename}\`
 File type: {extension}
 
-### STRICT RULES:
+### CHANGE-BASED EDITING:
+Instead of returning the entire document, return your changes in a structured format.
+The system will apply your changes to the original document programmatically.
+
+### RULES:
 1. You may ONLY modify the content of this document
 2. You may READ any project file for context but CANNOT write to other files
-3. Before completing, validate the document syntax ({extension} format)
-4. Provide a CONCISE CHANGE SUMMARY (bulleted list of what you changed)
-5. If requirements are unclear, ASK CLARIFYING QUESTIONS
-6. Do NOT provide verbose explanations - focus on the changes
+3. If requirements are unclear, ASK CLARIFYING QUESTIONS before modifying
+4. Do NOT provide verbose explanations - focus on the changes
 
 ### Current Document Content:
 \`\`\`{language}
@@ -210,6 +212,9 @@ File type: {extension}
 
   /**
    * Submit a prompt to Claude with the document harness
+   * Uses the dedicated sendPrompt API to avoid routing through the main Puffin prompt view.
+   * This keeps the plugin's prompt channel isolated.
+   *
    * @param {Object} options - Submission options
    * @param {string} options.filename - Document filename
    * @param {string} options.filePath - Full file path
@@ -219,9 +224,9 @@ File type: {extension}
    * @param {string} options.model - Model to use (haiku/sonnet/opus)
    * @param {string} options.thinkingBudget - Thinking budget (none/think/think-hard)
    * @param {Array} options.contextFiles - Optional context files
-   * @param {string} options.branchId - Branch ID for the request
-   * @param {string} options.sessionId - Session ID (null for new session)
-   * @returns {Promise<void>} Submits to Claude (response via events)
+   * @param {string} options.branchId - Branch ID for the request (unused - plugin has dedicated channel)
+   * @param {string} options.sessionId - Session ID (unused - plugin manages own sessions)
+   * @returns {Promise<Object>} Response object with { response: string } or throws on error
    */
   async submit(options) {
     const config = await this.loadConfig()
@@ -233,9 +238,7 @@ File type: {extension}
       userPrompt,
       model = config.defaultModel,
       thinkingBudget = 'none',
-      contextFiles = [],
-      branchId = 'plugin',
-      sessionId = null
+      contextFiles = []
     } = options
 
     // Build the harnessed prompt
@@ -247,34 +250,31 @@ File type: {extension}
       contextFiles
     })
 
-    // Get thinking budget value
-    const thinkingValue = config.thinkingBudgets[thinkingBudget] || null
+    console.log('[DocumentEditorPromptService] Submitting prompt via dedicated channel:', {
+      model,
+      thinkingBudget,
+      filename,
+      promptLength: prompt.length
+    })
 
-    // Submit to Claude via the existing API
-    // Note: The actual response handling is done via events (window.puffin.claude.onResponse)
-    if (window.puffin?.claude?.submit) {
-      window.puffin.claude.submit({
-        prompt,
-        branchId,
-        sessionId,
+    // Use sendPrompt API for dedicated plugin channel (non-streaming, returns response directly)
+    // This avoids routing through the main Puffin prompt view
+    if (window.puffin?.claude?.sendPrompt) {
+      const result = await window.puffin.claude.sendPrompt(prompt, {
         model,
-        thinking: thinkingValue,
-        metadata: {
-          type: 'document-editor',
-          filePath,
-          filename,
-          extension
-        }
+        maxTurns: 40, // Allow multi-turn for tool use if needed
+        timeout: 300000 // 5 minutes for complex edits
       })
 
-      console.log('[DocumentEditorPromptService] Submitted prompt:', {
-        model,
-        thinkingBudget,
-        filename,
-        promptLength: prompt.length
-      })
+      if (result.success) {
+        console.log('[DocumentEditorPromptService] Received response, length:', result.response?.length || 0)
+        return { response: result.response }
+      } else {
+        console.error('[DocumentEditorPromptService] Request failed:', result.error)
+        throw new Error(result.error || 'Claude request failed')
+      }
     } else {
-      console.error('[DocumentEditorPromptService] Claude API not available')
+      console.error('[DocumentEditorPromptService] Claude sendPrompt API not available')
       throw new Error('Claude API is not available')
     }
   }

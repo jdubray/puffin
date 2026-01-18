@@ -130,7 +130,7 @@ async function loadHighlightJs() {
 }
 
 // Import services
-import { DocumentEditorPromptService, ResponseParser, SessionManager, ChangeTracker, SyntaxValidator } from '../services/index.js'
+import { DocumentEditorPromptService, ResponseParser, SessionManager, ChangeTracker, SyntaxValidator, DocumentMerger } from '../services/index.js'
 
 export class DocumentEditorView {
   /**
@@ -167,11 +167,21 @@ export class DocumentEditorView {
       responseHistory: [],        // Array of parsed response objects
       currentResponse: null,      // Most recent response being displayed
       pendingQuestions: [],       // Questions awaiting answers
+      showResponseModal: false,   // Whether to show the response modal
       sessionLoaded: false,       // Whether session has been loaded
       contentBeforeSubmit: '',    // Content snapshot for diff calculation
       // Change tracking state (Story 3)
       highlightChangesEnabled: true,  // Whether change highlights are visible
-      hasTrackedChanges: false        // Whether there are changes to highlight
+      hasTrackedChanges: false,       // Whether there are changes to highlight
+      // Search state
+      searchText: '',
+      searchMatches: [],          // Array of { line, startIndex, endIndex }
+      currentMatchIndex: -1,      // Current match index for navigation
+      // Undo state
+      undoStack: [],              // Stack of previous document states
+      maxUndoStates: 20,          // Maximum undo history
+      // Question answers state (persists across re-renders)
+      pendingAnswers: {}          // Map of questionId -> answer text
     }
 
     // Auto-save timer
@@ -208,6 +218,9 @@ export class DocumentEditorView {
 
     // Initialize syntax validator (Story 5)
     this.syntaxValidator = new SyntaxValidator()
+
+    // Initialize document merger for structured change application
+    this.documentMerger = new DocumentMerger()
   }
 
   /**
@@ -278,6 +291,10 @@ export class DocumentEditorView {
               <span class="document-editor-btn-icon" aria-hidden="true">💾</span>
               <span class="document-editor-btn-text">Save</span>
             </button>
+            <button class="document-editor-btn" data-action="undo" title="Undo last AI edit" aria-label="Undo last AI change" ${!hasFile || this.state.undoStack.length === 0 ? 'disabled' : ''}>
+              <span class="document-editor-btn-icon" aria-hidden="true">↩️</span>
+              <span class="document-editor-btn-text">Undo AI</span>
+            </button>
           </div>
           <div class="document-editor-toolbar-center">
             <span class="document-editor-filename" title="${this.escapeHtml(this.state.currentFile || '')}">
@@ -304,9 +321,51 @@ export class DocumentEditorView {
           </div>
         </div>
 
-        <!-- Main content: Editor or Empty state (always visible, flex: 1) -->
-        <div class="document-editor-main">
-          ${this.renderMainContent()}
+        <!-- Search bar -->
+        <div class="document-editor-search-bar">
+          <div class="document-editor-search-input-wrapper">
+            <span class="document-editor-search-icon">🔍</span>
+            <input type="text"
+                   class="document-editor-search-input"
+                   placeholder="Search in document... (Ctrl+F)"
+                   value="${this.escapeHtml(this.state.searchText)}"
+                   ${!hasFile ? 'disabled' : ''}>
+            ${this.state.searchMatches.length > 0 ? `
+              <span class="document-editor-search-count">
+                ${this.state.currentMatchIndex + 1} / ${this.state.searchMatches.length}
+              </span>
+            ` : ''}
+          </div>
+          <button class="document-editor-btn document-editor-search-btn" data-action="search-prev" title="Previous match (Shift+Enter)" ${!hasFile || this.state.searchMatches.length === 0 ? 'disabled' : ''}>
+            <span>▲</span>
+          </button>
+          <button class="document-editor-btn document-editor-search-btn" data-action="search-next" title="Next match (Enter)" ${!hasFile || this.state.searchMatches.length === 0 ? 'disabled' : ''}>
+            <span>▼</span>
+          </button>
+          <button class="document-editor-btn document-editor-search-btn" data-action="search-clear" title="Clear search" ${!hasFile || !this.state.searchText ? 'disabled' : ''}>
+            <span>✕</span>
+          </button>
+        </div>
+
+        <!-- Main content area: Editor (left) + Response panel (right) -->
+        <div class="document-editor-content-area">
+          <!-- Editor side -->
+          <div class="document-editor-main">
+            ${this.renderMainContent()}
+          </div>
+
+          <!-- Response panel (right side) -->
+          <div class="document-editor-response-panel ${responseCollapsed ? 'collapsed' : ''}">
+            <div class="document-editor-response-header">
+              <button class="document-editor-response-toggle" data-action="toggle-response" title="Toggle response panel" aria-label="Toggle AI response panel" aria-expanded="${!responseCollapsed}">
+                <span class="document-editor-toggle-icon" aria-hidden="true">${responseCollapsed ? '◀' : '▶'}</span>
+                <span>AI Response</span>
+              </button>
+            </div>
+            <div class="document-editor-response-content">
+              ${this.renderResponseContent()}
+            </div>
+          </div>
         </div>
 
         <!-- AI Prompt area: Controls, Input, and Send button -->
@@ -344,14 +403,13 @@ export class DocumentEditorView {
           ` : ''}
           <!-- Prompt Input Row -->
           <div class="document-editor-prompt-input-row">
-            <input
-              type="text"
+            <textarea
               class="document-editor-prompt-input"
-              placeholder="Describe changes to make to this document..."
-              value="${this.escapeHtml(this.state.promptText)}"
+              placeholder="Describe changes to make... (Ctrl+Enter to send)"
+              rows="6"
               ${!hasFile || this.state.isSubmitting ? 'disabled' : ''}
-            >
-            <button class="document-editor-btn document-editor-prompt-btn ${this.state.isSubmitting ? 'submitting' : ''}"
+            >${this.escapeHtml(this.state.promptText)}</textarea>
+            <button class="document-editor-btn document-editor-btn-primary document-editor-prompt-btn ${this.state.isSubmitting ? 'submitting' : ''}"
                     aria-label="Send prompt to Claude"
                     ${!hasFile || this.state.isSubmitting ? 'disabled' : ''}>
               ${this.state.isSubmitting ? `
@@ -364,20 +422,8 @@ export class DocumentEditorView {
             </button>
           </div>
         </div>
-
-        <!-- AI Response area: Collapsible with header -->
-        <div class="document-editor-response-area ${responseCollapsed ? 'collapsed' : ''}">
-          <div class="document-editor-response-header">
-            <button class="document-editor-response-toggle" data-action="toggle-response" title="Toggle response area" aria-label="Toggle AI response panel" aria-expanded="${!responseCollapsed}">
-              <span class="document-editor-toggle-icon" aria-hidden="true">${responseCollapsed ? '▶' : '▼'}</span>
-              <span>AI Response</span>
-            </button>
-          </div>
-          <div class="document-editor-response-content">
-            ${this.renderResponseContent()}
-          </div>
-        </div>
       </div>
+      ${this.renderResponseModal()}
     `
 
     this.attachEventListeners()
@@ -611,44 +657,189 @@ export class DocumentEditorView {
   renderQuestions(response) {
     if (!response.questions || response.questions.length === 0) return ''
 
-    const questionsHtml = response.questions.map(q => `
-      <div class="document-editor-question ${q.answered ? 'answered' : ''}" data-question-id="${q.id}" data-response-id="${response.id}">
-        <div class="document-editor-question-text">
-          <span class="document-editor-question-icon">${q.answered ? '✓' : '?'}</span>
-          ${this.escapeHtml(q.question)}
+    const unansweredQuestions = response.questions.filter(q => !q.answered)
+    const hasUnanswered = unansweredQuestions.length > 0
+
+    const questionsHtml = response.questions.map(q => {
+      // Get persisted answer value from state
+      const pendingAnswer = this.state.pendingAnswers[q.id] || ''
+
+      return `
+        <div class="document-editor-question ${q.answered ? 'answered' : ''}" data-question-id="${q.id}" data-response-id="${response.id}">
+          <div class="document-editor-question-text">
+            <span class="document-editor-question-icon">${q.answered ? '✓' : '?'}</span>
+            ${this.escapeHtml(q.question)}
+          </div>
+          ${q.answered ? `
+            <div class="document-editor-question-answer">
+              <span class="document-editor-answer-label">Your answer:</span>
+              ${this.escapeHtml(q.answer)}
+            </div>
+          ` : `
+            <div class="document-editor-question-input-row">
+              <input
+                type="text"
+                class="document-editor-question-input"
+                placeholder="Type your answer..."
+                value="${this.escapeHtml(pendingAnswer)}"
+                data-question-id="${q.id}"
+                data-response-id="${response.id}"
+                ${this.state.isSubmitting ? 'disabled' : ''}
+              >
+            </div>
+          `}
         </div>
-        ${q.answered ? `
-          <div class="document-editor-question-answer">
-            <span class="document-editor-answer-label">Your answer:</span>
-            ${this.escapeHtml(q.answer)}
-          </div>
-        ` : `
-          <div class="document-editor-question-input-row">
-            <input
-              type="text"
-              class="document-editor-question-input"
-              placeholder="Type your answer..."
-              data-question-id="${q.id}"
-              data-response-id="${response.id}"
-              ${this.state.isSubmitting ? 'disabled' : ''}
-            >
-            <button
-              class="document-editor-btn document-editor-question-reply-btn"
-              data-question-id="${q.id}"
-              data-response-id="${response.id}"
-              ${this.state.isSubmitting ? 'disabled' : ''}
-            >
-              Reply
-            </button>
-          </div>
-        `}
-      </div>
-    `).join('')
+      `
+    }).join('')
+
+    // Single submit button for all answers
+    const submitButton = hasUnanswered ? `
+      <button
+        class="document-editor-btn document-editor-btn-primary document-editor-submit-all-answers-btn"
+        data-response-id="${response.id}"
+        ${this.state.isSubmitting ? 'disabled' : ''}
+      >
+        Submit All Answers
+      </button>
+    ` : ''
 
     return `
       <div class="document-editor-questions-section">
         <div class="document-editor-questions-label">Questions from Claude:</div>
         ${questionsHtml}
+        ${submitButton}
+      </div>
+    `
+  }
+
+  /**
+   * Render the response modal (shows Claude's response including questions)
+   * @returns {string} HTML for the modal
+   */
+  renderResponseModal() {
+    if (!this.state.showResponseModal || !this.state.currentResponse) return ''
+
+    const response = this.state.currentResponse
+    const questions = response.questions || []
+    const unanswered = questions.filter(q => !q.answered)
+    const hasQuestions = unanswered.length > 0
+    const hasValidationErrors = response.validationErrors && response.validationErrors.length > 0
+    const documentApplied = response.documentApplied
+
+    // Determine modal title and icon
+    let titleIcon = '✅'
+    let titleText = 'Changes Applied'
+    if (hasQuestions) {
+      titleIcon = '❓'
+      titleText = 'Claude has questions'
+    } else if (hasValidationErrors && !documentApplied) {
+      titleIcon = '⚠️'
+      titleText = 'Issues Found'
+    } else if (!documentApplied) {
+      titleIcon = 'ℹ️'
+      titleText = 'Response from Claude'
+    }
+
+    // Build summary section
+    const summaryHtml = response.summary ? `
+      <div class="document-editor-modal-section">
+        <div class="document-editor-modal-section-label">Summary</div>
+        <div class="document-editor-modal-section-content">${this.formatSummary(response.summary)}</div>
+      </div>
+    ` : ''
+
+    // Build questions section
+    const answeredCount = questions.filter(q => q.answered).length
+    const questionsHtml = questions.length > 0 ? `
+      <div class="document-editor-modal-section">
+        <div class="document-editor-modal-section-label ${hasQuestions ? 'warning' : ''}">
+          ${hasQuestions ? `Questions (${answeredCount}/${questions.length} answered)` : 'Questions (all answered)'}
+        </div>
+        ${hasQuestions ? `
+          <div class="document-editor-modal-hint">
+            Answer all questions to continue. Claude will then make the requested changes.
+          </div>
+        ` : ''}
+        ${questions.map(q => `
+          <div class="document-editor-modal-question ${q.answered ? 'answered' : ''}" data-question-id="${q.id}">
+            <div class="document-editor-modal-question-text">
+              <span class="document-editor-modal-question-icon">${q.answered ? '✓' : '?'}</span>
+              <span>${this.escapeHtml(q.question)}</span>
+            </div>
+            ${q.answered ? `
+              <div class="document-editor-modal-question-answer">
+                Your answer: ${this.escapeHtml(q.answer)}
+              </div>
+            ` : `
+              <div class="document-editor-modal-input-row">
+                <input
+                  type="text"
+                  class="document-editor-modal-question-input"
+                  placeholder="Type your answer and press Enter..."
+                  data-question-id="${q.id}"
+                  data-response-id="${response.id}"
+                >
+                <button
+                  class="document-editor-btn document-editor-btn-primary document-editor-modal-reply-btn"
+                  data-question-id="${q.id}"
+                  data-response-id="${response.id}"
+                >
+                  Reply
+                </button>
+              </div>
+            `}
+          </div>
+        `).join('')}
+      </div>
+    ` : ''
+
+    // Build validation errors section
+    const errorsHtml = hasValidationErrors ? `
+      <div class="document-editor-modal-section">
+        <div class="document-editor-modal-section-label error">Validation Issues</div>
+        <ul class="document-editor-modal-errors">
+          ${response.validationErrors.map(e => `
+            <li class="document-editor-modal-error-item ${e.severity || 'error'}">
+              <span class="document-editor-modal-error-icon">${e.severity === 'warning' ? '⚠️' : '❌'}</span>
+              <span>${this.escapeHtml(e.message)}</span>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    ` : ''
+
+    // Build stats section
+    const statsHtml = documentApplied && response.diffStats ? `
+      <div class="document-editor-modal-stats">
+        ${response.diffStats.added > 0 ? `<span class="stat-added">+${response.diffStats.added}</span>` : ''}
+        ${response.diffStats.modified > 0 ? `<span class="stat-modified">~${response.diffStats.modified}</span>` : ''}
+        ${response.diffStats.deleted > 0 ? `<span class="stat-deleted">-${response.diffStats.deleted}</span>` : ''}
+        <span class="stat-label">lines changed</span>
+      </div>
+    ` : ''
+
+    return `
+      <div class="document-editor-questions-modal-overlay" data-action="close-response-modal">
+        <div class="document-editor-questions-modal" onclick="event.stopPropagation()">
+          <div class="document-editor-questions-modal-header">
+            <div class="document-editor-questions-modal-title">
+              <span class="document-editor-questions-modal-title-icon">${titleIcon}</span>
+              <span>${titleText}</span>
+            </div>
+            <button class="document-editor-questions-modal-close" data-action="close-response-modal" title="Close">×</button>
+          </div>
+          <div class="document-editor-questions-modal-body">
+            ${statsHtml}
+            ${summaryHtml}
+            ${questionsHtml}
+            ${errorsHtml}
+          </div>
+          <div class="document-editor-questions-modal-footer">
+            <button class="document-editor-btn ${hasQuestions ? '' : 'document-editor-btn-primary'}" data-action="close-response-modal">
+              ${hasQuestions ? 'Close (answer later)' : 'OK'}
+            </button>
+          </div>
+        </div>
       </div>
     `
   }
@@ -796,11 +987,11 @@ export class DocumentEditorView {
       this.addTrackedListener(textarea, 'keydown', keydownHandler)
     }
 
-    // AI prompt input - Enter key to submit
+    // AI prompt input - Ctrl+Enter (or Cmd+Enter on Mac) to submit
     const promptInput = this.container.querySelector('.document-editor-prompt-input')
     if (promptInput) {
       const keyHandler = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
           e.preventDefault()
           this.handleAskAI()
         }
@@ -869,6 +1060,29 @@ export class DocumentEditorView {
       const handler = () => this.clearHighlights()
       this.addTrackedListener(clearHighlightsBtn, 'click', handler)
     }
+
+    // Search input
+    const searchInput = this.container.querySelector('.document-editor-search-input')
+    if (searchInput) {
+      const inputHandler = (e) => this.handleSearchInput(e.target.value)
+      const keyHandler = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          if (e.shiftKey) {
+            this.searchPrev()
+          } else {
+            this.searchNext()
+          }
+        } else if (e.key === 'Escape') {
+          this.clearSearch()
+        }
+      }
+      this.addTrackedListener(searchInput, 'input', inputHandler)
+      this.addTrackedListener(searchInput, 'keydown', keyHandler)
+    }
+
+    // Attach question and modal listeners
+    this.attachQuestionListeners()
   }
 
   /**
@@ -890,7 +1104,154 @@ export class DocumentEditorView {
     } else if (isMod && e.key === 's') {
       e.preventDefault()
       this.handleSave()
+    } else if (isMod && e.key === 'f') {
+      e.preventDefault()
+      this.focusSearch()
     }
+  }
+
+  /**
+   * Focus the search input
+   */
+  focusSearch() {
+    const searchInput = this.container.querySelector('.document-editor-search-input')
+    if (searchInput) {
+      searchInput.focus()
+      searchInput.select()
+    }
+  }
+
+  /**
+   * Handle search input change
+   * @param {string} text - Search text
+   */
+  handleSearchInput(text) {
+    this.state.searchText = text
+
+    if (!text) {
+      this.state.searchMatches = []
+      this.state.currentMatchIndex = -1
+      this.updateHighlighting()
+      this.updateSearchUI()
+      return
+    }
+
+    // Find all matches
+    const content = this.state.content || ''
+    const lines = content.split('\n')
+    const matches = []
+    const searchLower = text.toLowerCase()
+
+    lines.forEach((line, lineIndex) => {
+      const lineLower = line.toLowerCase()
+      let startIndex = 0
+      while (true) {
+        const index = lineLower.indexOf(searchLower, startIndex)
+        if (index === -1) break
+        matches.push({
+          line: lineIndex,
+          startIndex: index,
+          endIndex: index + text.length
+        })
+        startIndex = index + 1
+      }
+    })
+
+    this.state.searchMatches = matches
+    this.state.currentMatchIndex = matches.length > 0 ? 0 : -1
+
+    this.updateLineNumbers()
+    this.updateSearchUI()
+
+    // Scroll to first match
+    if (matches.length > 0) {
+      this.scrollToMatch(0)
+    }
+  }
+
+  /**
+   * Go to next search match
+   */
+  searchNext() {
+    if (this.state.searchMatches.length === 0) return
+
+    this.state.currentMatchIndex = (this.state.currentMatchIndex + 1) % this.state.searchMatches.length
+    this.updateSearchUI()
+    this.scrollToMatch(this.state.currentMatchIndex)
+    this.updateLineNumbers()
+  }
+
+  /**
+   * Go to previous search match
+   */
+  searchPrev() {
+    if (this.state.searchMatches.length === 0) return
+
+    this.state.currentMatchIndex = this.state.currentMatchIndex <= 0
+      ? this.state.searchMatches.length - 1
+      : this.state.currentMatchIndex - 1
+    this.updateSearchUI()
+    this.scrollToMatch(this.state.currentMatchIndex)
+    this.updateLineNumbers()
+  }
+
+  /**
+   * Clear search
+   */
+  clearSearch() {
+    this.state.searchText = ''
+    this.state.searchMatches = []
+    this.state.currentMatchIndex = -1
+
+    const searchInput = this.container.querySelector('.document-editor-search-input')
+    if (searchInput) {
+      searchInput.value = ''
+    }
+
+    this.updateLineNumbers()
+    this.updateSearchUI()
+  }
+
+  /**
+   * Update search UI (count display, button states)
+   */
+  updateSearchUI() {
+    const countEl = this.container.querySelector('.document-editor-search-count')
+    if (countEl) {
+      if (this.state.searchMatches.length > 0) {
+        countEl.textContent = `${this.state.currentMatchIndex + 1} / ${this.state.searchMatches.length}`
+        countEl.style.display = ''
+      } else {
+        countEl.style.display = 'none'
+      }
+    }
+
+    // Update button states
+    const prevBtn = this.container.querySelector('[data-action="search-prev"]')
+    const nextBtn = this.container.querySelector('[data-action="search-next"]')
+    const clearBtn = this.container.querySelector('[data-action="search-clear"]')
+
+    if (prevBtn) prevBtn.disabled = this.state.searchMatches.length === 0
+    if (nextBtn) nextBtn.disabled = this.state.searchMatches.length === 0
+    if (clearBtn) clearBtn.disabled = !this.state.searchText
+  }
+
+  /**
+   * Scroll to a specific match
+   * @param {number} matchIndex - Index of match to scroll to
+   */
+  scrollToMatch(matchIndex) {
+    const match = this.state.searchMatches[matchIndex]
+    if (!match) return
+
+    const textarea = this.container.querySelector('.document-editor-textarea')
+    if (!textarea) return
+
+    // Calculate approximate scroll position based on line number
+    const lineHeight = 21 // Matches CSS line-height
+    const targetY = match.line * lineHeight
+
+    textarea.scrollTop = Math.max(0, targetY - textarea.clientHeight / 2)
   }
 
   /**
@@ -977,124 +1338,269 @@ export class DocumentEditorView {
 
   /**
    * Process AI response and update state
+   * Claude responds with either:
+   * - Questions (## Questions section) - displayed in modal for user to answer
+   * - Structured changes (<<<CHANGE>>> blocks) - preferred, applies diffs
+   * - Full document (## Updated Document section) - fallback, replaces entire document
+   *
    * @param {Object} result - Raw result from promptService.submit()
    * @param {string} prompt - Original user prompt
    */
   async processAIResponse(result, prompt) {
-    // Extract the response text from the result
     const rawResponse = result?.response || result?.text || result?.content || ''
+    console.log('[DocumentEditorView] Processing AI response, length:', rawResponse.length)
 
-    // Extract updated document content from Claude's response
-    const updatedContent = this.extractUpdatedDocument(rawResponse)
+    // Parse response for questions and updated document
+    const questions = this.extractQuestions(rawResponse)
+    const summary = this.extractSummary(rawResponse)
+
     let documentApplied = false
-    let clientValidationResult = null
+    let validationErrors = []
+    let appliedChanges = []
+    let failedChanges = []
 
-    if (updatedContent !== null) {
-      // Run client-side syntax validation before applying changes (Story 5)
-      clientValidationResult = this.syntaxValidator.validate(updatedContent, this.state.extension)
+    // Response type: QUESTIONS - Claude needs clarification
+    if (questions.length > 0) {
+      console.log('[DocumentEditorView] Claude asked', questions.length, 'question(s)')
+      // Don't apply any document changes when there are questions
+    }
+    // Response type: STRUCTURED CHANGES - preferred format using DocumentMerger
+    else if (this.documentMerger.hasStructuredChanges(rawResponse)) {
+      console.log('[DocumentEditorView] Found structured changes, using DocumentMerger')
 
-      if (clientValidationResult.valid) {
-        // Apply the updated document content
-        this.state.content = updatedContent
-        this.state.isModified = true
-        documentApplied = true
+      const parsed = this.documentMerger.parseChanges(rawResponse)
 
-        // Update textarea if it exists
-        const textarea = this.container.querySelector('.document-editor-textarea')
-        if (textarea) {
-          textarea.value = updatedContent
+      if (parsed.parseErrors.length > 0) {
+        console.warn('[DocumentEditorView] Parse errors:', parsed.parseErrors)
+        validationErrors = parsed.parseErrors.map(e => ({
+          id: this.generateResponseId(),
+          message: e,
+          severity: 'warning'
+        }))
+      }
+
+      if (parsed.changes.length > 0) {
+        // Push current state to undo stack before applying changes
+        this.pushUndoState()
+
+        // Apply changes to the document
+        const mergeResult = this.documentMerger.applyChanges(this.state.content, parsed.changes)
+        appliedChanges = mergeResult.applied
+        failedChanges = mergeResult.failed
+
+        if (appliedChanges.length > 0) {
+          // Validate the result
+          const validation = this.syntaxValidator.validate(mergeResult.content, this.state.extension)
+
+          if (validation.valid) {
+            this.state.content = mergeResult.content
+            this.state.isModified = true
+            documentApplied = true
+
+            // Update textarea
+            const textarea = this.container.querySelector('.document-editor-textarea')
+            if (textarea) {
+              textarea.value = mergeResult.content
+            }
+
+            // Update display
+            this.updateHighlighting()
+            this.updateLineNumbers()
+
+            console.log('[DocumentEditorView] Applied', appliedChanges.length, 'changes via DocumentMerger')
+          } else {
+            console.warn('[DocumentEditorView] Validation failed after merge:', validation.errors)
+            validationErrors = validation.errors.map(e => ({
+              id: this.generateResponseId(),
+              message: e.message,
+              severity: 'error',
+              line: e.line
+            }))
+          }
         }
 
-        // Update syntax highlighting
-        this.updateHighlighting()
-
-        console.log('[DocumentEditorView] Applied updated document from AI response')
-      } else {
-        console.warn('[DocumentEditorView] Syntax validation failed, document not applied:',
-          clientValidationResult.errors)
+        if (failedChanges.length > 0) {
+          console.warn('[DocumentEditorView] Failed changes:', failedChanges)
+          validationErrors.push(...failedChanges.map(f => ({
+            id: this.generateResponseId(),
+            message: `Failed to apply change: ${f.error}`,
+            severity: 'warning'
+          })))
+        }
       }
-    } else {
-      console.log('[DocumentEditorView] No updated document found in AI response')
     }
+    // Response type: FULL DOCUMENT UPDATE - fallback format
+    else {
+      const updatedContent = this.extractUpdatedDocument(rawResponse)
 
-    // Parse the response for summary, questions, etc.
-    const parsed = this.responseParser.parse(
-      rawResponse,
-      this.state.contentBeforeSubmit,
-      documentApplied ? this.state.content : this.state.contentBeforeSubmit
-    )
+      if (updatedContent !== null) {
+        // Safety check: warn if document shrinks significantly
+        const originalLines = this.state.content.split('\n').length
+        const newLines = updatedContent.split('\n').length
+        const shrinkagePercent = ((originalLines - newLines) / originalLines) * 100
 
-    // Merge client-side validation errors with any from Claude's response
-    const allValidationErrors = [
-      ...(parsed.validationErrors || []),
-      ...(clientValidationResult && !clientValidationResult.valid
-        ? clientValidationResult.errors.map(e => ({
+        if (shrinkagePercent > 50 && originalLines > 20) {
+          console.warn('[DocumentEditorView] WARNING: Document would shrink by', shrinkagePercent.toFixed(0), '% - possible truncation')
+          validationErrors.push({
+            id: this.generateResponseId(),
+            message: `Document shrinks by ${shrinkagePercent.toFixed(0)}% (${originalLines} -> ${newLines} lines). This may indicate truncation. Undo if unintended.`,
+            severity: 'warning'
+          })
+        }
+
+        // Validate before applying
+        const validation = this.syntaxValidator.validate(updatedContent, this.state.extension)
+
+        if (validation.valid) {
+          // Push current state to undo stack before applying changes
+          this.pushUndoState()
+
+          // Apply the complete updated document
+          this.state.content = updatedContent
+          this.state.isModified = true
+          documentApplied = true
+
+          // Update textarea
+          const textarea = this.container.querySelector('.document-editor-textarea')
+          if (textarea) {
+            textarea.value = updatedContent
+          }
+
+          // Update display
+          this.updateHighlighting()
+          this.updateLineNumbers()
+
+          console.log('[DocumentEditorView] Applied updated document (full replacement)')
+        } else {
+          console.warn('[DocumentEditorView] Validation failed:', validation.errors)
+          validationErrors.push(...validation.errors.map(e => ({
             id: this.generateResponseId(),
             message: e.message,
             severity: 'error',
-            line: e.line,
-            source: 'client-validation'
-          }))
-        : [])
-    ]
+            line: e.line
+          })))
+        }
+      } else {
+        console.log('[DocumentEditorView] No questions or document update found in response')
+      }
+    }
+
+    // Calculate diff stats if document was applied
+    let diffStats = { added: 0, modified: 0, deleted: 0 }
+    if (documentApplied) {
+      const beforeLines = (this.state.contentBeforeSubmit || '').split('\n').length
+      const afterLines = this.state.content.split('\n').length
+      diffStats = {
+        added: Math.max(0, afterLines - beforeLines),
+        deleted: Math.max(0, beforeLines - afterLines),
+        modified: appliedChanges.length > 0 ? appliedChanges.length : 1
+      }
+    }
+
+    // Generate summary for structured changes
+    let effectiveSummary = summary
+    if (!effectiveSummary && appliedChanges.length > 0) {
+      effectiveSummary = `Applied ${appliedChanges.length} change(s) to document`
+    }
 
     // Create response entry
     const responseEntry = {
       id: this.generateResponseId(),
       timestamp: new Date().toISOString(),
       prompt,
-      summary: parsed.changeSummary,
-      questions: parsed.questions,
-      fullResponse: parsed.fullResponse,
-      diffStats: documentApplied ? parsed.diffStats : { added: 0, modified: 0, deleted: 0 },
-      validationErrors: allValidationErrors,
+      summary: effectiveSummary || (documentApplied ? 'Document updated' : (questions.length > 0 ? 'Clarification needed' : 'No changes')),
+      questions,
+      fullResponse: rawResponse,
+      diffStats,
+      validationErrors,
+      appliedChanges: appliedChanges.length,
+      failedChanges: failedChanges.length,
       model: this.state.selectedModel,
       collapsed: false,
       documentApplied
     }
 
-    // Update current response
+    // Update state
     this.state.currentResponse = responseEntry
+    this.state.pendingQuestions = questions.filter(q => !q.answered)
+    // Response shown in bottom panel, not modal
 
-    // Add to session manager and persist
+    // Add to history
     if (this.sessionManager.isLoaded()) {
       await this.sessionManager.addResponse(responseEntry)
-      // Update history from session
       this.state.responseHistory = this.sessionManager.getResponses()
     } else {
-      // Fallback: add to local history
       this.state.responseHistory.unshift(responseEntry)
       if (this.state.responseHistory.length > 50) {
         this.state.responseHistory = this.state.responseHistory.slice(0, 50)
       }
     }
 
-    // Update pending questions
-    this.state.pendingQuestions = parsed.questions.filter(q => !q.answered)
-
-    console.log('[DocumentEditorView] Processed AI response:', {
-      summaryLength: parsed.changeSummary?.length,
-      questionCount: parsed.questions?.length,
-      diffStats: parsed.diffStats,
+    console.log('[DocumentEditorView] Response processed:', {
+      hasQuestions: questions.length > 0,
       documentApplied,
-      validationPassed: clientValidationResult?.valid ?? true
+      summary: summary?.substring(0, 50)
     })
 
-    // Compute and track changes for highlighting (Story 3)
+    // Track changes for highlighting
     if (documentApplied) {
       this.computeAndTrackChanges()
     }
 
-    // Update the response area
-    this.updateResponseContent()
+    // Render to show modal
+    this.render()
 
-    // Attach event listeners for questions
-    this.attachQuestionListeners()
-
-    // Trigger auto-save if document was applied and auto-save is enabled
+    // Auto-save if enabled
     if (documentApplied && this.state.autoSaveEnabled && this.state.currentFile) {
       this.scheduleAutoSave()
     }
+  }
+
+  /**
+   * Extract questions from Claude's response
+   * Looks for ## Questions section with numbered items
+   * @param {string} response - Raw response text
+   * @returns {Array} Array of question objects
+   */
+  extractQuestions(response) {
+    if (!response) return []
+
+    const questions = []
+    const questionsMatch = response.match(/##\s*Questions?\s*\n([\s\S]*?)(?=##|$)/i)
+
+    if (questionsMatch) {
+      const questionsText = questionsMatch[1].trim()
+      // Parse numbered or bulleted questions
+      const lines = questionsText.split('\n')
+        .map(l => l.replace(/^[\d\-*.)]+\s*/, '').trim())
+        .filter(l => l.length > 0 && l.endsWith('?'))
+
+      lines.forEach((q, i) => {
+        questions.push({
+          id: `q-${Date.now()}-${i}`,
+          question: q,
+          answered: false,
+          answer: null
+        })
+      })
+    }
+
+    return questions
+  }
+
+  /**
+   * Extract summary from Claude's response
+   * @param {string} response - Raw response text
+   * @returns {string|null} Summary text or null
+   */
+  extractSummary(response) {
+    if (!response) return null
+
+    const summaryMatch = response.match(/##\s*Summary\s*\n([\s\S]*?)(?=##|$)/i)
+    if (summaryMatch) {
+      return summaryMatch[1].trim()
+    }
+    return null
   }
 
   /**
@@ -1172,27 +1678,33 @@ export class DocumentEditorView {
    * Attach event listeners for question inputs and reply buttons
    */
   attachQuestionListeners() {
-    // Reply buttons
-    this.container.querySelectorAll('.document-editor-question-reply-btn').forEach(btn => {
-      const handler = (e) => {
-        const questionId = e.currentTarget.dataset.questionId
-        const responseId = e.currentTarget.dataset.responseId
-        this.handleQuestionReply(responseId, questionId)
-      }
-      this.addTrackedListener(btn, 'click', handler)
-    })
-
-    // Question inputs - Enter key to submit
+    // Question inputs - store values in state for persistence
     this.container.querySelectorAll('.document-editor-question-input').forEach(input => {
-      const handler = (e) => {
+      // Input handler to persist values
+      const inputHandler = (e) => {
+        const questionId = e.currentTarget.dataset.questionId
+        this.state.pendingAnswers[questionId] = e.currentTarget.value
+      }
+      this.addTrackedListener(input, 'input', inputHandler)
+
+      // Keydown handler - Enter submits all answers
+      const keyHandler = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault()
-          const questionId = e.currentTarget.dataset.questionId
           const responseId = e.currentTarget.dataset.responseId
-          this.handleQuestionReply(responseId, questionId)
+          this.handleSubmitAllAnswers(responseId)
         }
       }
-      this.addTrackedListener(input, 'keydown', handler)
+      this.addTrackedListener(input, 'keydown', keyHandler)
+    })
+
+    // Submit all answers button
+    this.container.querySelectorAll('.document-editor-submit-all-answers-btn').forEach(btn => {
+      const handler = () => {
+        const responseId = btn.dataset.responseId
+        this.handleSubmitAllAnswers(responseId)
+      }
+      this.addTrackedListener(btn, 'click', handler)
     })
 
     // Response collapse buttons
@@ -1203,6 +1715,184 @@ export class DocumentEditorView {
       }
       this.addTrackedListener(btn, 'click', handler)
     })
+
+    // Questions modal event listeners
+    this.attachModalListeners()
+  }
+
+  /**
+   * Attach event listeners for the response modal
+   */
+  attachModalListeners() {
+    // Close modal buttons and overlay
+    this.container.querySelectorAll('[data-action="close-response-modal"]').forEach(el => {
+      const handler = () => this.closeResponseModal()
+      this.addTrackedListener(el, 'click', handler)
+    })
+
+    // Modal question inputs - Enter key to submit
+    this.container.querySelectorAll('.document-editor-modal-question-input').forEach(input => {
+      const keyHandler = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          const questionId = e.currentTarget.dataset.questionId
+          const responseId = e.currentTarget.dataset.responseId
+          this.handleModalQuestionReply(responseId, questionId)
+        }
+      }
+      this.addTrackedListener(input, 'keydown', keyHandler)
+    })
+
+    // Modal reply buttons
+    this.container.querySelectorAll('.document-editor-modal-reply-btn').forEach(btn => {
+      const handler = () => {
+        const questionId = btn.dataset.questionId
+        const responseId = btn.dataset.responseId
+        this.handleModalQuestionReply(responseId, questionId)
+      }
+      this.addTrackedListener(btn, 'click', handler)
+    })
+
+    // Focus the first input in the modal
+    if (this.state.showResponseModal) {
+      const firstInput = this.container.querySelector('.document-editor-modal-question-input')
+      if (firstInput) {
+        setTimeout(() => firstInput.focus(), 100)
+      }
+    }
+  }
+
+  /**
+   * Close the response modal
+   */
+  closeResponseModal() {
+    this.state.showResponseModal = false
+    this.render()
+  }
+
+  /**
+   * Handle answering a question from the modal
+   * When all questions are answered, submits answers to Claude
+   * @param {string} responseId - Response ID containing the question
+   * @param {string} questionId - Question ID to answer
+   */
+  async handleModalQuestionReply(responseId, questionId) {
+    const input = this.container.querySelector(
+      `.document-editor-modal-question-input[data-question-id="${questionId}"]`
+    )
+    if (!input) return
+
+    const answer = input.value.trim()
+    if (!answer) return
+
+    console.log('[DocumentEditorView] Answering question from modal:', { responseId, questionId, answer })
+
+    // Mark this question as answered
+    if (this.state.currentResponse?.id === responseId) {
+      const question = this.state.currentResponse.questions?.find(q => q.id === questionId)
+      if (question) {
+        question.answer = answer
+        question.answered = true
+        question.answeredAt = new Date().toISOString()
+      }
+    }
+
+    // Update session manager
+    if (this.sessionManager.isLoaded()) {
+      await this.sessionManager.answerQuestion(responseId, questionId, answer)
+      this.state.responseHistory = this.sessionManager.getResponses()
+    }
+
+    // Update pending questions
+    this.state.pendingQuestions = this.state.pendingQuestions.filter(q => q.id !== questionId)
+
+    // Check if all questions are now answered
+    const unanswered = this.state.currentResponse?.questions?.filter(q => !q.answered) || []
+
+    if (unanswered.length === 0) {
+      // All questions answered - submit to Claude with the answers
+      await this.submitQuestionAnswers()
+    } else {
+      // Still have unanswered questions - just re-render to show updated state
+      this.render()
+    }
+  }
+
+  /**
+   * Submit all answered questions to Claude as a follow-up
+   * Formats the Q&A and sends to Claude to continue the task
+   */
+  async submitQuestionAnswers() {
+    if (!this.state.currentResponse?.questions) return
+
+    const questions = this.state.currentResponse.questions
+    const originalPrompt = this.state.currentResponse.prompt
+
+    // Format the answers as a follow-up prompt
+    const answersText = questions
+      .map(q => `Q: ${q.question}\nA: ${q.answer}`)
+      .join('\n\n')
+
+    const followUpPrompt = `Here are my answers to your questions:\n\n${answersText}\n\nPlease proceed with the original request: ${originalPrompt}`
+
+    console.log('[DocumentEditorView] Submitting answers to Claude')
+
+    // Close modal and show loading state
+    this.state.showResponseModal = false
+    this.state.isSubmitting = true
+    this.state.contentBeforeSubmit = this.state.content
+
+    // Record baseline for change tracking
+    this.changeTracker.recordBaseline(this.state.content)
+
+    this.render()
+
+    try {
+      // Submit the follow-up to Claude
+      const result = await this.promptService.submit({
+        filename: this.getDisplayFilename(),
+        filePath: this.state.currentFile,
+        extension: this.state.extension,
+        content: this.state.content,
+        userPrompt: followUpPrompt,
+        model: this.state.selectedModel,
+        thinkingBudget: this.state.thinkingBudget,
+        contextFiles: this.state.contextFiles.map(f => ({
+          name: f.name,
+          path: f.path,
+          extension: f.extension,
+          content: f.content
+        })),
+        branchId: 'plugin',
+        sessionId: null
+      })
+
+      // Process the response
+      await this.processAIResponse(result, followUpPrompt)
+
+    } catch (error) {
+      console.error('[DocumentEditorView] Error submitting answers:', error)
+
+      // Show error in modal
+      this.state.currentResponse = {
+        id: this.generateResponseId(),
+        timestamp: new Date().toISOString(),
+        prompt: followUpPrompt,
+        summary: `Error: ${error.message}`,
+        questions: [],
+        fullResponse: error.message,
+        diffStats: { added: 0, modified: 0, deleted: 0 },
+        validationErrors: [],
+        model: this.state.selectedModel,
+        collapsed: false,
+        documentApplied: false
+      }
+      this.state.showResponseModal = true
+      this.render()
+    } finally {
+      this.state.isSubmitting = false
+      this.updatePromptUI()
+    }
   }
 
   /**
@@ -1254,6 +1944,76 @@ export class DocumentEditorView {
     // Re-render response content
     this.updateResponseContent()
     this.attachQuestionListeners()
+  }
+
+  /**
+   * Handle submitting all answers at once
+   * @param {string} responseId - Response ID containing the questions
+   */
+  async handleSubmitAllAnswers(responseId) {
+    // Find the response
+    const response = this.state.currentResponse?.id === responseId
+      ? this.state.currentResponse
+      : this.state.responseHistory.find(r => r.id === responseId)
+
+    if (!response || !response.questions) return
+
+    // Get unanswered questions
+    const unansweredQuestions = response.questions.filter(q => !q.answered)
+    if (unansweredQuestions.length === 0) return
+
+    // Collect answers from pending state
+    const answeredQuestions = []
+    for (const q of unansweredQuestions) {
+      const answer = (this.state.pendingAnswers[q.id] || '').trim()
+      if (answer) {
+        answeredQuestions.push({ question: q, answer })
+      }
+    }
+
+    // Check if we have any answers to submit
+    if (answeredQuestions.length === 0) {
+      console.warn('[DocumentEditorView] No answers provided')
+      return
+    }
+
+    console.log('[DocumentEditorView] Submitting all answers:', answeredQuestions.length)
+
+    // Mark questions as answered
+    for (const { question, answer } of answeredQuestions) {
+      question.answer = answer
+      question.answered = true
+      question.answeredAt = new Date().toISOString()
+
+      // Update session manager
+      if (this.sessionManager.isLoaded()) {
+        await this.sessionManager.answerQuestion(responseId, question.id, answer)
+      }
+
+      // Remove from pending
+      delete this.state.pendingAnswers[question.id]
+    }
+
+    // Update state
+    this.state.responseHistory = this.sessionManager.getResponses()
+    this.state.pendingQuestions = this.state.pendingQuestions.filter(
+      q => !answeredQuestions.some(aq => aq.question.id === q.id)
+    )
+
+    // Build follow-up prompt with all answers
+    const answersText = answeredQuestions.map(
+      ({ question, answer }) => `Q: ${question.question}\nA: ${answer}`
+    ).join('\n\n')
+
+    const followUpPrompt = `Here are my answers to your questions:\n\n${answersText}\n\nPlease proceed with the document changes based on these answers.`
+
+    // Re-render to show answered state
+    this.updateResponseContent()
+    this.attachQuestionListeners()
+
+    // Submit follow-up prompt to Claude
+    this.state.promptText = followUpPrompt
+    await this.handleAskAI()
   }
 
   /**
@@ -1492,23 +2252,35 @@ export class DocumentEditorView {
       case 'toggle-response':
         this.toggleResponseArea()
         break
+      case 'search-next':
+        this.searchNext()
+        break
+      case 'search-prev':
+        this.searchPrev()
+        break
+      case 'search-clear':
+        this.clearSearch()
+        break
+      case 'undo':
+        this.handleUndo()
+        break
     }
   }
 
   /**
-   * Toggle response area collapsed/expanded
+   * Toggle response panel collapsed/expanded
    */
   toggleResponseArea() {
     this.state.responseCollapsed = !this.state.responseCollapsed
 
-    const responseArea = this.container.querySelector('.document-editor-response-area')
+    const responsePanel = this.container.querySelector('.document-editor-response-panel')
     const toggleIcon = this.container.querySelector('.document-editor-toggle-icon')
 
-    if (responseArea) {
-      responseArea.classList.toggle('collapsed', this.state.responseCollapsed)
+    if (responsePanel) {
+      responsePanel.classList.toggle('collapsed', this.state.responseCollapsed)
     }
     if (toggleIcon) {
-      toggleIcon.textContent = this.state.responseCollapsed ? '▶' : '▼'
+      toggleIcon.textContent = this.state.responseCollapsed ? '◀' : '▶'
     }
   }
 
@@ -1821,7 +2593,7 @@ export class DocumentEditorView {
   }
 
   /**
-   * Update line numbers with optional change markers
+   * Update line numbers with optional change markers and search highlights
    */
   updateLineNumbers() {
     const lineNumbers = this.container.querySelector('.document-editor-line-numbers')
@@ -1830,11 +2602,25 @@ export class DocumentEditorView {
     const lines = (this.state.content || '').split('\n').length
     const showChanges = this.state.highlightChangesEnabled && this.changeTracker.hasChanges()
 
+    // Build set of lines with search matches
+    const searchMatchLines = new Set()
+    const currentMatchLine = this.state.searchMatches[this.state.currentMatchIndex]?.line
+    this.state.searchMatches.forEach(m => searchMatchLines.add(m.line))
+
     lineNumbers.innerHTML = Array.from({ length: lines }, (_, i) => {
       const lineNum = i + 1
+      const lineIndex = i
+
+      // Change tracking
       const changeType = showChanges ? this.changeTracker.getChangeForLine(lineNum) : null
       const changeClass = changeType ? ` change-${changeType}` : ''
-      return `<div class="document-editor-line-number${changeClass}">${lineNum}</div>`
+
+      // Search highlighting
+      const hasMatch = searchMatchLines.has(lineIndex)
+      const isCurrentMatch = lineIndex === currentMatchLine
+      const searchClass = isCurrentMatch ? ' search-current' : (hasMatch ? ' search-match' : '')
+
+      return `<div class="document-editor-line-number${changeClass}${searchClass}">${lineNum}</div>`
     }).join('')
   }
 
@@ -1968,6 +2754,120 @@ export class DocumentEditorView {
    */
   onActivate() {
     console.log('[DocumentEditorView] onActivate()')
+  }
+
+  /**
+   * Push current document state onto the undo stack
+   * Called before AI makes changes to enable reverting
+   */
+  pushUndoState() {
+    const state = {
+      content: this.state.content,
+      timestamp: new Date().toISOString()
+    }
+
+    // Add to stack
+    this.state.undoStack.push(state)
+
+    // Trim stack if over max size
+    if (this.state.undoStack.length > this.state.maxUndoStates) {
+      this.state.undoStack.shift()
+    }
+
+    console.log('[DocumentEditorView] Pushed undo state, stack size:', this.state.undoStack.length)
+  }
+
+  /**
+   * Handle undo action
+   * If text is selected, restore only that portion from previous state
+   * If no selection, restore the entire document
+   */
+  handleUndo() {
+    if (this.state.undoStack.length === 0) {
+      console.log('[DocumentEditorView] Undo stack is empty')
+      return
+    }
+
+    const textarea = this.container.querySelector('.document-editor-textarea')
+    if (!textarea) return
+
+    // Get selection range
+    const selectionStart = textarea.selectionStart
+    const selectionEnd = textarea.selectionEnd
+    const hasSelection = selectionStart !== selectionEnd
+
+    // Pop the last state
+    const previousState = this.state.undoStack.pop()
+
+    if (hasSelection) {
+      // Selection-aware undo: restore only the selected portion
+      const previousContent = previousState.content
+      const currentContent = this.state.content
+
+      // Calculate line ranges for the selection
+      const currentLines = currentContent.split('\n')
+      const previousLines = previousContent.split('\n')
+
+      // Find line number for selection start
+      let charCount = 0
+      let startLine = 0
+      for (let i = 0; i < currentLines.length; i++) {
+        if (charCount + currentLines[i].length >= selectionStart) {
+          startLine = i
+          break
+        }
+        charCount += currentLines[i].length + 1 // +1 for newline
+      }
+
+      // Find line number for selection end
+      charCount = 0
+      let endLine = 0
+      for (let i = 0; i < currentLines.length; i++) {
+        if (charCount + currentLines[i].length >= selectionEnd) {
+          endLine = i
+          break
+        }
+        charCount += currentLines[i].length + 1
+      }
+
+      // Check if we can restore these lines from previous state
+      if (startLine < previousLines.length && endLine < previousLines.length) {
+        // Replace the selected lines with previous version
+        const beforeSelection = currentLines.slice(0, startLine)
+        const afterSelection = currentLines.slice(endLine + 1)
+        const restoredLines = previousLines.slice(startLine, endLine + 1)
+
+        const newContent = [
+          ...beforeSelection,
+          ...restoredLines,
+          ...afterSelection
+        ].join('\n')
+
+        this.state.content = newContent
+        textarea.value = newContent
+
+        console.log('[DocumentEditorView] Restored lines', startLine, 'to', endLine, 'from previous state')
+      } else {
+        // Selection extends beyond previous content, fall back to full restore
+        this.state.content = previousContent
+        textarea.value = previousContent
+        console.log('[DocumentEditorView] Selection extends beyond previous content, full restore')
+      }
+    } else {
+      // No selection: restore entire document
+      this.state.content = previousState.content
+      textarea.value = previousState.content
+      console.log('[DocumentEditorView] Restored entire document from previous state')
+    }
+
+    // Mark as modified and update display
+    this.state.isModified = true
+    this.updateHighlighting()
+    this.updateLineNumbers()
+    this.updateSaveIndicator()
+
+    // Update undo button state
+    this.render()
   }
 
   /**

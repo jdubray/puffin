@@ -523,6 +523,8 @@ const DocumentEditorPlugin = {
   /**
    * Get the prompt harness configuration
    * Loads from config/prompt-harness.json and caches it
+   * Template fields support both string and array formats for readability.
+   * Arrays are joined with newlines when loaded.
    * @returns {Promise<Object>} Harness configuration
    */
   async getHarnessConfig() {
@@ -535,7 +537,24 @@ const DocumentEditorPlugin = {
       // Load config from plugin's config directory
       const configPath = path.join(__dirname, 'config', 'prompt-harness.json')
       const configData = await fs.readFile(configPath, 'utf-8')
-      this.harnessConfig = JSON.parse(configData)
+      const rawConfig = JSON.parse(configData)
+
+      // Process array-based template fields into strings (for readability in JSON)
+      // This allows template strings to be written as arrays of lines
+      const templateFields = [
+        'systemPromptTemplate',
+        'validationInstructions',
+        'summaryInstructions',
+        'contextFileTemplate'
+      ]
+
+      for (const field of templateFields) {
+        if (Array.isArray(rawConfig[field])) {
+          rawConfig[field] = rawConfig[field].join('\n')
+        }
+      }
+
+      this.harnessConfig = rawConfig
 
       this.context.log.info('Loaded prompt harness configuration')
       return { config: this.harnessConfig }

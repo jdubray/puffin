@@ -43,7 +43,8 @@
       "Bash(for f in /mnt/c/Users/jjdub/code/puffin/plugins/calendar/renderer/components/*.js)",
       "Bash(do echo \"Checking $f\")",
       "Bash(echo:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(git restore:*)"
     ]
   }
 }

@@ -130,7 +130,7 @@ async function loadHighlightJs() {
 }
 
 // Import services
-import { DocumentEditorPromptService, ResponseParser, SessionManager, ChangeTracker, SyntaxValidator, DocumentMerger } from '../services/index.js'
+import { DocumentEditorPromptService, ResponseParser, SessionManager, ChangeTracker, SyntaxValidator, DocumentMerger, MarkerUtils } from '../services/index.js'
 
 export class DocumentEditorView {
   /**
@@ -157,12 +157,11 @@ export class DocumentEditorView {
       error: null,
       responseCollapsed: false,
       responseContent: '',
-      // AI prompt state
+      // AI prompt state (uses inline /@puffin: markers instead of textarea)
       selectedModel: 'haiku',
       thinkingBudget: 'none',
       contextFiles: [],           // Array of { type: 'gui'|'doc', path, name, content }
       isSubmitting: false,
-      promptText: '',
       // Response handling state (Story 2)
       responseHistory: [],        // Array of parsed response objects
       currentResponse: null,      // Most recent response being displayed
@@ -181,7 +180,9 @@ export class DocumentEditorView {
       undoStack: [],              // Stack of previous document states
       maxUndoStates: 20,          // Maximum undo history
       // Question answers state (persists across re-renders)
-      pendingAnswers: {}          // Map of questionId -> answer text
+      pendingAnswers: {},         // Map of questionId -> answer text
+      // Cached marker count (updated when content changes to avoid redundant regex parsing)
+      cachedMarkerCount: 0
     }
 
     // Auto-save timer
@@ -273,6 +274,8 @@ export class DocumentEditorView {
 
     const hasFile = !!this.state.currentFile
     const responseCollapsed = this.state.responseCollapsed
+    // Count inline Puffin markers in the document content
+    const markerCount = hasFile ? MarkerUtils.countMarkers(this.state.content) : 0
 
     this.container.innerHTML = `
       <div class="document-editor-wrapper">
@@ -294,6 +297,14 @@ export class DocumentEditorView {
             <button class="document-editor-btn" data-action="undo" title="Undo last AI edit" aria-label="Undo last AI change" ${!hasFile || this.state.undoStack.length === 0 ? 'disabled' : ''}>
               <span class="document-editor-btn-icon" aria-hidden="true">↩️</span>
               <span class="document-editor-btn-text">Undo AI</span>
+            </button>
+            <button class="document-editor-btn document-editor-insert-marker-btn" data-action="insert-marker" title="Insert Puffin marker at cursor (Ctrl+M)" aria-label="Insert Puffin marker" ${!hasFile ? 'disabled' : ''}>
+              <span class="document-editor-btn-icon" aria-hidden="true">🐧</span>
+              <span class="document-editor-btn-text">Insert Marker</span>
+            </button>
+            <button class="document-editor-btn document-editor-clean-markers-btn" data-action="clean-markers" title="Remove all Puffin markers from document" aria-label="Clean all markers" ${!hasFile ? 'disabled' : ''}>
+              <span class="document-editor-btn-icon" aria-hidden="true">🧹</span>
+              <span class="document-editor-btn-text">Clean Markers</span>
             </button>
           </div>
           <div class="document-editor-toolbar-center">
@@ -401,26 +412,27 @@ export class DocumentEditorView {
             `).join('')}
           </div>
           ` : ''}
-          <!-- Prompt Input Row -->
-          <div class="document-editor-prompt-input-row">
-            <textarea
-              class="document-editor-prompt-input"
-              placeholder="Describe changes to make... (Ctrl+Enter to send)"
-              rows="6"
-              ${!hasFile || this.state.isSubmitting ? 'disabled' : ''}
-            >${this.escapeHtml(this.state.promptText)}</textarea>
-            <button class="document-editor-btn document-editor-btn-primary document-editor-prompt-btn ${this.state.isSubmitting ? 'submitting' : ''}"
-                    aria-label="Send prompt to Claude"
-                    ${!hasFile || this.state.isSubmitting ? 'disabled' : ''}>
-              ${this.state.isSubmitting ? `
-                <span class="document-editor-btn-spinner"></span>
-                <span>Sending...</span>
-              ` : `
-                <span class="document-editor-btn-icon">🚀</span>
-                <span class="document-editor-btn-text">Send</span>
-              `}
-            </button>
+          <!-- Marker Count and Send Button (inline markers replace textarea) -->
+          <div class="document-editor-marker-indicator ${markerCount > 0 ? 'has-markers' : ''}">
+            ${markerCount > 0 ? `
+              <span class="puffin-marker-count">${markerCount} marker${markerCount !== 1 ? 's' : ''}</span>
+              <span class="document-editor-marker-hint">ready to process</span>
+            ` : `
+              <span class="document-editor-marker-hint">Add <code>/@puffin: instruction //</code> markers in your document</span>
+            `}
           </div>
+          <button class="document-editor-btn document-editor-btn-primary document-editor-prompt-btn ${this.state.isSubmitting ? 'submitting' : ''}"
+                  aria-label="Process inline markers with Claude"
+                  title="${markerCount > 0 ? `Process ${markerCount} marker${markerCount !== 1 ? 's' : ''} with Claude` : 'No markers found in document'}"
+                  ${!hasFile || this.state.isSubmitting || markerCount === 0 ? 'disabled' : ''}>
+            ${this.state.isSubmitting ? `
+              <span class="document-editor-btn-spinner"></span>
+              <span>Processing...</span>
+            ` : `
+              <span class="document-editor-btn-icon">🐧</span>
+              <span class="document-editor-btn-text">Process Markers</span>
+            `}
+          </button>
         </div>
       </div>
       ${this.renderResponseModal()}
@@ -982,28 +994,14 @@ export class DocumentEditorView {
       const inputHandler = this.handleInput.bind(this)
       const scrollHandler = this.syncScroll.bind(this)
       const keydownHandler = this.handleKeyDown.bind(this)
+      const contextMenuHandler = this.handleContextMenu.bind(this)
       this.addTrackedListener(textarea, 'input', inputHandler)
       this.addTrackedListener(textarea, 'scroll', scrollHandler)
       this.addTrackedListener(textarea, 'keydown', keydownHandler)
+      this.addTrackedListener(textarea, 'contextmenu', contextMenuHandler)
     }
 
-    // AI prompt input - Ctrl+Enter (or Cmd+Enter on Mac) to submit
-    const promptInput = this.container.querySelector('.document-editor-prompt-input')
-    if (promptInput) {
-      const keyHandler = (e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-          e.preventDefault()
-          this.handleAskAI()
-        }
-      }
-      const inputHandler = (e) => {
-        this.state.promptText = e.target.value
-      }
-      this.addTrackedListener(promptInput, 'keydown', keyHandler)
-      this.addTrackedListener(promptInput, 'input', inputHandler)
-    }
-
-    // AI Send button
+    // AI Send button (processes inline markers)
     const askBtn = this.container.querySelector('.document-editor-prompt-btn')
     if (askBtn) {
       const handler = () => this.handleAskAI()
@@ -1255,16 +1253,28 @@ export class DocumentEditorView {
   }
 
   /**
-   * Handle AI prompt submission
+   * Handle AI prompt submission using inline markers
+   * Extracts all /@puffin: ... // markers from the document and combines them
+   * into a single prompt for Claude to process holistically.
    */
   async handleAskAI() {
-    const promptInput = this.container.querySelector('.document-editor-prompt-input')
-    const prompt = this.state.promptText?.trim() || promptInput?.value?.trim()
+    if (!this.state.currentFile || this.state.isSubmitting) return
 
-    if (!prompt || !this.state.currentFile || this.state.isSubmitting) return
+    // Find all inline markers in the document
+    const markers = MarkerUtils.findAllMarkers(this.state.content)
+    if (markers.length === 0) {
+      console.log('[DocumentEditorView] No markers found in document')
+      return
+    }
 
-    console.log('[DocumentEditorView] Submitting AI prompt:', {
-      prompt,
+    // Combine all marker prompts into a single request
+    // The prompt harness in config/prompt-harness.json instructs Claude
+    // to process all markers holistically and remove them when applying edits
+    const combinedPrompt = MarkerUtils.combinePrompts(this.state.content)
+
+    console.log('[DocumentEditorView] Processing inline markers:', {
+      markerCount: markers.length,
+      combinedPromptLength: combinedPrompt.length,
       model: this.state.selectedModel,
       thinkingBudget: this.state.thinkingBudget,
       contextFiles: this.state.contextFiles.length
@@ -1278,7 +1288,6 @@ export class DocumentEditorView {
 
     // Set submitting state and update UI
     this.state.isSubmitting = true
-    this.state.promptText = ''
     this.updatePromptUI()
 
     // Ensure response area is expanded
@@ -1290,13 +1299,14 @@ export class DocumentEditorView {
     this.updateResponseContent()
 
     try {
-      // Submit via the prompt service
+      // Submit via the prompt service with combined marker prompts
+      // The document content includes the markers; Claude will process them holistically
       const result = await this.promptService.submit({
         filename: this.getDisplayFilename(),
         filePath: this.state.currentFile,
         extension: this.state.extension,
         content: this.state.content,
-        userPrompt: prompt,
+        userPrompt: combinedPrompt,
         model: this.state.selectedModel,
         thinkingBudget: this.state.thinkingBudget,
         contextFiles: this.state.contextFiles.map(f => ({
@@ -1310,16 +1320,18 @@ export class DocumentEditorView {
       })
 
       // Process the response using ResponseParser
-      await this.processAIResponse(result, prompt)
+      // Note: We pass the combined prompt for display in the response history
+      await this.processAIResponse(result, `[${markers.length} inline marker${markers.length !== 1 ? 's' : ''}] ${combinedPrompt.substring(0, 100)}${combinedPrompt.length > 100 ? '...' : ''}`)
 
     } catch (error) {
       console.error('[DocumentEditorView] AI submission error:', error)
 
       // Create an error response entry
+      const promptDisplay = `[${markers.length} inline marker${markers.length !== 1 ? 's' : ''}]`
       const errorResponse = {
         id: this.generateResponseId(),
         timestamp: new Date().toISOString(),
-        prompt,
+        prompt: promptDisplay,
         summary: `Error: ${error.message}`,
         questions: [],
         fullResponse: error.message,
@@ -2074,32 +2086,56 @@ export class DocumentEditorView {
    * Update prompt UI elements without full re-render
    */
   updatePromptUI() {
-    const promptInput = this.container.querySelector('.document-editor-prompt-input')
     const sendBtn = this.container.querySelector('.document-editor-prompt-btn')
     const modelSelector = this.container.querySelector('.document-editor-model-selector')
     const thinkingSelector = this.container.querySelector('.document-editor-thinking-selector')
     const addContextBtn = this.container.querySelector('.document-editor-add-context-btn')
+    const markerIndicator = this.container.querySelector('.document-editor-marker-indicator')
+    const markerCountEl = this.container.querySelector('.puffin-marker-count')
+    const markerHintEl = this.container.querySelector('.document-editor-marker-hint')
 
     const hasFile = !!this.state.currentFile
+    const markerCount = hasFile ? MarkerUtils.countMarkers(this.state.content) : 0
     const disabled = !hasFile || this.state.isSubmitting
 
-    if (promptInput) {
-      promptInput.disabled = disabled
-      promptInput.value = this.state.promptText
+    // Update marker indicator
+    if (markerIndicator) {
+      markerIndicator.classList.toggle('has-markers', markerCount > 0)
+    }
+    if (markerCountEl) {
+      markerCountEl.textContent = `${markerCount} marker${markerCount !== 1 ? 's' : ''}`
+      markerCountEl.style.display = markerCount > 0 ? '' : 'none'
+    }
+    if (markerHintEl) {
+      if (markerCount > 0) {
+        markerHintEl.textContent = 'ready to process'
+      } else {
+        // Use DOM manipulation instead of innerHTML for security best practices
+        markerHintEl.textContent = ''
+        markerHintEl.appendChild(document.createTextNode('Add '))
+        const codeEl = document.createElement('code')
+        codeEl.textContent = '/@puffin: instruction //'
+        markerHintEl.appendChild(codeEl)
+        markerHintEl.appendChild(document.createTextNode(' markers in your document'))
+      }
     }
 
+    // Update send button - disabled when no markers or submitting
     if (sendBtn) {
-      sendBtn.disabled = disabled
+      sendBtn.disabled = disabled || markerCount === 0
       sendBtn.classList.toggle('submitting', this.state.isSubmitting)
+      sendBtn.title = markerCount > 0
+        ? `Process ${markerCount} marker${markerCount !== 1 ? 's' : ''} with Claude`
+        : 'No markers found in document'
       if (this.state.isSubmitting) {
         sendBtn.innerHTML = `
           <span class="document-editor-btn-spinner"></span>
-          <span>Sending...</span>
+          <span>Processing...</span>
         `
       } else {
         sendBtn.innerHTML = `
-          <span class="document-editor-btn-icon">🚀</span>
-          <span class="document-editor-btn-text">Send</span>
+          <span class="document-editor-btn-icon">🐧</span>
+          <span class="document-editor-btn-text">Process Markers</span>
         `
       }
     }
@@ -2263,6 +2299,12 @@ export class DocumentEditorView {
         break
       case 'undo':
         this.handleUndo()
+        break
+      case 'insert-marker':
+        this.insertMarker()
+        break
+      case 'clean-markers':
+        this.handleCleanMarkers()
         break
     }
   }
@@ -2464,6 +2506,8 @@ export class DocumentEditorView {
     this.scheduleHighlighting()
     this.updateLineNumbers()
     this.updateSaveIndicator()
+    // Update marker indicator when content changes
+    this.updatePromptUI()
 
     if (this.state.autoSaveEnabled && this.state.currentFile) {
       this.scheduleAutoSave()
@@ -2499,6 +2543,12 @@ export class DocumentEditorView {
       textarea.value = this.state.content.substring(0, start) + spaces + this.state.content.substring(end)
       textarea.selectionStart = textarea.selectionEnd = start + spaces.length
       this.handleInput({ target: textarea })
+    }
+
+    // Ctrl+M (or Cmd+M on Mac) inserts a Puffin marker
+    if (e.key === 'm' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      this.insertMarker()
     }
   }
 
@@ -2551,6 +2601,7 @@ export class DocumentEditorView {
   /**
    * Update syntax highlighting
    * Uses highlight.js to apply language-specific syntax highlighting
+   * Also applies Puffin marker highlighting for /@puffin: ... // markers
    */
   updateHighlighting() {
     const highlightCode = this.container.querySelector('.document-editor-highlight-layer code')
@@ -2558,9 +2609,11 @@ export class DocumentEditorView {
 
     const content = this.state.content || ''
 
-    // If highlight.js is not loaded, show plain text
+    // If highlight.js is not loaded, show plain text with marker highlighting
     if (!this.hljs) {
-      highlightCode.textContent = content + '\n'
+      const escapedContent = this.escapeHtml(content)
+      const withMarkers = this.applyMarkerHighlighting(escapedContent)
+      highlightCode.innerHTML = withMarkers + '\n'
       highlightCode.className = ''
       return
     }
@@ -2576,20 +2629,43 @@ export class DocumentEditorView {
           ignoreIllegals: true
         })
         // Sanitize hljs output to only allow safe span elements with hljs-* classes
-        const sanitizedHtml = this.sanitizeHighlightOutput(result.value)
+        let sanitizedHtml = this.sanitizeHighlightOutput(result.value)
+        // Apply Puffin marker highlighting on top of syntax highlighting
+        sanitizedHtml = this.applyMarkerHighlighting(sanitizedHtml)
         highlightCode.innerHTML = sanitizedHtml + '\n'
         highlightCode.className = `hljs language-${language}`
       } else {
-        // Plain text - no highlighting needed
-        highlightCode.textContent = content + '\n'
+        // Plain text - apply marker highlighting
+        const escapedContent = this.escapeHtml(content)
+        const withMarkers = this.applyMarkerHighlighting(escapedContent)
+        highlightCode.innerHTML = withMarkers + '\n'
         highlightCode.className = 'hljs'
       }
     } catch (error) {
-      // Fallback to plain text on error
+      // Fallback to plain text on error, still apply marker highlighting
       console.warn('[DocumentEditorView] Highlighting failed:', error.message)
-      highlightCode.textContent = content + '\n'
+      const escapedContent = this.escapeHtml(content)
+      const withMarkers = this.applyMarkerHighlighting(escapedContent)
+      highlightCode.innerHTML = withMarkers + '\n'
       highlightCode.className = 'hljs'
     }
+  }
+
+  /**
+   * Apply Puffin marker highlighting to HTML content
+   * Wraps /@puffin: ... // markers with span.puffin-marker for visual distinction
+   * @param {string} html - HTML content (escaped or from highlight.js)
+   * @returns {string} HTML with markers wrapped in highlighting spans
+   */
+  applyMarkerHighlighting(html) {
+    if (!html) return html
+
+    // Pattern to match Puffin markers in the HTML
+    // Note: The content may have HTML entities, so we need to handle both
+    // raw text and entity-encoded versions
+    const markerPattern = /(\/@puffin:[\s\S]*?\/\/)/g
+
+    return html.replace(markerPattern, '<span class="puffin-marker">$1</span>')
   }
 
   /**
@@ -2871,10 +2947,486 @@ export class DocumentEditorView {
   }
 
   /**
+   * Insert a Puffin marker at the current cursor position
+   * Markers use the format: /@puffin: instruction //
+   */
+  insertMarker() {
+    const textarea = this.container.querySelector('.document-editor-textarea')
+    if (!textarea) return
+
+    const cursorPos = textarea.selectionStart
+    const selectionEnd = textarea.selectionEnd
+    const content = this.state.content
+
+    // Default marker template (empty marker with space for user input)
+    const markerTemplate = MarkerUtils.createMarker('')
+    // Calculate cursor position dynamically based on MARKER_START length
+    const cursorOffset = MarkerUtils.MARKER_START.length + 1 // Position after "/@puffin: "
+
+    // If text is selected, wrap it in the marker as the instruction
+    let newContent
+    let newCursorPos
+    if (cursorPos !== selectionEnd) {
+      const selectedText = content.substring(cursorPos, selectionEnd)
+      const marker = `/@puffin: ${selectedText} //`
+      newContent = content.substring(0, cursorPos) + marker + content.substring(selectionEnd)
+      newCursorPos = cursorPos + marker.length
+    } else {
+      // No selection, insert empty marker and place cursor inside
+      newContent = content.substring(0, cursorPos) + markerTemplate + content.substring(cursorPos)
+      newCursorPos = cursorPos + cursorOffset
+    }
+
+    // Update state and textarea
+    this.state.content = newContent
+    this.state.isModified = true
+    textarea.value = newContent
+
+    // Set cursor position inside the marker
+    textarea.setSelectionRange(newCursorPos, newCursorPos)
+    textarea.focus()
+
+    // Update UI
+    this.updateHighlighting()
+    this.updateLineNumbers()
+    this.updateSaveIndicator()
+    this.updatePromptUI()
+
+    console.log('[DocumentEditorView] Inserted Puffin marker at position', cursorPos)
+  }
+
+  /**
+   * Handle cleaning all Puffin markers from the document
+   * Shows a confirmation dialog before removing markers
+   */
+  handleCleanMarkers() {
+    const content = this.state.content
+    if (!content) return
+
+    // Find all markers in the document
+    const markers = MarkerUtils.findAllMarkers(content)
+
+    if (markers.length === 0) {
+      this.showCleanMarkersNotification('No markers found', 'There are no Puffin markers in the document to remove.')
+      return
+    }
+
+    // Show confirmation dialog
+    this.showCleanMarkersConfirmation(markers.length)
+  }
+
+  /**
+   * Show a notification for clean markers action
+   * @param {string} title - Notification title
+   * @param {string} message - Notification message
+   */
+  showCleanMarkersNotification(title, message) {
+    // Create notification overlay
+    const overlay = document.createElement('div')
+    overlay.className = 'puffin-notification-overlay'
+    overlay.setAttribute('role', 'alert')
+    overlay.setAttribute('aria-live', 'polite')
+
+    overlay.innerHTML = `
+      <div class="puffin-notification">
+        <div class="puffin-notification-icon">🐧</div>
+        <div class="puffin-notification-content">
+          <div class="puffin-notification-title">${this.escapeHtml(title)}</div>
+          <div class="puffin-notification-message">${this.escapeHtml(message)}</div>
+        </div>
+        <button class="puffin-notification-close" aria-label="Close notification">×</button>
+      </div>
+    `
+
+    document.body.appendChild(overlay)
+
+    // Auto-dismiss after 3 seconds
+    const dismissTimeout = setTimeout(() => {
+      this.dismissNotification(overlay)
+    }, 3000)
+
+    // Close button handler
+    const closeBtn = overlay.querySelector('.puffin-notification-close')
+    closeBtn.addEventListener('click', () => {
+      clearTimeout(dismissTimeout)
+      this.dismissNotification(overlay)
+    })
+
+    // Click outside to dismiss
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        clearTimeout(dismissTimeout)
+        this.dismissNotification(overlay)
+      }
+    })
+  }
+
+  /**
+   * Dismiss a notification overlay
+   * @param {HTMLElement} overlay - The notification overlay element
+   */
+  dismissNotification(overlay) {
+    if (overlay && overlay.parentNode) {
+      overlay.classList.add('dismissing')
+      setTimeout(() => {
+        if (overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay)
+        }
+      }, 200)
+    }
+  }
+
+  /**
+   * Show confirmation dialog for cleaning markers
+   * @param {number} markerCount - Number of markers to be removed
+   */
+  showCleanMarkersConfirmation(markerCount) {
+    // Create modal overlay
+    const overlay = document.createElement('div')
+    overlay.className = 'puffin-modal-overlay'
+    overlay.setAttribute('role', 'dialog')
+    overlay.setAttribute('aria-modal', 'true')
+    overlay.setAttribute('aria-labelledby', 'clean-markers-title')
+    overlay.setAttribute('aria-describedby', 'clean-markers-desc')
+
+    const markerText = markerCount === 1 ? '1 marker' : `${markerCount} markers`
+
+    overlay.innerHTML = `
+      <div class="puffin-modal puffin-clean-markers-modal">
+        <div class="puffin-modal-header">
+          <span class="puffin-modal-icon">🧹</span>
+          <h3 id="clean-markers-title" class="puffin-modal-title">Clean All Markers</h3>
+        </div>
+        <div class="puffin-modal-body">
+          <p id="clean-markers-desc">
+            Remove <strong>${markerText}</strong> from the document?
+          </p>
+          <p class="puffin-modal-hint">
+            This will delete all <code>/@puffin: ... //</code> markers and their prompt content.
+            The surrounding document content will remain intact.
+          </p>
+        </div>
+        <div class="puffin-modal-footer">
+          <button class="puffin-modal-btn puffin-modal-btn-secondary" data-action="cancel">
+            Cancel
+          </button>
+          <button class="puffin-modal-btn puffin-modal-btn-primary puffin-modal-btn-danger" data-action="confirm">
+            <span class="puffin-modal-btn-icon">🧹</span>
+            Remove All Markers
+          </button>
+        </div>
+      </div>
+    `
+
+    document.body.appendChild(overlay)
+
+    // Focus the cancel button initially (safer default)
+    const cancelBtn = overlay.querySelector('[data-action="cancel"]')
+    const confirmBtn = overlay.querySelector('[data-action="confirm"]')
+
+    setTimeout(() => cancelBtn.focus(), 50)
+
+    // Cancel button handler
+    cancelBtn.addEventListener('click', () => {
+      this.dismissCleanMarkersModal(overlay)
+    })
+
+    // Confirm button handler
+    confirmBtn.addEventListener('click', () => {
+      this.executeCleanMarkers()
+      this.dismissCleanMarkersModal(overlay)
+    })
+
+    // Click outside to cancel
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        this.dismissCleanMarkersModal(overlay)
+      }
+    })
+
+    // Escape key to cancel (cleanup handled by dismissCleanMarkersModal)
+    const escapeHandler = (e) => {
+      if (e.key === 'Escape') {
+        this.dismissCleanMarkersModal(overlay)
+      }
+    }
+    document.addEventListener('keydown', escapeHandler)
+
+    // Store reference for cleanup
+    this._cleanMarkersModal = overlay
+    this._cleanMarkersEscapeHandler = escapeHandler
+  }
+
+  /**
+   * Dismiss the clean markers confirmation modal
+   * @param {HTMLElement} overlay - The modal overlay element
+   */
+  dismissCleanMarkersModal(overlay) {
+    if (overlay && overlay.parentNode) {
+      overlay.classList.add('dismissing')
+      setTimeout(() => {
+        if (overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay)
+        }
+      }, 200)
+    }
+
+    // Clean up escape handler
+    if (this._cleanMarkersEscapeHandler) {
+      document.removeEventListener('keydown', this._cleanMarkersEscapeHandler)
+      this._cleanMarkersEscapeHandler = null
+    }
+    this._cleanMarkersModal = null
+  }
+
+  /**
+   * Execute the marker cleaning operation
+   * Removes all markers and updates the document
+   */
+  executeCleanMarkers() {
+    const content = this.state.content
+    if (!content) return
+
+    const markers = MarkerUtils.findAllMarkers(content)
+    if (markers.length === 0) return
+
+    // Remove all markers
+    const cleanedContent = MarkerUtils.removeAllMarkers(content)
+
+    // Update the document content
+    const textarea = this.container.querySelector('.document-editor-textarea')
+    if (textarea) {
+      // Save cursor position (approximate - will be adjusted if needed)
+      const cursorPos = Math.min(textarea.selectionStart, cleanedContent.length)
+
+      // Update state and textarea
+      this.state.content = cleanedContent
+      this.state.isModified = true
+      textarea.value = cleanedContent
+
+      // Restore cursor position
+      textarea.setSelectionRange(cursorPos, cursorPos)
+      textarea.focus()
+
+      // Update UI
+      this.updateHighlighting()
+      this.updateLineNumbers()
+      this.updateSaveIndicator()
+      this.updatePromptUI()
+
+      // Trigger auto-save if enabled
+      if (this.state.autoSaveEnabled && this.state.currentFile) {
+        this.scheduleAutoSave()
+      }
+
+      console.log(`[DocumentEditorView] Cleaned ${markers.length} Puffin marker(s) from document`)
+
+      // Show success notification
+      const markerText = markers.length === 1 ? '1 marker' : `${markers.length} markers`
+      this.showCleanMarkersNotification('Markers Removed', `Successfully removed ${markerText} from the document.`)
+    }
+  }
+
+  /**
+   * Handle right-click context menu on textarea
+   * Shows a custom context menu with Puffin-specific options
+   * @param {MouseEvent} e - Context menu event
+   */
+  handleContextMenu(e) {
+    e.preventDefault()
+
+    // Remove any existing context menu
+    this.hideContextMenu()
+
+    // Create context menu
+    const menu = document.createElement('div')
+    menu.className = 'puffin-context-menu'
+    menu.setAttribute('role', 'menu')
+    menu.setAttribute('aria-label', 'Editor context menu')
+
+    // Initial position at cursor (will be adjusted after measuring to stay in viewport)
+    menu.style.left = `${e.clientX}px`
+    menu.style.top = `${e.clientY}px`
+
+    // Get current selection info
+    const textarea = this.container.querySelector('.document-editor-textarea')
+    const hasSelection = textarea && textarea.selectionStart !== textarea.selectionEnd
+
+    // Menu items
+    const menuItems = [
+      {
+        label: hasSelection ? 'Wrap Selection with Puffin Marker' : 'Insert Puffin Marker',
+        icon: '🐧',
+        action: () => this.insertMarker(),
+        shortcut: 'Ctrl+M'
+      },
+      { divider: true },
+      {
+        label: 'Cut',
+        icon: '✂️',
+        action: () => document.execCommand('cut'),
+        shortcut: 'Ctrl+X',
+        disabled: !hasSelection
+      },
+      {
+        label: 'Copy',
+        icon: '📋',
+        action: () => document.execCommand('copy'),
+        shortcut: 'Ctrl+C',
+        disabled: !hasSelection
+      },
+      {
+        label: 'Paste',
+        icon: '📄',
+        action: () => document.execCommand('paste'),
+        shortcut: 'Ctrl+V'
+      },
+      { divider: true },
+      {
+        label: 'Select All',
+        icon: '⬜',
+        action: () => textarea && textarea.select(),
+        shortcut: 'Ctrl+A'
+      }
+    ]
+
+    // Build menu HTML
+    menuItems.forEach((item, index) => {
+      if (item.divider) {
+        const divider = document.createElement('div')
+        divider.className = 'puffin-context-menu-divider'
+        divider.setAttribute('role', 'separator')
+        menu.appendChild(divider)
+      } else {
+        const menuItem = document.createElement('div')
+        menuItem.className = 'puffin-context-menu-item'
+        if (item.disabled) {
+          menuItem.classList.add('disabled')
+          menuItem.setAttribute('aria-disabled', 'true')
+        }
+        menuItem.setAttribute('role', 'menuitem')
+        menuItem.setAttribute('tabindex', item.disabled ? '-1' : '0')
+
+        menuItem.innerHTML = `
+          <span class="puffin-context-menu-icon" aria-hidden="true">${item.icon}</span>
+          <span class="puffin-context-menu-label">${item.label}</span>
+          ${item.shortcut ? `<span class="puffin-context-menu-shortcut">${item.shortcut}</span>` : ''}
+        `
+
+        if (!item.disabled) {
+          menuItem.addEventListener('click', () => {
+            item.action()
+            this.hideContextMenu()
+          })
+
+          // Keyboard support
+          menuItem.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              item.action()
+              this.hideContextMenu()
+            }
+          })
+        }
+
+        menu.appendChild(menuItem)
+      }
+    })
+
+    // Append to body
+    document.body.appendChild(menu)
+
+    // Ensure menu stays within viewport with proper boundary checking
+    const menuRect = menu.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const padding = 8 // Minimum padding from viewport edges
+
+    // Calculate safe position
+    let left = e.clientX
+    let top = e.clientY
+
+    // Check right edge - if menu would overflow, position it to the left of cursor
+    if (left + menuRect.width > viewportWidth - padding) {
+      left = Math.max(padding, viewportWidth - menuRect.width - padding)
+    }
+
+    // Check bottom edge - if menu would overflow, position it above cursor
+    if (top + menuRect.height > viewportHeight - padding) {
+      top = Math.max(padding, viewportHeight - menuRect.height - padding)
+    }
+
+    // Ensure left and top are never negative
+    left = Math.max(padding, left)
+    top = Math.max(padding, top)
+
+    // Apply calculated position
+    menu.style.left = `${left}px`
+    menu.style.top = `${top}px`
+
+    // Focus first item for keyboard navigation
+    const firstItem = menu.querySelector('.puffin-context-menu-item:not(.disabled)')
+    if (firstItem) {
+      firstItem.focus()
+    }
+
+    // Close menu on click outside
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target)) {
+        this.hideContextMenu()
+        document.removeEventListener('click', closeHandler)
+        document.removeEventListener('contextmenu', closeHandler)
+      }
+    }
+
+    // Close on Escape key
+    const escapeHandler = (e) => {
+      if (e.key === 'Escape') {
+        this.hideContextMenu()
+        document.removeEventListener('keydown', escapeHandler)
+        textarea && textarea.focus()
+      }
+    }
+
+    // Delay adding listeners to avoid immediate close
+    setTimeout(() => {
+      document.addEventListener('click', closeHandler)
+      document.addEventListener('contextmenu', closeHandler)
+      document.addEventListener('keydown', escapeHandler)
+    }, 10)
+
+    // Store reference for cleanup
+    this._contextMenu = menu
+    this._contextMenuCloseHandler = closeHandler
+    this._contextMenuEscapeHandler = escapeHandler
+  }
+
+  /**
+   * Hide and remove the context menu
+   */
+  hideContextMenu() {
+    if (this._contextMenu && this._contextMenu.parentNode) {
+      this._contextMenu.parentNode.removeChild(this._contextMenu)
+    }
+    this._contextMenu = null
+
+    // Clean up event listeners
+    if (this._contextMenuCloseHandler) {
+      document.removeEventListener('click', this._contextMenuCloseHandler)
+      document.removeEventListener('contextmenu', this._contextMenuCloseHandler)
+    }
+    if (this._contextMenuEscapeHandler) {
+      document.removeEventListener('keydown', this._contextMenuEscapeHandler)
+    }
+  }
+
+  /**
    * Lifecycle: Called when view is deactivated
    */
   onDeactivate() {
     console.log('[DocumentEditorView] onDeactivate()')
+    // Clean up context menu if open
+    this.hideContextMenu()
   }
 
   /**
@@ -2885,6 +3437,14 @@ export class DocumentEditorView {
 
     // Remove global keyboard listener
     document.removeEventListener('keydown', this._boundKeyDown)
+
+    // Clean up context menu if open
+    this.hideContextMenu()
+
+    // Clean up clean markers modal if open
+    if (this._cleanMarkersModal) {
+      this.dismissCleanMarkersModal(this._cleanMarkersModal)
+    }
 
     // Clean up all tracked event listeners
     this.cleanupListeners()

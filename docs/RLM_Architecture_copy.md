@@ -86,11 +86,6 @@ This is where the RLM insight becomes powerful:
 
 ### 1. Context Vault Schema
 
-#### High-Level Specification Structure
-
-Every specification document (like FS-001) contains eight universal structural components that must be indexed and queryable:
-
-**1. Document Metadata**
 ```
 ContextVault/
 ├── specifications/
@@ -98,17 +93,6 @@ ContextVault/
 │   ├── acceptance-criteria.json
 │   ├── domain-rules.json       # Business logic constraints
 │   └── constraints.json        # Technical constraints
-### Specification Indexing Structure
-
-Based on analysis of FS-001 and similar specification documents, add the following specification-index files (described in detail above):
-- `spec-index.json` - Document metadata and sectional organization
-- `spec-entities.json` - Domain entities, models, actors
-- `spec-requirements.json` - Functional/non-functional requirements
-- `spec-operations.json` - Workflows, processes, flows
-- `spec-risks.json` - Risk assessment, external dependencies
-- `spec-validation.json` - Acceptance and validation criteria
-
-These enable slicing specifications by relevance to a task.
 ├── codebase-index/
 │   ├── file-manifest.json      # All files with metadata
 │   ├── symbol-table.json       # Functions, classes, exports

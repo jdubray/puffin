@@ -3,6 +3,8 @@ name: Puffin Q&A Bot
 on:
   discussion:
     types: [created]
+  discussion_comment:
+    types: [created]
 
 # Only respond to discussions in the Q&A category
 # You'll need to create a "Q&A" category in your repo's Discussions settings
@@ -11,6 +13,7 @@ jobs:
   answer-question:
     runs-on: ubuntu-latest
     # Only run for discussions in the Q&A category
+    # For comments, only reply to follow-ups on bot answers (checked in script)
     if: github.event.discussion.category.slug == 'q-a'
 
     permissions:
@@ -41,4 +44,9 @@ jobs:
           DISCUSSION_BODY: ${{ github.event.discussion.body }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
+          # Comment-specific variables (only set for discussion_comment events)
+          EVENT_TYPE: ${{ github.event_name }}
+          COMMENT_ID: ${{ github.event.comment.node_id }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
         run: npm run answer

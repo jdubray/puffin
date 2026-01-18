@@ -19,6 +19,7 @@
    - [Toast History Plugin](#toast-history-plugin)
    - [Prompt Template Plugin](#prompt-template-plugin)
    - [Document Editor Plugin](#document-editor-plugin)
+   - [Inline Prompt Markers](#inline-prompt-markers)
    - [Image Attachments for Prompts](#image-attachments-for-prompts)
    - [Sprint Close with Git Commit](#sprint-close-with-git-commit)
    - [Sprint Management Enhancements](#sprint-management-enhancements)
@@ -1137,6 +1138,160 @@ plugins/document-editor-plugin/
 
 ---
 
+### Inline Prompt Markers
+
+Embed Claude instructions directly within your document using inline prompt markers. This powerful feature allows you to place prompts exactly where you want changes to occur.
+
+![Inline Prompt Markers](screenshots/inline-markers.png)
+
+#### Marker Syntax
+
+Puffin uses a distinctive marker syntax that works across all file types:
+
+```
+/@puffin: your instruction here //
+```
+
+**Key characteristics:**
+- **Universal format**: Works in any text file, regardless of programming language
+- **Visually distinct**: Highlighted with a yellow background and 🐧 icon
+- **Multiline support**: Instructions can span multiple lines
+
+**Multiline example:**
+```
+/@puffin:
+  Refactor this function to:
+  1. Use async/await instead of callbacks
+  2. Add error handling with try/catch
+  3. Add JSDoc documentation
+//
+```
+
+#### How Markers Work
+
+When you submit a document with markers, Claude:
+1. **Reads the entire document** to understand context
+2. **Finds all markers** in the document
+3. **Processes instructions holistically** (not one-by-one)
+4. **Applies changes** that satisfy all marker instructions
+5. **Removes markers** as part of applying the edits
+
+**Important:** Claude processes markers as a cohesive whole, understanding how instructions relate to each other. This means you can reference other parts of the document in your markers.
+
+#### Inserting Markers
+
+There are three ways to insert a marker:
+
+**1. Toolbar Button:**
+- Click the 🐧 **Insert Marker** button in the toolbar
+- A marker is inserted at your cursor position
+- Cursor is placed inside the marker for immediate typing
+
+**2. Context Menu:**
+- Right-click in the editor
+- Select **"Insert Puffin Marker"** (or **"Wrap Selection with Puffin Marker"** if text is selected)
+- The marker is inserted at your cursor
+
+**3. Keyboard Shortcut:**
+- Press **Ctrl+M** (or **Cmd+M** on Mac)
+- Quickly insert a marker without leaving the keyboard
+
+#### Wrapping Selected Text
+
+If you select text before inserting a marker, the selection becomes the marker content:
+
+1. Select the text you want to modify
+2. Use any insertion method (toolbar, context menu, or Ctrl+M)
+3. The selected text is wrapped: `/@puffin: selected text //`
+
+This is useful for quickly marking sections that need changes.
+
+#### Visual Highlighting
+
+Markers are visually distinct in the editor:
+
+| Element | Appearance |
+|---------|------------|
+| **Background** | Yellow gradient with dashed border |
+| **Icon** | 🐧 Puffin emoji prefix |
+| **Hover** | Enhanced highlighting for visibility |
+
+The highlighting ensures markers stand out from your code and don't get confused with regular comments.
+
+#### Cleaning Markers
+
+Remove all markers from your document with the **Clean Markers** button:
+
+1. Click the 🧹 **Clean Markers** button in the toolbar
+2. A confirmation dialog shows how many markers will be removed
+3. Click **"Remove All Markers"** to clean the document
+
+**What gets removed:**
+- The entire marker syntax (`/@puffin: ... //`)
+- The prompt content inside the marker
+- Surrounding document content is preserved
+
+**When to clean markers:**
+- After Claude has processed all your instructions
+- Before committing code (markers are for development, not production)
+- When you want to start fresh with new instructions
+
+#### Best Practices
+
+**Placement:**
+- Place markers close to the code you want modified
+- For file-wide changes, place marker at the top
+- For function-specific changes, place marker above the function
+
+**Instruction clarity:**
+- Be specific about what you want changed
+- Reference existing code by name (function names, variable names)
+- Include examples if the desired output isn't obvious
+
+**Multiple markers:**
+- Use multiple markers for unrelated changes
+- Keep related instructions in a single marker
+- Claude processes all markers together, so they can reference each other
+
+#### Marker Processing Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. Write your document with embedded markers                   │
+│     /@puffin: Add input validation //                           │
+│                                                                 │
+│  2. Click "Send to Claude" button                               │
+│     → Document + all markers sent to Claude                     │
+│                                                                 │
+│  3. Claude processes holistically                               │
+│     → Understands full context                                  │
+│     → Applies changes for ALL markers                           │
+│     → Removes markers in the process                            │
+│                                                                 │
+│  4. Review changes in response panel                            │
+│     → Accept, modify, or undo                                   │
+│                                                                 │
+│  5. Clean any remaining markers (if needed)                     │
+│     → Click 🧹 Clean Markers                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Known Limitations
+
+- The end delimiter `//` is identical to JavaScript single-line comment syntax
+- Best practice: Use markers on their own lines when possible
+- The unique `/@puffin:` start delimiter significantly reduces false matches
+- Malformed markers (incomplete syntax) are ignored silently
+
+#### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+M` / `Cmd+M` | Insert marker at cursor |
+| `Ctrl+M` with selection | Wrap selection with marker |
+
+---
+
 ### Image Attachments for Prompts
 
 Attach images to your prompts for visual context when communicating with Claude.
@@ -1750,6 +1905,7 @@ For Claude CLI issues:
 |----------|--------|---------|
 | `Ctrl+Shift+D` | Toggle SAM Debugger | Global |
 | `Ctrl/Cmd+Enter` | Submit Prompt | Prompt Editor |
+| `Ctrl/Cmd+M` | Insert Puffin Marker | Document Editor |
 | `Ctrl/Cmd+V` | Paste Image | Prompt Editor |
 | `Ctrl/Cmd+C` | Copy Post-it Note | Calendar |
 | `Ctrl/Cmd+V` | Paste Post-it Note | Calendar |
@@ -1819,6 +1975,7 @@ Puffin uses Electron with modern web technologies:
 
 **3CLI**: Claude Code CLI, the command-line interface for Claude
 **Acceptance Criteria Verification**: Process where Claude explicitly confirms each numbered criterion is met, partial, or blocked
+**Clean Markers**: Action that removes all Puffin markers from a document, leaving only the surrounding content
 **Auto-Save**: Feature that automatically saves document changes after a brief period of inactivity (1.5 seconds)
 **Archived**: Status for completed stories older than 2 weeks, stored in a collapsible section
 **Automated Sprint Implementation**: Mode where Claude orchestrates entire sprints autonomously with code review and bug fixing
@@ -1836,6 +1993,7 @@ Puffin uses Electron with modern web technologies:
 **Human-Controlled Mode**: Traditional implementation mode where you control each story's execution
 **Image Attachment**: Image file attached to a prompt for visual context (max 5 per prompt)
 **Implementation Order**: Optimized sequence for story implementation based on dependencies
+**Inline Prompt Marker**: A `/@puffin: ... //` syntax for embedding Claude instructions directly in document content
 **Orchestration Plan**: Preview of automated sprint showing order, branches, and phases
 **Post-it Note**: Personal note attached to a calendar day for reminders and annotations
 **Prompt Template**: Reusable prompt text saved for quick access and consistency

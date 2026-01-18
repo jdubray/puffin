@@ -5,6 +5,40 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.0] - 2026-01-18
+
+### Added
+
+- **Inline Prompt Markers**: Embed Claude instructions directly within documents using the `/@puffin: ... //` syntax
+  - **Universal marker format**: Works across all file types regardless of programming language
+  - **Visual highlighting**: Markers displayed with yellow gradient background, dashed border, and 🐧 icon
+  - **Multiline support**: Instructions can span multiple lines for complex prompts
+  - **Holistic processing**: Claude reads all markers and processes them as a cohesive whole
+  - **Insert Marker button**: 🐧 toolbar button to insert marker at cursor position
+  - **Context menu integration**: Right-click to insert marker or wrap selected text
+  - **Keyboard shortcut**: Ctrl+M (Cmd+M on Mac) for quick marker insertion
+  - **Selection wrapping**: Selected text automatically becomes the marker content
+  - **Clean Markers button**: 🧹 toolbar button to remove all markers from document
+  - **Confirmation dialog**: Prevents accidental marker deletion with count display
+  - **Auto-save integration**: Changes trigger auto-save when markers are cleaned
+  - **Toast notifications**: Feedback when markers are inserted or cleaned
+
+- **MarkerUtils service**: Utility functions for marker detection and manipulation
+  - `findAllMarkers()`: Extract all markers with positions and content
+  - `createMarker()`: Generate properly formatted marker syntax
+  - `removeAllMarkers()`: Strip all markers from content
+  - `countMarkers()`: Optimized marker counting
+  - `highlightMarkersInHtml()`: Apply visual highlighting with XSS protection
+
+### Changed
+
+- **Document Editor toolbar**: Added Insert Marker and Clean Markers buttons to toolbar-left section
+- **Syntax highlighting**: Marker highlighting now applied on top of language-specific highlighting
+
+### Security
+
+- **XSS protection**: Marker content is escaped before HTML insertion to prevent script injection
+
 ## [2.13.0] - 2026-01-17
 
 ### Added

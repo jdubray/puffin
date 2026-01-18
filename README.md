@@ -279,9 +279,24 @@ Puffin includes five built-in plugins that add navigation tabs:
 - **Designer** 🎨: Visual GUI designer for creating UI layouts
 - **Context** 📄: CLAUDE.md configuration viewer and editor with branch focus management
 - **Docs** 📁: Documentation browser for markdown and image files in your docs/ directory
-- **Editor** 📝: Text file editor with syntax highlighting, auto-save, and line numbers
+- **Editor** 📝: Text file editor with syntax highlighting, auto-save, inline prompt markers, and line numbers
 
 ## Latest Features
+
+### Inline Prompt Markers (v2.14.0)
+Embed Claude instructions directly in your documents with the new marker syntax:
+
+```
+/@puffin: your instruction here //
+```
+
+- **Insert via toolbar, context menu, or Ctrl+M**
+- **Visual highlighting** with yellow background and 🐧 icon
+- **Multiline support** for complex instructions
+- **Holistic processing** - Claude sees all markers and applies changes cohesively
+- **Clean markers button** removes all markers when you're done
+
+This workflow lets you annotate your code exactly where changes are needed, making it easier to communicate precise modifications to Claude.
 
 ### Automated Sprint Implementation (v2.12.0)
 Let Claude orchestrate entire sprints autonomously:

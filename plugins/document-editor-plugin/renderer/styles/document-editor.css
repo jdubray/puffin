@@ -2038,6 +2038,35 @@
 }
 
 /* ========================================
+   FORCE APPLY SECTION
+   ======================================== */
+
+.document-editor-force-apply-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color, #333);
+}
+
+.document-editor-force-apply-hint {
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #888);
+  margin: 0 0 10px 0;
+  line-height: 1.4;
+}
+
+/* Warning button style */
+.document-editor-btn-warning {
+  background: linear-gradient(135deg, rgba(236, 201, 75, 0.2) 0%, rgba(245, 158, 11, 0.2) 100%);
+  border-color: rgba(236, 201, 75, 0.6);
+  color: var(--color-warning, #ecc94b);
+}
+
+.document-editor-btn-warning:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(236, 201, 75, 0.3) 0%, rgba(245, 158, 11, 0.3) 100%);
+  border-color: rgba(236, 201, 75, 0.8);
+}
+
+/* ========================================
    PUFFIN MARKER HIGHLIGHTING
    ======================================== */
 
@@ -2047,22 +2076,32 @@
  * for Claude to process holistically.
  */
 
-/* Base marker style - visually distinct from regular comments */
+/* Base marker style - visually distinct from regular comments
+ * IMPORTANT: No horizontal padding/margin allowed!
+ * The highlight layer must have identical character positions to the textarea.
+ * Any horizontal spacing would cause cursor position mismatch when editing.
+ */
 .puffin-marker {
   background: linear-gradient(
     135deg,
     rgba(255, 193, 7, 0.15) 0%,
     rgba(255, 152, 0, 0.15) 100%
   );
-  border: 1px dashed rgba(255, 193, 7, 0.6);
-  border-radius: 3px;
-  padding: 1px 4px;
-  margin: 0 1px;
+  border-top: 1px dashed rgba(255, 193, 7, 0.6);
+  border-bottom: 1px dashed rgba(255, 193, 7, 0.6);
+  /* No horizontal padding/margin - must match textarea character positions exactly */
+  padding: 1px 0;
+  margin: 0;
   display: inline;
   position: relative;
 }
 
-/* Puffin icon indicator before marker */
+/* Puffin icon indicator before marker - DISABLED to prevent cursor position mismatch
+ * The ::before pseudo-element adds visual characters that don't exist in the underlying
+ * textarea, causing cursor positioning bugs when editing inside markers.
+ * Instead, we rely on the distinctive background/border styling for visibility.
+ */
+/*
 .puffin-marker::before {
   content: '🐧';
   font-size: 0.75em;
@@ -2070,6 +2109,7 @@
   opacity: 0.9;
   vertical-align: middle;
 }
+*/
 
 /* Hover state for better visibility */
 .puffin-marker:hover {
@@ -2078,7 +2118,8 @@
     rgba(255, 193, 7, 0.25) 0%,
     rgba(255, 152, 0, 0.25) 100%
   );
-  border-color: rgba(255, 193, 7, 0.8);
+  border-top-color: rgba(255, 193, 7, 0.8);
+  border-bottom-color: rgba(255, 193, 7, 0.8);
 }
 
 /* Multiline marker support */

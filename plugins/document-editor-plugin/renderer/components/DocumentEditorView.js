@@ -182,7 +182,9 @@ export class DocumentEditorView {
       // Question answers state (persists across re-renders)
       pendingAnswers: {},         // Map of questionId -> answer text
       // Cached marker count (updated when content changes to avoid redundant regex parsing)
-      cachedMarkerCount: 0
+      cachedMarkerCount: 0,
+      // Pending content that failed validation (for "Apply Anyway" feature)
+      pendingValidationContent: null  // { content, responseId } - content rejected due to validation errors
     }
 
     // Auto-save timer
@@ -790,6 +792,7 @@ export class DocumentEditorView {
                   placeholder="Type your answer and press Enter..."
                   data-question-id="${q.id}"
                   data-response-id="${response.id}"
+                  value="${this.escapeHtml(this.state.pendingAnswers[q.id] || '')}"
                 >
                 <button
                   class="document-editor-btn document-editor-btn-primary document-editor-modal-reply-btn"
@@ -805,7 +808,8 @@ export class DocumentEditorView {
       </div>
     ` : ''
 
-    // Build validation errors section
+    // Build validation errors section with "Apply Anyway" option
+    const hasPendingContent = this.state.pendingValidationContent !== null
     const errorsHtml = hasValidationErrors ? `
       <div class="document-editor-modal-section">
         <div class="document-editor-modal-section-label error">Validation Issues</div>
@@ -817,6 +821,17 @@ export class DocumentEditorView {
             </li>
           `).join('')}
         </ul>
+        ${hasPendingContent ? `
+          <div class="document-editor-force-apply-section">
+            <p class="document-editor-force-apply-hint">
+              Changes were not applied due to validation errors. You can apply them anyway and fix the issues manually.
+            </p>
+            <button class="document-editor-btn document-editor-btn-warning" data-action="force-apply">
+              <span class="document-editor-btn-icon">⚠️</span>
+              <span class="document-editor-btn-text">Apply Anyway</span>
+            </button>
+          </div>
+        ` : ''}
       </div>
     ` : ''
 
@@ -832,7 +847,7 @@ export class DocumentEditorView {
 
     return `
       <div class="document-editor-questions-modal-overlay" data-action="close-response-modal">
-        <div class="document-editor-questions-modal" onclick="event.stopPropagation()">
+        <div class="document-editor-questions-modal" data-modal-content="true">
           <div class="document-editor-questions-modal-header">
             <div class="document-editor-questions-modal-title">
               <span class="document-editor-questions-modal-title-icon">${titleIcon}</span>
@@ -1283,6 +1298,9 @@ export class DocumentEditorView {
     // Store content before submission for diff calculation
     this.state.contentBeforeSubmit = this.state.content
 
+    // Clear any pending validation content from previous failed attempts
+    this.state.pendingValidationContent = null
+
     // Record baseline for change tracking (Story 3)
     this.changeTracker.recordBaseline(this.state.content)
 
@@ -1428,6 +1446,11 @@ export class DocumentEditorView {
               severity: 'error',
               line: e.line
             }))
+            // Store pending content for "Apply Anyway" feature
+            this.state.pendingValidationContent = {
+              content: mergeResult.content,
+              responseId: this.generateResponseId()
+            }
           }
         }
 
@@ -1445,56 +1468,95 @@ export class DocumentEditorView {
     else {
       const updatedContent = this.extractUpdatedDocument(rawResponse)
 
+      console.log('[DocumentEditorView] Full document extraction result:', {
+        found: updatedContent !== null,
+        extractedLength: updatedContent?.length || 0,
+        extractedLines: updatedContent?.split('\n').length || 0,
+        originalLength: this.state.content.length,
+        originalLines: this.state.content.split('\n').length
+      })
+
       if (updatedContent !== null) {
-        // Safety check: warn if document shrinks significantly
+        // Safety check: warn and BLOCK if document shrinks significantly
+        // This prevents Claude from accidentally truncating documents
         const originalLines = this.state.content.split('\n').length
         const newLines = updatedContent.split('\n').length
         const shrinkagePercent = ((originalLines - newLines) / originalLines) * 100
+        const isSuspiciousShrinkage = shrinkagePercent > 30 || (originalLines > 5 && newLines < originalLines * 0.5)
 
-        if (shrinkagePercent > 50 && originalLines > 20) {
-          console.warn('[DocumentEditorView] WARNING: Document would shrink by', shrinkagePercent.toFixed(0), '% - possible truncation')
+        if (isSuspiciousShrinkage) {
+          console.warn('[DocumentEditorView] WARNING: Suspicious document shrinkage detected:', {
+            originalLines,
+            newLines,
+            shrinkagePercent: shrinkagePercent.toFixed(0) + '%'
+          })
           validationErrors.push({
             id: this.generateResponseId(),
-            message: `Document shrinks by ${shrinkagePercent.toFixed(0)}% (${originalLines} -> ${newLines} lines). This may indicate truncation. Undo if unintended.`,
-            severity: 'warning'
+            message: `Document would shrink from ${originalLines} to ${newLines} lines (${shrinkagePercent.toFixed(0)}% reduction). This may indicate Claude returned a truncated response. Use "Apply Anyway" if this is intentional.`,
+            severity: 'error'
           })
-        }
-
-        // Validate before applying
-        const validation = this.syntaxValidator.validate(updatedContent, this.state.extension)
-
-        if (validation.valid) {
-          // Push current state to undo stack before applying changes
-          this.pushUndoState()
-
-          // Apply the complete updated document
-          this.state.content = updatedContent
-          this.state.isModified = true
-          documentApplied = true
-
-          // Update textarea
-          const textarea = this.container.querySelector('.document-editor-textarea')
-          if (textarea) {
-            textarea.value = updatedContent
+          // Store for "Apply Anyway" feature - don't auto-apply suspicious shrinkage
+          this.state.pendingValidationContent = {
+            content: updatedContent,
+            responseId: this.generateResponseId()
           }
-
-          // Update display
-          this.updateHighlighting()
-          this.updateLineNumbers()
-
-          console.log('[DocumentEditorView] Applied updated document (full replacement)')
         } else {
-          console.warn('[DocumentEditorView] Validation failed:', validation.errors)
-          validationErrors.push(...validation.errors.map(e => ({
-            id: this.generateResponseId(),
-            message: e.message,
-            severity: 'error',
-            line: e.line
-          })))
+          // Validate syntax before applying
+          const validation = this.syntaxValidator.validate(updatedContent, this.state.extension)
+
+          if (validation.valid) {
+            // Push current state to undo stack before applying changes
+            this.pushUndoState()
+
+            // Apply the complete updated document
+            this.state.content = updatedContent
+            this.state.isModified = true
+            documentApplied = true
+
+            // Update textarea
+            const textarea = this.container.querySelector('.document-editor-textarea')
+            if (textarea) {
+              textarea.value = updatedContent
+            }
+
+            // Update display
+            this.updateHighlighting()
+            this.updateLineNumbers()
+
+            console.log('[DocumentEditorView] Applied updated document (full replacement)')
+          } else {
+            console.warn('[DocumentEditorView] Validation failed:', validation.errors)
+            validationErrors.push(...validation.errors.map(e => ({
+              id: this.generateResponseId(),
+              message: e.message,
+              severity: 'error',
+              line: e.line
+            })))
+            // Store pending content for "Apply Anyway" feature
+            this.state.pendingValidationContent = {
+              content: updatedContent,
+              responseId: this.generateResponseId()
+            }
+          }
         }
       } else {
         console.log('[DocumentEditorView] No questions or document update found in response')
+        // Add warning so user knows why no changes were applied
+        validationErrors.push({
+          id: this.generateResponseId(),
+          message: 'Claude\'s response did not include document changes in the expected format. The response should contain either <<<CHANGE>>> blocks or an "## Updated Document" section with a code block.',
+          severity: 'warning'
+        })
       }
+    }
+
+    // If we have no document changes, no questions, and no errors yet, add an info message
+    if (!documentApplied && questions.length === 0 && validationErrors.length === 0) {
+      validationErrors.push({
+        id: this.generateResponseId(),
+        message: 'No actionable changes detected in Claude\'s response. Check the full response in the panel below.',
+        severity: 'warning'
+      })
     }
 
     // Calculate diff stats if document was applied
@@ -1533,19 +1595,23 @@ export class DocumentEditorView {
     }
 
     // Update state
-    this.state.currentResponse = responseEntry
     this.state.pendingQuestions = questions.filter(q => !q.answered)
     // Response shown in bottom panel, not modal
 
-    // Add to history
+    // Add to history and update currentResponse
+    // Note: SessionManager creates a new ID, so we must use the returned response
+    // to ensure currentResponse.id matches the history entry for proper filtering
     if (this.sessionManager.isLoaded()) {
-      await this.sessionManager.addResponse(responseEntry)
+      const addedResponse = await this.sessionManager.addResponse(responseEntry)
       this.state.responseHistory = this.sessionManager.getResponses()
+      // Use the response from history (with matching ID) as currentResponse
+      this.state.currentResponse = addedResponse || responseEntry
     } else {
       this.state.responseHistory.unshift(responseEntry)
       if (this.state.responseHistory.length > 50) {
         this.state.responseHistory = this.state.responseHistory.slice(0, 50)
       }
+      this.state.currentResponse = responseEntry
     }
 
     console.log('[DocumentEditorView] Response processed:', {
@@ -1631,6 +1697,7 @@ export class DocumentEditorView {
     const updatedDocPattern = /##\s*Updated\s*Document\s*\n```[\w]*\n([\s\S]*?)\n```/i
     const match = response.match(updatedDocPattern)
     if (match && match[1]) {
+      console.log('[DocumentEditorView] Extracted via pattern 1 (## Updated Document)')
       return match[1]
     }
 
@@ -1638,6 +1705,7 @@ export class DocumentEditorView {
     const altPattern = /###\s*Updated\s*Document\s*\n```[\w]*\n([\s\S]*?)\n```/i
     const altMatch = response.match(altPattern)
     if (altMatch && altMatch[1]) {
+      console.log('[DocumentEditorView] Extracted via pattern 2 (### Updated Document)')
       return altMatch[1]
     }
 
@@ -1645,9 +1713,11 @@ export class DocumentEditorView {
     const inlinePattern = /(?:here is|here's) the updated (?:document|file|content):\s*\n```[\w]*\n([\s\S]*?)\n```/i
     const inlineMatch = response.match(inlinePattern)
     if (inlineMatch && inlineMatch[1]) {
+      console.log('[DocumentEditorView] Extracted via pattern 3 (here is the updated...)')
       return inlineMatch[1]
     }
 
+    console.log('[DocumentEditorView] No updated document pattern found in response')
     return null
   }
 
@@ -1736,14 +1806,29 @@ export class DocumentEditorView {
    * Attach event listeners for the response modal
    */
   attachModalListeners() {
+    // Stop propagation on modal content to prevent overlay click from closing modal
+    // This replaces the inline onclick handler which was unreliable
+    this.container.querySelectorAll('[data-modal-content="true"]').forEach(modal => {
+      const stopHandler = (e) => e.stopPropagation()
+      this.addTrackedListener(modal, 'click', stopHandler)
+    })
+
     // Close modal buttons and overlay
     this.container.querySelectorAll('[data-action="close-response-modal"]').forEach(el => {
       const handler = () => this.closeResponseModal()
       this.addTrackedListener(el, 'click', handler)
     })
 
-    // Modal question inputs - Enter key to submit
+    // Modal question inputs - persist values and handle Enter key
     this.container.querySelectorAll('.document-editor-modal-question-input').forEach(input => {
+      // Input handler to persist values across re-renders
+      const inputHandler = (e) => {
+        const questionId = e.currentTarget.dataset.questionId
+        this.state.pendingAnswers[questionId] = e.currentTarget.value
+      }
+      this.addTrackedListener(input, 'input', inputHandler)
+
+      // Keydown handler - Enter submits the reply
       const keyHandler = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault()
@@ -1765,6 +1850,12 @@ export class DocumentEditorView {
       this.addTrackedListener(btn, 'click', handler)
     })
 
+    // Force apply button (apply changes despite validation errors)
+    this.container.querySelectorAll('[data-action="force-apply"]').forEach(btn => {
+      const handler = () => this.handleForceApply()
+      this.addTrackedListener(btn, 'click', handler)
+    })
+
     // Focus the first input in the modal
     if (this.state.showResponseModal) {
       const firstInput = this.container.querySelector('.document-editor-modal-question-input')
@@ -1783,21 +1874,69 @@ export class DocumentEditorView {
   }
 
   /**
+   * Handle "Apply Anyway" - force apply changes that failed validation
+   * This allows users to apply Claude's changes despite syntax errors
+   */
+  handleForceApply() {
+    if (!this.state.pendingValidationContent) {
+      console.warn('[DocumentEditorView] No pending content to force apply')
+      return
+    }
+
+    const { content } = this.state.pendingValidationContent
+    console.log('[DocumentEditorView] Force applying content despite validation errors')
+
+    // Push current state to undo stack before applying
+    this.pushUndoState()
+
+    // Apply the content
+    this.state.content = content
+    this.state.isModified = true
+
+    // Update textarea
+    const textarea = this.container.querySelector('.document-editor-textarea')
+    if (textarea) {
+      textarea.value = content
+    }
+
+    // Update display
+    this.updateHighlighting()
+    this.updateLineNumbers()
+
+    // Clear pending content
+    this.state.pendingValidationContent = null
+
+    // Update current response to show it was applied
+    if (this.state.currentResponse) {
+      this.state.currentResponse.documentApplied = true
+      this.state.currentResponse.forceApplied = true
+    }
+
+    // Close modal and re-render
+    this.state.showResponseModal = false
+    this.render()
+
+    console.log('[DocumentEditorView] Force applied content successfully')
+  }
+
+  /**
    * Handle answering a question from the modal
    * When all questions are answered, submits answers to Claude
    * @param {string} responseId - Response ID containing the question
    * @param {string} questionId - Question ID to answer
    */
   async handleModalQuestionReply(responseId, questionId) {
+    // Get answer from state (persisted) or fall back to input value
     const input = this.container.querySelector(
       `.document-editor-modal-question-input[data-question-id="${questionId}"]`
     )
-    if (!input) return
-
-    const answer = input.value.trim()
+    const answer = (this.state.pendingAnswers[questionId] || input?.value || '').trim()
     if (!answer) return
 
     console.log('[DocumentEditorView] Answering question from modal:', { responseId, questionId, answer })
+
+    // Clear the pending answer from state
+    delete this.state.pendingAnswers[questionId]
 
     // Mark this question as answered
     if (this.state.currentResponse?.id === responseId) {
@@ -1853,6 +1992,9 @@ export class DocumentEditorView {
     this.state.showResponseModal = false
     this.state.isSubmitting = true
     this.state.contentBeforeSubmit = this.state.content
+
+    // Clear any pending validation content from previous failed attempts
+    this.state.pendingValidationContent = null
 
     // Record baseline for change tracking
     this.changeTracker.recordBaseline(this.state.content)

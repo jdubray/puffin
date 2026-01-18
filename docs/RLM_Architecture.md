@@ -86,42 +86,46 @@ This is where the RLM insight becomes powerful:
 
 ### 1. Context Vault Schema
 
-#### High-Level Specification Structure
+/@puffin: update the ContextVault schema by adding missing concepts that you will find by analysis the included documents (user-management specification, ACM specification). 
+the goal it to identify high level concepts that are common to specifications and code bases.
+//
 
-Every specification document (like FS-001) contains eight universal structural components that must be indexed and queryable:
-
-**1. Document Metadata**
 ```
 ContextVault/
 ├── specifications/
-│   ├── user-stories.json       # Structured story data
-│   ├── acceptance-criteria.json
-│   ├── domain-rules.json       # Business logic constraints
-│   └── constraints.json        # Technical constraints
-### Specification Indexing Structure
-
-Based on analysis of FS-001 and similar specification documents, add the following specification-index files (described in detail above):
-- `spec-index.json` - Document metadata and sectional organization
-- `spec-entities.json` - Domain entities, models, actors
-- `spec-requirements.json` - Functional/non-functional requirements
-- `spec-operations.json` - Workflows, processes, flows
-- `spec-risks.json` - Risk assessment, external dependencies
-- `spec-validation.json` - Acceptance and validation criteria
-
+│   ├── user-stories.json              # Structured story data with metadata
+│   ├── acceptance-criteria.json        # Testable requirements per story
+│   ├── domain-rules.json              # Business logic constraints and validation
+│   ├── actor-types.json               # User types, roles, permissions (e.g., admin, regular user, support)
+│   ├── security-requirements.json     # Authentication, authorization, PII, encryption
+│   ├── resource-requirements.json     # External systems: databases, APIs, webhooks, queues
+│   ├── data-constraints.json          # Field validation, uniqueness, invariants, cardinality
+│   └── criticality-matrix.json        # Impact assessment (safety, compliance, financial, operational)
 These enable slicing specifications by relevance to a task.
 ├── codebase-index/
-│   ├── file-manifest.json      # All files with metadata
-│   ├── symbol-table.json       # Functions, classes, exports
-│   ├── dependency-graph.json   # Import relationships
-│   └── pattern-catalog.json    # Detected patterns
+│   ├── file-manifest.json             # All files with metadata
+│   ├── symbol-table.json              # Functions, classes, exports, entities
+│   ├── dependency-graph.json          # Import relationships
+│   ├── pattern-catalog.json           # Detected patterns and architectural styles
+│   ├── inspection-assertions.json     # Verification requirements per acceptance criterion
+│   └── deliberation-triggers.json     # Decision points requiring human review (cross-boundary, high-risk, ambiguous)
+├── traceability/
+│   ├── story-to-code.json             # Maps user stories to implementing entities
+│   ├── criterion-to-code.json         # Maps acceptance criteria to code and tests
+│   ├── code-to-tests.json             # Maps code entities to test coverage
+│   ├── constraint-to-code.json        # Maps domain rules and invariants to enforcement code
+│   └── resource-usage.json            # Maps code to external resources accessed
 ├── history/
-│   ├── decisions.json          # Architectural decisions
-│   ├── thread-summaries/       # Condensed conversation logs
-│   └── implementation-log.json # What was built and why
+│   ├── decisions.json                 # Design decisions with rationale and alternatives
+│   ├── deliberation-resolutions.json  # Record of paused decisions and human choices
+│   ├── thread-summaries/              # Condensed conversation logs
+│   └── implementation-log.json        # What was built, why, and by whom
 └── active-context/
     ├── current-sprint.json
     ├── current-story.json
-    └── working-set.json        # Files currently relevant
+    ├── working-set.json               # Files currently relevant
+    ├── verification-state.json        # Test coverage, assertion status
+    └── risk-hotspots.json             # Flagged code requiring review
 ```
 
 ### 2. Recursive Task Decomposition

@@ -129,15 +129,53 @@ export class DocumentEditorPromptService {
 You are editing a single document: \`{filename}\`
 File type: {extension}
 
-### CHANGE-BASED EDITING:
-Instead of returning the entire document, return your changes in a structured format.
-The system will apply your changes to the original document programmatically.
-
 ### RULES:
 1. You may ONLY modify the content of this document
 2. You may READ any project file for context but CANNOT write to other files
 3. If requirements are unclear, ASK CLARIFYING QUESTIONS before modifying
 4. Do NOT provide verbose explanations - focus on the changes
+5. ALWAYS remove /@puffin: ... // markers from your output - they are instructions, not content
+
+### RESPONSE FORMAT (REQUIRED):
+You MUST respond using ONE of these formats:
+
+**Option A: Structured Changes (preferred for targeted edits)**
+\`\`\`
+## Summary
+Brief description of changes made.
+
+<<<CHANGE>>>
+TYPE: REPLACE|INSERT_AFTER|INSERT_BEFORE|DELETE
+FIND:
+\`\`\`
+exact text to find
+\`\`\`
+CONTENT:
+\`\`\`
+replacement text
+\`\`\`
+<<<END_CHANGE>>>
+\`\`\`
+
+**Option B: Full Document (for extensive rewrites)**
+\`\`\`
+## Summary
+Brief description of changes made.
+
+## Updated Document
+\`\`\`{language}
+...complete updated document content...
+\`\`\`
+\`\`\`
+
+**Option C: Questions (when clarification needed)**
+\`\`\`
+## Questions
+1. Your question here?
+2. Another question?
+\`\`\`
+
+IMPORTANT: Your response MUST include either <<<CHANGE>>> blocks, an ## Updated Document section, or ## Questions. A summary alone is NOT sufficient.
 
 ### Current Document Content:
 \`\`\`{language}

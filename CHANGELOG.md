@@ -5,6 +5,22 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-01-17
+
+### Added
+
+- **Document Editor Plugin**: New plugin for editing text files with syntax highlighting and AI assistance
+  - Edit text files directly within Puffin (supports .md, .txt, .js, .ts, .html, .css, .json, .py, and 20+ file types)
+  - Syntax highlighting powered by highlight.js with support for 190+ languages
+  - Line numbers synchronized with editor scrolling
+  - Auto-save with configurable 1.5-second debounce (toggle on/off)
+  - Visual save indicator (saved/unsaved/saving states)
+  - External file change detection with reload prompts
+  - Recent files tracking for quick access
+  - Native file dialogs for create/open operations
+  - Prompt input area for future AI assistance integration (stubbed)
+  - Document Editor tab added to navigation bar (📝 icon)
+
 ## [2.12.1] - 2026-01-17
 
 ### Added

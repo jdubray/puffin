@@ -18,6 +18,7 @@
    - [Calendar Plugin](#calendar-plugin)
    - [Toast History Plugin](#toast-history-plugin)
    - [Prompt Template Plugin](#prompt-template-plugin)
+   - [Document Editor Plugin](#document-editor-plugin)
    - [Image Attachments for Prompts](#image-attachments-for-prompts)
    - [Sprint Close with Git Commit](#sprint-close-with-git-commit)
    - [Sprint Management Enhancements](#sprint-management-enhancements)
@@ -710,6 +711,17 @@ Puffin ships with four built-in plugins that are automatically loaded on startup
   - Project-specific storage
 - **Access**: Click "Templates" in the navigation bar
 
+**8. Document Editor** 📝
+- **Purpose**: Edit text files with syntax highlighting and AI assistance
+- **Features**:
+  - Edit code and text files directly within Puffin
+  - Syntax highlighting for 190+ languages via highlight.js
+  - Line numbers synchronized with scrolling
+  - Auto-save with visual indicators
+  - External file change detection
+  - Recent files tracking
+- **Access**: Click "Editor" in the navigation bar
+
 #### Plugin Architecture
 
 Plugins in Puffin follow a consistent structure:
@@ -943,6 +955,185 @@ Templates are stored in `.puffin/prompt-templates.json` within your project dire
 - Project-specific (different templates per project)
 - Version-controllable (can be committed to git)
 - Portable (move with your project)
+
+---
+
+### Document Editor Plugin
+
+Edit text files directly within Puffin with syntax highlighting, auto-save, and AI assistance capabilities.
+
+![Document Editor](screenshots/document-editor.png)
+
+#### Supported File Types
+
+The Document Editor supports a wide range of text file formats:
+
+**Code Files:**
+- JavaScript/TypeScript: `.js`, `.ts`, `.jsx`, `.tsx`
+- Web: `.html`, `.css`, `.scss`
+- Python: `.py`
+- Ruby: `.rb`
+- Go: `.go`
+- Rust: `.rs`
+- Java: `.java`
+- C/C++: `.c`, `.cpp`, `.h`
+- Shell: `.sh`, `.bash`, `.zsh`, `.ps1`, `.bat`
+
+**Data Files:**
+- JSON: `.json`
+- YAML: `.yaml`, `.yml`
+- XML: `.xml`
+- SQL: `.sql`
+- GraphQL: `.graphql`
+
+**Documentation:**
+- Markdown: `.md`
+- Plain Text: `.txt`
+
+#### Opening Files
+
+**Create New File:**
+1. Click the "New" button in the toolbar
+2. Choose a location and filename in the native save dialog
+3. The file is created and opened for editing
+
+**Open Existing File:**
+1. Click the "Open" button in the toolbar
+2. Select a file from the native file picker
+3. File content loads with appropriate syntax highlighting
+
+**Recent Files:**
+- Recently opened files are tracked for quick access
+- Up to 10 recent files are stored
+- Click a recent file to reopen it instantly
+
+#### Editor Features
+
+**Syntax Highlighting:**
+- Powered by highlight.js with 190+ language support
+- Automatic language detection based on file extension
+- Color-coded syntax for improved readability
+
+**Line Numbers:**
+- Line numbers displayed in a left gutter
+- Synchronized scrolling with editor content
+- Click line numbers for quick navigation
+
+**Text Editing:**
+- Standard text editing operations (undo, redo, select, copy, paste)
+- Tab key inserts spaces (2 spaces by default)
+- Cursor position preserved during updates
+
+#### Auto-Save Functionality
+
+![Auto-Save Indicator](screenshots/autosave-indicator.png)
+
+**How Auto-Save Works:**
+- Enabled by default
+- Saves after 1.5 seconds of inactivity (debounced)
+- Visual indicator shows save state
+
+**Save States:**
+| State | Indicator | Description |
+|-------|-----------|-------------|
+| Saved | Green dot | All changes saved to disk |
+| Unsaved | Yellow dot | Changes pending |
+| Saving | Spinner | Save in progress |
+| Error | Red dot | Save failed (check permissions) |
+
+**Toggle Auto-Save:**
+- Use the checkbox in the toolbar to enable/disable
+- When disabled, use the "Save" button for manual saves
+- Preference is preserved for the session
+
+#### External File Changes
+
+The Document Editor watches for external modifications to the open file:
+
+**Detection:**
+- Uses file system watcher (`fs.watch`)
+- Detects changes made by other editors or tools
+- Notification appears when changes detected
+
+**Handling Changes:**
+- Prompt asks whether to reload the file
+- Option to keep current content or reload from disk
+- Prevents accidental overwrites of external changes
+
+#### Layout Structure
+
+The Document Editor tab includes four areas:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ [New] [Open] [Save]  │  filename.js  │  ● Saved  │ [✓] │ <- Toolbar
+├─────────────────────────────────────────────────────────┤
+│  1 │ const foo = 'bar';                                │
+│  2 │ function hello() {                                │
+│  3 │   console.log('world');                           │ <- Editor Area
+│  4 │ }                                                 │
+├─────────────────────────────────────────────────────────┤
+│ Ask AI about this document...                    [Ask] │ <- Prompt Input (future)
+├─────────────────────────────────────────────────────────┤
+│ AI responses will appear here                          │ <- Response Area (future)
+└─────────────────────────────────────────────────────────┘
+```
+
+**Toolbar:**
+- File operations (New, Open, Save)
+- Current filename display
+- Save status indicator
+- Auto-save toggle
+
+**Editor Area:**
+- Line numbers gutter
+- Syntax-highlighted code view
+- Scrollable with synchronized line numbers
+
+**Prompt Input (Future):**
+- Text input for AI queries about the document
+- Currently stubbed for future AI integration
+
+**Response Area (Future):**
+- Displays AI responses
+- Currently stubbed for future AI integration
+
+#### Empty State
+
+When no file is open, the editor displays an empty state:
+
+- "No Document Open" message
+- Quick action buttons for "New Document" and "Open File"
+- Provides clear guidance for getting started
+
+#### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Tab` | Insert 2 spaces |
+| `Ctrl+S` / `Cmd+S` | Manual save (when auto-save disabled) |
+| `Ctrl+Z` / `Cmd+Z` | Undo |
+| `Ctrl+Y` / `Cmd+Y` | Redo |
+| `Ctrl+A` / `Cmd+A` | Select all |
+
+#### Storage and Configuration
+
+**File Storage:**
+- Files are saved to their original location on disk
+- Recent files list stored in plugin configuration
+- UTF-8 encoding used for all files
+
+**Plugin Files:**
+```
+plugins/document-editor-plugin/
+├── puffin-plugin.json    # Plugin manifest
+├── index.js              # Main process handlers
+├── package.json          # Dependencies (highlight.js)
+├── README.md             # Documentation
+└── renderer/
+    ├── components/       # View components
+    └── styles/           # CSS styles
+```
 
 ---
 
@@ -1628,6 +1819,7 @@ Puffin uses Electron with modern web technologies:
 
 **3CLI**: Claude Code CLI, the command-line interface for Claude
 **Acceptance Criteria Verification**: Process where Claude explicitly confirms each numbered criterion is met, partial, or blocked
+**Auto-Save**: Feature that automatically saves document changes after a brief period of inactivity (1.5 seconds)
 **Archived**: Status for completed stories older than 2 weeks, stored in a collapsible section
 **Automated Sprint Implementation**: Mode where Claude orchestrates entire sprints autonomously with code review and bug fixing
 **Backlog**: Collection of user stories waiting to be implemented
@@ -1639,6 +1831,7 @@ Puffin uses Electron with modern web technologies:
 **Claude Code Plugin**: A skill package that injects context into Claude's prompts for specific tasks
 **Code Review Phase**: Automated review phase after story implementation that identifies issues
 **Conventional Commits**: Commit message format used for auto-generated sprint commits (e.g., `feat(scope): message`)
+**Document Editor Plugin**: Plugin for editing text files with syntax highlighting, line numbers, and auto-save
 **GUI Definition**: Saved visual design that can be reused
 **Human-Controlled Mode**: Traditional implementation mode where you control each story's execution
 **Image Attachment**: Image file attached to a prompt for visual context (max 5 per prompt)
@@ -1652,6 +1845,7 @@ Puffin uses Electron with modern web technologies:
 **Session ID**: Unique identifier for conversation continuity with Claude
 **Skill**: Context content (markdown) injected into CLAUDE.md to enhance Claude's capabilities
 **Sprint Close**: Process of archiving a sprint with optional git commit
+**Syntax Highlighting**: Color-coded display of source code based on language grammar (powered by highlight.js)
 **Sprint Completion Summary**: Statistics and outcomes displayed after automated sprint finishes
 **SQLite**: Lightweight database engine used by Puffin for persistent storage
 **Start Implementation**: Action that generates an implementation prompt for selected stories
@@ -1663,4 +1857,4 @@ Puffin uses Electron with modern web technologies:
 
 ---
 
-*This manual covers Puffin version 2.12.0. For the latest updates and features, check the GitHub repository and release notes.*
+*This manual covers Puffin version 2.13.0. For the latest updates and features, check the GitHub repository and release notes.*

@@ -1060,6 +1060,64 @@
 }
 
 /* ========================================
+   VALIDATION ERRORS (Story 5)
+   ======================================== */
+
+.document-editor-validation-errors {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background-color: rgba(245, 101, 101, 0.1);
+  border: 1px solid rgba(245, 101, 101, 0.3);
+  border-radius: 4px;
+}
+
+.document-editor-validation-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-error, #f56565);
+  margin-bottom: 6px;
+}
+
+.document-editor-validation-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.document-editor-validation-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 0.75rem;
+}
+
+.document-editor-validation-list li:not(:last-child) {
+  border-bottom: 1px solid rgba(245, 101, 101, 0.2);
+}
+
+.document-editor-validation-icon {
+  flex-shrink: 0;
+  font-size: 0.875rem;
+}
+
+.document-editor-validation-message {
+  color: var(--text-secondary, #888);
+}
+
+.document-editor-validation-error .document-editor-validation-message {
+  color: var(--color-error, #f56565);
+}
+
+.document-editor-validation-warning {
+  background-color: rgba(236, 201, 75, 0.05);
+}
+
+.document-editor-validation-warning .document-editor-validation-message {
+  color: var(--color-warning, #ecc94b);
+}
+
+/* ========================================
    RESPONSE HISTORY
    ======================================== */
 

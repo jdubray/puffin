@@ -130,7 +130,7 @@ async function loadHighlightJs() {
 }
 
 // Import services
-import { DocumentEditorPromptService, ResponseParser, SessionManager, ChangeTracker } from '../services/index.js'
+import { DocumentEditorPromptService, ResponseParser, SessionManager, ChangeTracker, SyntaxValidator } from '../services/index.js'
 
 export class DocumentEditorView {
   /**
@@ -205,6 +205,9 @@ export class DocumentEditorView {
 
     // Initialize change tracker (Story 3)
     this.changeTracker = new ChangeTracker()
+
+    // Initialize syntax validator (Story 5)
+    this.syntaxValidator = new SyntaxValidator()
   }
 
   /**
@@ -516,9 +519,46 @@ export class DocumentEditorView {
         </div>
         <div class="document-editor-response-entry-content ${collapsed ? 'hidden' : ''}">
           ${this.renderChangeSummary(response)}
+          ${this.renderValidationErrors(response)}
           ${hasQuestions ? this.renderQuestions(response) : ''}
           ${this.renderDiffStats(response.diffStats)}
         </div>
+      </div>
+    `
+  }
+
+  /**
+   * Render validation errors section
+   * @param {Object} response - Response object
+   * @returns {string} HTML for validation errors
+   */
+  renderValidationErrors(response) {
+    if (!response.validationErrors || response.validationErrors.length === 0) {
+      return ''
+    }
+
+    const errorItems = response.validationErrors.map(error => {
+      const lineInfo = error.line ? ` (line ${error.line})` : ''
+      const sourceInfo = error.source === 'client-validation' ? ' [client]' : ''
+      const severityClass = error.severity === 'warning'
+        ? 'document-editor-validation-warning'
+        : 'document-editor-validation-error'
+      const icon = error.severity === 'warning' ? '⚠️' : '❌'
+
+      return `
+        <li class="${severityClass}">
+          <span class="document-editor-validation-icon">${icon}</span>
+          <span class="document-editor-validation-message">${this.escapeHtml(error.message)}${lineInfo}${sourceInfo}</span>
+        </li>
+      `
+    }).join('')
+
+    return `
+      <div class="document-editor-validation-errors">
+        <div class="document-editor-validation-label">Validation Issues:</div>
+        <ul class="document-editor-validation-list">
+          ${errorItems}
+        </ul>
       </div>
     `
   }
@@ -944,12 +984,59 @@ export class DocumentEditorView {
     // Extract the response text from the result
     const rawResponse = result?.response || result?.text || result?.content || ''
 
-    // Parse the response
+    // Extract updated document content from Claude's response
+    const updatedContent = this.extractUpdatedDocument(rawResponse)
+    let documentApplied = false
+    let clientValidationResult = null
+
+    if (updatedContent !== null) {
+      // Run client-side syntax validation before applying changes (Story 5)
+      clientValidationResult = this.syntaxValidator.validate(updatedContent, this.state.extension)
+
+      if (clientValidationResult.valid) {
+        // Apply the updated document content
+        this.state.content = updatedContent
+        this.state.isModified = true
+        documentApplied = true
+
+        // Update textarea if it exists
+        const textarea = this.container.querySelector('.document-editor-textarea')
+        if (textarea) {
+          textarea.value = updatedContent
+        }
+
+        // Update syntax highlighting
+        this.updateHighlighting()
+
+        console.log('[DocumentEditorView] Applied updated document from AI response')
+      } else {
+        console.warn('[DocumentEditorView] Syntax validation failed, document not applied:',
+          clientValidationResult.errors)
+      }
+    } else {
+      console.log('[DocumentEditorView] No updated document found in AI response')
+    }
+
+    // Parse the response for summary, questions, etc.
     const parsed = this.responseParser.parse(
       rawResponse,
       this.state.contentBeforeSubmit,
-      this.state.content
+      documentApplied ? this.state.content : this.state.contentBeforeSubmit
     )
+
+    // Merge client-side validation errors with any from Claude's response
+    const allValidationErrors = [
+      ...(parsed.validationErrors || []),
+      ...(clientValidationResult && !clientValidationResult.valid
+        ? clientValidationResult.errors.map(e => ({
+            id: this.generateResponseId(),
+            message: e.message,
+            severity: 'error',
+            line: e.line,
+            source: 'client-validation'
+          }))
+        : [])
+    ]
 
     // Create response entry
     const responseEntry = {
@@ -959,10 +1046,11 @@ export class DocumentEditorView {
       summary: parsed.changeSummary,
       questions: parsed.questions,
       fullResponse: parsed.fullResponse,
-      diffStats: parsed.diffStats,
-      validationErrors: parsed.validationErrors,
+      diffStats: documentApplied ? parsed.diffStats : { added: 0, modified: 0, deleted: 0 },
+      validationErrors: allValidationErrors,
       model: this.state.selectedModel,
-      collapsed: false
+      collapsed: false,
+      documentApplied
     }
 
     // Update current response
@@ -987,17 +1075,62 @@ export class DocumentEditorView {
     console.log('[DocumentEditorView] Processed AI response:', {
       summaryLength: parsed.changeSummary?.length,
       questionCount: parsed.questions?.length,
-      diffStats: parsed.diffStats
+      diffStats: parsed.diffStats,
+      documentApplied,
+      validationPassed: clientValidationResult?.valid ?? true
     })
 
     // Compute and track changes for highlighting (Story 3)
-    this.computeAndTrackChanges()
+    if (documentApplied) {
+      this.computeAndTrackChanges()
+    }
 
     // Update the response area
     this.updateResponseContent()
 
     // Attach event listeners for questions
     this.attachQuestionListeners()
+
+    // Trigger auto-save if document was applied and auto-save is enabled
+    if (documentApplied && this.state.autoSaveEnabled && this.state.currentFile) {
+      this.scheduleAutoSave()
+    }
+  }
+
+  /**
+   * Extract updated document content from Claude's response
+   * Looks for the ## Updated Document section with a code block
+   * @param {string} response - Raw response text from Claude
+   * @returns {string|null} Extracted document content, or null if not found
+   */
+  extractUpdatedDocument(response) {
+    if (!response || typeof response !== 'string') {
+      return null
+    }
+
+    // Pattern 1: Look for "## Updated Document" section with code block
+    // Matches: ## Updated Document\n```language\ncontent\n```
+    const updatedDocPattern = /##\s*Updated\s*Document\s*\n```[\w]*\n([\s\S]*?)\n```/i
+    const match = response.match(updatedDocPattern)
+    if (match && match[1]) {
+      return match[1]
+    }
+
+    // Pattern 2: Alternative format - "### Updated Document" (h3)
+    const altPattern = /###\s*Updated\s*Document\s*\n```[\w]*\n([\s\S]*?)\n```/i
+    const altMatch = response.match(altPattern)
+    if (altMatch && altMatch[1]) {
+      return altMatch[1]
+    }
+
+    // Pattern 3: Look for "Here is the updated document:" or similar
+    const inlinePattern = /(?:here is|here's) the updated (?:document|file|content):\s*\n```[\w]*\n([\s\S]*?)\n```/i
+    const inlineMatch = response.match(inlinePattern)
+    if (inlineMatch && inlineMatch[1]) {
+      return inlineMatch[1]
+    }
+
+    return null
   }
 
   /**

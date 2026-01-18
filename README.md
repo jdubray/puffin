@@ -205,7 +205,8 @@ puffin/
 │   ├── stats-plugin/      # Usage statistics dashboard
 │   ├── designer-plugin/   # GUI designer
 │   ├── claude-config-plugin/ # CLAUDE.md context management
-│   └── document-viewer-plugin/ # Documentation browser
+│   ├── document-viewer-plugin/ # Documentation browser
+│   └── document-editor-plugin/ # Text file editor with syntax highlighting
 │
 ├── projects/              # Example projects (optional)
 └── tests/
@@ -272,12 +273,13 @@ Real-time streaming of Claude Code's output:
 
 ### Plugin Views
 
-Puffin includes four built-in plugins that add navigation tabs:
+Puffin includes five built-in plugins that add navigation tabs:
 
 - **Stats** 📊: Usage statistics dashboard with weekly metrics and export
 - **Designer** 🎨: Visual GUI designer for creating UI layouts
 - **Context** 📄: CLAUDE.md configuration viewer and editor with branch focus management
 - **Docs** 📁: Documentation browser for markdown and image files in your docs/ directory
+- **Editor** 📝: Text file editor with syntax highlighting, auto-save, and line numbers
 
 ## Latest Features
 

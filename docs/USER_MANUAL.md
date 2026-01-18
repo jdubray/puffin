@@ -2015,4 +2015,4 @@ Puffin uses Electron with modern web technologies:
 
 ---
 
-*This manual covers Puffin version 2.13.0. For the latest updates and features, check the GitHub repository and release notes.*
+*This manual covers Puffin version 2.12.4. For the latest updates and features, check the GitHub repository and release notes.*

@@ -287,7 +287,7 @@ Puffin includes five built-in plugins that add navigation tabs:
 Embed Claude instructions directly in your documents with the new marker syntax:
 
 ```
-/@puffin: your instruction here //
+/@puffin: your instruction here @/
 ```
 
 - **Insert via toolbar, context menu, or Ctrl+M**

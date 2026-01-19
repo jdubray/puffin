@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Inline Prompt Markers**: Embed Claude instructions directly within documents using the `/@puffin: ... //` syntax
+- **Inline Prompt Markers**: Embed Claude instructions directly within documents using the `/@puffin: ... @/` syntax
   - **Universal marker format**: Works across all file types regardless of programming language
   - **Visual highlighting**: Markers displayed with yellow gradient background, dashed border, and 🐧 icon
   - **Multiline support**: Instructions can span multiple lines for complex prompts

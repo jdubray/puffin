@@ -1149,7 +1149,7 @@ Embed Claude instructions directly within your document using inline prompt mark
 Puffin uses a distinctive marker syntax that works across all file types:
 
 ```
-/@puffin: your instruction here //
+/@puffin: your instruction here @/
 ```
 
 **Key characteristics:**
@@ -1164,7 +1164,7 @@ Puffin uses a distinctive marker syntax that works across all file types:
   1. Use async/await instead of callbacks
   2. Add error handling with try/catch
   3. Add JSDoc documentation
-//
+@/
 ```
 
 #### How Markers Work
@@ -1202,7 +1202,7 @@ If you select text before inserting a marker, the selection becomes the marker c
 
 1. Select the text you want to modify
 2. Use any insertion method (toolbar, context menu, or Ctrl+M)
-3. The selected text is wrapped: `/@puffin: selected text //`
+3. The selected text is wrapped: `/@puffin: selected text @/`
 
 This is useful for quickly marking sections that need changes.
 
@@ -1227,7 +1227,7 @@ Remove all markers from your document with the **Clean Markers** button:
 3. Click **"Remove All Markers"** to clean the document
 
 **What gets removed:**
-- The entire marker syntax (`/@puffin: ... //`)
+- The entire marker syntax (`/@puffin: ... @/`)
 - The prompt content inside the marker
 - Surrounding document content is preserved
 
@@ -1258,7 +1258,7 @@ Remove all markers from your document with the **Clean Markers** button:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  1. Write your document with embedded markers                   │
-│     /@puffin: Add input validation //                           │
+│     /@puffin: Add input validation @/                           │
 │                                                                 │
 │  2. Click "Send to Claude" button                               │
 │     → Document + all markers sent to Claude                     │
@@ -1278,9 +1278,8 @@ Remove all markers from your document with the **Clean Markers** button:
 
 #### Known Limitations
 
-- The end delimiter `//` is identical to JavaScript single-line comment syntax
-- Best practice: Use markers on their own lines when possible
-- The unique `/@puffin:` start delimiter significantly reduces false matches
+- The `@/` end delimiter is rarely used in code, reducing false matches
+- The symmetric `/@...@/` pattern makes markers easy to spot
 - Malformed markers (incomplete syntax) are ignored silently
 
 #### Keyboard Shortcuts
@@ -1993,7 +1992,7 @@ Puffin uses Electron with modern web technologies:
 **Human-Controlled Mode**: Traditional implementation mode where you control each story's execution
 **Image Attachment**: Image file attached to a prompt for visual context (max 5 per prompt)
 **Implementation Order**: Optimized sequence for story implementation based on dependencies
-**Inline Prompt Marker**: A `/@puffin: ... //` syntax for embedding Claude instructions directly in document content
+**Inline Prompt Marker**: A `/@puffin: ... @/` syntax for embedding Claude instructions directly in document content
 **Orchestration Plan**: Preview of automated sprint showing order, branches, and phases
 **Post-it Note**: Personal note attached to a calendar day for reminders and annotations
 **Prompt Template**: Reusable prompt text saved for quick access and consistency

@@ -242,7 +242,190 @@ export class DocumentEditorView {
     // Load highlight.js in background
     this.loadHighlighter()
 
+    // Load persisted editor state and restore last session
+    await this.loadPersistedState()
+
     console.log('[DocumentEditorView] init() complete')
+  }
+
+  /**
+   * Load persisted editor state from storage
+   * Restores: last opened file, context files, model preferences
+   */
+  async loadPersistedState() {
+    try {
+      console.log('[DocumentEditorView] Loading persisted state...')
+      const result = await window.puffin.plugins.invoke(
+        'document-editor-plugin',
+        'loadEditorState',
+        {}
+      )
+
+      if (!result.state) {
+        console.log('[DocumentEditorView] No persisted state found')
+        return
+      }
+
+      const persistedState = result.state
+
+      // Restore user preferences
+      if (persistedState.selectedModel) {
+        this.state.selectedModel = persistedState.selectedModel
+      }
+      if (persistedState.thinkingBudget) {
+        this.state.thinkingBudget = persistedState.thinkingBudget
+      }
+      if (typeof persistedState.autoSaveEnabled === 'boolean') {
+        this.state.autoSaveEnabled = persistedState.autoSaveEnabled
+      }
+      if (typeof persistedState.highlightChangesEnabled === 'boolean') {
+        this.state.highlightChangesEnabled = persistedState.highlightChangesEnabled
+      }
+
+      // Restore context files (reload content from disk)
+      if (persistedState.contextFiles && persistedState.contextFiles.length > 0) {
+        await this.reloadContextFiles(persistedState.contextFiles)
+      }
+
+      // Restore last opened file (if it still exists)
+      if (persistedState.lastOpenedFile) {
+        await this.openFileByPath(persistedState.lastOpenedFile)
+      }
+
+      console.log('[DocumentEditorView] Persisted state restored')
+    } catch (error) {
+      console.warn('[DocumentEditorView] Failed to load persisted state:', error)
+    }
+  }
+
+  /**
+   * Reload context files from their paths
+   * @param {Array} contextFileRefs - Array of { path, name, type }
+   */
+  async reloadContextFiles(contextFileRefs) {
+    const loadedFiles = []
+
+    for (const ref of contextFileRefs) {
+      try {
+        // Read file content from disk
+        const result = await window.puffin.plugins.invoke(
+          'document-editor-plugin',
+          'readFile',
+          { path: ref.path }
+        )
+
+        if (result.error) {
+          console.warn(`[DocumentEditorView] Failed to reload context file ${ref.name}: ${result.error}`)
+          continue
+        }
+
+        loadedFiles.push({
+          type: ref.type || 'doc',
+          path: ref.path,
+          name: ref.name,
+          extension: result.extension,
+          content: result.content
+        })
+      } catch (error) {
+        console.warn(`[DocumentEditorView] Failed to reload context file ${ref.name}:`, error)
+      }
+    }
+
+    if (loadedFiles.length > 0) {
+      this.state.contextFiles = loadedFiles
+      console.log(`[DocumentEditorView] Reloaded ${loadedFiles.length} context files`)
+      this.render()
+    }
+  }
+
+  /**
+   * Open a file by its path (without file dialog)
+   * Used to restore last opened file from persisted state
+   * @param {string} filePath - Path to the file
+   */
+  async openFileByPath(filePath) {
+    try {
+      // Read the file directly
+      const result = await window.puffin.plugins.invoke(
+        'document-editor-plugin',
+        'readFile',
+        { path: filePath }
+      )
+
+      if (result.error) {
+        console.warn(`[DocumentEditorView] Failed to open last file ${filePath}: ${result.error}`)
+        return false
+      }
+
+      // Unwatch previous file if any
+      if (this.state.currentFile) {
+        await this.unwatchCurrentFile()
+      }
+
+      // Update state with opened file
+      this.state.currentFile = filePath
+      this.state.content = result.content
+      this.state.extension = result.extension
+      this.state.isModified = false
+      this.state.error = null
+
+      // Clear response state for new document
+      this.state.responseHistory = []
+      this.state.currentResponse = null
+      this.state.pendingQuestions = []
+      this.state.pendingValidationContent = null
+
+      // Reset change tracker and record baseline (Story 3)
+      this.changeTracker.clear()
+      this.changeTracker.recordBaseline(this.state.content)
+      this.state.hasTrackedChanges = false
+
+      // Clear undo stack for new document
+      this.state.undoStack = []
+
+      console.log(`[DocumentEditorView] Restored last file: ${filePath}`)
+
+      // Watch for external changes
+      await this.watchCurrentFile()
+
+      // Load session (response history) for this document
+      await this.loadSessionForCurrentFile()
+
+      // Re-render
+      this.render()
+
+      return true
+    } catch (error) {
+      console.warn(`[DocumentEditorView] Failed to open file by path ${filePath}:`, error)
+      return false
+    }
+  }
+
+  /**
+   * Save the current editor state to persistent storage
+   * Called when relevant state changes occur
+   */
+  async saveEditorState() {
+    try {
+      const stateToSave = {
+        lastOpenedFile: this.state.currentFile,
+        contextFiles: this.state.contextFiles,
+        selectedModel: this.state.selectedModel,
+        thinkingBudget: this.state.thinkingBudget,
+        autoSaveEnabled: this.state.autoSaveEnabled,
+        highlightChangesEnabled: this.state.highlightChangesEnabled
+      }
+
+      await window.puffin.plugins.invoke(
+        'document-editor-plugin',
+        'saveEditorState',
+        { state: stateToSave }
+      )
+
+      console.log('[DocumentEditorView] Editor state saved')
+    } catch (error) {
+      console.warn('[DocumentEditorView] Failed to save editor state:', error)
+    }
   }
 
   /**
@@ -631,9 +814,30 @@ export class DocumentEditorView {
   renderChangeSummary(response) {
     if (!response.summary) return ''
 
+    // Show warning and action buttons if Claude claims changes but document was NOT actually updated
+    const notAppliedSection = !response.documentApplied && response.summary && response.summary !== 'No changes'
+      ? `<div class="document-editor-not-applied-warning">
+          <span class="document-editor-warning-icon">⚠️</span>
+          <span class="document-editor-warning-text">Document was NOT updated - Claude's response did not use the expected format</span>
+        </div>
+        <div class="document-editor-not-applied-actions">
+          <button class="document-editor-btn document-editor-btn-small" data-action="append-raw-response" data-response-id="${response.id}" title="Append Claude's content to the end of the document">
+            <span class="document-editor-btn-icon">📝</span>
+            <span class="document-editor-btn-text">Append to Document</span>
+          </button>
+          <button class="document-editor-btn document-editor-btn-small document-editor-btn-secondary" data-action="view-full-response" data-response-id="${response.id}" title="View the full raw response">
+            <span class="document-editor-btn-icon">👁️</span>
+            <span class="document-editor-btn-text">View Full Response</span>
+          </button>
+        </div>`
+      : ''
+
+    const label = response.documentApplied ? 'Changes Made:' : 'Claude\'s Response:'
+
     return `
-      <div class="document-editor-change-summary">
-        <div class="document-editor-summary-label">Changes Made:</div>
+      <div class="document-editor-change-summary ${!response.documentApplied ? 'not-applied' : ''}">
+        ${notAppliedSection}
+        <div class="document-editor-summary-label">${label}</div>
         <div class="document-editor-summary-content">${this.formatSummary(response.summary)}</div>
       </div>
     `
@@ -1029,6 +1233,8 @@ export class DocumentEditorView {
       const handler = (e) => {
         this.state.selectedModel = e.target.value
         console.log('[DocumentEditorView] Model changed:', this.state.selectedModel)
+        // Save editor state (persist model preference)
+        this.saveEditorState()
       }
       this.addTrackedListener(modelSelector, 'change', handler)
     }
@@ -1039,6 +1245,8 @@ export class DocumentEditorView {
       const handler = (e) => {
         this.state.thinkingBudget = e.target.value
         console.log('[DocumentEditorView] Thinking budget changed:', this.state.thinkingBudget)
+        // Save editor state (persist thinking budget preference)
+        this.saveEditorState()
       }
       this.addTrackedListener(thinkingSelector, 'change', handler)
     }
@@ -1717,6 +1925,22 @@ export class DocumentEditorView {
       return inlineMatch[1]
     }
 
+    // Pattern 4: Look for "## Full Document" or "## Complete Document" (alternative naming)
+    const fullDocPattern = /##\s*(?:Full|Complete)\s*Document\s*\n```[\w]*\n([\s\S]*?)\n```/i
+    const fullDocMatch = response.match(fullDocPattern)
+    if (fullDocMatch && fullDocMatch[1]) {
+      console.log('[DocumentEditorView] Extracted via pattern 4 (## Full/Complete Document)')
+      return fullDocMatch[1]
+    }
+
+    // Pattern 5: Look for "## Continued Document" for continuation scenarios
+    const continuedPattern = /##\s*Continued\s*Document\s*\n```[\w]*\n([\s\S]*?)\n```/i
+    const continuedMatch = response.match(continuedPattern)
+    if (continuedMatch && continuedMatch[1]) {
+      console.log('[DocumentEditorView] Extracted via pattern 5 (## Continued Document)')
+      return continuedMatch[1]
+    }
+
     console.log('[DocumentEditorView] No updated document pattern found in response')
     return null
   }
@@ -1856,6 +2080,20 @@ export class DocumentEditorView {
       this.addTrackedListener(btn, 'click', handler)
     })
 
+    // Append raw response button (when Claude doesn't use proper format)
+    this.container.querySelectorAll('[data-action="append-raw-response"]').forEach(btn => {
+      const responseId = btn.dataset.responseId
+      const handler = () => this.handleAppendRawResponse(responseId)
+      this.addTrackedListener(btn, 'click', handler)
+    })
+
+    // View full response button
+    this.container.querySelectorAll('[data-action="view-full-response"]').forEach(btn => {
+      const responseId = btn.dataset.responseId
+      const handler = () => this.handleViewFullResponse(responseId)
+      this.addTrackedListener(btn, 'click', handler)
+    })
+
     // Focus the first input in the modal
     if (this.state.showResponseModal) {
       const firstInput = this.container.querySelector('.document-editor-modal-question-input')
@@ -1917,6 +2155,226 @@ export class DocumentEditorView {
     this.render()
 
     console.log('[DocumentEditorView] Force applied content successfully')
+  }
+
+  /**
+   * Handle appending Claude's raw response to the document
+   * Used when Claude doesn't use the proper <<<CHANGE>>> format
+   * @param {string} responseId - Response ID to get content from
+   */
+  handleAppendRawResponse(responseId) {
+    // Find the response in history or current
+    const response = this.findResponseById(responseId)
+    if (!response || !response.fullResponse) {
+      console.warn('[DocumentEditorView] No response found for ID:', responseId)
+      return
+    }
+
+    // Extract useful content from the raw response
+    const extractedContent = this.extractContentFromResponse(response.fullResponse)
+    if (!extractedContent) {
+      alert('Could not extract content from Claude\'s response.')
+      return
+    }
+
+    console.log('[DocumentEditorView] Appending raw response content to document')
+
+    // Push current state to undo stack before modifying
+    this.pushUndoState()
+
+    // Append the content to the document
+    const separator = this.state.content.endsWith('\n') ? '\n' : '\n\n'
+    this.state.content = this.state.content + separator + extractedContent
+    this.state.isModified = true
+
+    // Update textarea
+    const textarea = this.container.querySelector('.document-editor-textarea')
+    if (textarea) {
+      textarea.value = this.state.content
+    }
+
+    // Update display
+    this.updateHighlighting()
+    this.updateLineNumbers()
+
+    // Mark response as applied
+    response.documentApplied = true
+    response.appendedRaw = true
+
+    // Re-render to update UI
+    this.render()
+
+    console.log('[DocumentEditorView] Raw response content appended successfully')
+  }
+
+  /**
+   * Handle viewing the full raw response in a modal
+   * @param {string} responseId - Response ID to view
+   */
+  handleViewFullResponse(responseId) {
+    const response = this.findResponseById(responseId)
+    if (!response || !response.fullResponse) {
+      console.warn('[DocumentEditorView] No response found for ID:', responseId)
+      return
+    }
+
+    // Create and show a modal with the full response
+    const modal = document.createElement('div')
+    modal.className = 'document-editor-full-response-modal-overlay'
+    modal.innerHTML = `
+      <div class="document-editor-full-response-modal">
+        <div class="document-editor-full-response-modal-header">
+          <span class="document-editor-full-response-modal-title">Full Claude Response</span>
+          <button class="document-editor-full-response-modal-close" title="Close">×</button>
+        </div>
+        <div class="document-editor-full-response-modal-body">
+          <pre class="document-editor-full-response-content">${this.escapeHtml(response.fullResponse)}</pre>
+        </div>
+        <div class="document-editor-full-response-modal-footer">
+          <button class="document-editor-btn document-editor-btn-secondary" data-action="copy-response">
+            <span class="document-editor-btn-icon">📋</span>
+            <span class="document-editor-btn-text">Copy to Clipboard</span>
+          </button>
+          <button class="document-editor-btn" data-action="close-modal">Close</button>
+        </div>
+      </div>
+    `
+
+    // Add event listeners
+    modal.querySelector('.document-editor-full-response-modal-close').addEventListener('click', () => {
+      modal.remove()
+    })
+    modal.querySelector('[data-action="close-modal"]').addEventListener('click', () => {
+      modal.remove()
+    })
+    modal.querySelector('[data-action="copy-response"]').addEventListener('click', () => {
+      navigator.clipboard.writeText(response.fullResponse).then(() => {
+        alert('Response copied to clipboard!')
+      }).catch(err => {
+        console.error('Failed to copy:', err)
+      })
+    })
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.remove()
+      }
+    })
+
+    document.body.appendChild(modal)
+  }
+
+  /**
+   * Find a response by its ID in current response or history
+   * @param {string} responseId - Response ID to find
+   * @returns {Object|null} Response object or null
+   */
+  findResponseById(responseId) {
+    if (this.state.currentResponse && this.state.currentResponse.id === responseId) {
+      return this.state.currentResponse
+    }
+    return this.state.responseHistory.find(r => r.id === responseId) || null
+  }
+
+  /**
+   * Extract useful content from Claude's raw response
+   * Attempts to find markdown/prose content that can be appended
+   * @param {string} rawResponse - Full raw response text
+   * @returns {string|null} Extracted content or null
+   */
+  extractContentFromResponse(rawResponse) {
+    if (!rawResponse) return null
+
+    // Strategy 1: Look for content after "## Summary" section (skip the summary, get the meat)
+    const summaryMatch = rawResponse.match(/##\s*Summary[\s\S]*?\n\n([\s\S]+)/i)
+    if (summaryMatch && summaryMatch[1]) {
+      const afterSummary = summaryMatch[1].trim()
+      // Clean up any trailing metadata
+      const cleaned = this.cleanExtractedContent(afterSummary)
+      if (cleaned.length > 50) {
+        return cleaned
+      }
+    }
+
+    // Strategy 2: Look for code blocks that might contain the content
+    const codeBlockMatch = rawResponse.match(/```(?:markdown|md)?\n([\s\S]*?)\n```/i)
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      return codeBlockMatch[1].trim()
+    }
+
+    // Strategy 3: Look for content after common intro phrases
+    const introPatterns = [
+      /(?:here is|here's) the (?:continued|updated|completed|rest of the)[\s\S]*?:\s*\n+([\s\S]+)/i,
+      /(?:continuing|extending|completing) the (?:document|specification|spec|content)[\s\S]*?:\s*\n+([\s\S]+)/i,
+      /I(?:'ve| have) (?:added|written|created|continued)[\s\S]*?:\s*\n+([\s\S]+)/i
+    ]
+
+    for (const pattern of introPatterns) {
+      const match = rawResponse.match(pattern)
+      if (match && match[1]) {
+        const content = this.cleanExtractedContent(match[1])
+        if (content.length > 50) {
+          return content
+        }
+      }
+    }
+
+    // Strategy 4: If the response looks like mostly prose/markdown, use most of it
+    // Skip obvious metadata sections
+    const lines = rawResponse.split('\n')
+    const contentLines = []
+    let inSummarySection = false
+
+    for (const line of lines) {
+      // Skip summary section
+      if (/^##\s*Summary/i.test(line)) {
+        inSummarySection = true
+        continue
+      }
+      if (inSummarySection && /^##\s/.test(line) && !/^##\s*Summary/i.test(line)) {
+        inSummarySection = false
+      }
+      if (inSummarySection) continue
+
+      // Skip change markers and metadata
+      if (/^<<<(CHANGE|END_CHANGE)>>>/.test(line)) continue
+      if (/^(TYPE|FIND|CONTENT|POSITION):/.test(line)) continue
+      if (/^\+\d+\s*~\d+/.test(line)) continue // Stats like +42 ~1
+
+      contentLines.push(line)
+    }
+
+    const content = contentLines.join('\n').trim()
+    if (content.length > 100) {
+      return this.cleanExtractedContent(content)
+    }
+
+    // Fallback: Just return the raw response minus obvious metadata
+    return this.cleanExtractedContent(rawResponse)
+  }
+
+  /**
+   * Clean extracted content by removing metadata and formatting artifacts
+   * @param {string} content - Raw extracted content
+   * @returns {string} Cleaned content
+   */
+  cleanExtractedContent(content) {
+    if (!content) return ''
+
+    let cleaned = content
+
+    // Remove stats lines like "+42 ~1 lines"
+    cleaned = cleaned.replace(/^\s*\+\d+\s*~?\d*\s*(?:-\d+\s*)?lines?\s*$/gim, '')
+
+    // Remove empty code blocks
+    cleaned = cleaned.replace(/```\s*```/g, '')
+
+    // Remove trailing whitespace from each line
+    cleaned = cleaned.split('\n').map(l => l.trimEnd()).join('\n')
+
+    // Collapse multiple blank lines into one
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n')
+
+    return cleaned.trim()
   }
 
   /**
@@ -2351,6 +2809,9 @@ export class DocumentEditorView {
 
       // Re-render to show the new chip
       this.render()
+
+      // Save editor state (persist context files)
+      this.saveEditorState()
     } catch (error) {
       console.error('[DocumentEditorView] Add context file error:', error)
       alert('Failed to add context file: ' + error.message)
@@ -2370,6 +2831,9 @@ export class DocumentEditorView {
 
       // Re-render to update chips
       this.render()
+
+      // Save editor state (persist context files)
+      this.saveEditorState()
     }
   }
 
@@ -2385,6 +2849,9 @@ export class DocumentEditorView {
     // Update line numbers and highlight layer
     this.updateLineNumbers()
     this.updateHighlightLayer()
+
+    // Save editor state (persist highlight preference)
+    this.saveEditorState()
   }
 
   /**
@@ -2525,6 +2992,9 @@ export class DocumentEditorView {
 
       // Re-render to show editor
       this.render()
+
+      // Save editor state (persist last opened file)
+      this.saveEditorState()
     } catch (error) {
       console.error('[DocumentEditorView] New document error:', error)
       alert('Failed to create file: ' + error.message)
@@ -2588,6 +3058,9 @@ export class DocumentEditorView {
 
       // Re-render to show editor with content
       this.render()
+
+      // Save editor state (persist last opened file)
+      this.saveEditorState()
     } catch (error) {
       console.error('[DocumentEditorView] Open file error:', error)
       alert('Failed to open file: ' + error.message)
@@ -2914,6 +3387,9 @@ export class DocumentEditorView {
     if (enabled && this.state.isModified && this.state.currentFile) {
       this.scheduleAutoSave()
     }
+
+    // Save editor state (persist auto-save preference)
+    this.saveEditorState()
   }
 
   /**

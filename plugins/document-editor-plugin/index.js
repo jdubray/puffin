@@ -85,6 +85,7 @@ const DocumentEditorPlugin = {
   recentFiles: [],
   fileWatchers: new Map(),
   recentFilesPath: null,
+  editorStatePath: null,  // Path to editor-state.json for persisting editor preferences
   allowedBasePaths: [],
   harnessConfig: null,
 
@@ -104,6 +105,7 @@ const DocumentEditorPlugin = {
     await fs.mkdir(pluginDataPath, { recursive: true })
 
     this.recentFilesPath = path.join(pluginDataPath, 'recent-files.json')
+    this.editorStatePath = path.join(pluginDataPath, 'editor-state.json')
 
     // Initialize allowed base paths for file operations
     // Allow user's home directory and the current working directory (project root)
@@ -131,6 +133,8 @@ const DocumentEditorPlugin = {
     context.registerIpcHandler('getHarnessConfig', this.getHarnessConfig.bind(this))
     context.registerIpcHandler('loadSession', this.loadSession.bind(this))
     context.registerIpcHandler('saveSession', this.saveSession.bind(this))
+    context.registerIpcHandler('loadEditorState', this.loadEditorState.bind(this))
+    context.registerIpcHandler('saveEditorState', this.saveEditorState.bind(this))
 
     context.log.info('Document Editor plugin activated')
   },
@@ -659,6 +663,86 @@ const DocumentEditorPlugin = {
       try {
         const sessionsDir = await this.getSessionsDir()
         const tempPath = path.join(sessionsDir, `${sessionHash}.json.tmp`)
+        await fs.unlink(tempPath)
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      return { success: false, error: error.message }
+    }
+  },
+
+  /**
+   * Load editor state from persistent storage
+   * Returns last opened file, context files, and user preferences
+   * @returns {Promise<Object>} Editor state or empty state if not found
+   */
+  async loadEditorState() {
+    try {
+      const data = await fs.readFile(this.editorStatePath, 'utf-8')
+      const state = JSON.parse(data)
+      this.context.log.info('Loaded editor state')
+      return { state }
+    } catch (error) {
+      // File doesn't exist or is invalid - return empty state
+      this.context.log.info('No editor state found, using defaults')
+      return {
+        state: {
+          lastOpenedFile: null,
+          contextFiles: [],
+          selectedModel: 'haiku',
+          thinkingBudget: 'none',
+          autoSaveEnabled: true,
+          highlightChangesEnabled: true
+        }
+      }
+    }
+  },
+
+  /**
+   * Save editor state to persistent storage
+   * Uses atomic write pattern (write to temp, then rename)
+   * @param {Object} options - State to persist
+   * @returns {Promise<Object>} Success status
+   */
+  async saveEditorState(options = {}) {
+    const { state } = options
+
+    if (!state) {
+      return { success: false, error: 'State is required' }
+    }
+
+    // Only persist the fields we care about (don't save transient state)
+    const persistedState = {
+      lastOpenedFile: state.lastOpenedFile || null,
+      contextFiles: (state.contextFiles || []).map(cf => ({
+        // Only persist path info, not content (will be reloaded)
+        path: cf.path,
+        name: cf.name,
+        type: cf.type
+      })),
+      selectedModel: state.selectedModel || 'haiku',
+      thinkingBudget: state.thinkingBudget || 'none',
+      autoSaveEnabled: state.autoSaveEnabled !== false, // Default true
+      highlightChangesEnabled: state.highlightChangesEnabled !== false, // Default true
+      savedAt: new Date().toISOString()
+    }
+
+    const tempPath = `${this.editorStatePath}.tmp`
+    try {
+      // Write to temp file first (atomic write pattern)
+      await fs.writeFile(tempPath, JSON.stringify(persistedState, null, 2), 'utf-8')
+
+      // Rename to final path
+      await fs.rename(tempPath, this.editorStatePath)
+
+      this.context.log.info('Saved editor state')
+      return { success: true }
+    } catch (error) {
+      this.context.log.error('Failed to save editor state:', error.message)
+
+      // Clean up temp file if it exists
+      try {
         await fs.unlink(tempPath)
       } catch {
         // Ignore cleanup errors

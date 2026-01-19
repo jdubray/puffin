@@ -1,22 +1,35 @@
 /**
  * DocumentMerger - Applies structured changes to documents
  *
- * Parses Claude's structured change format and applies changes
+ * Parses Claude's JSON-based change format and applies changes
  * programmatically to preserve the full document content.
+ *
+ * JSON Format:
+ * {
+ *   "type": "changes",
+ *   "summary": ["change 1", "change 2"],
+ *   "changes": [
+ *     { "op": "replace", "find": "text", "content": "new text" },
+ *     { "op": "insert_after", "find": "anchor", "content": "new text" },
+ *     { "op": "insert_before", "find": "anchor", "content": "new text" },
+ *     { "op": "delete", "find": "text to remove" }
+ *   ]
+ * }
  */
 
 export class DocumentMerger {
   constructor() {
-    // Change block markers
-    this.CHANGE_START = '<<<CHANGE>>>'
-    this.CHANGE_END = '<<<END_CHANGE>>>'
+    // Valid operation types
+    this.VALID_OPS = ['replace', 'insert_after', 'insert_before', 'delete']
 
-    // Valid change types
-    this.VALID_TYPES = ['REPLACE', 'INSERT_AFTER', 'INSERT_BEFORE', 'DELETE']
+    // Legacy markers (for backwards compatibility)
+    this.LEGACY_CHANGE_START = '<<<CHANGE>>>'
+    this.LEGACY_CHANGE_END = '<<<END_CHANGE>>>'
   }
 
   /**
    * Parse structured changes from Claude's response
+   * Supports both JSON format (preferred) and legacy markdown format
    * @param {string} response - Raw response text from Claude
    * @returns {Object} Parsed result with changes array and summary
    */
@@ -25,6 +38,152 @@ export class DocumentMerger {
       return { changes: [], summary: '', questions: [], parseErrors: ['Empty response'] }
     }
 
+    // Try JSON format first (preferred)
+    const jsonResult = this.parseJsonFormat(response)
+    if (jsonResult.success) {
+      return jsonResult.data
+    }
+
+    // Fall back to legacy markdown format
+    if (this.hasLegacyFormat(response)) {
+      console.log('[DocumentMerger] Falling back to legacy markdown format')
+      return this.parseLegacyFormat(response)
+    }
+
+    // No recognized format
+    return {
+      changes: [],
+      summary: '',
+      questions: [],
+      parseErrors: ['No valid JSON or legacy change format found in response']
+    }
+  }
+
+  /**
+   * Parse JSON format from response
+   * @param {string} response - Raw response text
+   * @returns {Object} { success: boolean, data?: ParsedResult }
+   */
+  parseJsonFormat(response) {
+    // Extract JSON from code block
+    const jsonMatch = response.match(/```json\s*\n([\s\S]*?)\n```/)
+    if (!jsonMatch) {
+      return { success: false }
+    }
+
+    let jsonStr = jsonMatch[1].trim()
+
+    try {
+      const parsed = JSON.parse(jsonStr)
+
+      // Handle questions format
+      if (parsed.type === 'questions') {
+        return {
+          success: true,
+          data: {
+            changes: [],
+            summary: '',
+            questions: (parsed.questions || []).map((q, i) => ({
+              id: `q-${Date.now()}-${i}`,
+              question: q,
+              answered: false
+            })),
+            parseErrors: []
+          }
+        }
+      }
+
+      // Handle changes format
+      if (parsed.type === 'changes') {
+        const changes = []
+        const parseErrors = []
+
+        for (const change of (parsed.changes || [])) {
+          const op = (change.op || '').toLowerCase()
+          if (!this.VALID_OPS.includes(op)) {
+            parseErrors.push(`Invalid operation type: ${change.op}`)
+            continue
+          }
+
+          if (!change.find) {
+            parseErrors.push('Change missing required "find" field')
+            continue
+          }
+
+          if (op !== 'delete' && !change.content) {
+            parseErrors.push(`${op} operation missing required "content" field`)
+            continue
+          }
+
+          changes.push({
+            type: op.toUpperCase(),
+            find: change.find,
+            content: change.content || null
+          })
+        }
+
+        // Build summary string from array
+        const summaryArray = parsed.summary || []
+        const summaryStr = Array.isArray(summaryArray)
+          ? summaryArray.map(s => `- ${s}`).join('\n')
+          : String(summaryArray)
+
+        return {
+          success: true,
+          data: {
+            changes,
+            summary: summaryStr,
+            questions: [],
+            parseErrors
+          }
+        }
+      }
+
+      // Unknown type
+      return {
+        success: false
+      }
+    } catch (e) {
+      console.warn('[DocumentMerger] JSON parse error:', e.message)
+      // Try to extract more context about the error
+      return {
+        success: false,
+        error: `JSON parse error: ${e.message}`
+      }
+    }
+  }
+
+  /**
+   * Check if response contains legacy markdown format
+   * @param {string} response - Response text
+   * @returns {boolean}
+   */
+  hasLegacyFormat(response) {
+    return response.includes(this.LEGACY_CHANGE_START) && response.includes(this.LEGACY_CHANGE_END)
+  }
+
+  /**
+   * Check if response contains structured changes (JSON or legacy)
+   * @param {string} response - Response text to check
+   * @returns {boolean} True if response uses structured change format
+   */
+  hasStructuredChanges(response) {
+    if (!response) return false
+
+    // Check for JSON format
+    const jsonMatch = response.match(/```json\s*\n[\s\S]*?"type"\s*:\s*"changes"[\s\S]*?\n```/)
+    if (jsonMatch) return true
+
+    // Check for legacy format
+    return this.hasLegacyFormat(response)
+  }
+
+  /**
+   * Parse legacy markdown format (backwards compatibility)
+   * @param {string} response - Raw response text
+   * @returns {Object} Parsed result
+   */
+  parseLegacyFormat(response) {
     const result = {
       changes: [],
       summary: '',
@@ -43,7 +202,6 @@ export class DocumentMerger {
     if (questionsMatch) {
       const questionsText = questionsMatch[1].trim()
       if (questionsText && !questionsText.includes('[Only include')) {
-        // Parse individual questions (look for numbered or bulleted items)
         const questionLines = questionsText.split('\n')
           .map(l => l.replace(/^[-*\d.)\s]+/, '').trim())
           .filter(l => l.length > 0 && l.endsWith('?'))
@@ -61,7 +219,7 @@ export class DocumentMerger {
 
     while ((match = changeBlockRegex.exec(response)) !== null) {
       const blockContent = match[1].trim()
-      const parsed = this.parseChangeBlock(blockContent)
+      const parsed = this.parseLegacyChangeBlock(blockContent)
 
       if (parsed.error) {
         result.parseErrors.push(parsed.error)
@@ -74,11 +232,11 @@ export class DocumentMerger {
   }
 
   /**
-   * Parse a single change block
+   * Parse a single legacy change block
    * @param {string} blockContent - Content of a single change block
    * @returns {Object} Parsed change object or error
    */
-  parseChangeBlock(blockContent) {
+  parseLegacyChangeBlock(blockContent) {
     // Extract TYPE
     const typeMatch = blockContent.match(/^TYPE:\s*(\w+)/im)
     if (!typeMatch) {
@@ -86,24 +244,26 @@ export class DocumentMerger {
     }
 
     const type = typeMatch[1].toUpperCase()
-    if (!this.VALID_TYPES.includes(type)) {
+    const validTypes = ['REPLACE', 'INSERT_AFTER', 'INSERT_BEFORE', 'DELETE']
+    if (!validTypes.includes(type)) {
       return { error: `Invalid change type: ${type}` }
     }
 
-    // Extract FIND content (between FIND: and CONTENT: or end)
-    const findMatch = blockContent.match(/FIND:\s*\n```[^\n]*\n([\s\S]*?)\n```/i)
-    if (!findMatch) {
+    // Extract FIND content - handles nested code blocks
+    const findText = this.extractCodeBlockContent(blockContent, 'FIND')
+    if (findText === null) {
       return { error: 'Missing or malformed FIND section in change block' }
     }
-    const findText = findMatch[1]
 
-    // Extract CONTENT (optional for DELETE)
+    // Extract CONTENT (optional for DELETE) - handles nested code blocks
     let contentText = null
-    const contentMatch = blockContent.match(/CONTENT:\s*\n```[^\n]*\n([\s\S]*?)\n```/i)
-    if (contentMatch) {
-      contentText = contentMatch[1]
-    } else if (type !== 'DELETE') {
-      return { error: `Missing CONTENT section for ${type} operation` }
+    if (type !== 'DELETE') {
+      contentText = this.extractCodeBlockContent(blockContent, 'CONTENT')
+      if (contentText === null) {
+        return { error: `Missing CONTENT section for ${type} operation` }
+      }
+    } else {
+      contentText = this.extractCodeBlockContent(blockContent, 'CONTENT')
     }
 
     return {
@@ -111,6 +271,53 @@ export class DocumentMerger {
       find: findText,
       content: contentText
     }
+  }
+
+  /**
+   * Extract content from a labeled code block, handling nested code blocks
+   * @param {string} blockContent - The full change block content
+   * @param {string} label - The label to look for (e.g., 'FIND' or 'CONTENT')
+   * @returns {string|null} The extracted content or null if not found
+   */
+  extractCodeBlockContent(blockContent, label) {
+    // Find the label position
+    const labelRegex = new RegExp(`${label}:\\s*\\n\`\`\`[^\\n]*\\n`, 'i')
+    const labelMatch = blockContent.match(labelRegex)
+    if (!labelMatch) {
+      return null
+    }
+
+    const contentStart = labelMatch.index + labelMatch[0].length
+
+    // Find next section label or end
+    const nextLabel = label === 'FIND' ? blockContent.indexOf('CONTENT:', contentStart) : -1
+    const searchEnd = nextLabel !== -1 ? nextLabel : blockContent.length
+
+    // Look for ``` that's on its own line before the next section
+    const searchArea = blockContent.substring(contentStart, searchEnd)
+    const lines = searchArea.split('\n')
+    let charCount = 0
+    let contentEnd = -1
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (line.trim() === '```') {
+        contentEnd = charCount
+        break
+      }
+      charCount += line.length + 1
+    }
+
+    if (contentEnd === -1) {
+      return null
+    }
+
+    let content = searchArea.substring(0, contentEnd)
+    if (content.endsWith('\n')) {
+      content = content.slice(0, -1)
+    }
+
+    return content
   }
 
   /**
@@ -182,8 +389,6 @@ export class DocumentMerger {
       const normalizedIndex = normalizedContent.indexOf(normalizedFind)
 
       if (normalizedIndex !== -1) {
-        // Found in normalized version - need to find actual position in original
-        // This is approximate - find the best match using line-by-line search
         const result = this.findBestMatch(content, find)
         if (result) {
           index = result.index
@@ -207,7 +412,6 @@ export class DocumentMerger {
       for (const line of lines) {
         const lineIndex = content.indexOf(line)
         if (lineIndex !== -1) {
-          // Found a matching line - expand to find full context
           const result = this.expandMatchFromLine(content, find, lineIndex, line)
           if (result) {
             index = result.index
@@ -236,7 +440,6 @@ export class DocumentMerger {
     const findLines = find.split('\n').map(l => l.trim()).filter(l => l.length > 0)
     if (findLines.length === 0) return null
 
-    // Find first line
     const firstLine = findLines[0]
     let searchStart = 0
 
@@ -244,25 +447,18 @@ export class DocumentMerger {
       const lineIndex = content.indexOf(firstLine, searchStart)
       if (lineIndex === -1) break
 
-      // Try to match subsequent lines
-      let matchStart = lineIndex
-      let matchEnd = lineIndex + firstLine.length
-      let allLinesMatched = true
-
-      // Find the actual start of this line in content
       let actualStart = lineIndex
       while (actualStart > 0 && content[actualStart - 1] !== '\n') {
         actualStart--
       }
 
-      // Try to match all lines
       const contentFromMatch = content.substring(actualStart)
       const contentLines = contentFromMatch.split('\n')
+      let allLinesMatched = true
 
       for (let i = 0; i < findLines.length && i < contentLines.length; i++) {
         if (!contentLines[i].trim().includes(findLines[i]) &&
             contentLines[i].trim() !== findLines[i]) {
-          // Allow partial matches if most of the line matches
           if (findLines[i].length > 20) {
             const similarity = this.calculateSimilarity(contentLines[i].trim(), findLines[i])
             if (similarity < 0.8) {
@@ -277,7 +473,6 @@ export class DocumentMerger {
       }
 
       if (allLinesMatched) {
-        // Calculate the actual text to match
         let endLineIndex = 0
         for (let i = 0; i < findLines.length && i < contentLines.length; i++) {
           endLineIndex = i
@@ -307,16 +502,13 @@ export class DocumentMerger {
 
     if (foundLineIdx === -1) return null
 
-    // Find the start of the line in content
     let lineStart = lineIndex
     while (lineStart > 0 && content[lineStart - 1] !== '\n') {
       lineStart--
     }
 
-    // Go back to find potential start of the match
     let matchStart = lineStart
     for (let i = 0; i < foundLineIdx; i++) {
-      // Go back one line
       if (matchStart > 0) {
         matchStart--
         while (matchStart > 0 && content[matchStart - 1] !== '\n') {
@@ -325,15 +517,13 @@ export class DocumentMerger {
       }
     }
 
-    // Find the end by counting forward
     let matchEnd = lineStart
     const remainingLines = findLines.length - foundLineIdx
     for (let i = 0; i < remainingLines; i++) {
-      // Find end of current line
       while (matchEnd < content.length && content[matchEnd] !== '\n') {
         matchEnd++
       }
-      if (matchEnd < content.length) matchEnd++ // Skip newline
+      if (matchEnd < content.length) matchEnd++
     }
 
     const matchedText = content.substring(matchStart, matchEnd).replace(/\n$/, '')
@@ -353,7 +543,6 @@ export class DocumentMerger {
 
     if (longer.length === 0) return 1.0
 
-    // Simple character-based similarity
     let matches = 0
     for (let i = 0; i < shorter.length; i++) {
       if (longer.includes(shorter[i])) matches++
@@ -370,7 +559,10 @@ export class DocumentMerger {
     const before = content.substring(0, index)
     const after = content.substring(index + findText.length)
 
-    switch (type) {
+    // Normalize type to uppercase for comparison
+    const normalizedType = type.toUpperCase()
+
+    switch (normalizedType) {
       case 'REPLACE':
         return { success: true, content: before + newContent + after }
 
@@ -386,16 +578,6 @@ export class DocumentMerger {
       default:
         return { success: false, error: `Unknown change type: ${type}` }
     }
-  }
-
-  /**
-   * Check if response contains structured changes
-   * @param {string} response - Response text to check
-   * @returns {boolean} True if response uses structured change format
-   */
-  hasStructuredChanges(response) {
-    if (!response) return false
-    return response.includes(this.CHANGE_START) && response.includes(this.CHANGE_END)
   }
 
   /**

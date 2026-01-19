@@ -44,7 +44,8 @@
       "Bash(do echo \"Checking $f\")",
       "Bash(echo:*)",
       "Bash(done)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git rev-parse:*)"
     ]
   }
 }

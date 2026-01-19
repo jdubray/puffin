@@ -16,16 +16,27 @@
 ### Layer 1: Context Management Layer
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    CONTEXT VAULT                            │
-├─────────────────────────────────────────────────────────────┤
-│  Specifications    │  Codebase Index   │  Conversation      │
-│  ───────────────   │  ──────────────   │  History           │
-│  • User Stories    │  • File manifest  │  ─────────────     │
-│  • Acceptance      │  • Symbol index   │  • Thread logs     │
-│  • Constraints     │  • Dependencies   │  • Decisions       │
-│  • Domain rules    │  • Patterns       │  • Rationale       │ 
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    CONTEXT VAULT                                         │
+├──────────────────────────────────────────────────────────────────────────────────────────┤
+│  specifications/          │  codebase-index/       │  traceability/                      │
+│  ─────────────────────    │  ──────────────────    │  ─────────────────────              │
+│  • user-stories.json      │  • file-manifest.json  │  • story-to-code.json               │
+│  • acceptance-criteria    │  • symbol-table.json   │  • criterion-to-code.json           │
+│  • domain-rules.json      │  • dependency-graph    │  • code-to-tests.json               │
+│  • assumptions.json       │  • pattern-catalog     │  • constraint-to-code.json          │
+│  • security-requirements  │                        │  • change-impact-analysis           │
+│  • technical-standards    │                        │                                     │
+│  • api-contracts.json     │                        │                                     │
+├──────────────────────────────────────────────────────────────────────────────────────────┤
+│  quality-gates/           │  history/              │  active-context/                    │
+│  ─────────────────────    │  ──────────────────    │  ─────────────────────              │
+│  • inspection-assertions  │  • decisions.json      │  • current-sprint.json              │
+│  • deliberation-triggers  │  • thread-summaries/   │  • current-story.json               │
+│                           │  • implementation-log  │  • working-set.json                 │
+│                           │  • incident-log.json   │  • verification-state.json          │
+│                           │  • deployment-history  │  • risk-hotspots.json               │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Innovation**: Context is never fed directly to Claude Code. Instead, Puffin maintains a **queryable vault** that the orchestrator can slice, filter, and compose into targeted prompts.
@@ -86,46 +97,123 @@ This is where the RLM insight becomes powerful:
 
 ### 1. Context Vault Schema
 
-/@puffin: update the ContextVault schema by adding missing concepts that you will find by analysis the included documents (user-management specification, ACM specification). 
-the goal it to identify high level concepts that are common to specifications and code bases.
-//
 
 ```
 ContextVault/
 ├── specifications/
-│   ├── user-stories.json              # Structured story data with metadata
-│   ├── acceptance-criteria.json        # Testable requirements per story
-│   ├── domain-rules.json              # Business logic constraints and validation
-│   ├── actor-types.json               # User types, roles, permissions (e.g., admin, regular user, support)
-│   ├── security-requirements.json     # Authentication, authorization, PII, encryption
-│   ├── resource-requirements.json     # External systems: databases, APIs, webhooks, queues
-│   ├── data-constraints.json          # Field validation, uniqueness, invariants, cardinality
-│   └── criticality-matrix.json        # Impact assessment (safety, compliance, financial, operational)
-These enable slicing specifications by relevance to a task.
+│   │   # --- Core Requirements ---
+│   ├── assumptions.json               # Explicit assumptions about environment, users, and constraints;
+│   │                                  #   includes assumption ID, description, rationale, risk if wrong,
+│   │                                  #   validation status, and dependent stories
+│   ├── specifications.json            # High-level system specifications with metadata; defines scope,
+│   │                                  #   objectives, success metrics, and links to detailed requirements
+│   ├── user-stories.json              # Structured story data: ID, title, description, actor, priority,
+│   │                                  #   story points, status, sprint assignment, dependencies, and tags
+│   ├── acceptance-criteria.json       # Testable conditions per story: criterion ID, parent story,
+│   │                                  #   given/when/then format, verification method, automation status
+│   ├── glossary.json                  # Domain terminology definitions; ensures consistent language
+│   │                                  #   across specs, code, and documentation; includes synonyms and
+│   │                                  #   relationships between terms
+│   │
+│   │   # --- Business Rules & Constraints ---
+│   ├── domain-rules.json              # Business logic constraints: rule ID, description, applicability
+│   │                                  #   conditions, enforcement mechanism, exceptions, and examples
+│   ├── data-constraints.json          # Data integrity rules: field validations, uniqueness constraints,
+│   │                                  #   referential integrity, cardinality limits, format specifications
+│   ├── criticality-matrix.json        # Impact assessment per feature/component: safety implications,
+│   │                                  #   compliance requirements, financial impact, operational risk,
+│   │                                  #   recovery priority
+│   │
+│   │   # --- Actors & Security ---
+│   ├── actor-types.json               # User personas and system actors: role definitions, permissions,
+│   │                                  #   access levels, usage patterns, and authorization boundaries
+│   ├── security-requirements.json     # Security specifications: authentication mechanisms, authorization
+│   │                                  #   rules, data classification (PII/PHI), encryption requirements,
+│   │                                  #   audit logging, session management, OWASP compliance checklist
+│   │
+│   │   # --- Technical Specifications ---
+│   ├── technical-requirements.json    # Non-functional requirements: performance targets (latency, throughput),
+│   │                                  #   scalability limits, availability SLAs, architecture constraints,
+│   │                                  #   browser/platform support, accessibility (WCAG) level
+│   ├── technical-standards.json       # Development standards: coding conventions, testing requirements
+│   │                                  #   (coverage thresholds, test types), documentation standards,
+│   │                                  #   review criteria, linting rules, commit message format
+│   ├── resource-requirements.json     # External dependencies: databases (type, version, schema),
+│   │                                  #   third-party APIs (endpoints, auth, rate limits), message queues,
+│   │                                  #   webhooks, file storage, caching layers
+│   └── api-contracts.json             # API specifications: endpoint definitions, request/response schemas,
+│                                      #   versioning strategy, deprecation policy, error codes, rate limits
+│   # These enable slicing specifications by relevance to a task.
+│
 ├── codebase-index/
-│   ├── file-manifest.json             # All files with metadata
-│   ├── symbol-table.json              # Functions, classes, exports, entities
-│   ├── dependency-graph.json          # Import relationships
-│   ├── pattern-catalog.json           # Detected patterns and architectural styles
-│   ├── inspection-assertions.json     # Verification requirements per acceptance criterion
-│   └── deliberation-triggers.json     # Decision points requiring human review (cross-boundary, high-risk, ambiguous)
+│   ├── file-manifest.json             # Complete file inventory: path, type, size, creation date,
+│   │                                  #   last modified, author, module membership, public/internal flag
+│   ├── symbol-table.json              # Code symbol index: functions, classes, interfaces, exports,
+│   │                                  #   entities, actions, acceptors, renderers, state machines;
+│   │                                  #   includes signature, visibility, documentation status, complexity
+│   ├── dependency-graph.json          # Import/export relationships: inbound/outbound dependencies,
+│   │                                  #   circular dependency detection, external package usage,
+│   │                                  #   coupling metrics
+│   └── pattern-catalog.json           # Detected architectural patterns: pattern type, implementing files,
+│                                      #   conformance level, variations, anti-patterns flagged
+│
 ├── traceability/
-│   ├── story-to-code.json             # Maps user stories to implementing entities
-│   ├── criterion-to-code.json         # Maps acceptance criteria to code and tests
-│   ├── code-to-tests.json             # Maps code entities to test coverage
-│   ├── constraint-to-code.json        # Maps domain rules and invariants to enforcement code
-│   └── resource-usage.json            # Maps code to external resources accessed
+│   ├── story-to-code.json             # Forward traceability: maps user stories to implementing files,
+│   │                                  #   functions, and components; tracks implementation completeness
+│   ├── criterion-to-code.json         # Acceptance criteria to code: maps each criterion to enforcement
+│   │                                  #   code and validation tests; tracks verification status
+│   ├── code-to-tests.json             # Test coverage mapping: links code entities to unit, integration,
+│   │                                  #   and e2e tests; tracks coverage percentage and gap analysis
+│   ├── constraint-to-code.json        # Domain rule enforcement: maps business rules and invariants to
+│   │                                  #   validation code, error handlers, and guard clauses
+│   ├── resource-usage.json            # External resource access: maps code paths to databases, APIs,
+│   │                                  #   file systems; identifies access patterns and bottlenecks
+│   └── change-impact-analysis.json    # Dependency impact tracking: given a changed file/symbol,
+│                                      #   identifies affected stories, tests, and downstream code
+│
+├── quality-gates/
+│   ├── inspection-assertions.json     # Verification checkpoints: per acceptance criterion, defines
+│   │                                  #   inspection method, required evidence, pass/fail criteria,
+│   │                                  #   automation capability, reviewer role
+│   └── deliberation-triggers.json     # Human review triggers: conditions requiring manual decision
+│                                      #   (cross-boundary changes, high-risk modifications, ambiguous
+│                                      #   requirements, security-sensitive code, compliance checkpoints)
+│
 ├── history/
-│   ├── decisions.json                 # Design decisions with rationale and alternatives
-│   ├── deliberation-resolutions.json  # Record of paused decisions and human choices
-│   ├── thread-summaries/              # Condensed conversation logs
-│   └── implementation-log.json        # What was built, why, and by whom
+│   ├── decisions.json                 # Architectural Decision Records (ADRs): decision ID, context,
+│   │                                  #   options considered, rationale, consequences, status, supersedes
+│   ├── deliberation-resolutions.json  # Paused decision outcomes: trigger condition, options presented,
+│   │                                  #   human choice made, reasoning provided, timestamp, reviewer
+│   ├── thread-summaries/              # Condensed conversation logs: per-session summaries, key decisions,
+│   │                                  #   action items, unresolved questions, context for future sessions
+│   ├── implementation-log.json        # Build history: what was implemented, which story/criterion,
+│   │                                  #   files changed, author (human or agent), timestamp, verification
+│   ├── migration-history.json         # Schema and data migrations: version, description, up/down scripts,
+│   │                                  #   execution status, rollback capability
+│   ├── deployment-history.json        # Release tracking: version, environment, timestamp, deployer,
+│   │                                  #   configuration snapshot, rollback reference
+│   └── incident-log.json              # Production issues: incident ID, severity, root cause, affected
+│                                      #   components, resolution, prevention measures, related commits
+│
 └── active-context/
-    ├── current-sprint.json
-    ├── current-story.json
-    ├── working-set.json               # Files currently relevant
-    ├── verification-state.json        # Test coverage, assertion status
-    └── risk-hotspots.json             # Flagged code requiring review
+    ├── current-sprint.json            # Active sprint metadata: sprint ID, goal, start/end dates,
+    │                                  #   committed stories, velocity target, blockers, burndown data
+    ├── current-story.json             # Story in progress: full story details, implementation status,
+    │                                  #   files touched, remaining criteria, blocking issues
+    ├── current-debugging-session.json # Active debug context: symptom, hypothesis, investigated files,
+    │                                  #   findings, reproduction steps, candidate fixes
+    ├── working-set.json               # Currently relevant files: paths actively being modified or
+    │                                  #   referenced, recent access timestamps, edit frequency
+    ├── feature-flags.json             # Toggle states: flag name, current value per environment,
+    │                                  #   rollout percentage, owner, expiration, cleanup status
+    ├── environments.json              # Deployment targets: environment name, URL, configuration,
+    │                                  #   deployed version, health status, access credentials reference
+    ├── verification-state.json        # Test execution status: last run timestamp, pass/fail counts,
+    │                                  #   coverage delta, flaky test tracking, blocking failures
+    ├── risk-hotspots.json             # Flagged areas requiring review: file paths, risk type (complexity,
+    │                                  #   churn, security, coverage gap), severity, recommended action
+    └── rollback-points.json           # Safe restore markers: checkpoint ID, timestamp, git ref,
+                                       #   configuration snapshot, verification state, restoration steps
 ```
 
 ### 2. Recursive Task Decomposition

@@ -1,0 +1,341 @@
+
+# 1. Context Vault Schema
+
+ContextVault/
+├── specifications/
+│   │   # --- Core Requirements ---
+│   ├── assumptions.json               # Explicit assumptions about environment, users, and constraints;
+│   │                                  #   includes assumption ID, description, rationale, risk if wrong,
+│   │                                  #   validation status, and dependent stories
+│   ├── specifications.json            # High-level system specifications with metadata; defines scope,
+│   │                                  #   objectives, success metrics, and links to detailed requirements
+│   ├── user-stories.json              # Structured story data: ID, title, description, actor, priority,
+│   │                                  #   story points, status, sprint assignment, dependencies, and tags
+│   ├── acceptance-criteria.json       # Testable conditions per story: criterion ID, parent story,
+│   │                                  #   given/when/then format, verification method, automation status
+│   ├── glossary.json                  # Domain terminology definitions; ensures consistent language
+│   │                                  #   across specs, code, and documentation; includes synonyms and
+│   │                                  #   relationships between terms
+│   │
+│   │   # --- Business Rules & Constraints ---
+│   ├── domain-rules.json              # Business logic constraints: rule ID, description, applicability
+│   │                                  #   conditions, enforcement mechanism, exceptions, and examples
+│   ├── data-constraints.json          # Data integrity rules: field validations, uniqueness constraints,
+│   │                                  #   referential integrity, cardinality limits, format specifications
+│   ├── criticality-matrix.json        # Impact assessment per feature/component: safety implications,
+│   │                                  #   compliance requirements, financial impact, operational risk,
+│   │                                  #   recovery priority
+│   │
+│   │   # --- Actors & Security ---
+│   ├── actor-types.json               # User personas and system actors: role definitions, permissions,
+│   │                                  #   access levels, usage patterns, and authorization boundaries
+│   ├── security-requirements.json     # Security specifications: authentication mechanisms, authorization
+│   │                                  #   rules, data classification (PII/PHI), encryption requirements,
+│   │                                  #   audit logging, session management, OWASP compliance checklist
+│   │
+│   │   # --- Technical Specifications ---
+│   ├── technical-requirements.json    # Non-functional requirements: performance targets (latency, throughput),
+│   │                                  #   scalability limits, availability SLAs, architecture constraints,
+│   │                                  #   browser/platform support, accessibility (WCAG) level
+│   ├── technical-standards.json       # Development standards: coding conventions, testing requirements
+│   │                                  #   (coverage thresholds, test types), documentation standards,
+│   │                                  #   review criteria, linting rules, commit message format
+│   ├── resource-requirements.json     # External dependencies: databases (type, version, schema),
+│   │                                  #   third-party APIs (endpoints, auth, rate limits), message queues,
+│   │                                  #   webhooks, file storage, caching layers
+│   └── api-contracts.json             # API specifications: endpoint definitions, request/response schemas,
+│                                      #   versioning strategy, deprecation policy, error codes, rate limits
+│   # These enable slicing specifications by relevance to a task.
+│
+├── codebase-index/
+│   ├── file-manifest.json             # Complete file inventory: path, type, size, creation date,
+│   │                                  #   last modified, author, module membership, public/internal flag
+│   ├── symbol-table.json              # Code symbol index: functions, classes, interfaces, exports,
+│   │                                  #   entities, actions, acceptors, renderers, state machines;
+│   │                                  #   includes signature, visibility, documentation status, complexity
+│   ├── dependency-graph.json          # Import/export relationships: inbound/outbound dependencies,
+│   │                                  #   circular dependency detection, external package usage,
+│   │                                  #   coupling metrics
+│   └── pattern-catalog.json           # Detected architectural patterns: pattern type, implementing files,
+│                                      #   conformance level, variations, anti-patterns flagged
+│
+├── traceability/
+│   ├── story-to-code.json             # Forward traceability: maps user stories to implementing files,
+│   │                                  #   functions, and components; tracks implementation completeness
+│   ├── criterion-to-code.json         # Acceptance criteria to code: maps each criterion to enforcement
+│   │                                  #   code and validation tests; tracks verification status
+│   ├── code-to-tests.json             # Test coverage mapping: links code entities to unit, integration,
+│   │                                  #   and e2e tests; tracks coverage percentage and gap analysis
+│   ├── constraint-to-code.json        # Domain rule enforcement: maps business rules and invariants to
+│   │                                  #   validation code, error handlers, and guard clauses
+│   ├── resource-usage.json            # External resource access: maps code paths to databases, APIs,
+│   │                                  #   file systems; identifies access patterns and bottlenecks
+│   └── change-impact-analysis.json    # Dependency impact tracking: given a changed file/symbol,
+│                                      #   identifies affected stories, tests, and downstream code
+│
+├── quality-gates/
+│   ├── inspection-assertions.json     # Verification checkpoints: per acceptance criterion, defines
+│   │                                  #   inspection method, required evidence, pass/fail criteria,
+│   │                                  #   automation capability, reviewer role
+│   └── deliberation-triggers.json     # Human review triggers: conditions requiring manual decision
+│                                      #   (cross-boundary changes, high-risk modifications, ambiguous
+│                                      #   requirements, security-sensitive code, compliance checkpoints)
+│
+├── history/
+│   ├── decisions.json                 # Architectural Decision Records (ADRs): decision ID, context,
+│   │                                  #   options considered, rationale, consequences, status, supersedes
+│   ├── deliberation-resolutions.json  # Paused decision outcomes: trigger condition, options presented,
+│   │                                  #   human choice made, reasoning provided, timestamp, reviewer
+│   ├── thread-summaries/              # Condensed conversation logs: per-session summaries, key decisions,
+│   │                                  #   action items, unresolved questions, context for future sessions
+│   ├── implementation-log.json        # Build history: what was implemented, which story/criterion,
+│   │                                  #   files changed, author (human or agent), timestamp, verification
+│   ├── migration-history.json         # Schema and data migrations: version, description, up/down scripts,
+│   │                                  #   execution status, rollback capability
+│   ├── deployment-history.json        # Release tracking: version, environment, timestamp, deployer,
+│   │                                  #   configuration snapshot, rollback reference
+│   └── incident-log.json              # Production issues: incident ID, severity, root cause, affected
+│                                      #   components, resolution, prevention measures, related commits
+│
+└── active-context/
+    ├── current-sprint.json            # Active sprint metadata: sprint ID, goal, start/end dates,
+    │                                  #   committed stories, velocity target, blockers, burndown data
+    ├── current-story.json             # Story in progress: full story details, implementation status,
+    │                                  #   files touched, remaining criteria, blocking issues
+    ├── current-debugging-session.json # Active debug context: symptom, hypothesis, investigated files,
+    │                                  #   findings, reproduction steps, candidate fixes
+    ├── working-set.json               # Currently relevant files: paths actively being modified or
+    │                                  #   referenced, recent access timestamps, edit frequency
+    ├── feature-flags.json             # Toggle states: flag name, current value per environment,
+    │                                  #   rollout percentage, owner, expiration, cleanup status
+    ├── environments.json              # Deployment targets: environment name, URL, configuration,
+    │                                  #   deployed version, health status, access credentials reference
+    ├── verification-state.json        # Test execution status: last run timestamp, pass/fail counts,
+    │                                  #   coverage delta, flaky test tracking, blocking failures
+    ├── risk-hotspots.json             # Flagged areas requiring review: file paths, risk type (complexity,
+    │                                  #   churn, security, coverage gap), severity, recommended action
+    └── rollback-points.json           # Safe restore markers: checkpoint ID, timestamp, git ref,
+                                       #   configuration snapshot, verification state, restoration steps
+
+# 2. ACM-to-Context-Vault-Schema Mapping
+
+## Mapping Overview
+
+This mapping shows how Context Vault Schema elements correspond to ACM (Abstract Code Metamodel) layers.
+Direction indicators: → (CV feeds ACM), ← (ACM feeds CV), ↔ (bidirectional sync)
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  ACM LAYER                    │  CONTEXT VAULT SCHEMA ELEMENT                   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  LAYER 1: INVENTORY           │                                                 │
+│  (What files exist?)          │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  FileEntry                  ↔ │  codebase-index/file-manifest.json              │
+│  FileEntry.exports          → │  codebase-index/symbol-table.json (exports)     │
+│  FileEntry.imports          → │  codebase-index/symbol-table.json (imports)     │
+│  FileClassification.layer   ↔ │  codebase-index/pattern-catalog.json            │
+│                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  LAYER 2: STRUCTURE           │                                                 │
+│  (What are code entities?)    │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  CodeEntity                 ↔ │  codebase-index/symbol-table.json               │
+│  CodeEntity.kind            → │  symbol-table: functions, classes, interfaces   │
+│  CodeEntity.signature       → │  symbol-table: signature, visibility, complexity│
+│  CodeEntity.samRole         ↔ │  symbol-table: entities, actions, acceptors,    │
+│                               │               renderers, state machines         │
+│  CodeEntity.annotations     ← │  (extracted from source during ACM generation)  │
+│                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  LAYER 3: DEPENDENCIES        │                                                 │
+│  (How does code connect?)     │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  DependencyEdge             ↔ │  codebase-index/dependency-graph.json           │
+│  DependencyEdge.kind        → │  dependency-graph: inbound/outbound deps        │
+│  circular detection         → │  dependency-graph: circular dependency detection│
+│  coupling metrics           → │  dependency-graph: coupling metrics             │
+│                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  LAYER 4: RESOURCES           │                                                 │
+│  (External system access?)    │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  DatabaseResource           ↔ │  specifications/resource-requirements.json      │
+│                               │    (databases: type, version, schema)           │
+│  APIResource                ↔ │  specifications/resource-requirements.json      │
+│                               │    (third-party APIs: endpoints, auth, limits)  │
+│  APIEndpoint                ↔ │  specifications/api-contracts.json              │
+│  QueueResource              ↔ │  specifications/resource-requirements.json      │
+│                               │    (message queues, webhooks)                   │
+│  FileStoreResource          ↔ │  specifications/resource-requirements.json      │
+│                               │    (file storage)                               │
+│  CacheResource              ↔ │  specifications/resource-requirements.json      │
+│                               │    (caching layers)                             │
+│  ResourceAccess             ↔ │  traceability/resource-usage.json               │
+│                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  LAYER 5: INTENT              │                                                 │
+│  (Why does code exist?)       │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  UserStory                  ↔ │  specifications/user-stories.json               │
+│  UserStory.criticality      ← │  specifications/criticality-matrix.json         │
+│  UserStory.impactScope      ← │  specifications/criticality-matrix.json         │
+│  AcceptanceCriterion        ↔ │  specifications/acceptance-criteria.json        │
+│  storyToCode mapping        ↔ │  traceability/story-to-code.json                │
+│  criterionToCode mapping    ↔ │  traceability/criterion-to-code.json            │
+│  codeToTests mapping        ↔ │  traceability/code-to-tests.json                │
+│  DeliberationPoint          ↔ │  quality-gates/deliberation-triggers.json       │
+│                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  LAYER 6: CONSTRAINTS         │                                                 │
+│  (What must always be true?)  │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  Invariant                  ↔ │  specifications/domain-rules.json               │
+│                               │    (business logic constraints)                 │
+│  DomainRule                 ↔ │  specifications/domain-rules.json               │
+│  DomainRule (validation)    ↔ │  specifications/data-constraints.json           │
+│  DomainRule (cardinality)   ↔ │  specifications/data-constraints.json           │
+│  DomainRule (authorization) ↔ │  specifications/security-requirements.json      │
+│                               │    (authorization rules)                        │
+│  InspectionAssertion        ↔ │  quality-gates/inspection-assertions.json       │
+│  constraintToCode mapping   ↔ │  traceability/constraint-to-code.json           │
+│                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  LAYER 7: SIGNALS             │                                                 │
+│  (Code health and risk?)      │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  EntityMetrics              → │  (computed, not stored in CV directly)          │
+│  Hotspot                    ↔ │  active-context/risk-hotspots.json              │
+│  Hotspot.riskFactors        ← │  risk-hotspots: risk type, severity             │
+│  CodeSmell                  → │  codebase-index/pattern-catalog.json            │
+│                               │    (anti-patterns flagged)                      │
+│  testCoverage               ← │  active-context/verification-state.json         │
+│                               │    (coverage delta, gap analysis)               │
+│  changeFrequency/history    ← │  history/implementation-log.json                │
+│  defectCount                ← │  history/incident-log.json                      │
+│                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  LAYER 8: DECISIONS           │                                                 │
+│  (Why written this way?)      │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  DesignDecision             ↔ │  history/decisions.json (ADRs)                  │
+│  DesignDecision.alternatives↔ │  decisions.json: options considered             │
+│  DesignDecision.rationale   ↔ │  decisions.json: rationale, consequences        │
+│  DeliberationResolution     ↔ │  history/deliberation-resolutions.json          │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+
+## Cross-Cutting Mappings
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  ACM CONCEPT                  │  CONTEXT VAULT ELEMENT                          │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  TRACEABILITY (bidirectional) │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  impact analysis            ↔ │  traceability/change-impact-analysis.json       │
+│  test coverage links        ↔ │  traceability/code-to-tests.json                │
+│  requirement links          ↔ │  traceability/story-to-code.json                │
+│                               │  traceability/criterion-to-code.json            │
+│                                                                                 │
+│  ACTIVE CONTEXT               │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  (session state, not ACM)   ↔ │  active-context/current-sprint.json             │
+│                             ↔ │  active-context/current-story.json              │
+│                             ↔ │  active-context/current-debugging-session.json  │
+│                             ↔ │  active-context/working-set.json                │
+│                             ↔ │  active-context/feature-flags.json              │
+│                             ↔ │  active-context/environments.json               │
+│                             ↔ │  active-context/rollback-points.json            │
+│                                                                                 │
+│  SPECIFICATIONS (ACM input)   │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  (feeds ACM generation)     → │  specifications/specifications.json             │
+│  (terminology reference)    → │  specifications/glossary.json                   │
+│  (actor definitions)        → │  specifications/actor-types.json                │
+│  (technical constraints)    → │  specifications/technical-requirements.json     │
+│  (coding standards)         → │  specifications/technical-standards.json        │
+│                                                                                 │
+│  HISTORY (ACM signals input)  │                                                 │
+│  ─────────────────────────────┼─────────────────────────────────────────────────│
+│  (change frequency source)  → │  history/implementation-log.json                │
+│  (migration tracking)       → │  history/migration-history.json                 │
+│  (deployment context)       → │  history/deployment-history.json                │
+│  (defect history source)    → │  history/incident-log.json                      │
+│  (session context)          → │  history/thread-summaries/                      │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+
+## Semantic Alignment Notes
+
+1. GRANULARITY DIFFERENCES
+   - ACM EntityId maps to symbol-table entries (function/class level)
+   - CV story-to-code maps at file level; ACM provides line-level precision
+   - CV assumes manual traceability updates; ACM can auto-generate from annotations
+
+2. CRITICALITY MAPPING
+   ACM CriticalityLevel        →  CV criticality-matrix.json fields
+   ─────────────────────────────────────────────────────────────────
+   "safety"                    →  safety implications
+   "compliance"                →  compliance requirements
+   "security"                  →  (combined with security-requirements.json)
+   "financial"                 →  financial impact
+   "operational"               →  operational risk, recovery priority
+   "standard"                  →  (default, no special matrix entry)
+
+3. VERIFICATION STATUS ALIGNMENT
+   ACM VerificationStatus      ↔  CV verification-state.json
+   ─────────────────────────────────────────────────────────────────
+   "passing"                   ↔  pass counts, no blocking failures
+   "failing"                   ↔  blocking failures present
+   "blocked"                   ↔  flaky test tracking
+   "unverified"                ↔  coverage gaps identified
+   "manual_required"           ↔  deliberation-triggers.json entries
+
+4. DELIBERATION TRIGGERS
+   ACM DeliberationTrigger     ↔  CV deliberation-triggers.json conditions
+   ─────────────────────────────────────────────────────────────────
+   "cross_boundary"            ↔  cross-boundary changes
+   "high_risk_hotspot"         ↔  high-risk modifications
+   "missing_test_coverage"     ↔  coverage gap triggers
+   "ambiguous_requirement"     ↔  ambiguous requirements
+   "security_sensitive"        ↔  security-sensitive code
+   "architectural_decision"    ↔  (triggers ADR creation in decisions.json)
+
+
+## Elements Without Direct Mapping
+
+CV ELEMENTS NOT IN ACM:
+─────────────────────────────────────────────────────────────────
+specifications/assumptions.json     - ACM has no assumptions layer
+                                      (could extend Layer 5 Intent)
+active-context/*                    - Session state, not metamodel
+                                      (operational, not structural)
+history/thread-summaries/           - Conversation logs, ephemeral
+                                      (could feed Layer 8 context)
+
+ACM ELEMENTS NOT IN CV:
+─────────────────────────────────────────────────────────────────
+SAMRole (state/action/model/view)   - SAM pattern roles in symbol-table
+                                      but not formalized in CV schema
+Signature (full type info)          - CV symbol-table has complexity
+                                      but not full signatures
+DependencyStrength/Confidence       - CV has coupling metrics but not
+                                      per-edge confidence scoring
+
+
+
+
+
+
+
+

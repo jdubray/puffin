@@ -681,7 +681,7 @@ const DocumentEditorPlugin = {
     try {
       const data = await fs.readFile(this.editorStatePath, 'utf-8')
       const state = JSON.parse(data)
-      this.context.log.info('Loaded editor state')
+      this.context.log.info('Loaded editor state, lastOpenedFile:', state.lastOpenedFile)
       return { state }
     } catch (error) {
       // File doesn't exist or is invalid - return empty state
@@ -712,9 +712,27 @@ const DocumentEditorPlugin = {
       return { success: false, error: 'State is required' }
     }
 
+    this.context.log.info('saveEditorState called with lastOpenedFile:', state.lastOpenedFile)
+
+    // If lastOpenedFile is null/undefined, preserve the existing value from disk
+    // This prevents other state changes (model, context files) from clearing the last opened file
+    let lastOpenedFile = state.lastOpenedFile || null
+    if (!lastOpenedFile) {
+      try {
+        const existingData = await fs.readFile(this.editorStatePath, 'utf-8')
+        const existingState = JSON.parse(existingData)
+        if (existingState.lastOpenedFile) {
+          lastOpenedFile = existingState.lastOpenedFile
+          this.context.log.info('Preserving existing lastOpenedFile:', lastOpenedFile)
+        }
+      } catch {
+        // File doesn't exist or is invalid - that's fine, use null
+      }
+    }
+
     // Only persist the fields we care about (don't save transient state)
     const persistedState = {
-      lastOpenedFile: state.lastOpenedFile || null,
+      lastOpenedFile,
       contextFiles: (state.contextFiles || []).map(cf => ({
         // Only persist path info, not content (will be reloaded)
         path: cf.path,
@@ -736,7 +754,7 @@ const DocumentEditorPlugin = {
       // Rename to final path
       await fs.rename(tempPath, this.editorStatePath)
 
-      this.context.log.info('Saved editor state')
+      this.context.log.info('Saved editor state with lastOpenedFile:', persistedState.lastOpenedFile)
       return { success: true }
     } catch (error) {
       this.context.log.error('Failed to save editor state:', error.message)

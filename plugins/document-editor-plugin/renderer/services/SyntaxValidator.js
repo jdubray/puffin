@@ -86,12 +86,32 @@ export class SyntaxValidator {
 
     // Check for broken link syntax [text](url)
     // Look for unclosed brackets or parentheses in link patterns
-    const linkPattern = /\[([^\]]*)\]\(([^)]*)\)/g
+    // Must skip lines inside fenced code blocks
     const brokenLinkPattern = /\[([^\]]*)\]\([^)]*$/gm
+    let linkCheckInCodeBlock = false
+    let linkCheckFenceChar = null
 
     let lineNum = 0
     for (const line of lines) {
       lineNum++
+      const fenceMatch = line.match(fencedCodeBlockPattern)
+
+      // Track code block state
+      if (fenceMatch) {
+        const fenceChar = fenceMatch[1].charAt(0)
+        if (!linkCheckInCodeBlock) {
+          linkCheckInCodeBlock = true
+          linkCheckFenceChar = fenceChar
+        } else if (line.trim().startsWith(linkCheckFenceChar.repeat(3))) {
+          linkCheckInCodeBlock = false
+          linkCheckFenceChar = null
+        }
+        continue
+      }
+
+      // Skip lines inside code blocks
+      if (linkCheckInCodeBlock) continue
+
       // Check for links that start but don't close the parenthesis
       if (brokenLinkPattern.test(line)) {
         errors.push({
@@ -104,7 +124,6 @@ export class SyntaxValidator {
 
       // Check for unclosed square brackets in links
       const openBrackets = (line.match(/\[(?![^\]]*\])/g) || []).length
-      const bracketPairs = (line.match(/\[[^\]]*\]/g) || []).length
 
       // Only report if there's a standalone [ that's likely meant to be a link
       if (openBrackets > 0 && line.includes('](')) {
@@ -122,14 +141,38 @@ export class SyntaxValidator {
 
     // Check for unclosed inline code (odd number of backticks outside code blocks)
     // This is a simple heuristic - doesn't handle all edge cases
+    // We need to track which lines are inside fenced code blocks
+    let insideCodeBlock = false
+    let currentFenceChar = null
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-      // Skip lines that are part of fenced code blocks
-      if (fencedCodeBlockPattern.test(line)) continue
+      const fenceMatch = line.match(fencedCodeBlockPattern)
 
-      // Count single backticks (not triple)
-      const singleBackticks = line.match(/(?<!`)`(?!`)/g)
-      if (singleBackticks && singleBackticks.length % 2 !== 0) {
+      // Check if this line is a fence delimiter
+      if (fenceMatch) {
+        const fenceChar = fenceMatch[1].charAt(0)
+        if (!insideCodeBlock) {
+          // Starting a code block
+          insideCodeBlock = true
+          currentFenceChar = fenceChar
+        } else if (line.trim().startsWith(currentFenceChar.repeat(3))) {
+          // Closing a code block (same fence type)
+          insideCodeBlock = false
+          currentFenceChar = null
+        }
+        continue // Skip fence lines themselves
+      }
+
+      // Skip lines inside fenced code blocks
+      if (insideCodeBlock) continue
+
+      // Count single backticks (not triple) - use simpler regex for better compatibility
+      // Match backticks that are NOT part of triple backticks
+      const lineWithoutTripleBackticks = line.replace(/```+/g, '')
+      const singleBacktickCount = (lineWithoutTripleBackticks.match(/`/g) || []).length
+
+      if (singleBacktickCount % 2 !== 0) {
         // Check if this might be intentional (e.g., in a sentence about backticks)
         if (!line.includes('```')) {
           errors.push({
@@ -142,9 +185,31 @@ export class SyntaxValidator {
     }
 
     // Check for malformed headers (# without space)
+    // Must also skip lines inside code blocks
+    let headerCheckInCodeBlock = false
+    let headerCheckFenceChar = null
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-      // Headers should have space after # (unless it's a code line)
+      const fenceMatch = line.match(fencedCodeBlockPattern)
+
+      // Track code block state
+      if (fenceMatch) {
+        const fenceChar = fenceMatch[1].charAt(0)
+        if (!headerCheckInCodeBlock) {
+          headerCheckInCodeBlock = true
+          headerCheckFenceChar = fenceChar
+        } else if (line.trim().startsWith(headerCheckFenceChar.repeat(3))) {
+          headerCheckInCodeBlock = false
+          headerCheckFenceChar = null
+        }
+        continue
+      }
+
+      // Skip lines inside code blocks
+      if (headerCheckInCodeBlock) continue
+
+      // Headers should have space after # (unless it's a shebang line)
       if (/^#{1,6}[^#\s]/.test(line) && !line.startsWith('#!')) {
         errors.push({
           message: `Malformed header at line ${i + 1}: missing space after #`,

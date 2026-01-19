@@ -175,7 +175,10 @@ export class SessionManager {
       fullResponse: responseData.fullResponse || '',
       diffStats: responseData.diffStats || { added: 0, modified: 0, deleted: 0 },
       model: responseData.model || 'haiku',
-      collapsed: false
+      collapsed: false,
+      documentApplied: responseData.documentApplied || false,
+      appliedChanges: responseData.appliedChanges || 0,
+      failedChanges: responseData.failedChanges || 0
     }
 
     // Add to beginning (most recent first)

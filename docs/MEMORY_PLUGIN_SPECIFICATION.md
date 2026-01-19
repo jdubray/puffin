@@ -4,7 +4,6 @@
 **Status:** Ready for Implementation  
 **Plugin Name:** `memory-plugin`
 
-
 ## 1. Overview
 
 ### 1.1 Purpose
@@ -444,59 +443,11 @@ The memory plugin renders:
 - Search interface for manual memory lookup
 - Statistics dashboard (memory growth, access patterns)
 
----
 
-## 6. Future Enhancements
-
-The following enhancements are identified for future releases based on contemporary agent memory research:
-
-### Phase 2: Core Enhancements
-
-1. **Graph-Based Memory**: Implement context-graph layer for complex relationships between memories, enabling multi-hop reasoning and relationship traversal
-
-2. **Semantic Search**: Enhanced retrieval using vector embeddings with hybrid lexical/semantic scoring
-
-3. **Conflict Resolution**: Automatic detection and resolution of contradictory memories with user confirmation workflows
-
-4. **Memory Sharing**: Share memories across projects with similar patterns, enabling cross-project knowledge transfer
-
-5. **Audit Trail**: Complete history of memory changes and reasoning, supporting explainability requirements
-
-6. **Custom Categories**: User-defined memory categories for domain-specific knowledge organization
-
-### Phase 3: Advanced Capabilities
-
-7. **Parametric Memory Internalization**: Distill frequently-accessed memories into model fine-tuning to improve response latency and coherence (e.g., user preferences become implicit in model behavior)
-
-8. **Latent Memory Representations**: Support compressed/latent memory tokens in addition to explicit token-level storage, enabling:
-   - More efficient long-context handling
-   - Seamless multimodal memory support (visual + textual facts)
-   - Improved token budget management
-
-9. **Memory Evolution Sophistication**:
-   - **Cluster-level consolidation** for grouping related memories
-   - **Importance-driven forgetting** weighing semantic value vs. recency
-   - **Soft updating** with temporal validity windows instead of hard replacements
-
-10. **Multimodal Memory Support**: Store and retrieve memories across text, code, images, and structured data (particularly for embodied agent contexts)
-
-### Phase 4: Trustworthiness & Intelligence
-
-11. **Trustworthiness Mechanisms**:
-    - **Privacy controls** (user-governed retention policies, differential privacy for sensitive facts)
-    - **Explainability** (memory attribution - which memories influenced this response?)
-    - **Hallucination mitigation** (confidence thresholds, uncertainty-aware generation)
-
-12. **Advanced Retrieval Strategies**:
-    - **Query synthesis** beyond simple reformulation (semantic keyword extraction, intent classification)
-    - **Hybrid retrieval** combining lexical (BM25), semantic (embeddings), and graph-based approaches
-    - **Relevance scoring** that incorporates recency, frequency, confidence, and semantic pertinence
-
-13. **RL-Driven Memory Management**: Enable the memory system itself to learn optimal extraction, consolidation, and retrieval policies through reinforcement learning (following the trend toward agentic memory management)
 
 ---
 
-**Document Status:** Ready for implementation
+**Document Status:** Ready for Detailed Design
 
 ---
 
@@ -512,4 +463,91 @@ The following enhancements are identified for future releases based on contempor
 - [x] Configuration schema documented
 - [x] Error handling patterns defined
 - [x] Maintenance schedules specified
-- [x] Future enhancements scoped and prioritized
+- [x] Detailed design steps documented
+
+---
+
+## Appendix B: Detailed Design Steps
+
+The following steps outline the recommended approach for moving from this specification to detailed design and implementation.
+
+### Step 1: Define Data Models and Schemas
+
+1. **Resource Schema**: Define the JSON structure for raw conversation resources
+   - Required fields: `id`, `timestamp`, `branchId`, `sessionId`, `conversationText`
+   - Optional metadata fields for future extensibility
+
+2. **Item Schema**: Define the structure for extracted memory items
+   - Required fields: `id`, `category`, `content`, `sourceResourceId`, `extractedAt`, `confidence`
+   - Index fields: `lastAccessed`, `accessCount`
+
+3. **Category Summary Format**: Define the markdown template for category files
+   - Header structure, metadata section, content organization
+
+### Step 2: Design the LLM Extraction Prompts
+
+1. Create the extraction prompt template based on Section 2.2
+2. Define the expected JSON response schema with validation rules
+3. Design fallback prompts for handling edge cases (empty conversations, unclear content)
+4. Create the category evolution prompt for integrating new items into existing summaries
+
+### Step 3: Implement Core Memory Manager
+
+1. **File System Layer**
+   - Directory creation and management
+   - Atomic file write operations
+   - File locking for concurrent access
+
+2. **Write Path Implementation**
+   - Resource ingestion with immutable storage
+   - Batched item storage by category
+   - Category summary evolution logic
+
+3. **Read Path Implementation**
+   - Query synthesis function
+   - Category selection via LLM
+   - Sufficiency checking logic
+   - Hierarchical search fallback
+
+### Step 4: Implement Retrieval System
+
+1. **Temporal Decay Calculator**: Implement the decay formula from Section 2.3
+2. **Relevance Scoring**: Design the multi-factor scoring algorithm
+3. **Conflict Detection**: Implement logic to identify contradictory memories
+4. **Token Budget Manager**: Context assembly with size limits
+
+### Step 5: Design IPC Interface
+
+1. Map each IPC channel to its handler function
+2. Define input validation schemas for each channel
+3. Implement error handling and response formatting
+4. Create integration tests for each IPC endpoint
+
+### Step 6: Implement Maintenance Tasks
+
+1. **Scheduler Setup**: Configure cron-style scheduling for maintenance
+2. **Nightly Consolidation**: Implement redundancy detection and merging
+3. **Weekly Summarization**: Implement compression and archival logic
+4. **Monthly Re-indexing**: Placeholder for future embedding support
+
+### Step 7: Build Renderer UI Components
+
+1. **Status Indicator**: Memory system health display
+2. **Statistics Dashboard**: Memory metrics visualization
+3. **Conflict Resolution UI**: Side-by-side comparison interface
+4. **Manual Review Interface**: Memory browsing and editing
+
+### Step 8: Integration Testing
+
+1. End-to-end tests for memorization workflow
+2. Retrieval accuracy tests with sample queries
+3. Conflict detection and resolution tests
+4. Maintenance task verification
+5. Performance benchmarks for large memory stores
+
+### Step 9: Documentation
+
+1. Plugin README with installation instructions
+2. API documentation for IPC channels
+3. Configuration reference guide
+4. Troubleshooting guide

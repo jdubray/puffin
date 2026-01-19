@@ -1,7 +1,7 @@
 /**
  * MarkerUtils - Utility functions for Puffin inline prompt markers
  *
- * Marker syntax: /@puffin: prompt text here //
+ * Marker syntax: /@puffin: prompt text here @/
  *
  * Features:
  * - Detection and extraction of markers from document content
@@ -9,27 +9,20 @@
  * - Removal of markers from content
  * - HTML highlighting of markers for visual distinction
  *
- * KNOWN LIMITATIONS:
- * - The end delimiter '//' is identical to JavaScript single-line comment syntax.
- *   This can cause false positives when the sequence `/@puffin: ... //` appears
- *   unintentionally in code files (e.g., in comments or string literals).
- * - Best practices to avoid false positives:
- *   1. Use markers on their own lines when possible
- *   2. Avoid placing `/@puffin:` in comments or strings unless intentional
- *   3. The unique `/@puffin:` start delimiter significantly reduces false matches
- * - Future versions may introduce a more unique end delimiter (e.g., `//@puffin`)
- *   for improved disambiguation in code-heavy documents.
+ * The `@/` end delimiter was chosen because:
+ * - It mirrors the `/@` opening pattern (symmetric)
+ * - It's rarely used in code (unlike `//` which is common in comments and URLs)
+ * - It's unambiguous and easy to spot
  */
 
 /**
  * Marker syntax constants
  *
- * Note: MARKER_END uses '//' which overlaps with JS comment syntax.
- * The combination of MARKER_START + MARKER_END creates sufficient uniqueness
- * for most use cases, but see module header for known limitations.
+ * Opening: /@puffin:
+ * Closing: @/
  */
 export const MARKER_START = '/@puffin:'
-export const MARKER_END = '//'
+export const MARKER_END = '@/'
 
 /**
  * Regex pattern to match Puffin markers
@@ -41,9 +34,9 @@ export const MARKER_END = '//'
  * - \s*         - Optional whitespace after start
  * - ([\s\S]*?)  - Capture group for prompt content (non-greedy, includes newlines)
  * - \s*         - Optional whitespace before end
- * - \/\/        - Literal end delimiter
+ * - @\/         - Literal end delimiter
  */
-export const MARKER_REGEX = /\/@puffin:\s*([\s\S]*?)\s*\/\//g
+export const MARKER_REGEX = /\/@puffin:\s*([\s\S]*?)\s*@\//g
 
 /**
  * Find all markers in content
@@ -198,7 +191,7 @@ export function highlightMarkersInHtml(html) {
 
   // Pattern to match markers, being careful with HTML entities
   // The content might have HTML escaping applied
-  const escapedMarkerPattern = /(\/@puffin:[\s\S]*?\/\/)/g
+  const escapedMarkerPattern = /(\/@puffin:[\s\S]*?@\/)/g
 
   // Replace markers with sanitized, wrapped versions
   // The marker content is escaped to prevent XSS if it contains HTML/script tags

@@ -98,8 +98,21 @@ export class DocumentMerger {
         const changes = []
         const parseErrors = []
 
+        console.log('[DocumentMerger] Parsing changes format:', {
+          changesCount: parsed.changes?.length,
+          summaryCount: parsed.summary?.length
+        })
+
         for (const change of (parsed.changes || [])) {
           const op = (change.op || '').toLowerCase()
+
+          console.log('[DocumentMerger] Processing change:', {
+            op,
+            findLength: change.find?.length,
+            findPreview: change.find?.substring(0, 80),
+            contentLength: change.content?.length
+          })
+
           if (!this.VALID_OPS.includes(op)) {
             parseErrors.push(`Invalid operation type: ${change.op}`)
             continue
@@ -322,6 +335,7 @@ export class DocumentMerger {
 
   /**
    * Apply parsed changes to the original document
+   * Reorders changes to handle dependencies (e.g., insert_after before replace on same text)
    * @param {string} originalContent - Original document content
    * @param {Array} changes - Array of parsed change objects
    * @returns {Object} Result with updated content and applied/failed changes
@@ -339,25 +353,130 @@ export class DocumentMerger {
       return { content: originalContent, applied: [], failed: [] }
     }
 
+    // Reorder changes to handle dependencies
+    const orderedChanges = this.reorderChanges(changes, originalContent)
+
     let content = originalContent
     const applied = []
     const failed = []
 
-    for (const change of changes) {
+    console.log(`[DocumentMerger] Applying ${orderedChanges.length} changes to document (${originalContent.length} chars)`)
+
+    for (let i = 0; i < orderedChanges.length; i++) {
+      const change = orderedChanges[i]
+      const opPreview = `${change.type} "${(change.find || '').substring(0, 40).replace(/\n/g, '\\n')}..."`
+
       try {
         const result = this.applySingleChange(content, change)
         if (result.success) {
           content = result.content
           applied.push(change)
+          console.log(`[DocumentMerger] Change ${i + 1}/${orderedChanges.length} applied: ${opPreview}`)
         } else {
           failed.push({ change, error: result.error })
+          console.warn(`[DocumentMerger] Change ${i + 1}/${orderedChanges.length} FAILED: ${opPreview}`)
+          console.warn(`[DocumentMerger] Reason: ${result.error}`)
         }
       } catch (error) {
         failed.push({ change, error: error.message })
+        console.error(`[DocumentMerger] Change ${i + 1}/${orderedChanges.length} ERROR: ${error.message}`)
       }
     }
 
+    console.log(`[DocumentMerger] Result: ${applied.length} applied, ${failed.length} failed`)
+
     return { content, applied, failed }
+  }
+
+  /**
+   * Reorder changes to handle dependencies
+   * - INSERT_AFTER/INSERT_BEFORE on text X should happen BEFORE REPLACE/DELETE on text X
+   * - Changes at later positions in document should be applied before earlier ones (to preserve indices)
+   * @param {Array} changes - Original changes array
+   * @param {string} content - Document content (for position detection)
+   * @returns {Array} Reordered changes
+   */
+  reorderChanges(changes, content) {
+    // Create a map of find text -> changes that will modify it
+    const findTextMap = new Map()
+
+    // First pass: find positions and group by find text
+    const changesWithMeta = changes.map((change, originalIndex) => {
+      const normalizedFind = change.find.replace(/\r\n/g, '\n').trim()
+      const position = content.replace(/\r\n/g, '\n').indexOf(normalizedFind)
+
+      return {
+        change,
+        originalIndex,
+        normalizedFind,
+        position,
+        // Priority: inserts should happen before replaces/deletes on same text
+        // INSERT_BEFORE = 0, INSERT_AFTER = 1, REPLACE = 2, DELETE = 3
+        typePriority: this.getTypePriority(change.type)
+      }
+    })
+
+    // Check for conflicts: if change A replaces text that change B uses as anchor
+    for (let i = 0; i < changesWithMeta.length; i++) {
+      for (let j = 0; j < changesWithMeta.length; j++) {
+        if (i === j) continue
+
+        const changeA = changesWithMeta[i]
+        const changeB = changesWithMeta[j]
+
+        // If A's find text contains or equals B's find text, and A is destructive (replace/delete)
+        // Then B should come before A
+        if ((changeA.change.type === 'REPLACE' || changeA.change.type === 'DELETE') &&
+            (changeB.change.type === 'INSERT_AFTER' || changeB.change.type === 'INSERT_BEFORE')) {
+          if (changeA.normalizedFind.includes(changeB.normalizedFind) ||
+              changeB.normalizedFind.includes(changeA.normalizedFind)) {
+            // Mark B as needing to come before A
+            if (changeB.originalIndex > changeA.originalIndex) {
+              console.log(`[DocumentMerger] Reordering: Moving INSERT before REPLACE/DELETE`)
+              changeB.mustComeBefore = changeA.originalIndex
+            }
+          }
+        }
+      }
+    }
+
+    // Sort:
+    // 1. By dependencies (mustComeBefore)
+    // 2. By position in document (later positions first to preserve indices)
+    // 3. By type priority (inserts before replaces/deletes)
+    changesWithMeta.sort((a, b) => {
+      // Handle explicit dependencies
+      if (a.mustComeBefore !== undefined && a.mustComeBefore === b.originalIndex) {
+        return -1 // a comes before b
+      }
+      if (b.mustComeBefore !== undefined && b.mustComeBefore === a.originalIndex) {
+        return 1 // b comes before a
+      }
+
+      // If same position (same find text), sort by type priority
+      if (a.normalizedFind === b.normalizedFind) {
+        return a.typePriority - b.typePriority
+      }
+
+      // Otherwise, maintain original order (trust Claude's ordering for different positions)
+      return a.originalIndex - b.originalIndex
+    })
+
+    return changesWithMeta.map(m => m.change)
+  }
+
+  /**
+   * Get priority for change type (lower = should come first)
+   * @private
+   */
+  getTypePriority(type) {
+    switch (type.toUpperCase()) {
+      case 'INSERT_BEFORE': return 0
+      case 'INSERT_AFTER': return 1
+      case 'REPLACE': return 2
+      case 'DELETE': return 3
+      default: return 4
+    }
   }
 
   /**
@@ -369,27 +488,65 @@ export class DocumentMerger {
   applySingleChange(content, change) {
     const { type, find, content: newContent } = change
 
+    // Debug logging for match attempts
+    console.log('[DocumentMerger] applySingleChange:', {
+      type,
+      findLength: find?.length,
+      findPreview: find?.substring(0, 100).replace(/\n/g, '\\n'),
+      contentLength: content?.length,
+      contentPreview: content?.substring(0, 100).replace(/\n/g, '\\n'),
+      newContentLength: newContent?.length
+    })
+
+    // Normalize line endings to LF for consistent matching
+    const normalizedContent = content.replace(/\r\n/g, '\n')
+    const normalizedFind = find.replace(/\r\n/g, '\n')
+
     // Strategy 1: Exact match
-    let index = content.indexOf(find)
-    let matchedText = find
+    let index = normalizedContent.indexOf(normalizedFind)
+    let matchedText = normalizedFind
+
+    console.log('[DocumentMerger] Strategy 1 (exact):', {
+      index,
+      normalizedFindLength: normalizedFind.length,
+      normalizedContentLength: normalizedContent.length,
+      findChars: JSON.stringify(normalizedFind.substring(0, 50)),
+      contentChars: JSON.stringify(normalizedContent.substring(0, 50)),
+      findFirst10CharCodes: [...normalizedFind.substring(0, 10)].map(c => c.charCodeAt(0)),
+      contentFirst10CharCodes: [...normalizedContent.substring(0, 10)].map(c => c.charCodeAt(0)),
+      findEndsWithNewline: normalizedFind.endsWith('\n'),
+      contentEndsWithNewline: normalizedContent.endsWith('\n')
+    })
 
     // Strategy 2: Try trimmed match
     if (index === -1) {
-      const trimmedFind = find.trim()
-      index = content.indexOf(trimmedFind)
+      const trimmedFind = normalizedFind.trim()
+      index = normalizedContent.indexOf(trimmedFind)
+      console.log('[DocumentMerger] Strategy 2 (trimmed):', {
+        index,
+        trimmedFindLength: trimmedFind.length,
+        trimmedFindPreview: JSON.stringify(trimmedFind.substring(0, 50))
+      })
       if (index !== -1) {
         matchedText = trimmedFind
       }
     }
 
-    // Strategy 3: Try normalized whitespace match (collapse multiple spaces/newlines)
+    // Strategy 3: Try with normalized internal whitespace (collapse multiple spaces/blank lines)
     if (index === -1) {
-      const normalizedFind = find.replace(/\s+/g, ' ').trim()
-      const normalizedContent = content.replace(/\s+/g, ' ')
-      const normalizedIndex = normalizedContent.indexOf(normalizedFind)
+      // Collapse multiple blank lines to single, normalize spaces
+      const collapseWhitespace = (s) => s
+        .replace(/\n\s*\n/g, '\n\n')  // Collapse multiple blank lines to one
+        .replace(/[ \t]+/g, ' ')       // Collapse spaces/tabs (but not newlines)
+        .trim()
 
-      if (normalizedIndex !== -1) {
-        const result = this.findBestMatch(content, find)
+      const collapsedFind = collapseWhitespace(normalizedFind)
+      const collapsedContent = collapseWhitespace(normalizedContent)
+      const collapsedIndex = collapsedContent.indexOf(collapsedFind)
+
+      if (collapsedIndex !== -1) {
+        // Found in collapsed version - now find in original
+        const result = this.findBestMatch(normalizedContent, normalizedFind)
         if (result) {
           index = result.index
           matchedText = result.text
@@ -398,8 +555,8 @@ export class DocumentMerger {
     }
 
     // Strategy 4: Line-by-line fuzzy match for multi-line finds
-    if (index === -1 && find.includes('\n')) {
-      const result = this.findBestMatch(content, find)
+    if (index === -1 && normalizedFind.includes('\n')) {
+      const result = this.findBestMatch(normalizedContent, normalizedFind)
       if (result) {
         index = result.index
         matchedText = result.text
@@ -408,11 +565,11 @@ export class DocumentMerger {
 
     // Strategy 5: Try finding a key substring (first non-empty line that's unique)
     if (index === -1) {
-      const lines = find.split('\n').map(l => l.trim()).filter(l => l.length > 10)
+      const lines = normalizedFind.split('\n').map(l => l.trim()).filter(l => l.length > 10)
       for (const line of lines) {
-        const lineIndex = content.indexOf(line)
+        const lineIndex = normalizedContent.indexOf(line)
         if (lineIndex !== -1) {
-          const result = this.expandMatchFromLine(content, find, lineIndex, line)
+          const result = this.expandMatchFromLine(normalizedContent, normalizedFind, lineIndex, line)
           if (result) {
             index = result.index
             matchedText = result.text
@@ -422,14 +579,64 @@ export class DocumentMerger {
       }
     }
 
+    // Strategy 6: Try finding any unique line, even short ones
     if (index === -1) {
-      return {
-        success: false,
-        error: `Could not find target text in document: "${find.substring(0, 80)}..."`
+      const lines = normalizedFind.split('\n').map(l => l.trim()).filter(l => l.length > 3)
+      for (const line of lines) {
+        // Check if this line is unique in the document
+        const firstIndex = normalizedContent.indexOf(line)
+        const lastIndex = normalizedContent.lastIndexOf(line)
+        if (firstIndex !== -1 && firstIndex === lastIndex) {
+          // Unique line found - use as anchor
+          const result = this.expandMatchFromLine(normalizedContent, normalizedFind, firstIndex, line)
+          if (result) {
+            index = result.index
+            matchedText = result.text
+            console.log(`[DocumentMerger] Found via unique line anchor: "${line.substring(0, 40)}..."`)
+            break
+          }
+        }
       }
     }
 
-    return this.applyChangeAtIndex(content, index, matchedText, type, newContent)
+    // Strategy 7: For small documents, try checking if the entire find text is a substring
+    // after aggressive whitespace normalization
+    if (index === -1 && normalizedContent.length < 500) {
+      const aggressiveNormalize = (s) => s.replace(/\s+/g, ' ').trim()
+      const normalizedFindAggressive = aggressiveNormalize(normalizedFind)
+      const normalizedContentAggressive = aggressiveNormalize(normalizedContent)
+
+      // Check if content contains find or find contains content (for small docs)
+      if (normalizedContentAggressive.includes(normalizedFindAggressive)) {
+        index = 0
+        matchedText = normalizedContent.trim()
+        console.log('[DocumentMerger] Strategy 7 (aggressive whitespace): matched via content includes find')
+      } else if (normalizedFindAggressive.includes(normalizedContentAggressive) && normalizedContentAggressive.length > 20) {
+        // The find text contains the document - document might just be the anchor
+        index = 0
+        matchedText = normalizedContent.trim()
+        console.log('[DocumentMerger] Strategy 7 (aggressive whitespace): find contains document content')
+      }
+    }
+
+    if (index === -1) {
+      // Provide helpful error with preview of what we were looking for
+      const preview = normalizedFind.substring(0, 100).replace(/\n/g, '\\n')
+      const firstLine = normalizedFind.split('\n')[0].trim()
+      console.error('[DocumentMerger] ALL STRATEGIES FAILED. Document content:', JSON.stringify(normalizedContent))
+      console.error('[DocumentMerger] Find text:', JSON.stringify(normalizedFind))
+      return {
+        success: false,
+        error: `Could not find text starting with: "${firstLine.substring(0, 50)}..." (full: "${preview}...")`
+      }
+    }
+
+    // Apply change using original content (with original line endings)
+    // But adjust index if we normalized CRLF to LF
+    const crlfCount = content.substring(0, index).split('\r\n').length - 1
+    const originalIndex = index + crlfCount  // Add back the \r characters
+
+    return this.applyChangeAtIndex(content, originalIndex, matchedText, type, newContent)
   }
 
   /**

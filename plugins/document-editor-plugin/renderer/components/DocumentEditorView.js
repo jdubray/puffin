@@ -157,7 +157,7 @@ export class DocumentEditorView {
       error: null,
       responseCollapsed: false,
       responseContent: '',
-      // AI prompt state (uses inline /@puffin: markers instead of textarea)
+      // AI prompt state (uses inline /@puffin: ... @/ markers instead of textarea)
       selectedModel: 'haiku',
       thinkingBudget: 'none',
       contextFiles: [],           // Array of { type: 'gui'|'doc', path, name, content }
@@ -267,6 +267,7 @@ export class DocumentEditorView {
       }
 
       const persistedState = result.state
+      console.log('[DocumentEditorView] Persisted state loaded:', JSON.stringify(persistedState, null, 2))
 
       // Restore user preferences
       if (persistedState.selectedModel) {
@@ -288,8 +289,13 @@ export class DocumentEditorView {
       }
 
       // Restore last opened file (if it still exists)
+      console.log('[DocumentEditorView] lastOpenedFile from state:', persistedState.lastOpenedFile)
       if (persistedState.lastOpenedFile) {
-        await this.openFileByPath(persistedState.lastOpenedFile)
+        console.log('[DocumentEditorView] Attempting to restore file:', persistedState.lastOpenedFile)
+        const success = await this.openFileByPath(persistedState.lastOpenedFile)
+        console.log('[DocumentEditorView] File restore result:', success)
+      } else {
+        console.log('[DocumentEditorView] No lastOpenedFile to restore')
       }
 
       console.log('[DocumentEditorView] Persisted state restored')
@@ -415,6 +421,11 @@ export class DocumentEditorView {
         autoSaveEnabled: this.state.autoSaveEnabled,
         highlightChangesEnabled: this.state.highlightChangesEnabled
       }
+      console.log('[DocumentEditorView] Saving state, lastOpenedFile:', this.state.currentFile)
+      if (!this.state.currentFile) {
+        console.warn('[DocumentEditorView] WARNING: Saving state with null currentFile!')
+        console.trace()
+      }
 
       await window.puffin.plugins.invoke(
         'document-editor-plugin',
@@ -422,7 +433,7 @@ export class DocumentEditorView {
         { state: stateToSave }
       )
 
-      console.log('[DocumentEditorView] Editor state saved')
+      console.log('[DocumentEditorView] Editor state saved successfully')
     } catch (error) {
       console.warn('[DocumentEditorView] Failed to save editor state:', error)
     }
@@ -603,7 +614,7 @@ export class DocumentEditorView {
               <span class="puffin-marker-count">${markerCount} marker${markerCount !== 1 ? 's' : ''}</span>
               <span class="document-editor-marker-hint">ready to process</span>
             ` : `
-              <span class="document-editor-marker-hint">Add <code>/@puffin: instruction //</code> markers in your document</span>
+              <span class="document-editor-marker-hint">Add <code>/@puffin: instruction @/</code> markers in your document</span>
             `}
           </div>
           <button class="document-editor-btn document-editor-btn-primary document-editor-prompt-btn ${this.state.isSubmitting ? 'submitting' : ''}"
@@ -1477,7 +1488,7 @@ export class DocumentEditorView {
 
   /**
    * Handle AI prompt submission using inline markers
-   * Extracts all /@puffin: ... // markers from the document and combines them
+   * Extracts all /@puffin: ... @/ markers from the document and combines them
    * into a single prompt for Claude to process holistically.
    */
   async handleAskAI() {
@@ -2714,7 +2725,7 @@ export class DocumentEditorView {
         markerHintEl.textContent = ''
         markerHintEl.appendChild(document.createTextNode('Add '))
         const codeEl = document.createElement('code')
-        codeEl.textContent = '/@puffin: instruction //'
+        codeEl.textContent = '/@puffin: instruction @/'
         markerHintEl.appendChild(codeEl)
         markerHintEl.appendChild(document.createTextNode(' markers in your document'))
       }
@@ -3216,7 +3227,7 @@ export class DocumentEditorView {
   /**
    * Update syntax highlighting
    * Uses highlight.js to apply language-specific syntax highlighting
-   * Also applies Puffin marker highlighting for /@puffin: ... // markers
+   * Also applies Puffin marker highlighting for /@puffin: ... @/ markers
    */
   updateHighlighting() {
     const highlightCode = this.container.querySelector('.document-editor-highlight-layer code')
@@ -3268,7 +3279,7 @@ export class DocumentEditorView {
 
   /**
    * Apply Puffin marker highlighting to HTML content
-   * Wraps /@puffin: ... // markers with span.puffin-marker for visual distinction
+   * Wraps /@puffin: ... @/ markers with span.puffin-marker for visual distinction
    * @param {string} html - HTML content (escaped or from highlight.js)
    * @returns {string} HTML with markers wrapped in highlighting spans
    */
@@ -3278,7 +3289,7 @@ export class DocumentEditorView {
     // Pattern to match Puffin markers in the HTML
     // Note: The content may have HTML entities, so we need to handle both
     // raw text and entity-encoded versions
-    const markerPattern = /(\/@puffin:[\s\S]*?\/\/)/g
+    const markerPattern = /(\/@puffin:[\s\S]*?@\/)/g
 
     return html.replace(markerPattern, '<span class="puffin-marker">$1</span>')
   }
@@ -3566,7 +3577,7 @@ export class DocumentEditorView {
 
   /**
    * Insert a Puffin marker at the current cursor position
-   * Markers use the format: /@puffin: instruction //
+   * Markers use the format: /@puffin: instruction @/
    */
   insertMarker() {
     const textarea = this.container.querySelector('.document-editor-textarea')
@@ -3586,7 +3597,7 @@ export class DocumentEditorView {
     let newCursorPos
     if (cursorPos !== selectionEnd) {
       const selectedText = content.substring(cursorPos, selectionEnd)
-      const marker = `/@puffin: ${selectedText} //`
+      const marker = `/@puffin: ${selectedText} @/`
       newContent = content.substring(0, cursorPos) + marker + content.substring(selectionEnd)
       newCursorPos = cursorPos + marker.length
     } else {
@@ -3720,7 +3731,7 @@ export class DocumentEditorView {
             Remove <strong>${markerText}</strong> from the document?
           </p>
           <p class="puffin-modal-hint">
-            This will delete all <code>/@puffin: ... //</code> markers and their prompt content.
+            This will delete all <code>/@puffin: ... @/</code> markers and their prompt content.
             The surrounding document content will remain intact.
           </p>
         </div>

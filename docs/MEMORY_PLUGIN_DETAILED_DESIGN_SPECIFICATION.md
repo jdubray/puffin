@@ -15,7 +15,8 @@ This document provides the detailed design and implementation guidance for the M
 ## Step 1: Define Data Models and Schemas
 
 ### 1.1 Resource Schema
-/@puffin: I missed that detail in the plugin specification, but do we need to 
+/@puffin: I want to question why do we need to copy all threads to the plugin repository? It's not a big problem if it is a better design, just curious @/
+
 Defines the JSON structure for raw conversation resources stored at `~/.puffin/memory/<user-id>/resources/`.
 
 **File naming convention:** `resource_<timestamp>_<branchId>.json`

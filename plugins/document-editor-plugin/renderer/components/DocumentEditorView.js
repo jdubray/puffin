@@ -350,13 +350,16 @@ export class DocumentEditorView {
    * @param {string} filePath - Path to the file
    */
   async openFileByPath(filePath) {
+    console.log('[DocumentEditorView] openFileByPath called with:', filePath)
     try {
       // Read the file directly
+      console.log('[DocumentEditorView] Invoking readFile IPC...')
       const result = await window.puffin.plugins.invoke(
         'document-editor-plugin',
         'readFile',
         { path: filePath }
       )
+      console.log('[DocumentEditorView] readFile result:', result.error ? `ERROR: ${result.error}` : `OK, ${result.content?.length} chars`)
 
       if (result.error) {
         console.warn(`[DocumentEditorView] Failed to open last file ${filePath}: ${result.error}`)
@@ -390,6 +393,7 @@ export class DocumentEditorView {
       this.state.undoStack = []
 
       console.log(`[DocumentEditorView] Restored last file: ${filePath}`)
+      console.log('[DocumentEditorView] State after restore:', { currentFile: this.state.currentFile, contentLength: this.state.content?.length })
 
       // Watch for external changes
       await this.watchCurrentFile()
@@ -398,11 +402,13 @@ export class DocumentEditorView {
       await this.loadSessionForCurrentFile()
 
       // Re-render
+      console.log('[DocumentEditorView] Calling render() after file restore...')
       this.render()
+      console.log('[DocumentEditorView] render() complete after file restore')
 
       return true
     } catch (error) {
-      console.warn(`[DocumentEditorView] Failed to open file by path ${filePath}:`, error)
+      console.error(`[DocumentEditorView] Failed to open file by path ${filePath}:`, error)
       return false
     }
   }
@@ -469,6 +475,7 @@ export class DocumentEditorView {
     if (!this.container) return
 
     const hasFile = !!this.state.currentFile
+    console.log('[DocumentEditorView] render() called, hasFile:', hasFile, 'currentFile:', this.state.currentFile)
     const responseCollapsed = this.state.responseCollapsed
     // Count inline Puffin markers in the document content
     const markerCount = hasFile ? MarkerUtils.countMarkers(this.state.content) : 0
@@ -825,8 +832,12 @@ export class DocumentEditorView {
   renderChangeSummary(response) {
     if (!response.summary) return ''
 
+    // Check if this response has questions - if so, don't show the "not updated" warning
+    const hasQuestions = response.questions && response.questions.length > 0
+
     // Show warning and action buttons if Claude claims changes but document was NOT actually updated
-    const notAppliedSection = !response.documentApplied && response.summary && response.summary !== 'No changes'
+    // Don't show warning if Claude is asking clarifying questions (that's expected behavior)
+    const notAppliedSection = !response.documentApplied && response.summary && response.summary !== 'No changes' && !hasQuestions
       ? `<div class="document-editor-not-applied-warning">
           <span class="document-editor-warning-icon">⚠️</span>
           <span class="document-editor-warning-text">Document was NOT updated - Claude's response did not use the expected format</span>
@@ -845,13 +856,88 @@ export class DocumentEditorView {
 
     const label = response.documentApplied ? 'Changes Made:' : 'Claude\'s Response:'
 
+    // When no document changes, show the full response content (conversational reply)
+    // This handles cases where Claude answers a question without making document changes
+    let responseContent = ''
+    if (!response.documentApplied && response.fullResponse) {
+      // Extract readable content from the response, excluding any code blocks or structured formats
+      const cleanedResponse = this.extractReadableContent(response.fullResponse)
+      if (cleanedResponse && cleanedResponse.length > 0 && cleanedResponse !== response.summary) {
+        responseContent = `
+          <div class="document-editor-conversational-response">
+            <div class="document-editor-response-text">${this.formatResponseText(cleanedResponse)}</div>
+          </div>
+        `
+      }
+    }
+
     return `
       <div class="document-editor-change-summary ${!response.documentApplied ? 'not-applied' : ''}">
         ${notAppliedSection}
         <div class="document-editor-summary-label">${label}</div>
         <div class="document-editor-summary-content">${this.formatSummary(response.summary)}</div>
+        ${responseContent}
       </div>
     `
+  }
+
+  /**
+   * Extract readable content from Claude's response
+   * Removes code blocks, structured change formats, and other non-conversational content
+   * @param {string} response - Raw response text
+   * @returns {string} Cleaned readable content
+   */
+  extractReadableContent(response) {
+    if (!response) return ''
+
+    let content = response
+
+    // Remove structured change blocks (<<<CHANGE>>>...<<<END>>>)
+    content = content.replace(/<<<CHANGE>>>[\s\S]*?<<<END>>>/g, '')
+
+    // Remove code blocks (```...```)
+    content = content.replace(/```[\s\S]*?```/g, '')
+
+    // Remove "## Updated Document" sections
+    content = content.replace(/##\s*Updated\s*Document[\s\S]*$/i, '')
+
+    // Remove "## Summary" header but keep content
+    content = content.replace(/##\s*Summary\s*\n?/gi, '')
+
+    // Remove "## Questions" sections (already handled separately)
+    content = content.replace(/##\s*Questions?[\s\S]*?(?=##|$)/gi, '')
+
+    // Clean up extra whitespace
+    content = content.replace(/\n{3,}/g, '\n\n').trim()
+
+    return content
+  }
+
+  /**
+   * Format response text for display (convert markdown-like formatting)
+   * @param {string} text - Text to format
+   * @returns {string} Formatted HTML
+   */
+  formatResponseText(text) {
+    if (!text) return ''
+
+    // Escape HTML first
+    let html = this.escapeHtml(text)
+
+    // Convert markdown-style formatting
+    // Bold: **text** or __text__
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    html = html.replace(/__(.*?)__/g, '<strong>$1</strong>')
+
+    // Italic: *text* or _text_
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    html = html.replace(/_([^_]+)_/g, '<em>$1</em>')
+
+    // Convert line breaks to <br> or paragraphs
+    html = html.replace(/\n\n/g, '</p><p>')
+    html = html.replace(/\n/g, '<br>')
+
+    return `<p>${html}</p>`
   }
 
   /**
@@ -1598,9 +1684,11 @@ export class DocumentEditorView {
   async processAIResponse(result, prompt) {
     const rawResponse = result?.response || result?.text || result?.content || ''
     console.log('[DocumentEditorView] Processing AI response, length:', rawResponse.length)
+    console.log('[DocumentEditorView] Raw response preview:', rawResponse.substring(0, 500))
 
     // Parse response for questions and updated document
     const questions = this.extractQuestions(rawResponse)
+    console.log('[DocumentEditorView] Extracted questions:', questions.length, questions)
     const summary = this.extractSummary(rawResponse)
 
     let documentApplied = false
@@ -1844,7 +1932,10 @@ export class DocumentEditorView {
       this.computeAndTrackChanges()
     }
 
-    // Render to show modal
+    // Clear submitting state BEFORE render so UI elements (inputs, buttons) are enabled
+    this.state.isSubmitting = false
+
+    // Render to show response
     this.render()
 
     // Auto-save if enabled
@@ -1855,7 +1946,10 @@ export class DocumentEditorView {
 
   /**
    * Extract questions from Claude's response
-   * Looks for ## Questions section with numbered items
+   * Looks for:
+   * 1. JSON format with "type": "questions" and "questions" array
+   * 2. ## Questions section with numbered items (structured format)
+   * 3. Clarifying question patterns in conversational responses
    * @param {string} response - Raw response text
    * @returns {Array} Array of question objects
    */
@@ -1863,6 +1957,41 @@ export class DocumentEditorView {
     if (!response) return []
 
     const questions = []
+
+    // Pattern 0: JSON format - { "type": "questions", "questions": [...] }
+    // Look for JSON in code blocks or raw JSON
+    const jsonPatterns = [
+      /```json\s*\n?([\s\S]*?)\n?```/i,  // JSON in code block
+      /```\s*\n?(\{[\s\S]*?"type"\s*:\s*"questions"[\s\S]*?\})\n?```/i,  // Generic code block with questions JSON
+      /(\{[\s\S]*?"type"\s*:\s*"questions"[\s\S]*?\})/i  // Raw JSON
+    ]
+
+    for (const pattern of jsonPatterns) {
+      const jsonMatch = response.match(pattern)
+      if (jsonMatch) {
+        try {
+          const jsonStr = jsonMatch[1].trim()
+          const parsed = JSON.parse(jsonStr)
+          if (parsed.type === 'questions' && Array.isArray(parsed.questions)) {
+            parsed.questions.forEach((q, i) => {
+              const questionText = typeof q === 'string' ? q : q.question || q.text || String(q)
+              questions.push({
+                id: `q-${Date.now()}-${i}`,
+                question: questionText,
+                answered: false,
+                answer: null
+              })
+            })
+            console.log('[DocumentEditorView] Extracted questions from JSON format:', questions.length)
+            return questions
+          }
+        } catch (e) {
+          console.log('[DocumentEditorView] Failed to parse JSON questions:', e.message)
+        }
+      }
+    }
+
+    // Pattern 1: Look for structured ## Questions section
     const questionsMatch = response.match(/##\s*Questions?\s*\n([\s\S]*?)(?=##|$)/i)
 
     if (questionsMatch) {
@@ -1880,6 +2009,39 @@ export class DocumentEditorView {
           answer: null
         })
       })
+    }
+
+    // Pattern 2: Detect clarifying questions in conversational responses
+    // Only if no structured changes found and response seems to be asking for clarification
+    if (questions.length === 0 && !this.documentMerger.hasStructuredChanges(response)) {
+      const clarifyingPatterns = [
+        /(?:I (?:want to|need to|would like to) (?:make sure I understand|clarify|confirm|verify))[^.?]*\?/gi,
+        /(?:Could you (?:please )?(?:clarify|confirm|explain|tell me))[^.?]*\?/gi,
+        /(?:Before I (?:proceed|make changes|edit))[^.?]*\?/gi,
+        /(?:Do you (?:want|mean|prefer))[^.?]*\?/gi,
+        /(?:Should I)[^.?]*\?/gi,
+        /(?:Is (?:this|that|it) (?:correct|right|what you))[^.?]*\?/gi,
+        /(?:Are you (?:asking|referring|saying))[^.?]*\?/gi,
+        /(?:Would you like)[^.?]*\?/gi
+      ]
+
+      for (const pattern of clarifyingPatterns) {
+        const matches = response.match(pattern)
+        if (matches) {
+          matches.forEach((match, i) => {
+            const question = match.trim()
+            // Avoid duplicates
+            if (!questions.some(q => q.question === question)) {
+              questions.push({
+                id: `q-${Date.now()}-${questions.length}`,
+                question,
+                answered: false,
+                answer: null
+              })
+            }
+          })
+        }
+      }
     }
 
     return questions
@@ -1996,11 +2158,17 @@ export class DocumentEditorView {
    */
   attachQuestionListeners() {
     // Question inputs - store values in state for persistence
-    this.container.querySelectorAll('.document-editor-question-input').forEach(input => {
+    const questionInputs = this.container.querySelectorAll('.document-editor-question-input')
+    console.log('[DocumentEditorView] attachQuestionListeners - found', questionInputs.length, 'question inputs')
+
+    questionInputs.forEach((input, idx) => {
+      console.log('[DocumentEditorView] Question input', idx, '- disabled:', input.disabled, 'readonly:', input.readOnly)
+
       // Input handler to persist values
       const inputHandler = (e) => {
         const questionId = e.currentTarget.dataset.questionId
         this.state.pendingAnswers[questionId] = e.currentTarget.value
+        console.log('[DocumentEditorView] Question input value changed:', questionId, e.currentTarget.value)
       }
       this.addTrackedListener(input, 'input', inputHandler)
 

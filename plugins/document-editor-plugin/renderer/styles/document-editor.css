@@ -399,8 +399,10 @@
   font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
   font-size: 14px;
   line-height: 1.5;
-  white-space: pre;
-  overflow: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: hidden;
+  overflow-y: auto;
   margin: 0;
   box-sizing: border-box;
   tab-size: 2;
@@ -1136,6 +1138,39 @@
 .document-editor-btn-secondary {
   background: var(--bg-tertiary, #333355);
   border-color: var(--border-color, #444);
+}
+
+/* Conversational response display (when no document changes) */
+.document-editor-conversational-response {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: var(--bg-secondary, #252535);
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #3a3a4a);
+}
+
+.document-editor-conversational-response .document-editor-response-text {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.document-editor-conversational-response .document-editor-response-text p {
+  margin: 0 0 0.75em 0;
+}
+
+.document-editor-conversational-response .document-editor-response-text p:last-child {
+  margin-bottom: 0;
+}
+
+.document-editor-conversational-response .document-editor-response-text strong {
+  color: var(--text-highlight, #f0f0f0);
+  font-weight: 600;
+}
+
+.document-editor-conversational-response .document-editor-response-text em {
+  font-style: italic;
+  color: var(--text-secondary, #b0b0b0);
 }
 
 .document-editor-btn-secondary:hover:not(:disabled) {

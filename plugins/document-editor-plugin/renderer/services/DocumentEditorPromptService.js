@@ -298,9 +298,12 @@ IMPORTANT: Your response MUST include either <<<CHANGE>>> blocks, an ## Updated 
     // Use sendPrompt API for dedicated plugin channel (non-streaming, returns response directly)
     // This avoids routing through the main Puffin prompt view
     if (window.puffin?.claude?.sendPrompt) {
+      // Haiku benefits from more turns due to smaller context window
+      const maxTurns = model === 'haiku' ? 100 : 40
+
       const result = await window.puffin.claude.sendPrompt(prompt, {
         model,
-        maxTurns: 40, // Allow multi-turn for tool use if needed
+        maxTurns,
         timeout: 300000 // 5 minutes for complex edits
       })
 

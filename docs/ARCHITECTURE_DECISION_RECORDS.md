@@ -420,6 +420,327 @@ This document contains architecture decision records extracted from the Puffin p
 
 ---
 
+## RLM Integration
+
+### ADR-021: Context Management Strategy for Long-Context Reasoning
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+Processing long-context reasoning (2M+ tokens) for multi-file codebases and project histories requires a strategy that balances token efficiency, semantic accuracy, and computational cost.
+
+**Options Discussed:**
+
+1. **Direct Prompt Injection** (Traditional)
+   - Concatenate all context into a single prompt
+   - Cons: Deteriorates with length, loses semantic structure, attention degrades over 100K+ tokens
+
+2. **RAG (Retrieval-Augmented Generation)** (Semantic Search)
+   - Use embedding-based similarity to fetch relevant context
+   - Cons: Misses structural dependencies (contracts, code cross-references)
+
+3. **REPL-Based External Environment** (Chosen)
+   - Store context as queryable variables in Python REPL
+   - Agent writes code to index, search, follow references, verify
+   - Recursion chases dependency graphs, building evidence trees
+
+**Rationale:**
+- MIT CSAIL RLM paper validates 100x context window scaling beyond base model limits
+- Separates length (token count) from complexity (information density)
+- Structural dependencies can be programmatically resolved
+- Recursive sub-calls prevent attention fragmentation
+- Cost efficient: often lower than simpler long-context scaffolds
+
+**Consequences:**
+- Requires REPL environment setup in orchestration layer
+- Agent must write queries (Python code) to explore context
+- Implementation complexity increases but becomes manageable with proper abstractions
+- Enables handling of truly large artifacts (multi-thousand-line codebases)
+
+---
+
+### ADR-022: Plugin-Based Designer Storage Architecture
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+GUI definitions must be stored in a way that:
+1. Prevents namespace collisions (unique names per design)
+2. Remains portable across projects
+3. Integrates with plugin architecture for extensibility
+4. Separates designer ownership from core state
+
+**Options Discussed:**
+
+1. **Core `.puffin/gui-definitions/` Directory**
+   - Simple, readily available in puffin-state.js
+   - Cons: Couples GUI storage to core, no namespace isolation
+
+2. **Designer Plugin Namespace** (Chosen)
+   - Stores definitions under plugin ownership: `.puffin/plugins/designer/designs/`
+   - Implements namespace enforcement (unique names within plugin)
+   - Designer Plugin manages schema evolution independently
+
+**Rationale:**
+- Designer Plugin becomes first-class owner of GUI definition lifecycle
+- Namespace enforcement via Plugin schema prevents collisions
+- Enables future plugins to store complementary design artifacts
+- Demonstrates plugin pattern as viable architecture
+
+**Consequences:**
+- Designer Plugin must be created before other plugins reference GUI definitions
+- PluginStateStore requires initialization before GUI operations
+- Migration path needed if core currently stores definitions
+
+---
+
+### ADR-023: Multi-Select GUI Definition Inclusion
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+When composing prompts, users need to include multiple GUI reference materials for context. Strategy must support reusing previously saved definitions, current work, and combining them.
+
+**Options Discussed:**
+
+1. **Single Selection Only**
+   - Choose one GUI definition per prompt
+   - Cons: Can't reference multiple design variants
+
+2. **Current Design Only**
+   - Auto-include active GUI designer state
+   - Cons: Can't reference past saved states
+
+3. **Multi-Select with Current Design Toggle** (Chosen)
+   - Checkbox dropdowns for saved GUI definitions
+   - Separate toggle for current in-progress design
+   - Combined descriptions concatenated in prompt context
+
+**Rationale:**
+- Real-world use case: comparing current design against approved versions
+- Current design toggle addresses in-progress work without saving
+- Prompt-editor already implements this pattern
+- Enables comprehensive UI design context (responsive variants, states, etc.)
+
+**Consequences:**
+- Increases UI complexity in prompt-editor dropdowns
+- State: `selectedGuiDefinitions` array in prompt model
+- Requires careful ordering in combined descriptions
+
+---
+
+### ADR-024: Hierarchical Context Vault Organization
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+Context Vault stores specifications, codebase indexes, traceability, history, and active context. Organization must enable efficient slicing and queries without coupling domains.
+
+**Decision:**
+```
+ContextVault/
+├── specifications/          (user stories, domain rules, assumptions)
+├── codebase-index/          (files, symbols, dependencies, patterns)
+├── traceability/            (story-to-code, code-to-tests, impact analysis)
+├── quality-gates/           (inspection assertions, deliberation triggers)
+├── history/                 (decisions, thread summaries, deployment)
+└── active-context/          (current sprint, working set, risk hotspots)
+```
+
+**Rationale:**
+- Four domains separate concerns (specs ≠ code ≠ traceability ≠ history)
+- Hierarchical structure maps to RLM query patterns
+- Each domain independently queryable and sliceable
+- Scale-friendly: add new files without restructuring
+
+**Consequences:**
+- Requires vault initialization on first RLM setup
+- Slicing engine must understand domain relationships
+- Migration tooling needed if moving from flat schemas
+
+---
+
+### ADR-025: History Index Generation Strategy
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+RLM queries need to efficiently navigate large histories (2M+ tokens). Pre-computed indexes prevent O(n) scans and enable targeted recursion.
+
+**Options Discussed:**
+
+1. **On-Demand Generation**
+   - Generate index when requested
+   - Cons: High latency, duplicated work
+
+2. **Continuous Real-Time Generation**
+   - Update index on every prompt/response
+   - Cons: Overhead on every interaction
+
+3. **Sprint-Based + Periodic Checkpoints** (Chosen)
+   - Generate comprehensive index at sprint end
+   - Lightweight periodic checkpoints (daily/weekly) for recent history
+   - Index structure: topic tags, session boundaries, byte offsets
+
+**Rationale:**
+- Sprint boundaries are natural semantic breakpoints
+- Reduces indexing overhead (not on every interaction)
+- Two-tier approach: heavy analysis at sprint end, light updates in-between
+- Enables RLM queries like "find all stories about authentication in previous sprints"
+
+**Consequences:**
+- Requires HistoryIndex file alongside history.json
+- Sprint closing workflow must include index generation
+- Recent history requires linear scan (acceptable)
+
+---
+
+### ADR-026: RLM Parallel Execution Strategy
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+RLM's recursive sub-calls can explore independent branches of a dependency graph. Orchestrator must determine when parallelization is safe and beneficial.
+
+**Options Discussed:**
+
+1. **Fully Sequential Execution**
+   - Process sub-calls one at a time
+   - Cons: Underutilizes API rate limits
+
+2. **Aggressive Parallelization**
+   - Spawn all possible sub-calls immediately
+   - Cons: Rapid rate limit exhaustion, uncontrolled token spend
+
+3. **Smart Parallelization with Dependency Detection** (Chosen)
+   - Analyze task dependency graph
+   - Parallelize independent branches
+   - Serialize dependent branches
+
+**Rationale:**
+- Balances latency vs cost (parallel on independent paths, serial on dependencies)
+- Respects API rate limits through controlled concurrency
+- Matches real-world development patterns
+
+**Consequences:**
+- Orchestrator must implement dependency graph analysis
+- Aggregation logic handles varying completion times
+- Requires careful testing of dependency detection
+
+---
+
+### ADR-027: RLM Result Aggregation Strategy
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+When RLM executes parallel sub-calls or multiple recursive levels, results must be combined coherently into a single response.
+
+**Decision:** Final Aggregation Only
+- Collect all results, wait for all sub-calls to complete
+- Merge results in priority order (evidence quality, recency)
+- Synthesize into final response
+- Single transmission to user
+
+**Rationale:**
+- Coherent result presentation (not fragmented updates)
+- Ability to reorganize results by quality
+- Easier to detect and handle contradictions
+- Matches SAM pattern (compute full state before rendering view)
+
+**Consequences:**
+- User sees results only after all sub-calls complete (higher latency)
+- Orchestrator must buffer all sub-results (memory tradeoff)
+- Conflict resolution required if sub-calls produce contradictory evidence
+
+---
+
+### ADR-028: Nested JSON Format for GUI Definitions
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+GUI definitions stored in Designer Plugin must support serialization, semantic meaning, evolution, and traversal for RLM queries.
+
+**Decision:** Nested JSON with Metadata
+```json
+{
+  "name": "...",
+  "description": "...",
+  "elements": [
+    {"type": "...", "id": "...", "properties": {...}, "children": [...]}
+  ],
+  "metadata": {
+    "timestamp": "...",
+    "version": "...",
+    "author": "...",
+    "tags": [...]
+  }
+}
+```
+
+**Rationale:**
+- Matches gui-designer.js internal representation
+- Metadata enables audit trail
+- Tagging enables RLM queries like "find designs tagged with 'form'"
+- Version field decouples schema evolution
+
+**Consequences:**
+- Requires schema version field for backward compatibility
+- Larger designs increase file size (manageable)
+- RLM indexing benefits from semantic structure
+
+---
+
+### ADR-029: Fully Qualified IPC Channel Naming
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+IPC channels connect renderer components to main process handlers. With multiple plugins, channel names must be unambiguous and prevent collisions.
+
+**Decision:** Format: `plugin:<plugin-name>:<channel-name>`
+- Example: `plugin:designer:save`, `plugin:designer:load`
+- Central registry ensures plugin names are unique
+
+**Rationale:**
+- Unambiguous in global namespace (no collisions)
+- Enables plugin discovery via naming pattern matching
+- Scales with unlimited plugins
+- Simple parsing: split on `:` to extract plugin name
+
+**Consequences:**
+- Channel names are longer (minor verbosity)
+- IPC handler validates plugin existence
+- Logging and debugging benefit from explicit naming
+
+---
+
+### ADR-030: Tiered Model Selection for RLM Agents
+
+**Status:** Accepted (RLM Enhancement)
+
+**Context:**
+RLM architecture spans multiple agents (root orchestrator, specialized agents, sub-calls). Each has different complexity and cost profiles.
+
+**Decision:**
+- Root orchestrator: Claude Opus (complex task decomposition)
+- Specialized agents: Claude Opus (spec, implementation, test agents)
+- Sub-call recursive: Claude Haiku (targeted queries, evidence gathering)
+
+**Rationale:**
+- Root orchestrator handles complex decomposition (needs Opus)
+- Recursive sub-calls are narrow in scope (Haiku sufficient)
+- Cost: Heavy hitters use Opus; work horses use Haiku
+- Total cost often lower than all-Opus
+
+**Consequences:**
+- Must configure model selection per agent type
+- Sub-call responses may be less nuanced (acceptable for evidence)
+- Requires testing to validate Haiku sufficiency
+
+---
+
 ## Summary
 
 The Puffin project architecture is built on these key principles:
@@ -429,5 +750,7 @@ The Puffin project architecture is built on these key principles:
 3. **Modularity** - Plugin system enables extensibility without core changes
 4. **Security** - XSS prevention, IPC boundaries, and careful event cleanup
 5. **User Experience** - Animated transitions, contextual UI, accessibility support
+6. **Long-Context Reasoning** - REPL-based external environment with hierarchical vault for efficient 2M+ token processing
+7. **Extensibility** - Designer Plugin pattern demonstrates plugin ecosystem for domain-specific tools
 
-These decisions have resulted in a maintainable, debuggable system suitable for complex multi-turn AI orchestration.
+These decisions have resulted in a maintainable, debuggable system suitable for complex multi-turn AI orchestration with enterprise-scale long-context reasoning capabilities.

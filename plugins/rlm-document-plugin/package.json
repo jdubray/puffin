@@ -1,0 +1,19 @@
+{
+  "name": "rlm-document-plugin",
+  "version": "1.0.0",
+  "description": "RLM Document Analyzer - Recursive Language Model analysis for large documents",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": [
+    "puffin",
+    "plugin",
+    "rlm",
+    "document-analysis",
+    "chunking",
+    "ai"
+  ],
+  "peerDependencies": {
+    "electron": ">=20.0.0"
+  }
+}

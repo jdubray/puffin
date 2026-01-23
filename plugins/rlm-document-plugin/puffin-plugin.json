@@ -1,0 +1,85 @@
+{
+  "name": "rlm-document-plugin",
+  "version": "1.0.0",
+  "displayName": "RLM Document Analyzer",
+  "description": "Recursive Language Model analysis for large documents with iterative exploration and evidence extraction",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["rlm", "document-analysis", "chunking", "ai", "evidence-extraction"],
+  "extensionPoints": {
+    "actions": [
+      "rlm:analyze-document",
+      "rlm:query-context"
+    ],
+    "ipcHandlers": [
+      "rlm:init-session",
+      "rlm:close-session",
+      "rlm:list-sessions",
+      "rlm:get-session",
+      "rlm:delete-session",
+      "rlm:get-query-results",
+      "rlm:query",
+      "rlm:peek",
+      "rlm:grep",
+      "rlm:get-chunks",
+      "rlm:get-chunk",
+      "rlm:add-buffer",
+      "rlm:get-buffers",
+      "rlm:export-results",
+      "rlm:get-export-formats",
+      "rlm:get-config",
+      "rlm:get-storage-stats",
+      "rlm:get-repl-stats"
+    ],
+    "components": []
+  },
+  "contributes": {
+    "views": [],
+    "commands": [],
+    "menus": {},
+    "configuration": {
+      "title": "RLM Document Settings",
+      "properties": {
+        "rlm.defaultChunkSize": {
+          "type": "number",
+          "default": 4000,
+          "description": "Default chunk size in characters"
+        },
+        "rlm.defaultOverlap": {
+          "type": "number",
+          "default": 200,
+          "description": "Default overlap between chunks in characters"
+        },
+        "rlm.maxConcurrentQueries": {
+          "type": "number",
+          "default": 3,
+          "description": "Maximum number of parallel chunk queries"
+        },
+        "rlm.subAgentModel": {
+          "type": "string",
+          "default": "haiku",
+          "description": "Model for sub-agent chunk analysis (fixed to haiku)"
+        },
+        "rlm.sessionRetentionDays": {
+          "type": "number",
+          "default": 30,
+          "description": "Days to retain inactive sessions before auto-cleanup"
+        },
+        "rlm.maxSessionsPerProject": {
+          "type": "number",
+          "default": 50,
+          "description": "Maximum number of sessions per project"
+        },
+        "rlm.queryTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "description": "Timeout for individual chunk queries in milliseconds"
+        }
+      }
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

@@ -1,0 +1,229 @@
+/**
+ * Toast Notification Styles - RLM Document Plugin
+ *
+ * Local toast notification system for export feedback and other alerts.
+ * Positioned at bottom-right with slide-in/out animations.
+ */
+
+/* ==========================================================================
+   Toast Container
+   ========================================================================== */
+
+.rlm-toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: calc(100vw - 40px);
+}
+
+/* ==========================================================================
+   Toast Base
+   ========================================================================== */
+
+.rlm-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg-primary, #1e1e1e);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  color: var(--text-primary, #e0e0e0);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  pointer-events: auto;
+  animation: rlmToastSlideIn 0.2s ease-out;
+  max-width: 380px;
+  min-width: 250px;
+}
+
+/* Slide in animation */
+@keyframes rlmToastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Exit animation */
+.rlm-toast.rlm-toast-exit {
+  animation: rlmToastSlideOut 0.2s ease-in forwards;
+}
+
+@keyframes rlmToastSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+/* ==========================================================================
+   Toast Icon
+   ========================================================================== */
+
+.rlm-toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rlm-toast-icon svg {
+  display: block;
+}
+
+/* Type-specific icon colors */
+.rlm-toast-success .rlm-toast-icon {
+  color: var(--color-success, #22c55e);
+}
+
+.rlm-toast-error .rlm-toast-icon {
+  color: var(--color-error, #ef4444);
+}
+
+.rlm-toast-warning .rlm-toast-icon {
+  color: var(--color-warning, #f59e0b);
+}
+
+.rlm-toast-info .rlm-toast-icon {
+  color: var(--accent-color, #3b82f6);
+}
+
+/* ==========================================================================
+   Toast Message
+   ========================================================================== */
+
+.rlm-toast-message {
+  flex: 1;
+  word-break: break-word;
+}
+
+/* ==========================================================================
+   Toast Close Button
+   ========================================================================== */
+
+.rlm-toast-close {
+  flex-shrink: 0;
+  padding: 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rlm-toast-close:hover {
+  background: var(--bg-hover, #3a3a3a);
+  color: var(--text-primary, #e0e0e0);
+}
+
+.rlm-toast-close:focus {
+  outline: 2px solid var(--accent-color, #3b82f6);
+  outline-offset: 2px;
+}
+
+.rlm-toast-close:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.rlm-toast-close:focus-visible {
+  outline: 2px solid var(--accent-color, #3b82f6);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Toast Type Variants (Border Accents)
+   ========================================================================== */
+
+.rlm-toast-success {
+  border-left: 3px solid var(--color-success, #22c55e);
+}
+
+.rlm-toast-error {
+  border-left: 3px solid var(--color-error, #ef4444);
+}
+
+.rlm-toast-warning {
+  border-left: 3px solid var(--color-warning, #f59e0b);
+}
+
+.rlm-toast-info {
+  border-left: 3px solid var(--accent-color, #3b82f6);
+}
+
+/* ==========================================================================
+   Responsive Adjustments
+   ========================================================================== */
+
+@media (max-width: 480px) {
+  .rlm-toast-container {
+    bottom: 10px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+
+  .rlm-toast {
+    max-width: none;
+    min-width: 0;
+  }
+}
+
+/* ==========================================================================
+   Accessibility - Reduced Motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .rlm-toast {
+    animation: none;
+  }
+
+  .rlm-toast.rlm-toast-exit {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   High Contrast Mode
+   ========================================================================== */
+
+@media (prefers-contrast: high) {
+  .rlm-toast {
+    border-width: 2px;
+  }
+
+  .rlm-toast-success {
+    border-left-width: 4px;
+  }
+
+  .rlm-toast-error {
+    border-left-width: 4px;
+  }
+
+  .rlm-toast-warning {
+    border-left-width: 4px;
+  }
+
+  .rlm-toast-info {
+    border-left-width: 4px;
+  }
+}

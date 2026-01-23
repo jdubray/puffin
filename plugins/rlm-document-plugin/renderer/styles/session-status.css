@@ -1,0 +1,304 @@
+/**
+ * Session Status Display Styles
+ * Styles for the RLM session status bar component
+ */
+
+/* ========================================
+   Main Container
+   ======================================== */
+
+.rlm-session-status-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-secondary, #252526);
+  border-bottom: 1px solid var(--border-color, #3c3c3c);
+  flex-shrink: 0;
+  min-height: 40px;
+  gap: 16px;
+}
+
+/* ========================================
+   Status Content (Left Side)
+   ======================================== */
+
+.session-status-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0; /* Allow content to shrink */
+  overflow: hidden;
+}
+
+/* ========================================
+   Session Indicator Group
+   ======================================== */
+
+.session-indicator-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.session-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.session-indicator.inactive {
+  background: var(--status-inactive, #6c6c6c);
+}
+
+.session-indicator.active {
+  background: var(--status-active, #4caf50);
+  box-shadow: 0 0 6px var(--status-active, #4caf50);
+}
+
+.session-text {
+  font-size: 13px;
+  color: var(--text-secondary, #a0a0a0);
+  font-style: italic;
+}
+
+.session-id {
+  font-size: 13px;
+  font-family: var(--font-mono, 'Consolas', 'Monaco', monospace);
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-tertiary, #333);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* ========================================
+   Document Info
+   ======================================== */
+
+.session-document {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  overflow: hidden;
+}
+
+.document-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.document-name {
+  font-size: 13px;
+  color: var(--text-primary, #e0e0e0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ========================================
+   Timestamp
+   ======================================== */
+
+.session-timestamp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.timestamp-icon {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.timestamp-value {
+  font-size: 12px;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+/* ========================================
+   REPL Status
+   ======================================== */
+
+.repl-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.repl-status.connected {
+  background: rgba(76, 175, 80, 0.15);
+  color: var(--status-active, #4caf50);
+}
+
+.repl-status.disconnected {
+  background: rgba(244, 67, 54, 0.15);
+  color: var(--status-error, #f44336);
+}
+
+.repl-indicator {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.repl-label {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ========================================
+   Session Actions (Right Side)
+   ======================================== */
+
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.close-session-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #a0a0a0);
+  background: transparent;
+  border: 1px solid var(--border-color, #555);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.close-session-btn:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  border-color: var(--text-secondary, #a0a0a0);
+}
+
+.close-session-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-color, #007acc);
+}
+
+.close-session-btn:active {
+  background: var(--bg-active, rgba(255, 255, 255, 0.1));
+}
+
+.close-session-btn .btn-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.close-session-btn .btn-text {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ========================================
+   Responsive Adjustments
+   ======================================== */
+
+@media (max-width: 800px) {
+  .session-status-content {
+    gap: 12px;
+  }
+
+  .session-timestamp {
+    display: none;
+  }
+
+  .session-document {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 600px) {
+  .rlm-session-status-display {
+    padding: 8px 12px;
+  }
+
+  .session-document {
+    display: none;
+  }
+
+  .repl-label {
+    display: none;
+  }
+
+  .close-session-btn .btn-text {
+    display: none;
+  }
+
+  .close-session-btn {
+    padding: 6px 8px;
+  }
+}
+
+/* ========================================
+   Animation for Status Changes
+   ======================================== */
+
+@keyframes pulse-active {
+  0%, 100% {
+    box-shadow: 0 0 6px var(--status-active, #4caf50);
+  }
+  50% {
+    box-shadow: 0 0 12px var(--status-active, #4caf50);
+  }
+}
+
+.session-indicator.active.pulsing {
+  animation: pulse-active 2s ease-in-out infinite;
+}
+
+/* ========================================
+   High Contrast Mode Support
+   ======================================== */
+
+@media (prefers-contrast: high) {
+  .session-indicator.active {
+    border: 2px solid var(--status-active, #4caf50);
+  }
+
+  .session-indicator.inactive {
+    border: 2px solid var(--status-inactive, #6c6c6c);
+  }
+
+  .repl-status {
+    border: 1px solid currentColor;
+  }
+
+  .close-session-btn {
+    border-width: 2px;
+  }
+}
+
+/* ========================================
+   Reduced Motion Support
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .session-indicator,
+  .repl-status,
+  .close-session-btn {
+    transition: none;
+  }
+
+  .session-indicator.active.pulsing {
+    animation: none;
+  }
+}

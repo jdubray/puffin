@@ -138,6 +138,10 @@ const RlmDocumentPlugin = {
     context.registerIpcHandler('get-config', this.handleGetConfig.bind(this))
     context.registerIpcHandler('get-storage-stats', this.handleGetStorageStats.bind(this))
     context.registerIpcHandler('get-repl-stats', this.handleGetReplStats.bind(this))
+
+    // File operations (for DocumentPicker)
+    context.registerIpcHandler('show-file-dialog', this.handleShowFileDialog.bind(this))
+    context.registerIpcHandler('get-file-stat', this.handleGetFileStat.bind(this))
   },
 
   /**
@@ -677,6 +681,85 @@ const RlmDocumentPlugin = {
     }
 
     return { stats: this.replManager.getStats() }
+  },
+
+  /**
+   * Show native file dialog for document selection
+   * @param {Object} options - Dialog options
+   * @param {string} options.filter - File type filter (all, text, code, data, markup)
+   * @returns {Promise<Object>} Dialog result with canceled and filePaths
+   */
+  async handleShowFileDialog(options = {}) {
+    const { dialog } = require('electron')
+    const { SUPPORTED_EXTENSIONS } = require('./lib/config')
+
+    // Map filter types to extensions
+    const filterMap = {
+      all: SUPPORTED_EXTENSIONS.map(e => e.replace('.', '')),
+      text: ['md', 'txt', 'rst', 'asciidoc', 'log'],
+      code: ['js', 'ts', 'jsx', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h'],
+      data: ['json', 'yaml', 'yml', 'xml', 'toml', 'csv', 'sql', 'graphql'],
+      markup: ['html', 'css', 'scss']
+    }
+
+    const selectedFilter = options.filter || 'all'
+    const extensions = filterMap[selectedFilter] || filterMap.all
+
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Select Document for Analysis',
+        defaultPath: this.projectPath,
+        filters: [
+          { name: 'Supported Documents', extensions },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+      })
+
+      return {
+        canceled: result.canceled,
+        filePaths: result.filePaths || []
+      }
+    } catch (error) {
+      this.context.log.error('[rlm-document-plugin] File dialog error:', error.message)
+      return { error: error.message }
+    }
+  },
+
+  /**
+   * Get file statistics (size, etc.) for validation
+   * @param {Object} params - Parameters
+   * @param {string} params.path - File path
+   * @returns {Promise<Object>} File stats
+   */
+  async handleGetFileStat(params = {}) {
+    const { path: filePath } = params
+
+    if (!filePath) {
+      return { error: 'File path is required' }
+    }
+
+    // Validate path is within project
+    const validation = validateDocumentPath(filePath, this.projectPath)
+    if (!validation.isValid) {
+      return { error: validation.error }
+    }
+
+    try {
+      const stats = await fs.stat(validation.resolvedPath)
+      return {
+        size: stats.size,
+        isFile: stats.isFile(),
+        isDirectory: stats.isDirectory(),
+        modified: stats.mtime.toISOString(),
+        created: stats.birthtime.toISOString()
+      }
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return { error: 'File not found' }
+      }
+      return { error: error.message }
+    }
   }
 }
 

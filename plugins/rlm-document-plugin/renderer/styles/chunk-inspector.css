@@ -1,0 +1,497 @@
+/**
+ * Chunk Inspector Styles
+ * Styles for the RLM Chunk Inspector component
+ */
+
+/* ========================================
+   Main Container
+   ======================================== */
+
+.chunk-inspector {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-secondary, #252526);
+  border-top: 1px solid var(--border-color, #3c3c3c);
+}
+
+.chunk-inspector-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ========================================
+   Header / Controls
+   ======================================== */
+
+.chunk-inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-tertiary, #2d2d2d);
+  border-bottom: 1px solid var(--border-color, #3c3c3c);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.chunk-metadata {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.chunk-id {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono, 'Consolas', 'Monaco', monospace);
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-primary, #1e1e1e);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.chunk-lines,
+.chunk-tokens,
+.chunk-strategy {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.meta-icon {
+  font-size: 10px;
+}
+
+.chunk-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ========================================
+   Control Buttons
+   ======================================== */
+
+.chunk-context-toggle,
+.chunk-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-secondary, #a0a0a0);
+  background: transparent;
+  border: 1px solid var(--border-color, #555);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chunk-context-toggle:hover,
+.chunk-copy-btn:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  border-color: var(--text-secondary, #a0a0a0);
+}
+
+.chunk-context-toggle:focus,
+.chunk-copy-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-color, #007acc);
+}
+
+.chunk-context-toggle.active {
+  color: var(--accent-color, #007acc);
+  border-color: var(--accent-color, #007acc);
+  background: rgba(0, 122, 204, 0.1);
+}
+
+.chunk-copy-btn.success {
+  color: var(--status-active, #4caf50);
+  border-color: var(--status-active, #4caf50);
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.chunk-copy-btn .btn-icon,
+.chunk-context-toggle .btn-icon {
+  font-size: 12px;
+}
+
+/* ========================================
+   Navigation Controls
+   ======================================== */
+
+.chunk-navigation {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-color, #555);
+}
+
+.chunk-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-secondary, #a0a0a0);
+  background: transparent;
+  border: 1px solid var(--border-color, #555);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chunk-nav-btn:hover:not(:disabled) {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  border-color: var(--text-secondary, #a0a0a0);
+}
+
+.chunk-nav-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-color, #007acc);
+}
+
+.chunk-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chunk-position {
+  font-size: 11px;
+  font-family: var(--font-mono, 'Consolas', 'Monaco', monospace);
+  color: var(--text-secondary, #a0a0a0);
+  padding: 0 6px;
+  min-width: 50px;
+  text-align: center;
+}
+
+/* ========================================
+   Content Area
+   ======================================== */
+
+.chunk-content-wrapper {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.chunk-content-wrapper.with-context {
+  max-height: calc(100% - 200px);
+}
+
+.chunk-code {
+  margin: 0;
+  padding: 12px;
+  font-size: 12px;
+  font-family: var(--font-mono, 'Consolas', 'Monaco', monospace);
+  line-height: 1.5;
+  background: var(--bg-primary, #1e1e1e);
+  color: var(--text-primary, #e0e0e0);
+  overflow: auto;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.chunk-code:focus {
+  outline: 2px solid var(--accent-color, #007acc);
+  outline-offset: -2px;
+}
+
+.chunk-code code {
+  font-family: inherit;
+  background: transparent;
+}
+
+/* ========================================
+   Context Chunks
+   ======================================== */
+
+.chunk-context {
+  padding: 8px 12px;
+  background: var(--bg-tertiary, #2d2d2d);
+  border-bottom: 1px solid var(--border-color, #3c3c3c);
+}
+
+.chunk-context-before {
+  border-bottom: 1px dashed var(--border-color, #555);
+}
+
+.chunk-context-after {
+  border-top: 1px dashed var(--border-color, #555);
+  border-bottom: none;
+}
+
+.context-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-tertiary, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.context-code {
+  max-height: 80px;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.context-code:hover {
+  opacity: 0.9;
+}
+
+/* ========================================
+   Finding/Point Section
+   ======================================== */
+
+.chunk-finding {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 122, 204, 0.1);
+  border-top: 1px solid var(--accent-color, #007acc);
+  flex-shrink: 0;
+}
+
+.finding-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-color, #007acc);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.finding-text {
+  font-size: 12px;
+  color: var(--text-primary, #e0e0e0);
+  line-height: 1.4;
+}
+
+/* ========================================
+   Loading State
+   ======================================== */
+
+.chunk-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px;
+  color: var(--text-secondary, #a0a0a0);
+  font-size: 13px;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color, #3c3c3c);
+  border-top-color: var(--accent-color, #007acc);
+  border-radius: 50%;
+  animation: chunk-spin 0.8s linear infinite;
+}
+
+@keyframes chunk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ========================================
+   Empty State
+   ======================================== */
+
+.chunk-inspector-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+}
+
+.chunk-inspector-empty .empty-icon {
+  font-size: 32px;
+  opacity: 0.4;
+  margin-bottom: 12px;
+}
+
+.chunk-inspector-empty .empty-message {
+  font-size: 13px;
+  color: var(--text-secondary, #a0a0a0);
+  margin: 0 0 4px 0;
+}
+
+.chunk-inspector-empty .empty-hint {
+  font-size: 11px;
+  color: var(--text-tertiary, #888);
+  margin: 0;
+}
+
+/* ========================================
+   Prism.js Theme Overrides (Dark Theme)
+   ======================================== */
+
+.chunk-code .token.comment,
+.chunk-code .token.prolog,
+.chunk-code .token.doctype,
+.chunk-code .token.cdata {
+  color: #6a9955;
+}
+
+.chunk-code .token.punctuation {
+  color: #d4d4d4;
+}
+
+.chunk-code .token.property,
+.chunk-code .token.tag,
+.chunk-code .token.boolean,
+.chunk-code .token.number,
+.chunk-code .token.constant,
+.chunk-code .token.symbol,
+.chunk-code .token.deleted {
+  color: #b5cea8;
+}
+
+.chunk-code .token.selector,
+.chunk-code .token.attr-name,
+.chunk-code .token.string,
+.chunk-code .token.char,
+.chunk-code .token.builtin,
+.chunk-code .token.inserted {
+  color: #ce9178;
+}
+
+.chunk-code .token.operator,
+.chunk-code .token.entity,
+.chunk-code .token.url,
+.chunk-code .language-css .token.string,
+.chunk-code .style .token.string {
+  color: #d4d4d4;
+}
+
+.chunk-code .token.atrule,
+.chunk-code .token.attr-value,
+.chunk-code .token.keyword {
+  color: #569cd6;
+}
+
+.chunk-code .token.function,
+.chunk-code .token.class-name {
+  color: #dcdcaa;
+}
+
+.chunk-code .token.regex,
+.chunk-code .token.important,
+.chunk-code .token.variable {
+  color: #d16969;
+}
+
+/* ========================================
+   Scrollbar Styling
+   ======================================== */
+
+.chunk-content-wrapper::-webkit-scrollbar,
+.chunk-code::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.chunk-content-wrapper::-webkit-scrollbar-track,
+.chunk-code::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chunk-content-wrapper::-webkit-scrollbar-thumb,
+.chunk-code::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, #555);
+  border-radius: 4px;
+}
+
+.chunk-content-wrapper::-webkit-scrollbar-thumb:hover,
+.chunk-code::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover, #666);
+}
+
+/* ========================================
+   High Contrast Mode
+   ======================================== */
+
+@media (prefers-contrast: high) {
+  .chunk-nav-btn,
+  .chunk-context-toggle,
+  .chunk-copy-btn {
+    border-width: 2px;
+  }
+
+  .chunk-code:focus {
+    outline-width: 3px;
+  }
+}
+
+/* ========================================
+   Reduced Motion
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .chunk-nav-btn,
+  .chunk-context-toggle,
+  .chunk-copy-btn {
+    transition: none;
+  }
+
+  .loading-spinner {
+    animation: none;
+    border-top-color: transparent;
+    border-right-color: var(--accent-color, #007acc);
+  }
+
+  .context-code {
+    transition: none;
+  }
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+
+@media (max-width: 600px) {
+  .chunk-inspector-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .chunk-metadata {
+    width: 100%;
+  }
+
+  .chunk-controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .chunk-context-toggle .btn-text,
+  .chunk-copy-btn .btn-text {
+    display: none;
+  }
+}

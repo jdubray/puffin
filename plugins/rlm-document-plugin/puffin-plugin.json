@@ -7,6 +7,27 @@
   "author": "Puffin",
   "license": "MIT",
   "keywords": ["rlm", "document-analysis", "chunking", "ai", "evidence-extraction"],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "RLMDocumentView",
+        "export": "RLMDocumentView",
+        "type": "class",
+        "description": "Main RLM document analysis view with session management"
+      }
+    ],
+    "styles": [
+      "renderer/styles/rlm-document.css",
+      "renderer/styles/session-status.css",
+      "renderer/styles/document-picker.css",
+      "renderer/styles/query-panel.css",
+      "renderer/styles/results-tree.css",
+      "renderer/styles/chunk-inspector.css",
+      "renderer/styles/export-controls.css",
+      "renderer/styles/toast.css"
+    ]
+  },
   "extensionPoints": {
     "actions": [
       "rlm:analyze-document",
@@ -30,12 +51,25 @@
       "rlm:get-export-formats",
       "rlm:get-config",
       "rlm:get-storage-stats",
-      "rlm:get-repl-stats"
+      "rlm:get-repl-stats",
+      "rlm:show-file-dialog",
+      "rlm:get-file-stat"
     ],
-    "components": []
+    "components": [
+      "RLMDocumentView"
+    ]
   },
   "contributes": {
-    "views": [],
+    "views": [
+      {
+        "id": "rlm-document-view",
+        "name": "Document Analysis",
+        "location": "nav",
+        "icon": "📑",
+        "order": 250,
+        "component": "RLMDocumentView"
+      }
+    ],
     "commands": [],
     "menus": {},
     "configuration": {

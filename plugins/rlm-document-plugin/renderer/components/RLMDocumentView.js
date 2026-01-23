@@ -299,9 +299,15 @@ export class RLMDocumentView {
             </section>
           </aside>
 
-          <!-- Right Panel: Results Tree -->
+          <!-- Right Panel: Synthesis + Results Tree -->
           <section class="rlm-right-panel" aria-labelledby="results-heading">
             <h2 id="results-heading" class="rlm-section-heading">Results</h2>
+
+            <!-- Synthesis Panel (shown when synthesis is available) -->
+            <div class="rlm-synthesis-container" style="display: none;">
+              <!-- Synthesis will be rendered here dynamically -->
+            </div>
+
             <div class="rlm-results-tree-container">
               <!-- ResultsTree component will be rendered here -->
             </div>
@@ -451,10 +457,9 @@ export class RLMDocumentView {
       this.context.events.on('session:close-requested', () => this._handleCloseSession())
     }
 
-    // Listen for document selection events
-    if (this.context.events?.on) {
-      this.context.events.on('document:selected', (data) => this._handleDocumentSelected(data))
-    }
+    // Note: Document selection is handled via callback in DocumentPicker options,
+    // not via events, to avoid duplicate handler calls. The DocumentPicker both
+    // emits an event AND calls its callback - we only use the callback.
   }
 
   // ============================================================================
@@ -476,7 +481,7 @@ export class RLMDocumentView {
       this._log('info', 'Attempting to restore session', { sessionId: lastSessionId })
 
       // Try to get the session via IPC
-      const result = await this._callIpc('rlm:get-session', { sessionId: lastSessionId })
+      const result = await this._callIpc('rlm:getSession', { sessionId: lastSessionId })
 
       if (result?.session && result.session.state === 'active') {
         this.state.session = result.session
@@ -545,7 +550,7 @@ export class RLMDocumentView {
     if (!this.state.session?.id) return
 
     try {
-      const result = await this._callIpc('rlm:get-session', { sessionId: this.state.session.id })
+      const result = await this._callIpc('rlm:getSession', { sessionId: this.state.session.id })
       if (result?.replStatus) {
         const wasConnected = this.state.replConnected
         this.state.replConnected = result.replStatus.connected
@@ -588,7 +593,7 @@ export class RLMDocumentView {
     try {
       this._log('info', 'Closing session', { sessionId: this.state.session.id })
 
-      await this._callIpc('rlm:close-session', { sessionId: this.state.session.id })
+      await this._callIpc('rlm:closeSession', { sessionId: this.state.session.id })
       await this._clearStorageValue('lastSessionId')
 
       // Reset state
@@ -630,14 +635,33 @@ export class RLMDocumentView {
     try {
       // Initialize a new session for this document
       this._log('info', 'Initializing RLM session for document')
+      this._log('info', 'About to call initSession IPC', { documentPath: document.path })
 
-      const result = await this._callIpc('rlm:init-session', {
-        documentPath: document.path
-      })
+      let result
+      try {
+        result = await this._callIpc('rlm:initSession', {
+          documentPath: document.path
+        })
+        this._log('info', 'initSession IPC returned', { result })
+      } catch (ipcError) {
+        this._log('error', 'initSession IPC threw error', { message: ipcError.message, stack: ipcError.stack })
+        throw ipcError
+      }
+
+      this._log('info', 'initSession result', { hasSession: !!result?.session, error: result?.error, result })
+
+      // Check for error in result
+      if (result?.error) {
+        throw new Error(result.error)
+      }
+
+      if (!result?.session) {
+        throw new Error('Session creation returned no session data')
+      }
 
       if (result?.session) {
         this.state.session = result.session
-        this.state.replConnected = result.replStatus?.connected || false
+        this.state.replConnected = result.repl?.connected || false
 
         // Save session ID for restoration
         await this._saveLastSessionId(result.session.id)
@@ -684,7 +708,7 @@ export class RLMDocumentView {
   /**
    * Handle query submission from QueryPanel
    * @param {Object} query - Query details
-   * @param {string} query.type - Query type (query, peek, grep)
+   * @param {string} query.type - Query type (rlm, query, peek, grep)
    * @param {string} query.text - Query text
    * @param {Object} query.params - IPC parameters
    * @param {string} query.sessionId - Session ID
@@ -692,6 +716,8 @@ export class RLMDocumentView {
    */
   async _handleQuerySubmit(query) {
     this._log('info', 'Query submitted', { type: query.type, text: query.text })
+
+    const isRlmQuery = query.type === 'rlm'
 
     // Update query state
     this.state.query = {
@@ -703,7 +729,13 @@ export class RLMDocumentView {
 
     // Update QueryPanel loading state
     if (this._components.queryPanel) {
-      this._components.queryPanel.update({ loading: true, error: null })
+      this._components.queryPanel.update({ loading: true, error: null, progress: null })
+    }
+
+    // For RLM queries, start progress polling
+    let progressInterval = null
+    if (isRlmQuery) {
+      progressInterval = this._startProgressPolling()
     }
 
     try {
@@ -712,10 +744,78 @@ export class RLMDocumentView {
 
       // Execute the query
       const result = await this._callIpc(ipcChannel, query.params)
+      this._log('debug', 'Query IPC result', { result, keys: result ? Object.keys(result) : [] })
+
+      // Stop progress polling
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
+
+      // Check for error in result
+      if (result?.error) {
+        throw new Error(result.error)
+      }
 
       // Update results state
+      // Response format varies by query type:
+      // - RLM (executeRlmQuery): { results: { findings: [...], summary: {...} } }
+      // - handleQuery: { result: { query, keywords, relevantChunks, ... } }
+      // - handleGrep: { result: { pattern, matchCount, matches, ... } }
+      // - handlePeek: { result: { content, start, end, ... } }
+      let rawItems = []
+
+      if (isRlmQuery) {
+        // RLM orchestrator returns { results: { findings, summary, synthesis } }
+        const rlmResults = result?.results || result
+        rawItems = rlmResults?.findings || []
+
+        // Store synthesis if available
+        if (rlmResults?.synthesis) {
+          this.state.synthesis = rlmResults.synthesis
+          this._log('info', 'RLM synthesis available', {
+            hasAnswer: !!rlmResults.synthesis.answer,
+            keyPoints: rlmResults.synthesis.keyPoints?.length || 0
+          })
+        } else {
+          this.state.synthesis = null
+        }
+
+        this._log('info', 'RLM results', {
+          findingCount: rawItems.length,
+          summary: rlmResults?.summary,
+          hasSynthesis: !!rlmResults?.synthesis
+        })
+      } else {
+        const queryResult = result?.result || result
+        rawItems = queryResult?.relevantChunks || queryResult?.results || queryResult?.chunks || queryResult?.matches || []
+      }
+
+      // Transform results to match ResultsTree expected format:
+      // ResultsTree expects: { chunkIndex, chunkId, point, excerpt, confidence, lineRange }
+      // REPL returns: { chunkIndex, score, preview }
+      // RLM Aggregator returns: { text, confidence, chunkIndex, chunkId, keyTerms, suggestedFollowup }
+      const transformedItems = rawItems.map((item, index) => ({
+        chunkIndex: item.chunkIndex ?? item.chunkIndices?.[0] ?? item.index ?? index,
+        chunkId: item.chunkId || `chunk_${item.chunkIndex ?? item.chunkIndices?.[0] ?? index}`,
+        // Map 'text' (from aggregator) or other finding fields to 'point'
+        point: item.text || item.point || item.finding || item.preview || item.match || 'Matched chunk',
+        excerpt: item.excerpt || item.evidence || item.context || '',
+        confidence: item.confidence || this._scoreToConfidence(item.score),
+        lineRange: item.lineRange || null,
+        // Preserve original fields for chunk inspection
+        score: item.score,
+        start: item.start,
+        end: item.end,
+        line: item.line,
+        // RLM-specific fields
+        chunkIndices: item.chunkIndices,
+        sources: item.sources,
+        keyTerms: item.keyTerms,
+        suggestedFollowup: item.suggestedFollowup
+      }))
+
       this.state.results = {
-        items: result?.results || result?.chunks || result?.matches || [],
+        items: transformedItems,
         sortBy: 'relevance',
         filter: ''
       }
@@ -725,8 +825,11 @@ export class RLMDocumentView {
 
       // Update QueryPanel
       if (this._components.queryPanel) {
-        this._components.queryPanel.update({ loading: false })
+        this._components.queryPanel.update({ loading: false, progress: null })
       }
+
+      // Update synthesis display if available
+      this._updateSynthesisDisplay()
 
       // Update ResultsTree with new results
       if (this._components.resultsTree) {
@@ -754,6 +857,11 @@ export class RLMDocumentView {
     } catch (error) {
       this._log('error', 'Query failed', { error: error.message })
 
+      // Stop progress polling on error
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
+
       // Update error state
       this.state.query.loading = false
       this.state.query.error = error.message
@@ -762,10 +870,45 @@ export class RLMDocumentView {
       if (this._components.queryPanel) {
         this._components.queryPanel.update({
           loading: false,
-          error: error.message || 'Query failed'
+          error: error.message || 'Query failed',
+          progress: null
         })
       }
     }
+  }
+
+  /**
+   * Start polling for RLM progress updates (Microsoft-style progress)
+   * @returns {number} Interval ID for cleanup
+   * @private
+   */
+  _startProgressPolling() {
+    let progress = 0
+    let phase = 1
+
+    const interval = setInterval(() => {
+      // Microsoft-style progress: goes to ~95%, then resets to 25% on each phase
+      const increment = Math.random() * 5 + 1
+      if (progress < 95) {
+        progress = Math.min(95, progress + increment)
+      } else {
+        phase++
+        progress = 25
+      }
+
+      // Update QueryPanel with progress
+      if (this._components.queryPanel) {
+        this._components.queryPanel.update({
+          progress: {
+            percent: Math.round(progress),
+            phase: phase,
+            status: phase > 1 ? `Iteration ${phase}: Refining results...` : 'Analyzing document...'
+          }
+        })
+      }
+    }, 500)
+
+    return interval
   }
 
   /**
@@ -773,23 +916,52 @@ export class RLMDocumentView {
    * @param {Object} result - Selected result data
    * @private
    */
-  _handleResultSelect(result) {
+  async _handleResultSelect(result) {
     this._log('debug', 'Result selected', { chunkId: result?.chunkId, chunkIndex: result?.chunkIndex })
 
-    // Update selected chunk state
+    // Update selected chunk state (will be enriched with content below)
     this.state.selectedChunk = result
 
-    // Update ChunkInspector with selected chunk
+    // Fetch the actual chunk content from the REPL if we have a session
+    let enrichedResult = { ...result }
+    if (this.state.session?.id && result?.chunkIndex !== undefined) {
+      try {
+        const chunkData = await this._callIpc('rlm:getChunk', {
+          sessionId: this.state.session.id,
+          index: result.chunkIndex
+        })
+        this._log('debug', 'Fetched chunk content', { chunkData })
+
+        // REPL returns { result: { chunk: { content, index, ... } } }
+        const chunk = chunkData?.result?.chunk
+        if (chunk?.content) {
+          // Merge the chunk content with the result metadata
+          enrichedResult = {
+            ...result,
+            content: chunk.content,
+            lineRange: chunk.lineRange || result.lineRange,
+            tokenCount: chunk.tokenCount
+          }
+          this.state.selectedChunk = enrichedResult
+        }
+      } catch (error) {
+        this._log('warn', 'Failed to fetch chunk content', { error: error.message })
+        // Continue with the original result (without full content)
+      }
+    }
+
+    // Update ChunkInspector with the (enriched) chunk
     if (this._components.chunkInspector) {
       this._components.chunkInspector.update({
-        chunk: result,
-        allChunks: this.state.results.items
+        chunk: enrichedResult,
+        allChunks: this.state.results.items,
+        documentPath: this.state.document?.path
       })
     }
 
     // Emit event for other interested components
     if (this.context.events?.emit) {
-      this.context.events.emit('chunk:selected', { result })
+      this.context.events.emit('chunk:selected', { result: enrichedResult })
     }
   }
 
@@ -798,20 +970,43 @@ export class RLMDocumentView {
    * @param {Object} chunk - Navigated chunk data
    * @private
    */
-  _handleChunkNavigate(chunk) {
+  async _handleChunkNavigate(chunk) {
     this._log('debug', 'Chunk navigate', { chunkId: chunk?.chunkId, chunkIndex: chunk?.chunkIndex })
 
+    // Fetch content if not already present
+    let enrichedChunk = chunk
+    if (this.state.session?.id && chunk?.chunkIndex !== undefined && !chunk.content) {
+      try {
+        const chunkData = await this._callIpc('rlm:getChunk', {
+          sessionId: this.state.session.id,
+          index: chunk.chunkIndex
+        })
+        // REPL returns { result: { chunk: { content, index, ... } } }
+        const fetchedChunk = chunkData?.result?.chunk
+        if (fetchedChunk?.content) {
+          enrichedChunk = {
+            ...chunk,
+            content: fetchedChunk.content,
+            lineRange: fetchedChunk.lineRange || chunk.lineRange,
+            tokenCount: fetchedChunk.tokenCount
+          }
+        }
+      } catch (error) {
+        this._log('warn', 'Failed to fetch chunk content during navigation', { error: error.message })
+      }
+    }
+
     // Update selected chunk state
-    this.state.selectedChunk = chunk
+    this.state.selectedChunk = enrichedChunk
 
     // Update ResultsTree selection to match
     if (this._components.resultsTree) {
-      this._components.resultsTree.update({ selectedResult: chunk })
+      this._components.resultsTree.update({ selectedResult: enrichedChunk })
     }
 
     // Emit event for other interested components
     if (this.context.events?.emit) {
-      this.context.events.emit('chunk:selected', { result: chunk })
+      this.context.events.emit('chunk:selected', { result: enrichedChunk })
     }
   }
 
@@ -839,7 +1034,8 @@ export class RLMDocumentView {
    */
   _getQueryIpcChannel(queryType) {
     const channels = {
-      query: 'rlm:query',
+      rlm: 'rlm:executeRlmQuery',  // Full RLM orchestrator query
+      query: 'rlm:query',           // Simple keyword search
       peek: 'rlm:peek',
       grep: 'rlm:grep'
     }
@@ -874,16 +1070,74 @@ export class RLMDocumentView {
   }
 
   /**
+   * Update the synthesis display panel
+   * @private
+   */
+  _updateSynthesisDisplay() {
+    const container = this.container.querySelector('.rlm-synthesis-container')
+    if (!container) return
+
+    if (!this.state.synthesis || !this.state.synthesis.answer) {
+      container.style.display = 'none'
+      container.innerHTML = ''
+      return
+    }
+
+    const synthesis = this.state.synthesis
+    const keyPointsHtml = synthesis.keyPoints?.length > 0
+      ? `<ul class="synthesis-key-points">
+          ${synthesis.keyPoints.map(point => `<li>${this._escapeHtml(point)}</li>`).join('')}
+        </ul>`
+      : ''
+
+    container.style.display = 'block'
+    container.innerHTML = `
+      <div class="rlm-synthesis-panel">
+        <div class="synthesis-header">
+          <h3 class="synthesis-title">Summary</h3>
+          <span class="synthesis-confidence ${synthesis.confidence || 'medium'}">
+            ${(synthesis.confidence || 'medium').charAt(0).toUpperCase() + (synthesis.confidence || 'medium').slice(1)} confidence
+          </span>
+        </div>
+        <div class="synthesis-answer">${this._escapeHtml(synthesis.answer || synthesis.findings?.[0] || '')}</div>
+        ${keyPointsHtml ? `
+          <div class="synthesis-key-points-section">
+            <h4 class="key-points-title">Key Points</h4>
+            ${keyPointsHtml}
+          </div>
+        ` : ''}
+      </div>
+    `
+  }
+
+  /**
    * Call IPC handler
-   * @param {string} channel - IPC channel name
+   * @param {string} channel - IPC channel name (format: 'rlm:handlerName' or just 'handlerName')
    * @param {Object} data - Data to send
    * @returns {Promise<any>} IPC response
    * @private
    */
   async _callIpc(channel, data = {}) {
-    if (window.puffinAPI?.invoke) {
-      return window.puffinAPI.invoke(channel, data)
+    // Use window.puffin.plugins.invoke() which is the standard Puffin IPC pattern
+    if (typeof window !== 'undefined' && window.puffin?.plugins?.invoke) {
+      // Convert 'rlm:handlerName' format to just 'handlerName' for plugin invoke
+      const handlerName = channel.startsWith('rlm:') ? channel.slice(4) : channel
+      this._log('debug', '_callIpc invoking', { pluginName: this.pluginName, handlerName, data })
+      try {
+        const result = await window.puffin.plugins.invoke(this.pluginName, handlerName, data)
+        this._log('debug', '_callIpc result', { handlerName, result })
+        return result
+      } catch (error) {
+        this._log('error', '_callIpc error', { handlerName, error: error.message })
+        throw error
+      }
     }
+    this._log('error', '_callIpc: IPC not available', {
+      hasWindow: typeof window !== 'undefined',
+      hasPuffin: !!window?.puffin,
+      hasPlugins: !!window?.puffin?.plugins,
+      hasInvoke: !!window?.puffin?.plugins?.invoke
+    })
     throw new Error('IPC not available')
   }
 
@@ -925,6 +1179,20 @@ export class RLMDocumentView {
       return this.context.storage.delete(key)
     }
     return false
+  }
+
+  /**
+   * Convert numeric score to confidence level
+   * @param {number} score - Numeric relevance score from REPL
+   * @returns {string} Confidence level: 'high', 'medium', or 'low'
+   * @private
+   */
+  _scoreToConfidence(score) {
+    if (score === undefined || score === null) return 'medium'
+    // Score is typically keyword match count from REPL
+    if (score >= 3) return 'high'
+    if (score >= 2) return 'medium'
+    return 'low'
   }
 
   /**

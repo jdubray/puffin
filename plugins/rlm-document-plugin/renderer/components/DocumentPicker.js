@@ -371,7 +371,7 @@ export class DocumentPicker {
 
     try {
       // Call IPC to show native file dialog
-      const result = await this._invokeIpc('show-file-dialog', {
+      const result = await this._invokeIpc('showFileDialog', {
         filter: this.state.filter
       })
 
@@ -539,7 +539,7 @@ export class DocumentPicker {
     let size = knownSize
     if (size === null) {
       try {
-        const statResult = await this._invokeIpc('get-file-stat', { path: filePath })
+        const statResult = await this._invokeIpc('getFileStat', { path: filePath })
         if (statResult.error) {
           throw new Error(statResult.error)
         }
@@ -643,14 +643,14 @@ export class DocumentPicker {
    * @private
    */
   async _invokeIpc(channel, args = {}) {
-    // The context should provide an ipc method
-    if (this.context.ipc) {
-      return this.context.ipc(channel, args)
+    // Use window.puffin.plugins.invoke() which is the standard Puffin IPC pattern
+    if (typeof window !== 'undefined' && window.puffin?.plugins?.invoke) {
+      return window.puffin.plugins.invoke('rlm-document-plugin', channel, args)
     }
 
-    // Fallback: try window.puffin.ipc if available
-    if (typeof window !== 'undefined' && window.puffin?.ipc) {
-      return window.puffin.ipc(`rlm-document-plugin:${channel}`, args)
+    // Fallback: try context.ipc if provided
+    if (this.context.ipc) {
+      return this.context.ipc(channel, args)
     }
 
     throw new Error('IPC not available')

@@ -30,30 +30,33 @@
   },
   "extensionPoints": {
     "actions": [
-      "rlm:analyze-document",
-      "rlm:query-context"
+      "rlmAnalyzeDocument",
+      "rlmQueryContext"
     ],
     "ipcHandlers": [
-      "rlm:init-session",
-      "rlm:close-session",
-      "rlm:list-sessions",
-      "rlm:get-session",
-      "rlm:delete-session",
-      "rlm:get-query-results",
+      "rlm:initSession",
+      "rlm:closeSession",
+      "rlm:listSessions",
+      "rlm:getSession",
+      "rlm:deleteSession",
+      "rlm:getQueryResults",
       "rlm:query",
       "rlm:peek",
       "rlm:grep",
-      "rlm:get-chunks",
-      "rlm:get-chunk",
-      "rlm:add-buffer",
-      "rlm:get-buffers",
-      "rlm:export-results",
-      "rlm:get-export-formats",
-      "rlm:get-config",
-      "rlm:get-storage-stats",
-      "rlm:get-repl-stats",
-      "rlm:show-file-dialog",
-      "rlm:get-file-stat"
+      "rlm:getChunks",
+      "rlm:getChunk",
+      "rlm:addBuffer",
+      "rlm:getBuffers",
+      "rlm:exportResults",
+      "rlm:getExportFormats",
+      "rlm:getConfig",
+      "rlm:getStorageStats",
+      "rlm:getReplStats",
+      "rlm:showFileDialog",
+      "rlm:getFileStat",
+      "rlm:executeRlmQuery",
+      "rlm:getOrchestratorStatus",
+      "rlm:configureOrchestrator"
     ],
     "components": [
       "RLMDocumentView"
@@ -87,13 +90,26 @@
         },
         "rlm.maxConcurrentQueries": {
           "type": "number",
-          "default": 3,
-          "description": "Maximum number of parallel chunk queries"
+          "default": 5,
+          "description": "Maximum number of parallel Claude Code subprocesses"
         },
         "rlm.subAgentModel": {
           "type": "string",
+          "enum": ["haiku", "sonnet"],
           "default": "haiku",
-          "description": "Model for sub-agent chunk analysis (fixed to haiku)"
+          "description": "Model for sub-LLM chunk analysis (haiku is faster/cheaper, sonnet is higher quality)"
+        },
+        "rlm.maxIterations": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum refinement iterations for RLM queries"
+        },
+        "rlm.cacheEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Cache sub-LLM responses to reduce redundant API calls"
         },
         "rlm.sessionRetentionDays": {
           "type": "number",

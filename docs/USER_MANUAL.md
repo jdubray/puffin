@@ -723,6 +723,26 @@ Puffin ships with four built-in plugins that are automatically loaded on startup
   - Recent files tracking
 - **Access**: Click "Editor" in the navigation bar
 
+**9. RLM Document Analysis** 🔍
+- **Purpose**: Analyze large documents using the Recursive Language Model (RLM) approach
+- **Credits**: Based on the RLM concept by [John Adeojo](https://github.com/brainqub3). Original Claude Code RLM skill: [brainqub3/claude_code_RLM](https://github.com/brainqub3/claude_code_RLM)
+- **Features**:
+  - Large document support through intelligent chunking
+  - AI-powered iterative analysis using Claude Code CLI as sub-LLM
+  - Automatic query refinement across multiple iterations
+  - Synthesis of findings into coherent, well-structured answers
+  - Interactive results tree with chunk inspection
+  - Multiple query types: RLM Query (full analysis), Quick Query, Peek, Grep
+  - Export results to JSON or Markdown
+  - Session management with automatic cleanup
+- **How RLM Works**:
+  1. **Keyword Search**: Find chunks containing relevant keywords
+  2. **Chunk Analysis**: Claude Code analyzes each chunk, extracting findings
+  3. **Aggregation**: Deduplicate and rank findings by confidence
+  4. **Synthesis**: Combine findings into a coherent answer
+- **Requirements**: Python 3.7+ and Claude Code CLI must be installed
+- **Access**: Click "RLM Documents" in the navigation bar
+
 #### Plugin Architecture
 
 Plugins in Puffin follow a consistent structure:

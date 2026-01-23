@@ -335,7 +335,7 @@ export class ExportControls {
 
     try {
       // Call export IPC handler
-      const result = await this._callIpc('rlm:export-results', {
+      const result = await this._callIpc('rlm:exportResults', {
         sessionId: this.session.id,
         format: this.state.selectedFormat,
         results: this.results
@@ -387,7 +387,7 @@ export class ExportControls {
   async _revealExportedFile(filePath) {
     try {
       // Use shell.showItemInFolder via IPC if available
-      await this._callIpc('rlm:reveal-file', { filePath })
+      await this._callIpc('rlm:revealFile', { filePath })
       this._log('debug', 'Revealed file in explorer', { filePath })
     } catch (error) {
       this._log('warn', 'Could not reveal file', { error: error.message })
@@ -405,7 +405,7 @@ export class ExportControls {
    */
   async _fetchExportFormats() {
     try {
-      const result = await this._callIpc('rlm:get-export-formats')
+      const result = await this._callIpc('rlm:getExportFormats')
       if (result?.formats && Array.isArray(result.formats)) {
         this.state.formats = result.formats
         this._log('debug', 'Fetched export formats', { count: result.formats.length })
@@ -445,14 +445,17 @@ export class ExportControls {
 
   /**
    * Call IPC handler
-   * @param {string} channel - IPC channel name
+   * @param {string} channel - IPC channel name (format: 'rlm:handlerName' or just 'handlerName')
    * @param {Object} data - Data to send
    * @returns {Promise<any>} IPC response
    * @private
    */
   async _callIpc(channel, data = {}) {
-    if (window.puffinAPI?.invoke) {
-      return window.puffinAPI.invoke(channel, data)
+    // Use window.puffin.plugins.invoke() which is the standard Puffin IPC pattern
+    if (typeof window !== 'undefined' && window.puffin?.plugins?.invoke) {
+      // Convert 'rlm:handlerName' format to just 'handlerName' for plugin invoke
+      const handlerName = channel.startsWith('rlm:') ? channel.slice(4) : channel
+      return window.puffin.plugins.invoke('rlm-document-plugin', handlerName, data)
     }
     throw new Error('IPC not available')
   }

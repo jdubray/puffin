@@ -12,6 +12,7 @@ const { STORAGE, getConfig } = require('./lib/config')
 const { detectPython } = require('./lib/python-detector')
 const SessionStore = require('./lib/session-store')
 const ReplManager = require('./lib/repl-manager')
+const { RlmOrchestrator } = require('./lib/rlm-orchestrator')
 const { exportSession, getExportFormats } = require('./lib/exporters')
 const {
   validateDocumentPath,
@@ -30,6 +31,7 @@ const RlmDocumentPlugin = {
   projectPath: null,
   sessionStore: null,
   replManager: null,
+  orchestrator: null,
   pythonPath: null,
   cleanupTimer: null,
 
@@ -76,6 +78,35 @@ const RlmDocumentPlugin = {
       this.replManager = null
     }
 
+    // Initialize RLM Orchestrator (requires REPL manager)
+    if (this.replManager) {
+      this.orchestrator = new RlmOrchestrator({
+        replManager: this.replManager,
+        log: context.log,
+        config: {
+          model: 'haiku',        // Default to haiku (fast/cheap)
+          maxConcurrent: 5,      // 5 parallel Claude Code processes
+          maxIterations: 3,      // Up to 3 refinement iterations
+          useMock: false         // Use real Claude Code CLI
+        }
+      })
+
+      // Forward orchestrator events for UI updates
+      this.orchestrator.on('progress:update', data => {
+        context.log.debug('[rlm-document-plugin] Progress update', data)
+      })
+
+      this.orchestrator.on('query:iteration:start', data => {
+        context.log.info(`[rlm-document-plugin] Query iteration ${data.iteration} started`)
+      })
+
+      this.orchestrator.on('query:complete', data => {
+        context.log.info(`[rlm-document-plugin] Query complete: ${data.results?.summary?.totalFindings || 0} findings`)
+      })
+
+      context.log.info('[rlm-document-plugin] RLM Orchestrator initialized')
+    }
+
     // Register IPC handlers
     this.registerHandlers(context)
 
@@ -95,6 +126,12 @@ const RlmDocumentPlugin = {
       this.cleanupTimer = null
     }
 
+    // Cleanup orchestrator
+    if (this.orchestrator) {
+      await this.orchestrator.cleanup()
+      this.orchestrator = null
+    }
+
     // Close all REPL processes
     if (this.replManager) {
       await this.replManager.closeAll()
@@ -112,36 +149,41 @@ const RlmDocumentPlugin = {
    */
   registerHandlers(context) {
     // Session management
-    context.registerIpcHandler('init-session', this.handleInitSession.bind(this))
-    context.registerIpcHandler('close-session', this.handleCloseSession.bind(this))
-    context.registerIpcHandler('list-sessions', this.handleListSessions.bind(this))
-    context.registerIpcHandler('get-session', this.handleGetSession.bind(this))
-    context.registerIpcHandler('delete-session', this.handleDeleteSession.bind(this))
+    context.registerIpcHandler('initSession', this.handleInitSession.bind(this))
+    context.registerIpcHandler('closeSession', this.handleCloseSession.bind(this))
+    context.registerIpcHandler('listSessions', this.handleListSessions.bind(this))
+    context.registerIpcHandler('getSession', this.handleGetSession.bind(this))
+    context.registerIpcHandler('deleteSession', this.handleDeleteSession.bind(this))
 
     // Query results
-    context.registerIpcHandler('get-query-results', this.handleGetQueryResults.bind(this))
+    context.registerIpcHandler('getQueryResults', this.handleGetQueryResults.bind(this))
 
     // Document operations
     context.registerIpcHandler('query', this.handleQuery.bind(this))
     context.registerIpcHandler('peek', this.handlePeek.bind(this))
     context.registerIpcHandler('grep', this.handleGrep.bind(this))
-    context.registerIpcHandler('get-chunks', this.handleGetChunks.bind(this))
-    context.registerIpcHandler('get-chunk', this.handleGetChunk.bind(this))
+    context.registerIpcHandler('getChunks', this.handleGetChunks.bind(this))
+    context.registerIpcHandler('getChunk', this.handleGetChunk.bind(this))
 
     // Buffers
-    context.registerIpcHandler('add-buffer', this.handleAddBuffer.bind(this))
-    context.registerIpcHandler('get-buffers', this.handleGetBuffers.bind(this))
+    context.registerIpcHandler('addBuffer', this.handleAddBuffer.bind(this))
+    context.registerIpcHandler('getBuffers', this.handleGetBuffers.bind(this))
 
     // Results and configuration
-    context.registerIpcHandler('export-results', this.handleExportResults.bind(this))
-    context.registerIpcHandler('get-export-formats', this.handleGetExportFormats.bind(this))
-    context.registerIpcHandler('get-config', this.handleGetConfig.bind(this))
-    context.registerIpcHandler('get-storage-stats', this.handleGetStorageStats.bind(this))
-    context.registerIpcHandler('get-repl-stats', this.handleGetReplStats.bind(this))
+    context.registerIpcHandler('exportResults', this.handleExportResults.bind(this))
+    context.registerIpcHandler('getExportFormats', this.handleGetExportFormats.bind(this))
+    context.registerIpcHandler('getConfig', this.handleGetConfig.bind(this))
+    context.registerIpcHandler('getStorageStats', this.handleGetStorageStats.bind(this))
+    context.registerIpcHandler('getReplStats', this.handleGetReplStats.bind(this))
 
     // File operations (for DocumentPicker)
-    context.registerIpcHandler('show-file-dialog', this.handleShowFileDialog.bind(this))
-    context.registerIpcHandler('get-file-stat', this.handleGetFileStat.bind(this))
+    context.registerIpcHandler('showFileDialog', this.handleShowFileDialog.bind(this))
+    context.registerIpcHandler('getFileStat', this.handleGetFileStat.bind(this))
+
+    // RLM Orchestrator operations
+    context.registerIpcHandler('executeRlmQuery', this.handleExecuteRlmQuery.bind(this))
+    context.registerIpcHandler('getOrchestratorStatus', this.handleGetOrchestratorStatus.bind(this))
+    context.registerIpcHandler('configureOrchestrator', this.handleConfigureOrchestrator.bind(this))
   },
 
   /**
@@ -221,24 +263,31 @@ const RlmDocumentPlugin = {
    * @returns {Promise<Object>} Session info or error
    */
   async handleInitSession(options = {}) {
+    this.context.log.info('[rlm-document-plugin] handleInitSession called', options)
     const { documentPath, chunkSize, chunkOverlap } = options
 
     if (!documentPath) {
+      this.context.log.warn('[rlm-document-plugin] No documentPath provided')
       return { error: 'Document path is required' }
     }
 
     // Validate path is within project
+    this.context.log.info('[rlm-document-plugin] Validating path...', { documentPath, projectPath: this.projectPath })
     const pathValidation = validateDocumentPath(documentPath, this.projectPath)
     if (!pathValidation.isValid) {
       this.context.log.warn(`[rlm-document-plugin] Blocked session init: ${pathValidation.error}`)
       return { error: pathValidation.error }
     }
+    this.context.log.info('[rlm-document-plugin] Path validated', { resolvedPath: pathValidation.resolvedPath })
 
     // Check file exists and get stats
     let stats
     try {
+      this.context.log.info('[rlm-document-plugin] Checking file stats...')
       stats = await fs.stat(pathValidation.resolvedPath)
+      this.context.log.info('[rlm-document-plugin] File stats retrieved', { size: stats.size })
     } catch (error) {
+      this.context.log.error('[rlm-document-plugin] File not found', { error: error.message })
       return { error: 'Document not found' }
     }
 
@@ -248,6 +297,7 @@ const RlmDocumentPlugin = {
         chunkSize: chunkSize || getConfig().chunking.DEFAULT_SIZE,
         chunkOverlap: chunkOverlap || getConfig().chunking.DEFAULT_OVERLAP
       }
+      this.context.log.info('[rlm-document-plugin] Creating session...', sessionConfig)
 
       const session = await this.sessionStore.createSession({
         documentPath: pathValidation.resolvedPath,
@@ -255,31 +305,37 @@ const RlmDocumentPlugin = {
         fileSize: stats.size,
         config: sessionConfig
       })
+      this.context.log.info('[rlm-document-plugin] Session created', { sessionId: session.id })
 
       // Initialize REPL if Python is available
+      // Note: REPL init is async but we don't block on it to avoid hanging the session creation
       let replInfo = null
       if (this.replManager) {
-        try {
-          replInfo = await this.replManager.initRepl(
-            session.id,
-            pathValidation.resolvedPath,
-            sessionConfig
-          )
-
-          // Update session with chunk count
-          if (replInfo.chunkCount) {
-            await this.sessionStore.updateSession(session.id, {
+        this.context.log.info('[rlm-document-plugin] REPL manager available, will initialize in background')
+        // Don't await - let REPL init happen in background
+        this.replManager.initRepl(
+          session.id,
+          pathValidation.resolvedPath,
+          sessionConfig
+        ).then(info => {
+          this.context.log.info('[rlm-document-plugin] REPL initialized (background)', info)
+          // Update session with chunk count asynchronously
+          if (info.chunkCount) {
+            this.sessionStore.updateSession(session.id, {
               stats: {
                 ...session.stats,
-                totalChunks: replInfo.chunkCount
+                totalChunks: info.chunkCount
               }
+            }).catch(err => {
+              this.context.log.warn('[rlm-document-plugin] Failed to update session with chunk count', err.message)
             })
-            session.stats.totalChunks = replInfo.chunkCount
           }
-        } catch (replError) {
-          this.context.log.warn(`[rlm-document-plugin] REPL init failed: ${replError.message}`)
-          replInfo = { error: replError.message }
-        }
+        }).catch(replError => {
+          this.context.log.warn(`[rlm-document-plugin] REPL init failed (background): ${replError.message}`)
+        })
+        replInfo = { status: 'initializing' }
+      } else {
+        this.context.log.info('[rlm-document-plugin] No REPL manager available')
       }
 
       this.context.log.info(`[rlm-document-plugin] Created session ${session.id} for ${documentPath}`)
@@ -288,6 +344,7 @@ const RlmDocumentPlugin = {
         repl: replInfo
       }
     } catch (error) {
+      this.context.log.error('[rlm-document-plugin] Session creation failed', { error: error.message, stack: error.stack })
       return { error: error.message }
     }
   },
@@ -759,6 +816,143 @@ const RlmDocumentPlugin = {
         return { error: 'File not found' }
       }
       return { error: error.message }
+    }
+  },
+
+  // ==================== RLM Orchestrator Handlers ====================
+
+  /**
+   * Execute a full RLM query with iterative refinement
+   * Uses Claude Code CLI for sub-LLM queries
+   * @param {Object} options - Query options
+   * @param {string} options.sessionId - Session ID
+   * @param {string} options.query - User query
+   * @param {string} options.model - Model to use (haiku, sonnet)
+   * @param {number} options.maxIterations - Max refinement iterations
+   * @returns {Promise<Object>} Aggregated results
+   */
+  async handleExecuteRlmQuery(options = {}) {
+    const { sessionId, query, model, maxIterations } = options
+
+    if (!sessionId) {
+      return { error: 'Session ID is required' }
+    }
+
+    if (!query) {
+      return { error: 'Query is required' }
+    }
+
+    if (!this.orchestrator) {
+      return { error: 'RLM Orchestrator is not available. Please ensure Python is installed.' }
+    }
+
+    try {
+      // Ensure REPL is initialized for the session
+      await this.ensureReplInitialized(sessionId)
+
+      // Initialize orchestrator session if needed
+      const session = await this.sessionStore.getSession(sessionId)
+      if (!session) {
+        return { error: `Session not found: ${sessionId}` }
+      }
+
+      if (!this.orchestrator.getSession(sessionId)) {
+        this.orchestrator.initSession(sessionId, {
+          documentPath: session.documentPath,
+          documentInfo: session
+        })
+      }
+
+      // Execute the RLM query
+      this.context.log.info(`[rlm-document-plugin] Executing RLM query: ${query.slice(0, 50)}...`)
+
+      const results = await this.orchestrator.executeQuery(sessionId, query, {
+        model: model || 'haiku',
+        maxIterations: maxIterations || 3
+      })
+
+      // Store results in session
+      if (results.findings && results.findings.length > 0) {
+        const queryId = `qry_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+        await this.sessionStore.saveQueryResult(sessionId, {
+          id: queryId,
+          query,
+          type: 'rlm',
+          findings: results.findings,
+          evidence: results.findings,
+          summary: results.summary,
+          timestamp: new Date().toISOString()
+        })
+      }
+
+      return { results }
+
+    } catch (error) {
+      this.context.log.error(`[rlm-document-plugin] RLM query error: ${error.message}`)
+      return { error: error.message }
+    }
+  },
+
+  /**
+   * Get orchestrator status for a session
+   * @param {Object} options - Options with sessionId
+   * @returns {Promise<Object>} Orchestrator status
+   */
+  async handleGetOrchestratorStatus(options = {}) {
+    const { sessionId } = options
+
+    if (!this.orchestrator) {
+      return {
+        available: false,
+        error: 'RLM Orchestrator is not available'
+      }
+    }
+
+    const status = {
+      available: true,
+      stats: this.orchestrator.getStats()
+    }
+
+    if (sessionId) {
+      status.session = this.orchestrator.getSessionStatus(sessionId)
+    }
+
+    return status
+  },
+
+  /**
+   * Configure the orchestrator
+   * @param {Object} options - Configuration options
+   * @param {string} options.model - Model to use (haiku, sonnet)
+   * @param {number} options.maxIterations - Max iterations
+   * @param {number} options.maxConcurrent - Max parallel queries
+   * @returns {Promise<Object>} Updated configuration
+   */
+  async handleConfigureOrchestrator(options = {}) {
+    if (!this.orchestrator) {
+      return { error: 'RLM Orchestrator is not available' }
+    }
+
+    const { model, maxIterations, maxConcurrent } = options
+
+    const updates = {}
+    if (model && ['haiku', 'sonnet'].includes(model)) {
+      updates.model = model
+    }
+    if (maxIterations && maxIterations > 0 && maxIterations <= 10) {
+      updates.maxIterations = maxIterations
+    }
+    if (maxConcurrent && maxConcurrent > 0 && maxConcurrent <= 10) {
+      updates.maxConcurrent = maxConcurrent
+    }
+
+    if (Object.keys(updates).length > 0) {
+      this.orchestrator.configureClient(updates)
+      this.context.log.info('[rlm-document-plugin] Orchestrator configured', updates)
+    }
+
+    return {
+      config: this.orchestrator.getStats().config
     }
   }
 }

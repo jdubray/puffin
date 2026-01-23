@@ -301,30 +301,60 @@ class RlmRepl:
         if not query:
             raise ValueError("query is required")
 
-        # Simple keyword extraction
-        keywords = [w.lower() for w in re.findall(r'\b\w+\b', query) if len(w) > 3]
+        # Extract keywords, filtering common stop words
+        stop_words = {
+            'about', 'above', 'after', 'again', 'against', 'also', 'been',
+            'before', 'being', 'below', 'between', 'both', 'could', 'create',
+            'detailed', 'does', 'doing', 'down', 'during', 'each', 'find',
+            'from', 'further', 'give', 'have', 'having', 'here', 'into',
+            'just', 'make', 'more', 'most', 'only', 'other', 'over', 'same',
+            'should', 'some', 'such', 'summary', 'than', 'that', 'their',
+            'them', 'then', 'there', 'these', 'they', 'this', 'those', 'through',
+            'under', 'until', 'very', 'what', 'when', 'where', 'which', 'while',
+            'will', 'with', 'would', 'your'
+        }
 
-        # Find relevant chunks
+        all_words = [w.lower() for w in re.findall(r'\b\w+\b', query) if len(w) > 2]
+        keywords = [w for w in all_words if w not in stop_words]
+
+        # If no keywords remain after filtering, use original extraction
+        if not keywords:
+            keywords = [w.lower() for w in re.findall(r'\b\w+\b', query) if len(w) > 3]
+
+        # Find relevant chunks - weight keywords by specificity
         relevant_chunks = []
         for chunk in self.chunks:
             chunk_lower = chunk["content"].lower()
-            score = sum(1 for kw in keywords if kw in chunk_lower)
+
+            # Score based on keyword occurrences with weighting
+            score = 0
+            matched_keywords = []
+            for kw in keywords:
+                # Count occurrences, not just presence
+                count = chunk_lower.count(kw)
+                if count > 0:
+                    # Longer/rarer keywords get higher weight
+                    weight = len(kw) / 4.0  # e.g., "bolt" = 1.0, "methodology" = 2.75
+                    score += count * weight
+                    matched_keywords.append(kw)
+
             if score > 0:
                 relevant_chunks.append({
                     "chunkIndex": chunk["index"],
-                    "score": score,
+                    "score": round(score, 2),
+                    "matchedKeywords": matched_keywords,
                     "preview": chunk["content"][:200] + "..." if len(chunk["content"]) > 200 else chunk["content"]
                 })
 
-        # Sort by relevance
+        # Sort by relevance score
         relevant_chunks.sort(key=lambda x: x["score"], reverse=True)
 
         return {
             "query": query,
             "keywords": keywords,
-            "relevantChunks": relevant_chunks[:5],
+            "relevantChunks": relevant_chunks[:10],  # Return more chunks for better coverage
             "totalChunks": len(self.chunks),
-            "note": "Full LLM integration pending - this returns keyword-matched chunks"
+            "note": "Keyword-matched chunks with weighted scoring"
         }
 
     def method_shutdown(self, params: Dict) -> Dict:

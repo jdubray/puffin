@@ -1,53 +1,149 @@
 # RLM Document Plugin
 
-Recursive Language Model analysis for large documents with iterative exploration and evidence extraction.
+Recursive Language Model (RLM) analysis for large documents with iterative exploration, evidence extraction, and AI-powered synthesis.
+
+## Credits
+
+This plugin is inspired by and based on the **RLM (Recursive Language Model)** concept by [John Adeojo](https://github.com/brainqub3). The original Claude Code RLM skill can be found at:
+
+**[https://github.com/brainqub3/claude_code_RLM](https://github.com/brainqub3/claude_code_RLM)**
+
+The RLM approach enables analysis of documents that exceed LLM context windows by:
+1. Chunking the document into manageable pieces
+2. Using a "sub-LLM" to analyze each chunk against the user's query
+3. Aggregating findings across chunks
+4. Synthesizing a coherent answer from the extracted evidence
 
 ## Overview
 
-The RLM Document Plugin provides session-based document analysis through a Python REPL interface, enabling:
+The RLM Document Plugin provides a complete GUI for document analysis within Puffin, featuring:
 
 - **Large document support**: Analyze documents that exceed context windows through intelligent chunking
-- **Iterative exploration**: Use `peek`, `grep`, and `query` to scout and analyze documents
-- **Session management**: Persistent sessions with automatic 30-day cleanup
-- **Concurrency control**: Safe parallel execution with configurable limits
+- **AI-powered analysis**: Uses Claude Code CLI as the sub-LLM for chunk analysis
+- **Iterative exploration**: Automatic refinement of queries across multiple iterations
+- **Synthesis**: Combines extracted findings into coherent, well-structured answers
+- **Interactive UI**: Full renderer interface with document picker, query panel, results tree, and chunk inspector
+- **Session management**: Persistent sessions with automatic cleanup
 - **Multiple export formats**: JSON and Markdown export of analysis results
-- **Evidence tracking**: Collect and organize findings with source references
+
+## Quick Start
+
+1. **Select a Document**: Click "Select Document" and choose a file to analyze (supports .txt, .md, .json, .js, .py, etc.)
+
+2. **Enter a Query**: Type your question in the query panel (e.g., "Summarize the main concepts in this document")
+
+3. **Run RLM Query**: Click the "RLM Query" button to start the analysis
+
+4. **View Results**:
+   - **Summary panel**: Shows the synthesized answer at the top
+   - **Results tree**: Lists individual findings with source chunk references
+   - **Chunk inspector**: Click any result to view the full chunk content
 
 ## Architecture
+
+### How RLM Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        User Query                                │
+│              "Summarize the BOLT methodology"                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    1. Keyword Search (REPL)                      │
+│         Find chunks containing relevant keywords                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│               2. Chunk Analysis (Claude Code CLI)                │
+│   For each relevant chunk:                                       │
+│   - Extract key findings                                         │
+│   - Assess relevance and confidence                             │
+│   - Suggest follow-up queries                                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    3. Result Aggregation                         │
+│   - Deduplicate findings                                         │
+│   - Rank by confidence                                           │
+│   - Check for convergence                                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│               4. Synthesis (Claude Code CLI)                     │
+│   Combine all findings into a coherent answer                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Final Output                                │
+│   - Synthesized summary with key points                          │
+│   - Individual findings with source references                   │
+│   - Full chunk content available for inspection                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Plugin Structure
 
 ```
 rlm-document-plugin/
-├── index.js                  # Main plugin entry point
+├── index.js                      # Main plugin entry point
+├── puffin-plugin.json            # Plugin manifest
 ├── lib/
-│   ├── repl-manager.js      # Python REPL process lifecycle
-│   ├── session-store.js     # Session persistence and CRUD
-│   ├── chunk-strategy.js    # Chunking algorithms
-│   ├── validators.js        # Input validation utilities
-│   ├── exporters.js         # JSON/Markdown export
-│   ├── schemas.js           # Data structure definitions
-│   ├── semaphore.js         # Concurrency control
-│   ├── python-detector.js   # Cross-platform Python detection
-│   └── config.js            # Configuration constants
+│   ├── repl-manager.js           # Python REPL process lifecycle
+│   ├── rlm-orchestrator.js       # RLM query loop orchestration
+│   ├── claude-code-client.js     # Claude Code CLI integration
+│   ├── result-aggregator.js      # Finding aggregation & deduplication
+│   ├── session-state.js          # Session state machine
+│   ├── session-store.js          # Session persistence
+│   ├── chunk-strategy.js         # Document chunking algorithms
+│   ├── exporters.js              # JSON/Markdown export
+│   ├── validators.js             # Input validation
+│   ├── schemas.js                # Data structure definitions
+│   ├── semaphore.js              # Concurrency control
+│   ├── python-detector.js        # Cross-platform Python detection
+│   └── config.js                 # Configuration constants
 ├── scripts/
-│   └── rlm_repl.py          # Python REPL implementation
-└── puffin-plugin.json       # Plugin manifest
+│   └── rlm_repl.py               # Python REPL implementation
+└── renderer/
+    ├── index.js                  # Renderer entry point
+    ├── components/
+    │   ├── RLMDocumentView.js    # Main view container
+    │   ├── DocumentPicker.js     # File selection component
+    │   ├── QueryPanel.js         # Query input & controls
+    │   ├── ResultsTree.js        # Results display tree
+    │   ├── ChunkInspector.js     # Chunk content viewer
+    │   ├── SessionStatusDisplay.js # Session status bar
+    │   └── ExportControls.js     # Export functionality
+    └── styles/
+        ├── rlm-document.css      # Main layout styles
+        ├── query-panel.css       # Query panel styles
+        ├── results-tree.css      # Results tree styles
+        └── chunk-inspector.css   # Chunk inspector styles
 ```
 
-### Storage Layout
+## Requirements
 
-```
-project-root/
-└── .puffin/
-    └── rlm-sessions/
-        ├── index.json                # Session index
-        └── {sessionId}/
-            ├── metadata.json         # Session metadata
-            ├── query-results/        # Query results per ID
-            ├── buffers.json          # Intermediate buffers
-            └── chunks/               # Materialized chunks (optional)
-```
+### Python
+
+The plugin requires **Python 3.7+** to be installed and available in the system PATH.
+
+**Supported Python executables** (by platform):
+- **Windows**: `python`, `python3`, `py`
+- **macOS/Linux**: `python3`, `python`
+
+The plugin automatically detects and validates Python on activation.
+
+### Claude Code CLI
+
+The plugin uses the Claude Code CLI (`claude`) for AI-powered analysis. Ensure:
+1. Claude Code is installed
+2. The `claude` command is available in your PATH
+3. You have an active Claude Code subscription
 
 ## Configuration
 
@@ -56,330 +152,131 @@ Configure the plugin via `rlm.*` settings in Puffin's configuration:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `rlm.defaultChunkSize` | 4000 | Default chunk size in characters |
-| `rlm.defaultOverlap` | 200 | Default overlap between chunks in characters |
-| `rlm.maxConcurrentQueries` | 3 | Maximum parallel chunk queries |
-| `rlm.subAgentModel` | "haiku" | Model for sub-agent chunk analysis |
-| `rlm.sessionRetentionDays` | 30 | Days to retain inactive sessions before auto-cleanup |
-| `rlm.maxSessionsPerProject` | 50 | Maximum number of sessions per project |
-| `rlm.queryTimeoutMs` | 60000 | Timeout for individual chunk queries (ms) |
+| `rlm.defaultOverlap` | 200 | Default overlap between chunks |
+| `rlm.maxConcurrentQueries` | 5 | Maximum parallel chunk analyses |
+| `rlm.subAgentModel` | "haiku" | Model for sub-LLM (haiku for speed, sonnet for quality) |
+| `rlm.maxIterations` | 3 | Maximum RLM iterations before stopping |
+| `rlm.sessionRetentionDays` | 30 | Days to retain inactive sessions |
+
+## UI Components
+
+### Document Picker
+- Select files from the project directory
+- Displays file name and path
+- Shows document statistics after loading
+
+### Query Panel
+- Text input for natural language queries
+- Query type selector:
+  - **RLM Query**: Full iterative analysis with synthesis
+  - **Quick Query**: Single-pass keyword search
+  - **Peek**: View specific character ranges
+  - **Grep**: Pattern search with regex support
+- Progress indicator with phase tracking
+
+### Results Panel
+- **Summary**: Synthesized answer with key points and confidence level
+- **Results Tree**: Collapsible list of individual findings
+  - Sort by relevance or position
+  - Filter by text search
+  - Expand to see excerpts
+  - Click "View Chunk" to inspect source
+
+### Chunk Inspector
+- Full content view of selected chunk
+- Syntax highlighting (when Prism.js available)
+- Navigation between chunks (prev/next)
+- Copy to clipboard
+- Context view (show surrounding chunks)
+
+### Export Controls
+- Export to JSON or Markdown
+- Includes synthesis, findings, and metadata
 
 ## IPC Handlers
 
-The plugin exposes the following IPC handlers (prefixed with `rlm:`):
+The plugin exposes the following IPC handlers:
 
 ### Session Management
+- `initSession` - Initialize session for a document
+- `closeSession` - Close session and cleanup
+- `getSession` - Get session status
+- `listSessions` - List all project sessions
 
-- **`init-session`** - Initialize a new RLM session for a document
-  ```javascript
-  {
-    documentPath: "path/to/file.md",      // Relative path
-    chunkSize: 4000,                       // Optional override
-    chunkOverlap: 200                      // Optional override
-  }
-  ```
-  Returns: `{ session, repl }` or `{ error }`
+### RLM Queries
+- `executeRlmQuery` - Full RLM analysis with synthesis
+- `query` - Simple keyword search
+- `peek` - View content range
+- `grep` - Pattern search
 
-- **`close-session`** - Close a session and clean up REPL process
-  ```javascript
-  { sessionId: "ses_abc123" }
-  ```
-  Returns: `{ success: true }` or `{ error }`
+### Chunk Operations
+- `getChunks` - Get all chunk metadata
+- `getChunk` - Get specific chunk content
 
-- **`delete-session`** - Delete session and persisted data
-  ```javascript
-  { sessionId: "ses_abc123" }
-  ```
-  Returns: `{ success: true }` or `{ error }`
-
-- **`list-sessions`** - List all sessions for the project
-  ```javascript
-  { includeMetadata: true, state: "active" }  // Optional filters
-  ```
-  Returns: `{ sessions: [...] }`
-
-- **`get-session`** - Get session metadata and status
-  ```javascript
-  { sessionId: "ses_abc123", touch: true }  // touch updates lastAccessedAt
-  ```
-  Returns: `{ session, replStatus }` or `{ error }`
-
-### Query Results
-
-- **`get-query-results`** - Get query results for a session
-  ```javascript
-  { sessionId: "ses_abc123", queryId: "qry_xyz" }  // queryId optional
-  ```
-  Returns: `{ result }` or `{ results: [...] }` or `{ error }`
-
-### Document Operations
-
-- **`query`** - Execute a query against a document
-  ```javascript
-  { sessionId: "ses_abc123", query: "What is the main topic?" }
-  ```
-  Returns: `{ result: { query, keywords, relevantChunks, ... } }` or `{ error }`
-
-- **`peek`** - View content at a specific character range
-  ```javascript
-  { sessionId: "ses_abc123", start: 0, end: 500 }
-  ```
-  Returns: `{ result: { content, startIndex, endIndex } }` or `{ error }`
-
-- **`grep`** - Search for patterns in the document
-  ```javascript
-  { sessionId: "ses_abc123", pattern: "\\bfunction\\b", maxMatches: 10, contextLines: 2 }
-  ```
-  Returns: `{ result: { matches, totalMatches, ... } }` or `{ error }`
-
-- **`get-chunks`** - Get chunk information for session
-  ```javascript
-  { sessionId: "ses_abc123", includeContent: false }
-  ```
-  Returns: `{ result: { chunks: [...], totalChunks, ... } }` or `{ error }`
-
-- **`get-chunk`** - Get a specific chunk by index
-  ```javascript
-  { sessionId: "ses_abc123", index: 0 }
-  ```
-  Returns: `{ result: { index, content, metadata, ... } }` or `{ error }`
-
-### Buffer Operations
-
-- **`add-buffer`** - Add content to session buffer for intermediate results
-  ```javascript
-  { sessionId: "ses_abc123", content: "text", label: "extraction" }
-  ```
-  Returns: `{ result: { bufferId, label, ... } }` or `{ error }`
-
-- **`get-buffers`** - Get all buffers for a session
-  ```javascript
-  { sessionId: "ses_abc123" }
-  ```
-  Returns: `{ result: { bufferCount, buffers: [...] } }` or `{ error }`
-
-### Export & Configuration
-
-- **`export-results`** - Export session results to JSON or Markdown
-  ```javascript
-  {
-    sessionId: "ses_abc123",
-    format: "json",                  // "json" or "markdown"
-    exportOptions: { includeBuffers: true }
-  }
-  ```
-  Returns: `{ export: { format, content, mimeType, filename }, session }` or `{ error }`
-
-- **`get-export-formats`** - Get available export formats
-  ```javascript
-  {}
-  ```
-  Returns: `{ formats: ["json", "markdown"] }`
-
-- **`get-config`** - Get plugin configuration and status
-  ```javascript
-  {}
-  ```
-  Returns: `{ config, pythonAvailable, pythonPath }`
-
-- **`get-storage-stats`** - Get storage usage statistics
-  ```javascript
-  {}
-  ```
-  Returns: `{ stats: { sessionCount, totalSize, ... } }`
-
-- **`get-repl-stats`** - Get REPL manager statistics
-  ```javascript
-  {}
-  ```
-  Returns: `{ stats: { activeReplCount, totalQueriesRun, ... } }` or `{ error }`
-
-## Python Requirements
-
-The plugin requires Python 3.7+ to be installed and available in the system PATH.
-
-**Supported Python executables** (by platform):
-- **Windows**: `python`, `python3`, `py`
-- **macOS/Linux**: `python3`, `python`
-
-The plugin automatically detects and validates Python on activation.
+### Export
+- `exportResults` - Export to JSON/Markdown
+- `getExportFormats` - List available formats
 
 ## Chunking Strategies
 
-The plugin supports three chunking strategies:
-
-1. **Character-based** (default): Splits document into fixed-size chunks with configurable overlap
-   - Best for: Most documents
-   - Configurable: size (default 4000), overlap (default 200)
-
+1. **Character-based** (default): Fixed-size chunks with overlap
 2. **Line-based**: Splits on line boundaries
-   - Best for: Code files, structured text
-   - Preserves semantic units when lines are meaningful
-
 3. **Semantic**: Splits on natural break points (paragraphs, sections)
-   - Best for: Prose, documentation
-   - Requires content analysis
-
-## Session Lifecycle
-
-### States
-
-```
-Pending → Active → Closed ↘
-                    ↓
-                  Expired (30+ days)
-```
-
-### Automatic Cleanup
-
-Sessions are automatically cleaned up after 30 days of inactivity (last access time). Cleanup runs:
-- Once on plugin activation
-- Daily (24-hour interval)
-
-### Manual Management
-
-Users can explicitly close or delete sessions via IPC handlers.
-
-## Error Handling
-
-All handlers return error objects with the following structure:
-
-```javascript
-{ error: "Human-readable error message" }
-```
-
-Common error scenarios:
-- **Invalid paths**: Files outside project directory (path traversal prevention)
-- **Missing sessions**: Session ID not found
-- **REPL unavailable**: Python not installed or REPL process crashed
-- **File not found**: Document file doesn't exist
-- **Invalid input**: Validation failures (invalid patterns, ranges, etc.)
-
-## Query Method Implementation
-
-⚠️ **Note**: The `query` method currently uses keyword-based matching as a placeholder. Full LLM integration is pending and will:
-- Accept model configuration
-- Support custom prompts
-- Provide evidence with confidence scores
-- Track token usage
-
-Current placeholder returns:
-```javascript
-{
-  query: "user query",
-  keywords: ["extracted", "keywords"],
-  relevantChunks: [
-    { chunkIndex: 0, score: 2, preview: "..." }
-  ],
-  totalChunks: 15,
-  note: "Full LLM integration pending..."
-}
-```
-
-## Testing
-
-Test files are located in `tests/plugins/`:
-
-- `rlm-schemas.test.js` - Data structure validation
-- `rlm-semaphore.test.js` - Concurrency control
-- `rlm-validators.test.js` - Input validation
-
-Run tests with:
-```bash
-npm test -- tests/plugins/rlm-*.test.js
-```
-
-## Development
-
-### Adding Tests
-
-For test examples, see existing test files. Key patterns:
-- Mock context objects
-- Verify error handling
-- Test edge cases (empty files, invalid paths, etc.)
-
-### Extending Functionality
-
-The plugin is designed for extensibility:
-
-1. **Add new chunking strategies**: Implement in `lib/chunk-strategy.js`
-2. **Add export formats**: Implement in `lib/exporters.js`
-3. **Add REPL methods**: Add to `scripts/rlm_repl.py` and `lib/repl-manager.js`
-4. **Add validators**: Add to `lib/validators.js` for new input types
-
-## Limitations & Known Issues
-
-1. **Query method**: Placeholder implementation (pending LLM integration)
-2. **No UI components**: Renderer UI can be added as a separate renderer plugin
-3. **No manual cleanup trigger**: Sessions clean up automatically but no manual trigger exposed
-4. **File size limits**:
-   - Warning at 10MB
-   - Hard limit at 50MB
-5. **Concurrency**: Max 3 concurrent queries (configurable but not exposed to UI)
-
-## Future Enhancements
-
-### Phase 2: Renderer UI
-
-- Document picker component
-- Query panel with history
-- Results tree view
-- Chunk inspector/navigator
-
-### Phase 3: Advanced Features
-
-- Query history persistence
-- Evidence export with citations
-- Configuration UI for chunk parameters
-- Session sharing between users
-
-### Phase 4: Codebase Exploration
-
-- Code indexer for project files
-- Symbol resolution (functions, classes, imports)
-- Dependency graph visualization
-- Semantic chunking for code files
 
 ## Troubleshooting
 
 ### Python Not Found
-
 **Symptom**: "Python REPL is not available"
 
 **Solution**:
-1. Ensure Python 3.7+ is installed
-2. Check Python is in system PATH
-3. Restart Puffin after installing Python
+1. Install Python 3.7+
+2. Ensure Python is in system PATH
+3. Restart Puffin
 
-### Sessions Not Persisting
-
-**Symptom**: Sessions lost after Puffin restart
-
-**Solution**: Check `.puffin/rlm-sessions/` directory exists and is writable
-
-### Queries Timing Out
-
-**Symptom**: Query returns timeout error
+### Claude Code Not Found
+**Symptom**: "Claude Code CLI not found"
 
 **Solution**:
-1. Increase `rlm.queryTimeoutMs` (default 60000ms)
-2. Reduce `rlm.maxConcurrentQueries` to reduce system load
-3. Check system resources (CPU, memory)
+1. Install Claude Code
+2. Ensure `claude` command is in PATH
+3. Verify with `claude --version` in terminal
 
-### Document Too Large
+### No Results Found
+**Symptom**: Query returns 0 findings
 
-**Symptom**: "File exceeds maximum size"
+**Possible causes**:
+- Document doesn't contain relevant content
+- Keywords don't match document terminology
+- Try rephrasing the query with different terms
+
+### Synthesis Not Appearing
+**Symptom**: Individual findings shown but no summary
 
 **Solution**:
-1. Split the document into smaller files
-2. Use chunking to focus analysis on relevant sections
+- Ensure findings were extracted (need at least 1)
+- Check server logs for synthesis errors
+- Verify Claude Code CLI is working
 
-## API Reference
+## Development
 
-For detailed API documentation, see comments in:
-- `lib/repl-manager.js` - REPL communication protocol
-- `lib/session-store.js` - Storage and persistence
-- `scripts/rlm_repl.py` - Python REPL JSON-RPC methods
+### Testing
+
+```bash
+npm test -- tests/plugins/rlm-*.test.js
+```
+
+### Extending
+
+1. **Add chunking strategies**: Implement in `lib/chunk-strategy.js`
+2. **Add export formats**: Implement in `lib/exporters.js`
+3. **Add REPL methods**: Add to `scripts/rlm_repl.py` and `lib/repl-manager.js`
+4. **Add UI components**: Add to `renderer/components/`
 
 ## License
 
 MIT
+
+## Acknowledgments
+
+- **John Adeojo** ([@brainqub3](https://github.com/brainqub3)) - Original RLM concept and Claude Code skill
+- **Anthropic** - Claude AI and Claude Code CLI

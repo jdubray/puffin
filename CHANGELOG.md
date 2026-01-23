@@ -5,6 +5,83 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-01-23
+
+### Added
+
+- **RLM Document Plugin**: Full implementation of Recursive Language Model document processing
+  - **Document Picker**: Select and load documents for RLM processing with file browser integration
+  - **Query Panel**: Execute RLM queries with streaming results and progress indicators
+  - **Chunk Inspector**: Visualize how documents are chunked for processing
+  - **Results Tree**: Hierarchical view of aggregated RLM query results
+  - **Session State Management**: Track RLM sessions with persistence across restarts
+  - **Export Controls**: Export processed results in multiple formats
+
+- **Claude Code Integration**: Direct integration with Claude Code CLI for RLM orchestration
+  - **Claude Code Client**: Manages communication with Claude Code subprocess
+  - **RLM Orchestrator**: Coordinates chunking, querying, and result aggregation
+  - **Result Aggregator**: Combines results from multiple chunk queries
+  - **Session State**: Tracks query progress and maintains session context
+
+- **RLM Backend Libraries**:
+  - `chunk-strategy.js`: Smart document chunking with configurable strategies
+  - `claude-code-client.js`: Claude Code CLI subprocess management
+  - `rlm-orchestrator.js`: Query orchestration and workflow management
+  - `result-aggregator.js`: Multi-chunk result combination
+  - `session-state.js`: Persistent session tracking
+  - `session-store.js`: SQLite-backed session storage
+  - `validators.js`: Input validation for RLM operations
+  - `schemas.js`: Data schemas for RLM structures
+  - `semaphore.js`: Concurrency control for parallel queries
+  - `exporters.js`: Result export in JSON, Markdown, and text formats
+  - `repl-manager.js`: Python REPL management for RLM scripts
+  - `python-detector.js`: Python environment detection
+  - `config.js`: RLM plugin configuration management
+
+- **RLM UI Components**:
+  - `RLMDocumentView.js`: Main view orchestrating all RLM components
+  - `DocumentPicker.js`: File selection with recent files and favorites
+  - `QueryPanel.js`: Query input with streaming response display
+  - `ChunkInspector.js`: Visual chunk boundary inspection
+  - `ResultsTree.js`: Collapsible tree view of aggregated results
+  - `ExportControls.js`: Export format selection and download
+  - `SessionStatusDisplay.js`: Real-time session progress tracking
+  - `Toast.js`: Notification system for RLM operations
+
+- **RLM Python Scripts**: `rlm_repl.py` for local RLM processing via Python REPL
+
+- **Claude Code Skill**: `/rlm` skill for running RLM-style loops directly in Claude Code
+  - Persistent Python REPL for state management
+  - Sub-agent integration via `rlm-subcall` for chunk queries
+
+- **Comprehensive Test Suite**: 8 new test files covering all RLM components
+  - `rlm-chunk-strategy.test.js`
+  - `rlm-exporters.test.js`
+  - `rlm-plugin-integration.test.js`
+  - `rlm-repl-integration.test.js`
+  - `rlm-schemas.test.js`
+  - `rlm-semaphore.test.js`
+  - `rlm-session-store.test.js`
+  - `rlm-validators.test.js`
+
+### Changed
+
+- **Document Editor Plugin**: Refactored to use project-level storage instead of global storage
+- **Plugin Architecture**: Enhanced IPC channels for RLM-specific operations
+
+### Documentation
+
+- **RLM Plugin Architecture Design**: Comprehensive design document in `docs/plans/`
+- **RLM Routing Specification**: Document routing strategies for multi-file RLM
+- **RLM Plugin Review**: Analysis and recommendations for RLM implementation
+- **RLM History Index Generator Spec**: Specification for history indexing
+- **Architecture Decision Records**: ADRs for key architectural choices
+- **User Manual Updates**: Added RLM plugin documentation section
+
+### Credits
+
+- [RLM Skill](https://github.com/brainqub3/claude_code_RLM) by John Adeojo
+
 ## [2.14.0] - 2026-01-18
 
 ### Added

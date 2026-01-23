@@ -361,7 +361,7 @@ Puffin includes a comprehensive Git panel for repository management directly wit
 MIT
 
 ## Credits
-
+- [RLM Skill](https://github.com/brainqub3/claude_code_RLM) by John Adeojo
 - [SAM Pattern](https://sam.js.org/) by Jean-Jacques Dubray
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) by Anthropic
 - [Electron](https://www.electronjs.org/)

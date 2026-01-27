@@ -1109,6 +1109,19 @@ ${updatedContext}
       if (progressCallback) progressCallback(msg)
     }
 
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    if (this.isProcessRunning()) {
+      console.error('[STORY-DERIVATION-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
+      return {
+        success: false,
+        error: 'A Claude CLI process is already running. Please wait for it to complete or cancel it first.'
+      }
+    }
+
+    // Acquire the process lock immediately
+    this._processLock = true
+    console.log('[STORY-DERIVATION-GUARD] Process lock acquired')
+
     progress('Initializing...')
 
     const systemPrompt = `You are a requirements analyst. Your ONLY task is to derive user stories from the request below.
@@ -1264,6 +1277,10 @@ Guidelines:
       })
 
       proc.on('close', (code) => {
+        // Release the process lock
+        this._processLock = false
+        console.log('[STORY-DERIVATION-GUARD] Process lock released (close)')
+
         progress(`Process closed with exit code: ${code}`)
         progress(`Total JSON messages received: ${allMessages.length}`)
         progress(`Message types: ${allMessages.map(m => m.type).join(', ') || '(none)'}`)
@@ -1314,6 +1331,10 @@ Guidelines:
       })
 
       proc.on('error', (error) => {
+        // Release the process lock
+        this._processLock = false
+        console.log('[STORY-DERIVATION-GUARD] Process lock released (error)')
+
         if (resolved) return
         resolved = true
         progress(`Process error: ${error.message}`)
@@ -1332,6 +1353,9 @@ Guidelines:
         progress(`Messages received before timeout: ${allMessages.length}`)
         progress(`Result text length before timeout: ${resultText.length}`)
         proc.kill()
+        // Release the process lock
+        this._processLock = false
+        console.log('[STORY-DERIVATION-GUARD] Process lock released (timeout)')
         resolve({
           success: false,
           error: 'Story derivation timed out',
@@ -1384,7 +1408,27 @@ ${feedback}`
    * @returns {Promise<string>} - Generated title
    */
   async generateTitle(content) {
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    if (this.isProcessRunning()) {
+      console.warn('[TITLE-GEN-GUARD] CLI process already running, using fallback title')
+      return this.generateFallbackTitle(content)
+    }
+
+    // Acquire the process lock immediately
+    this._processLock = true
+    console.log('[TITLE-GEN-GUARD] Process lock acquired')
+
     return new Promise((resolve, reject) => {
+      let resolved = false
+
+      const releaseAndResolve = (value) => {
+        if (resolved) return
+        resolved = true
+        this._processLock = false
+        console.log('[TITLE-GEN-GUARD] Process lock released')
+        resolve(value)
+      }
+
       // Create a simple prompt for title generation
       const titlePrompt = `Generate a concise 2-5 word title for this user request. Respond with ONLY the title, no quotes or additional text:
 
@@ -1429,23 +1473,23 @@ ${content}`
             .trim()
             .substring(0, 50)
 
-          resolve(cleanTitle || 'New Request')
+          releaseAndResolve(cleanTitle || 'New Request')
         } else {
           console.warn('Title generation failed, using fallback')
-          resolve(this.generateFallbackTitle(content))
+          releaseAndResolve(this.generateFallbackTitle(content))
         }
       })
 
       titleProcess.on('error', (error) => {
         console.warn('Title generation process error:', error)
-        resolve(this.generateFallbackTitle(content))
+        releaseAndResolve(this.generateFallbackTitle(content))
       })
 
       // Timeout after 10 seconds
       setTimeout(() => {
-        if (titleProcess) {
+        if (!resolved && titleProcess) {
           titleProcess.kill()
-          resolve(this.generateFallbackTitle(content))
+          releaseAndResolve(this.generateFallbackTitle(content))
         }
       }, 10000)
     })
@@ -1463,6 +1507,16 @@ ${content}`
    * @returns {Promise<{success: boolean, response?: string, error?: string}>}
    */
   async sendPrompt(prompt, options = {}) {
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    if (this.isProcessRunning()) {
+      console.error('[sendPrompt-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
+      return { success: false, error: 'A Claude CLI process is already running. Please wait for it to complete.' }
+    }
+
+    // Acquire the process lock immediately
+    this._processLock = true
+    console.log('[sendPrompt-GUARD] Process lock acquired')
+
     return new Promise((resolve) => {
       const model = options.model || 'haiku'
       const maxTurns = options.maxTurns || 1
@@ -1489,6 +1543,8 @@ ${content}`
 
       if (!proc.pid) {
         console.error('[sendPrompt] Failed to spawn process - no PID')
+        this._processLock = false
+        console.log('[sendPrompt-GUARD] Process lock released (no PID)')
         resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
         return
       }
@@ -1553,6 +1609,10 @@ ${content}`
       })
 
       proc.on('close', (code) => {
+        // Release the process lock
+        this._processLock = false
+        console.log('[sendPrompt-GUARD] Process lock released (close)')
+
         console.log('[sendPrompt] Process closed with code:', code)
         console.log('[sendPrompt] Data received:', dataReceived)
         console.log('[sendPrompt] Result text length:', resultText.length)
@@ -1591,6 +1651,10 @@ ${content}`
       })
 
       proc.on('error', (error) => {
+        // Release the process lock
+        this._processLock = false
+        console.log('[sendPrompt-GUARD] Process lock released (error)')
+
         console.error('[sendPrompt] Process error:', error.message)
         if (resolved) return
         resolved = true
@@ -1605,6 +1669,9 @@ ${content}`
         console.log('[sendPrompt] Result text length before timeout:', resultText.length)
         proc.kill()
         resolved = true
+        // Release the process lock
+        this._processLock = false
+        console.log('[sendPrompt-GUARD] Process lock released (timeout)')
         if (resultText.length > 0) {
           resolve({ success: true, response: resultText.trim() })
         } else {
@@ -1674,6 +1741,19 @@ ${content}`
       console.log('[ASSERTION-GEN]', msg)
       if (progressCallback) progressCallback(msg)
     }
+
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    if (this.isProcessRunning()) {
+      console.error('[ASSERTION-GEN-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
+      return {
+        success: false,
+        error: 'A Claude CLI process is already running. Please wait for it to complete or cancel it first.'
+      }
+    }
+
+    // Acquire the process lock immediately
+    this._processLock = true
+    console.log('[ASSERTION-GEN-GUARD] Process lock acquired')
 
     // Build coding standard context if provided
     const codingStandardContext = codingStandard
@@ -1761,6 +1841,8 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
 
       if (!proc.pid) {
         progress('ERROR: Failed to spawn process')
+        this._processLock = false
+        console.log('[ASSERTION-GEN-GUARD] Process lock released (no PID)')
         resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
         return
       }
@@ -1776,6 +1858,8 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
         if (!resolved) {
           resolved = true
           proc.kill()
+          this._processLock = false
+          console.log('[ASSERTION-GEN-GUARD] Process lock released (timeout)')
           progress('ERROR: Timeout')
           resolve({ success: false, error: 'Assertion generation timed out' })
         }
@@ -1829,6 +1913,10 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
 
       proc.on('close', (code) => {
         clearTimeout(timeout)
+        // Release the process lock
+        this._processLock = false
+        console.log('[ASSERTION-GEN-GUARD] Process lock released (close)')
+
         if (resolved) return
         resolved = true
 
@@ -1904,6 +1992,10 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
 
       proc.on('error', (err) => {
         clearTimeout(timeout)
+        // Release the process lock
+        this._processLock = false
+        console.log('[ASSERTION-GEN-GUARD] Process lock released (error)')
+
         if (resolved) return
         resolved = true
         progress(`ERROR: ${err.message}`)

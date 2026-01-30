@@ -2945,12 +2945,12 @@
   transition: all 0.2s ease;
 }
 
-.session-indicator .session-icon {
+.session-indicator .session-indicator-icon {
   font-size: 0.875rem;
   line-height: 1;
 }
 
-.session-indicator .session-label {
+.session-indicator .session-indicator-label {
   white-space: nowrap;
 }
 

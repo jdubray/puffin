@@ -4,6 +4,8 @@
 **Status:** Ready for Implementation  
 **Plugin Name:** `memory-plugin`
 
+/@puffin: make sure all the answers we discussed have been integrated in the specification @/
+
 ## 1. Overview
 
 ### 1.1 Purpose
@@ -37,46 +39,56 @@ Without a memory system, this knowledge is lost when conversations end, leading 
 
 ### 2.1 Memory Architecture Model
 
-Following the principles from the Memory Architecture reference, this plugin implements a **File-Based Memory** system with three layers:
+Following the principles from the Memory Architecture reference, this plugin implements a **File-Based Memory** system with two layers:
 
-#### Layer 1: Resources (Raw Data - Source of Truth)
-- Store raw branch thread conversations and context
-- Immutable and timestamped for full traceability
-- Enables replay, debugging, and audit trails
-- Location: `~/.puffin/memory/<user-id>/resources/`
-- Format: JSON with metadata (timestamp, branch, thread-id, session-id)
+> **Design Rationale: Memory Scope for Central Reasoning Engine**
+> 
+> The Memory Plugin serves a "central reasoning engine" that maintains the Code Model of the solution. Therefore, memory domain knowledge should only include concerns that need to be known and enforced **across the entire solution**, not at the feature or story level.
+> 
+> **In Scope for Domain Knowledge:**
+> - Architectural decisions affecting multiple components
+> - Cross-cutting concerns (error handling, state management patterns)
+> - Technical constraints that apply solution-wide
+> - Code style and conventions enforced everywhere
+> - Critical bug patterns and their solutions
+> - Key design assumptions and trade-offs
+> 
+> **Out of Scope (Feature/Story Level):**
+> - Business rules specific to individual features
+> - Feature-specific implementation details
+> - Story-level context and requirements
+> - User story acceptance criteria
+> 
+> This separation ensures the memory system provides essential context for any agent working on the codebase, without drowning in feature-specific minutiae.
 
-#### Layer 2: Items (Atomic Facts)
-- Discrete, extracted facts from conversations
+#### Layer 1: Branch Threads (Raw Data - Source of Truth)
+- Branch threads in Puffin are already immutable and timestamped
+- These serve as the source of truth for all memory extraction
+- No separate resource layer needed—extraction operates directly on existing branch conversations
+
+#### Layer 2: Items & Branch Memory (Atomic Facts and Summaries)
+- Discrete, extracted facts from branch conversations
 - Examples: "User prefers async/await over promises", "Architecture decision: Use event-driven pattern"
-- Linked to source resources for full traceability
-- Extracted automatically via LLM from raw conversations
-- Location: `~/.puffin/memory/<user-id>/items/`
-- Format: JSON with category, content, source-resource-id, extraction-timestamp
+- Extracted automatically via LLM from raw branch conversations
+- Each branch has its own memory file: `~/.puffin/memory/branches/{branch}.md`
+- Format: Markdown file containing extracted items and evolving summary, updated via LLM-driven synthesis
+- Handles conflicts by overwriting outdated facts and maintaining narrative coherence
 
-#### Layer 3: Categories (Evolving Summaries)
-- High-level, human-readable knowledge organized by topic
-- Examples: `coding_preferences.md`, `architectural_decisions.md`, `project_conventions.md`
-- Actively synthesized from items to handle contradictions and updates
-- Location: `~/.puffin/memory/<user-id>/categories/`
-- Format: Markdown files, updated via LLM-driven synthesis
 
 ### 2.2 Write Path: Active Memorization
 
 When processing a branch thread:
 
-1. **Resource Ingestion**: Save raw conversation to resources layer (immutable)
-2. **Extraction**: Use LLM to extract atomic facts from conversation
+0. A thread should be processed once the developer "creates a new thread", the memorization process should run in the background
+1. **Extraction**: Use LLM to extract atomic facts from the branch thread conversation
    - Prompt focuses on decisions, preferences, architectural choices
    - Returns structured JSON with extracted items
-3. **Batching**: Group extracted items by category to minimize file I/O
-   - Structure: `{ "coding_preferences": [...], "architectural_decisions": [...], ... }`
-4. **Item Storage**: Save individual items with source resource links
-5. **Category Evolution**: Load existing category summary, integrate new items via LLM
+   - Structure: `{ "coding_preferences": [...], "architectural_decisions": [...], "bug_fixes": [...],... }`
+2. **Branch Memory Evolution**: Load existing branch memory file, integrate new items via LLM
    - LLM rewrites summary to incorporate new information
    - Handles conflicts by overwriting outdated facts
    - Maintains narrative coherence and context
-6. **Metadata**: Track extraction timestamp, confidence scores, and access counts
+3. **Metadata**: Track extraction timestamp, confidence scores, and access counts
 
 **Example Extraction Prompt:**
 Given a branch thread conversation, identify and extract:
@@ -138,19 +150,14 @@ The memory system uses tiered retrieval to minimize token consumption while prov
    - Filter out noise and convert to semantic keywords
    - Identify query intent (asking for a decision, preference, or pattern)
 
-2. **Category Selection**: Use LLM to identify relevant category files
-   - Load only summaries from categories likely to contain answers
-   - Skip categories that don't match query intent
+2. **Branch Selection**: Use LLM to identify relevant branch memory files
+   - Load branch memory files likely to contain answers
+   - Skip branches that don't match query intent
 
-3. **Sufficiency Check**: Determine if category summaries are enough
+3. **Sufficiency Check**: Determine if branch memory summaries are enough
    - If summaries answer the query comprehensively → Return them
-   - If insufficient or ambiguous → Proceed to atomic items search
+   - If insufficient or ambiguous → Proceed to more detailed search within branch memories
    - Perform explicit content-based assessment rather than assuming coverage
-
-4. **Hierarchical Search**: Fall back to more granular searches
-   - Search atomic items (extracted facts) if summaries are vague or incomplete
-   - Search resources (raw conversations) only as last resort for full context
-   - Maintain audit trail of retrieval depth for transparency
 
 5. **Conflict Detection and Resolution**: Address contradictions across memory sources
    - Identify similar memories from different sources that contradict each other
@@ -176,49 +183,33 @@ The memory system uses tiered retrieval to minimize token consumption while prov
    - Include timestamp, confidence, and validity window metadata
    - Ensure conflict information is surfaced when relevant
 
-**Temporal Decay Formula:**
-```
-final_score = relevance_score × time_decay_factor
-time_decay_factor = 1.0 / (1.0 + (age_in_days / half_life_days))
-```
+**Temporal Decay:**
+Since this is a development tool for developers, there is no time-based temporal decay. Facts are valid indefinitely until explicitly superseded by newer information.
 
-Where `half_life_days` is configurable (default: 30). This ensures recent memories are prioritized while still allowing access to older insights.
 
 ### 2.4 Memory Maintenance
 
 To prevent knowledge rot and maintain system health, the plugin implements scheduled maintenance tasks:
 
-#### Nightly Consolidation (Daily at 3 AM)
-- Review conversations from the past 24 hours
+#### Thread Processing
+- Review conversations from the last known thread (before the user pressed the create new thread button, or created a new sprint)
 - Identify and merge redundant or contradictory memories
 - Promote frequently-accessed items to higher priority
 - Remove low-confidence duplicates
 
-#### Weekly Summarization (Every Monday at 2 AM)
-- Compress memories older than 30 days into higher-level insights
-- Archive infrequently-accessed items
-- Prune memories not accessed in 90 days
-- Update category summaries based on consolidated items
-
-#### Monthly Re-indexing (First day of month at 1 AM)
-- Regenerate embeddings with latest LLM model
-- Reweight graph relationships based on actual usage patterns
-- Archive unused nodes not touched in 180 days
-- Optimize storage layout for faster retrieval
+#### Weekly Maintenance (When the developer opens Puffin, check if at least one week has elapsed since last consolidation)
+- Consolidate and refactor branch memory files for clarity
+- Identify infrequently-accessed items and assess their continued relevance
+- Merge redundant or superseded memories
+- Update branch summaries based on consolidated items
 
 #### Future Enhancement: Advanced Memory Evolution (Out of Scope for v1)
 
 The following sophisticated memory evolution mechanisms are planned for future releases:
 
-**Consolidation Enhancements:**
-- **Cluster-level fusion**: Group semantically related memories into coherent clusters
-- **Global integration**: Synthesize contradictory facts into resolved summaries
-- **Hierarchical abstraction**: Consolidate repeated patterns into higher-level insights
-
 **Updating Enhancements:**
 - **Conflict resolution strategy**: Explicit handling when new information contradicts existing memories
 - **Temporal validity windows**: Support time-bounded facts with explicit expiration
-- **Soft updating**: Decay weights rather than hard replacements
 
 **Forgetting Enhancements:**
 - **Frequency-based forgetting**: LRU-style pruning for rarely accessed memories
@@ -271,9 +262,7 @@ The renderer process plugin:
   - Displays side-by-side comparison of conflicting facts with source, timestamp, and confidence metadata
   - Provides user interface for manual conflict resolution (accept newer, keep both, mark as resolved)
   - Color-codes conflicting entries to improve visual discoverability
-  - Tracks resolution history and reasoning for audit purposes
-  - Supports batch resolution for multiple related conflicts
-
+  
 ### 3.4 Configuration
 
 **File:** `plugins/memory-plugin/config/default-config.json`
@@ -282,12 +271,8 @@ The renderer process plugin:
 {
   "enabled": true,
   "storage": {
-    "basePath": "~/.puffin/memory",
-    "layers": {
-      "resources": "resources",
-      "items": "items",
-      "categories": "categories"
-    }
+    "basePath": "~/.puffin/memory/branches",
+    "branchMemoryTemplate": "{branchId}.md"
   },
   "extraction": {
     "enabled": true,
@@ -303,8 +288,6 @@ The renderer process plugin:
   "retrieval": {
     "maxTokens": 2000,
     "relevanceThreshold": 0.7,
-    "timeDecayHalfLifeDays": 30,
-    "timeDecayFunction": "exponential"
   },
   "maintenance": {
     "nightly": {
@@ -348,11 +331,11 @@ All IPC channels are prefixed with `memory:` to maintain plugin namespace isolat
 - Response: `{ memories: Memory[], totalTokens: number, retrievalTime: number }`
 - Purpose: Retrieve relevant memories for a query
 
-**`memory:get-category`**
+**`memory:get-branch-memory`**
 - Direction: Renderer → Main
-- Request: `{ category: string }`
-- Response: `{ category: string, content: string, lastUpdated: string, itemCount: number }`
-- Purpose: Load a specific category summary
+- Request: `{ branch: string }`
+- Response: `{ branch: string, content: string, lastUpdated: string, itemCount: number }`
+- Purpose: Load a specific branch's memory file
 
 #### Statistics and Monitoring
 
@@ -370,11 +353,11 @@ All IPC channels are prefixed with `memory:` to maintain plugin namespace isolat
 
 #### Administrative
 
-**`memory:clear-category`**
+**`memory:clear-branch-memory`**
 - Direction: Renderer → Main
-- Request: `{ category: string }`
+- Request: `{ branch: string }`
 - Response: `{ success: boolean, itemsDeleted: number }`
-- Purpose: Clear all memories in a category (careful operation)
+- Purpose: Clear all memories in a branch (careful operation)
 
 **`memory:run-maintenance`**
 - Direction: Renderer → Main
@@ -473,16 +456,10 @@ The following steps outline the recommended approach for moving from this specif
 
 ### Step 1: Define Data Models and Schemas
 
-1. **Resource Schema**: Define the JSON structure for raw conversation resources
-   - Required fields: `id`, `timestamp`, `branchId`, `sessionId`, `conversationText`
-   - Optional metadata fields for future extensibility
-
-2. **Item Schema**: Define the structure for extracted memory items
-   - Required fields: `id`, `category`, `content`, `sourceResourceId`, `extractedAt`, `confidence`
-   - Index fields: `lastAccessed`, `accessCount`
-
-3. **Category Summary Format**: Define the markdown template for category files
-   - Header structure, metadata section, content organization
+1. **Branch Memory Format**: Define the markdown structure for branch-specific memory files
+   - Required fields: `branchId`, `lastUpdated`, `extractedItems`
+   - Sections: metadata, coding preferences, architectural decisions, bug patterns, implementation notes
+   - Support for versioning and extraction history
 
 ### Step 2: Design the LLM Extraction Prompts
 
@@ -494,20 +471,20 @@ The following steps outline the recommended approach for moving from this specif
 ### Step 3: Implement Core Memory Manager
 
 1. **File System Layer**
-   - Directory creation and management
+   - Directory creation and management for branch memory files
    - Atomic file write operations
    - File locking for concurrent access
 
 2. **Write Path Implementation**
-   - Resource ingestion with immutable storage
-   - Batched item storage by category
-   - Category summary evolution logic
+   - Extract facts from branch thread conversations
+   - Update branch-specific memory file with new items
+   - Branch memory evolution logic via LLM
 
 3. **Read Path Implementation**
    - Query synthesis function
-   - Category selection via LLM
+   - Branch selection via LLM
    - Sufficiency checking logic
-   - Hierarchical search fallback
+   - Load and parse branch memory files
 
 ### Step 4: Implement Retrieval System
 

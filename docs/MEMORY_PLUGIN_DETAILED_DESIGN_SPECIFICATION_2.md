@@ -1,675 +1,137 @@
 # Memory Plugin Detailed Design Specification
 
-**Version:** 0.1.2 (Detailed Design)  
-**Status:** Ready for Implementation  
-**Derived from:** MEMORY_PLUGIN_SPECIFICATION.md Appendix B
+**Version:** 0.2.0 (Detailed Design)
+**Status:** Ready for Implementation
+**Derived from:** MEMORY_PLUGIN_SPECIFICATION.md v0.1.0
 
 ---
 
 ## Overview
 
-This document provides the detailed design and implementation guidance for the Memory Plugin, translating the high-level specification from the MEMORY_PLUGIN_SPECIFICATION into concrete implementation steps with specific deliverables, data models, and validation criteria.
+This document provides the detailed design and implementation guidance for the Memory Plugin, translating the high-level specification into concrete implementation steps.
+
+### Key Architectural Alignment
+
+This revision aligns the detailed design with the specification's **two-layer branch-memory architecture**:
+
+| Layer | Purpose | Storage |
+|-------|---------|---------|
+| **Layer 1: Branch Threads** | Raw data / source of truth | Existing Puffin branch conversations (read in-place) |
+| **Layer 2: Branch Memory Files** | Extracted facts + evolving summary | `~/.puffin/memory/branches/{branchId}.md` |
+
+**Removed from previous design:** Separate resource layer (JSON copies of threads), separate item files per category, knowledge graph index, embedding vectors. These are deferred to future versions per the spec's "Out of Scope for v1" section.
+
+### Memory Scope
+
+> The Memory Plugin serves a "central reasoning engine" that maintains the Code Model of the solution. Memory domain knowledge includes **only** concerns that need to be known and enforced across the entire solution:
+> - Architectural decisions affecting multiple components
+> - Cross-cutting concerns (error handling, state management patterns)
+> - Technical constraints that apply solution-wide
+> - Code style and conventions enforced everywhere
+> - Critical bug patterns and their solutions
+> - Key design assumptions and trade-offs
+>
+> **Out of scope:** Feature-specific business rules, story-level context, individual feature implementation details.
 
 ---
 
 ## Step 1: Define Data Models and Schemas
 
-### 1.1 Resource Schema
+### 1.1 Branch Memory File Format
 
-Defines the JSON structure for raw conversation resources stored at `~/.puffin/memory/<user-id>/resources/`.
+Each branch has a single markdown file at `~/.puffin/memory/branches/{branchId}.md` that contains both extracted items and an evolving narrative summary. The LLM rewrites this file when integrating new information.
 
-> **Design Rationale: Why Copy Threads to the Plugin Repository?**
-> The Memory Plugin copies conversation threads to its own storage location rather than referencing them in-place for several reasons:
-> 1. **Immutability & Audit Trail**: Raw conversation resources in the memory layer are write-once and never modified. This ensures a stable audit trail that won't be affected if the original thread files are edited, moved, or deleted elsewhere in Puffin.
-> 2. **Decoupling from Puffin Core**: By maintaining its own copy, the Memory Plugin is not dependent on Puffin's internal thread storage format or location. If Puffin's thread management changes in future versions, the Memory Plugin continues to function with its own archived resources.
-> 3. **LLM Processing Context**: The copied resources include additional metadata (extraction timestamps, session IDs, message counts) that may not exist in the original thread format. This enriched format is optimized for the LLM extraction pipeline.
-> 4. **Plugin Portability**: If the Memory Plugin's data needs to be backed up, migrated, or shared, having self-contained resources makes this straightforward without needing to also export Puffin's thread data.
-> 5. **Selective Storage**: Not all thread content needs to be memorized. The plugin can choose which conversations to ingest based on branch type, conversation length, or user preference—independent of what Puffin stores.
-> The trade-off is additional disk space usage, but conversation text is relatively small compared to the value of having an independent, immutable knowledge base.
-
-**File naming convention:** `resource_<threadId>.json`
-
-> **Design Note: Threads as Unified Units**
-> A Puffin thread represents a logical unit of work—a single question, bug, user story, specification, design, architecture decision, or plan. Even when a user returns to a thread across multiple sessions (different days, different times), the thread remains a single cohesive resource. The schema reflects this by:
-> 1. Using `threadId` as the primary identifier (not session or timestamp)
-> 2. Storing all prompt/reply exchanges within the thread as a unified `conversation` array
-> 3. Tracking `sessionHistory` to record when the user worked on this thread
-> 4. Capturing `threadContext` to describe the logical purpose of the thread
-
-**Schema:**
-```json
-{
-  "id": "resource_thread_xyz789",
-  "threadId": "thread_xyz789",
-  "branchId": "feature-branch-1",
-  "threadContext": {
-    "type": "bug_fix",
-    "title": "Fix race condition in async state updates",
-    "description": "Investigating and resolving race conditions when multiple async operations update shared state"
-  },
-  "createdAt": "2024-01-15T10:30:00Z",
-  "lastUpdatedAt": "2024-01-19T14:45:00Z",
-  "conversation": [
-    {
-      "role": "user",
-      "content": "I'm seeing race conditions when...",
-      "timestamp": "2024-01-15T10:30:00Z",
-      "sessionId": "session_abc123"
-    },
-    {
-      "role": "assistant",
-      "content": "Let me analyze the state update flow...",
-      "timestamp": "2024-01-15T10:31:15Z",
-      "sessionId": "session_abc123"
-    },
-    {
-      "role": "user",
-      "content": "Coming back to this - I tried your suggestion but...",
-      "timestamp": "2024-01-19T14:00:00Z",
-      "sessionId": "session_def456"
-    },
-    {
-      "role": "assistant",
-      "content": "I see. Let's try a different approach...",
-      "timestamp": "2024-01-19T14:02:30Z",
-      "sessionId": "session_def456"
-    }
-  ],
-  "sessionHistory": [
-    {
-      "sessionId": "session_abc123",
-      "startedAt": "2024-01-15T10:30:00Z",
-      "endedAt": "2024-01-15T11:45:00Z",
-      "messageCount": 8
-    },
-    {
-      "sessionId": "session_def456",
-      "startedAt": "2024-01-19T14:00:00Z",
-      "endedAt": "2024-01-19T14:45:00Z",
-      "messageCount": 7
-    }
-  ],
-  "metadata": {
-    "userId": "user_jjdub",
-    "threadType": "bug_fix",
-    "tags": ["async", "state-management", "race-condition"],
-    "status": "resolved",
-    "totalMessageCount": 15,
-    "totalDurationMinutes": 120
-  }
-}
-```
-
-**Thread Context Types:**
-- `bug_fix` - Diagnosing and fixing bugs
-- `feature` - Implementing new features
-- `user_story` - Working through user story requirements
-- `specification` - Defining specifications
-- `design` - Design discussions and decisions
-- `architecture` - Architectural planning and decisions
-- `refactoring` - Code refactoring efforts
-- `question` - General questions and exploration
-- `plan` - Planning and roadmap discussions
-
-### 1.1.1 Thread Update Event Subscription
-
-> **Design Note: Plugin Event Subscription Mechanism**
->
-> The Puffin plugin architecture supports event subscription through the `PluginContext` API. The Memory Plugin subscribes to thread-related events during its `activate()` lifecycle method.
->
-> **Available Event Hooks:**
->
-> The plugin context provides `onStateChange(callback)` which fires on every SAM state transition. For thread updates specifically, the plugin can:
->
-> 1. **Subscribe to state changes and filter for thread updates:**
->    ```javascript
->    context.onStateChange((state, previousState) => {
->      // Detect thread content changes
->      const currentThread = state.project?.history?.branches?.[state.activeBranch];
->      const previousThread = previousState.project?.history?.branches?.[previousState.activeBranch];
->      
->      if (this.hasThreadChanged(currentThread, previousThread)) {
->        this.onThreadUpdated(currentThread, state.activeBranch);
->      }
->    });
->    ```
->
-> 2. **Register for specific IPC events from the main process:**
->    ```javascript
->    // In main.js, emit events when threads are saved
->    context.on('thread:saved', (threadId, branchId) => {
->      this.scheduleMemorization(threadId, branchId);
->    });
->    
->    context.on('thread:completed', (threadId, branchId, sessionId) => {
->      this.triggerMemorization(threadId, branchId, sessionId);
->    });
->    ```
->
-> 3. **Hook into Claude response completion:**
->    The plugin can register a reactor that triggers after Claude responses are fully received:
->    ```javascript
->    context.registerReactor((state) => {
->      if (state.controlState.responseComplete && !state.controlState.memorized) {
->        this.memorizeCurrentThread(state);
->      }
->    });
->    ```
->
-> **Recommended Approach for Memory Plugin:**
->
-> The Memory Plugin should use a combination of:
-> - **State change subscription** for real-time awareness of thread modifications
-> - **Debounced memorization** to avoid processing on every keystroke
-> - **Completion triggers** to process threads when a response cycle completes
->
-> **Implementation in Memory Plugin `activate()`:**
-> ```javascript
-> async activate(context) {
->   // Subscribe to thread completion events
->   context.onStateChange((state, prevState) => {
->     // Trigger on response completion
->     if (state.controlState.responseComplete && 
->         !prevState.controlState.responseComplete) {
->       this.scheduleMemorization(state.activeThreadId, state.activeBranch);
->     }
->   });
->
->   // Also listen for explicit save events
->   context.on('project:saved', (projectId) => {
->     this.processUnsavedThreads(projectId);
->   });
-> }
-> ```
->
-> This approach ensures the Memory Plugin is notified of thread updates through the existing plugin architecture without requiring modifications to Puffin's core.
-
-**Key design decisions:**
-- Thread-centric storage: Each thread is a single resource file, updated as the conversation grows
-- Append-only conversation array: New messages are appended, existing messages are never modified
-- Session tracking: `sessionHistory` tracks when work occurred without fragmenting the logical thread
-- Thread context: Captures the purpose/intent of the thread for better categorization and retrieval
-- Full conversation preserved: Enables replay, audit, and future re-extraction
-- Metadata supports extensibility without schema versioning
-
-**Validation:**
-- `id` must be unique across all resources
-- `threadId` must be unique and follow naming convention
-- `createdAt` and `lastUpdatedAt` must be valid ISO 8601 format
-- `conversation` array must not be empty
-- Each conversation entry must have `role`, `content`, `timestamp`, and `sessionId`
-- `threadContext.type` must be one of the defined thread types
-- File must be valid JSON
-
-### 1.2.5 Knowledge Graph Index
-
-To support efficient traversal and retrieval, maintain a separate graph index:
-
-**File location:** `~/.puffin/memory/<user-id>/graph-index.json`
-
-**Schema:**
-```json
-{
-  "version": "1.0.0",
-  "lastUpdated": "2024-01-19T15:00:00Z",
-  "nodeCount": 156,
-  "edgeCount": 423,
-  
-  "adjacencyList": {
-    "node_arch_decision_20240119_001": {
-      "outbound": [
-        { "target": "node_conv_20240115_002", "type": "supports", "strength": 0.9 },
-        { "target": "node_impl_20240118_001", "type": "elaborates", "strength": 0.85 }
-      ],
-      "inbound": [
-        { "source": "node_lesson_20240119_002", "type": "supports", "strength": 0.8 }
-      ]
-    }
-  },
-  
-  "categoryIndex": {
-    "architectural_decisions": ["node_arch_decision_20240119_001", "node_arch_decision_20240115_003"],
-    "coding_preferences": ["node_conv_20240115_002"]
-  },
-  
-  "storyIndex": {
-    "US-042": ["node_arch_decision_20240119_001", "node_impl_20240118_001"],
-    "US-043": ["node_arch_decision_20240119_001"]
-  },
-  
-  "fileIndex": {
-    "src/renderer/sam/model.js": [
-      { "nodeId": "node_arch_decision_20240119_001", "relevance": 0.95 },
-      { "nodeId": "node_lesson_20240119_002", "relevance": 0.75 }
-    ]
-  },
-  
-  "embeddingIndex": {
-    "type": "hnsw",
-    "indexFile": "embeddings.idx",
-    "dimensions": 1536,
-    "nodeCount": 156
-  }
-}
-```
-
-**Index maintenance:**
-- Updated incrementally when nodes are added/modified
-- Full rebuild during monthly maintenance
-- Supports efficient graph traversal without loading all node files
-
-### 1.2 Knowledge Node Schema (RLM-Compatible)
-
-Defines the structure for extracted memory items stored at `~/.puffin/memory/<user-id>/items/`. This schema is designed to integrate with the Recursive Language Model (RLM) architecture, supporting intelligent context slicing, semantic retrieval, and knowledge graph traversal.
-
-> **Design Rationale: Why an RLM-Compatible Schema?**
->
-> The Memory Plugin serves as the foundational layer for Puffin's Context Vault (as defined in RLM_Architecture.md). Simple key-value storage is insufficient because:
->
-> 1. **Context Slicing Requires Semantic Understanding**: The RLM orchestrator needs to select relevant memories based on semantic similarity, not just keyword matching. Vector embeddings enable this.
->
-> 2. **Recursive Decomposition Needs Relationship Graphs**: When breaking tasks into sub-tasks, the system must understand how knowledge nodes relate to each other (supports, contradicts, supersedes, elaborates).
->
-> 3. **Specialized Agents Need Typed Knowledge**: Different agents (Spec, Architecture, Implementation, Test) need different knowledge types. Strong typing enables efficient routing.
->
-> 4. **Traceability Requires Rich Provenance**: Linking memories back to specifications, user stories, and code locations enables the traceability matrix central to RLM.
->
-> 5. **Temporal Validity Supports Knowledge Evolution**: Facts have lifespans. Architectural decisions may be superseded. The schema must track this.
-
-**File organization:** Items organized hierarchically:
-```
-items/
-├── coding_preferences/
-│   ├── patterns/
-│   ├── conventions/
-│   └── anti_patterns/
-├── architectural_decisions/
-│   ├── active/
-│   ├── superseded/
-│   └── proposed/
-├── domain_knowledge/
-│   ├── rules/
-│   ├── constraints/
-│   └── glossary/
-├── implementation_knowledge/
-│   ├── patterns/
-│   ├── lessons_learned/
-│   └── bug_patterns/
-└── project_conventions/
-    ├── naming/
-    ├── structure/
-    └── tooling/
-```
-
-**File naming convention:** `node_<type>_<id>.json`
-
-**Schema:**
-```json
-{
-  "id": "node_arch_decision_20240119_001",
-  "version": 1,
-  "schemaVersion": "2.0.0",
-  
-  "classification": {
-    "category": "architectural_decisions",
-    "subcategory": "active",
-    "knowledgeType": "decision",
-    "domainScope": ["state-management", "async-patterns"],
-    "componentScope": ["renderer", "sam"]
-  },
-  
-  "content": {
-    "title": "Adopt SAM Pattern for State Management",
-    "summary": "Use State-Action-Model pattern with explicit control states for predictable state transitions",
-    "detail": "The SAM pattern provides unidirectional data flow with clear separation between actions (proposals), model (acceptors), and state representation. This enables time-travel debugging and makes state mutations predictable.",
-    "structuredData": {
-      "decision": "Use SAM pattern",
-      "context": "Need predictable state management with debugging capabilities",
-      "alternatives": ["Redux", "MobX", "Zustand"],
-      "rationale": "SAM's explicit control states map well to FSM-driven UI",
-      "consequences": ["More boilerplate than simpler solutions", "Excellent debugging", "Clear action boundaries"]
-    }
-  },
-  
-  "embedding": {
-    "vector": [0.023, -0.156, 0.892, ...],
-    "model": "text-embedding-3-small",
-    "dimensions": 1536,
-    "generatedAt": "2024-01-19T00:20:00Z"
-  },
-  
-  "relationships": {
-    "supports": [
-      { "nodeId": "node_conv_20240115_002", "strength": 0.9, "context": "Naming conventions for actions" }
-    ],
-    "contradicts": [],
-    "supersedes": [
-      { "nodeId": "node_arch_decision_20231201_003", "reason": "Replaced Redux approach" }
-    ],
-    "elaborates": [
-      { "nodeId": "node_impl_20240118_001", "aspect": "FSM integration details" }
-    ],
-    "relatedStories": ["US-042", "US-043"],
-    "relatedFiles": [
-      { "path": "src/renderer/sam/model.js", "relevance": 0.95 },
-      { "path": "src/renderer/sam/actions.js", "relevance": 0.90 }
-    ],
-    "relatedCriteria": ["AC-042-1", "AC-042-2"]
-  },
-  
-  "provenance": {
-    "sourceResourceIds": ["resource_thread_xyz789"],
-    "sourceLineRanges": [
-      { "resourceId": "resource_thread_xyz789", "lines": "45-78" },
-      { "resourceId": "resource_thread_xyz789", "lines": "120-135" }
-    ],
-    "extractionMethod": "llm_extraction",
-    "extractionModel": "claude-3-sonnet",
-    "humanVerified": false,
-    "verifiedBy": null,
-    "verifiedAt": null
-  },
-  
-  "temporalValidity": {
-    "effectiveFrom": "2024-01-15T00:00:00Z",
-    "effectiveUntil": null,
-    "isActive": true,
-    "supersededBy": null,
-    "decayHalfLifeDays": 90
-  },
-  
-  "confidence": {
-    "extractionConfidence": 0.92,
-    "relevanceScore": 0.88,
-    "reinforcementCount": 3,
-    "lastReinforcedAt": "2024-01-19T08:30:00Z"
-  },
-  
-  "accessMetrics": {
-    "accessCount": 12,
-    "lastAccessed": "2024-01-19T14:30:00Z",
-    "accessHistory": [
-      { "timestamp": "2024-01-19T14:30:00Z", "context": "architecture-query", "agentType": "architecture" },
-      { "timestamp": "2024-01-18T10:15:00Z", "context": "implementation-task", "agentType": "implementation" }
-    ],
-    "usefulnessRatings": [
-      { "rating": 5, "timestamp": "2024-01-19T14:35:00Z", "context": "Helped resolve state bug" }
-    ]
-  },
-  
-  "metadata": {
-    "createdAt": "2024-01-15T10:30:00Z",
-    "updatedAt": "2024-01-19T00:15:30Z",
-    "branchId": "feature-branch-1",
-    "sessionId": "session_abc123def",
-    "tags": ["sam", "state-management", "architecture", "electron"],
-    "priority": "high",
-    "qualityGate": "passed"
-  }
-}
-```
-
-### 1.2.1 Knowledge Type Taxonomy
-
-The `knowledgeType` field uses a controlled vocabulary aligned with RLM agent specializations:
-
-| Knowledge Type | Description | Primary Agent Consumer |
-|----------------|-------------|------------------------|
-| `decision` | Architectural or design decision with rationale | Architecture Agent |
-| `rule` | Business rule or domain constraint | Spec Agent, Implementation Agent |
-| `pattern` | Reusable implementation pattern | Implementation Agent |
-| `anti_pattern` | Known problematic approaches to avoid | Review Agent |
-| `convention` | Project-specific naming or structural convention | All Agents |
-| `lesson` | Learned insight from implementation experience | Implementation Agent |
-| `bug_pattern` | Recurring bug type with fix approach | Implementation Agent, Test Agent |
-| `requirement` | Extracted or refined requirement | Spec Agent |
-| `constraint` | Technical or business constraint | Architecture Agent |
-| `glossary` | Domain term definition | All Agents |
-
-### 1.2.2 Relationship Types for Knowledge Graph
-
-The relationship model enables the Context Slicer to traverse the knowledge graph:
-
-| Relationship | Semantics | Use in Context Slicing |
-|--------------|-----------|------------------------|
-| `supports` | This node provides evidence for or aligns with target | Include supporting nodes to strengthen context |
-| `contradicts` | This node conflicts with target | Flag for conflict resolution, include both perspectives |
-| `supersedes` | This node replaces outdated target | Prefer this node, mark target as historical |
-| `elaborates` | This node provides additional detail for target | Include when deeper context needed |
-| `relatedStories` | Links to user story IDs in specifications | Enable story-centric slicing |
-| `relatedFiles` | Links to codebase files | Enable file-centric slicing |
-| `relatedCriteria` | Links to acceptance criteria | Enable verification-focused slicing |
-
-### 1.2.3 Embedding Strategy for Semantic Retrieval
-
-Vector embeddings enable semantic similarity search, crucial for intelligent context slicing:
-
-```javascript
-class EmbeddingManager {
-  constructor(config) {
-    this.model = config.embeddingModel || 'text-embedding-3-small';
-    this.dimensions = config.dimensions || 1536;
-    this.batchSize = config.batchSize || 100;
-  }
-
-  async generateEmbedding(node) {
-    // Compose text for embedding from multiple fields
-    const textForEmbedding = this.composeEmbeddingText(node);
-    
-    // Call embedding API
-    const vector = await this.callEmbeddingAPI(textForEmbedding);
-    
-    return {
-      vector,
-      model: this.model,
-      dimensions: this.dimensions,
-      generatedAt: new Date().toISOString()
-    };
-  }
-
-  composeEmbeddingText(node) {
-    // Weight different fields for embedding quality
-    const parts = [
-      node.content.title,
-      node.content.summary,
-      node.classification.category,
-      node.classification.knowledgeType,
-      ...(node.classification.domainScope || []),
-      ...(node.metadata.tags || [])
-    ];
-    return parts.filter(Boolean).join(' | ');
-  }
-
-  async findSimilar(queryEmbedding, nodes, topK = 10, threshold = 0.7) {
-    const scored = nodes.map(node => ({
-      node,
-      similarity: this.cosineSimilarity(queryEmbedding, node.embedding.vector)
-    }));
-    
-    return scored
-      .filter(s => s.similarity >= threshold)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, topK);
-  }
-
-  cosineSimilarity(a, b) {
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i];
-      normA += a[i] * a[i];
-      normB += b[i] * b[i];
-    }
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-  }
-}
-```
-
-### 1.2.4 RLM Integration Notes
-
-> **How This Schema Supports the RLM Architecture:**
->
-> **1. Context Vault Queries**
-> The schema directly maps to Context Vault query patterns:
-> ```javascript
-> // Story-centric slicing
-> vault.query({ 'relationships.relatedStories': 'US-042' })
->
-> // Component-scoped slicing  
-> vault.query({ 'classification.componentScope': 'renderer' })
->
-> // Knowledge-type filtering for agent routing
-> vault.query({ 'classification.knowledgeType': 'decision', 'temporalValidity.isActive': true })
-> ```
->
-> **2. Recursive Decomposition Support**
-> When the orchestrator decomposes a task, it can:
-> - Query for all nodes related to affected user stories
-> - Traverse `elaborates` relationships for deeper context
-> - Check `contradicts` to surface conflicts early
-> - Follow `supersedes` to ensure current knowledge is used
->
-> **3. Token Budget Optimization**
-> The tiered content structure (`title` → `summary` → `detail` → `structuredData`) enables progressive disclosure:
-> - Tight budget: Use only `title` and `summary`
-> - Medium budget: Include `detail`
-> - Full context: Include `structuredData`
->
-> **4. Agent-Specific Slicing**
-> The `knowledgeType` and `componentScope` fields enable routing:
-> - Spec Agent: `rule`, `requirement`, `constraint`
-> - Architecture Agent: `decision`, `pattern`, `constraint`
-> - Implementation Agent: `pattern`, `convention`, `lesson`, `bug_pattern`
-> - Test Agent: `rule`, `bug_pattern`, plus nodes linked via `relatedCriteria`
->
-> **5. Traceability Matrix**
-> The `relationships` section provides the forward and backward tracing required by RLM:
-> - Story → Code: `relatedStories` + `relatedFiles`
-> - Criterion → Code: `relatedCriteria` + `relatedFiles`
-> - Decision → Impact: `supersedes` + `elaborates`
-
-**Key design decisions:**
-- **Hierarchical classification** enables multi-dimensional slicing (by category, type, domain, component)
-- **Vector embeddings** support semantic similarity search for intelligent context selection
-- **Rich relationship model** enables knowledge graph traversal for recursive decomposition
-- **Tiered content structure** supports token budget optimization (title → summary → detail)
-- **Provenance tracking** maintains full audit trail back to source conversations and code
-- **Temporal validity** handles knowledge evolution and supersession
-- **Access metrics with context** tracks which agent types find which knowledge useful
-- **Human verification flag** distinguishes LLM-extracted from human-validated knowledge
-
-**Validation:**
-- `id` must be unique and follow naming convention
-- `category` must be one of the configured extraction categories
-- `confidence` must be between 0.0 and 1.0
-- `sourceResourceId` must reference an existing resource
-- `extractedAt` must be valid ISO 8601 format and not in the future
-
-### 1.3 Category Summary Format
-
-Defines the markdown template for category files stored at `~/.puffin/memory/<user-id>/categories/`.
-
-**File naming convention:** `<category_name>.md` (e.g., `coding_preferences.md`, `architectural_decisions.md`)
+**File naming convention:** `{branchId}.md` (e.g., `feature-auth.md`, `plugin-development.md`)
 
 **Template Structure:**
 ```markdown
-# [Category Name]
+# Branch Memory: {branchId}
 
-**Last Updated:** 2024-01-19T08:45:00Z  
-**Item Count:** 12  
-**Confidence Range:** 0.85-0.98  
-**Last Review:** User review at 2024-01-15T14:20:00Z
+**Last Updated:** 2024-01-19T08:45:00Z
+**Last Extraction:** 2024-01-19T00:15:30Z
+**Thread Count:** 3
 
 ## Summary
 
-High-level narrative summary (2-3 sentences) of the core insights in this category.
+High-level narrative summary (2-3 paragraphs) synthesizing all domain-level knowledge extracted from this branch's conversations. Written by LLM, updated each time new items are integrated.
 
-## Key Facts
+## Coding Preferences
 
-### Fact 1: [Concise Title]
+- **Async pattern**: User prefers async/await over Promise.then() chains (confidence: 0.95, source: thread_xyz789, extracted: 2024-01-19)
+- **Functional style**: Strongly favors functional programming patterns for data transformations (confidence: 0.88, source: thread_abc123, extracted: 2024-01-15)
 
-**Statement:** [Clear, actionable memory]
+## Architectural Decisions
 
-**Evidence:** Referenced in 3 sessions, consistently mentioned  
-**Confidence:** 0.95  
-**Last Updated:** 2024-01-19T00:15:30Z  
-**Source:** [linked item IDs]
+- **SAM Pattern**: Adopted State-Action-Model pattern for state management. Rationale: explicit control states map well to FSM-driven UI. Trade-off: more boilerplate than simpler solutions (confidence: 0.92, source: thread_xyz789, extracted: 2024-01-19)
 
-### Fact 2: [Another Fact]
+## Project Conventions
 
-[Similar structure as Fact 1]
+- **Naming**: Variables use camelCase, constants use UPPER_SNAKE_CASE across all JavaScript files (confidence: 0.95, source: thread_def456, extracted: 2024-01-10)
+
+## Bug Patterns
+
+- **Race conditions in async state updates**: Fix with explicit locking mechanisms. Occurred 2 times (confidence: 0.85, source: thread_xyz789, extracted: 2024-01-19)
+
+## Implementation Notes
+
+- **Component refactoring**: Composition over inheritance reduces coupling and improves reusability (confidence: 0.88, source: thread_abc123, extracted: 2024-01-15)
 
 ## Contradictions and Conflicts
 
-[Document any conflicting memories with source information, timestamps, and resolution status]
-
-## Usage Notes
-
-[Context-specific guidance for interpreting facts in this category]
+[Any conflicting memories detected during integration, with timestamps and source references]
 ```
 
 **Key design decisions:**
-- Human-readable markdown for easy review and manual editing
-- Metadata headers enable quick assessment without reading full content
-- Explicitly track contradictions for conflict resolution workflow
-- Markdown enables version control and diffing
+- Single markdown file per branch — simple, human-readable, editable
+- LLM rewrites the entire file on each integration (not append-only)
+- Inline metadata (confidence, source, date) enables retrieval scoring without separate index files
+- No separate resource/item/category layers — the branch memory file IS the extracted knowledge
+- Conflicts tracked inline within the branch file
 
 **Validation:**
 - File must be valid markdown
-- Must contain at least one "Key Facts" section
-- Each fact must reference at least one source item
-- Referenced item IDs must exist
-- ISO 8601 timestamps must be valid
+- Must contain at least Summary and one category section
+- Confidence values must be 0.0-1.0
+- Timestamps must be valid ISO 8601
+- Source thread references should correspond to real branch threads
 
-### 1.4 Conflict Record Schema
+### 1.2 Storage Directory Structure
 
-Defines structure for tracking contradictory memories that require resolution.
+```
+~/.puffin/memory/
+├── branches/
+│   ├── feature-auth.md
+│   ├── plugin-development.md
+│   ├── bugfix-race-condition.md
+│   └── ...
+├── config.json                  # Runtime config overrides
+└── maintenance-log.json         # Last maintenance timestamps
+```
 
-**File location:** `~/.puffin/memory/<user-id>/conflicts.json`
+**No subdirectories for items, resources, categories, or graph indexes.** The branch memory files contain all extracted knowledge.
 
-**Schema:**
+### 1.3 Maintenance Log Schema
+
+Tracks when maintenance was last performed. Used to implement the spec's "check if at least one week has elapsed" trigger.
+
+**File:** `~/.puffin/memory/maintenance-log.json`
+
 ```json
 {
-  "conflicts": [
-    {
-      "id": "conflict_20240119_001",
-      "createdAt": "2024-01-19T08:45:00Z",
-      "status": "unresolved",
-      "category": "coding_preferences",
-      "items": [
-        {
-          "itemId": "item_20240119_cp_001",
-          "content": "Prefer async/await",
-          "confidence": 0.95,
-          "extractedAt": "2024-01-19T00:15:30Z"
-        },
-        {
-          "itemId": "item_20240110_cp_003",
-          "content": "Prefer Promise.then() chains",
-          "confidence": 0.85,
-          "extractedAt": "2024-01-10T12:30:00Z"
-        }
-      ],
-      "resolution": {
-        "status": "pending_user_review",
-        "decision": null,
-        "reasoningNotes": null,
-        "resolvedAt": null
-      }
-    }
-  ]
+  "lastThreadProcessed": {
+    "branchId": "feature-auth",
+    "timestamp": "2024-01-19T00:15:30Z"
+  },
+  "lastWeeklyConsolidation": "2024-01-13T02:00:00Z",
+  "lastMonthlyReindex": "2024-01-01T01:00:00Z"
 }
 ```
 
-**Resolution statuses:**
-- `unresolved` - Conflict detected, awaiting user review
-- `pending_user_review` - Presented to user, awaiting decision
-- `accepted_newer` - User chose the more recent item
-- `accepted_higher_confidence` - User chose higher confidence item
-- `kept_both_with_context` - User resolved by keeping both with contextual distinction
-- `marked_outdated` - User marked older item as no longer valid
-- `auto_resolved` - System resolved based on configuration
+### 1.4 Conflict Record (Inline)
+
+Per the spec, conflicts are handled by the LLM during branch memory evolution — the LLM overwrites outdated facts and maintains narrative coherence. Conflicts that cannot be auto-resolved are documented in the "Contradictions and Conflicts" section of each branch memory file.
+
+No separate `conflicts.json` file is needed. If cross-branch conflicts are detected during retrieval, they are surfaced in the retrieval response.
 
 ---
 
@@ -677,11 +139,27 @@ Defines structure for tracking contradictory memories that require resolution.
 
 ### 2.1 Main Extraction Prompt Template
 
-Used to extract structured memory items from raw conversation text.
+Used to extract structured memory items from a branch thread conversation. Includes scope filtering per the spec's domain knowledge requirements.
 
 **Prompt:**
 ```
-You are a memory extraction specialist. Analyze the following development conversation and extract key decisions, preferences, and insights.
+You are a memory extraction specialist for a development tool. Analyze the following development conversation and extract key decisions, preferences, and insights that apply ACROSS THE ENTIRE SOLUTION.
+
+## Scope Filter
+
+ONLY extract knowledge that is relevant to the central reasoning engine — concerns that need to be known and enforced across the entire codebase:
+- Architectural decisions affecting multiple components
+- Cross-cutting concerns (error handling, state management patterns)
+- Technical constraints that apply solution-wide
+- Code style and conventions enforced everywhere
+- Critical bug patterns and their solutions
+- Key design assumptions and trade-offs
+
+DO NOT extract:
+- Business rules specific to individual features
+- Feature-specific implementation details
+- Story-level context and requirements
+- User story acceptance criteria
 
 ## Conversation
 
@@ -689,37 +167,22 @@ You are a memory extraction specialist. Analyze the following development conver
 
 ## Extraction Task
 
-Identify and extract memories in these categories:
+Identify and extract domain-level memories in these categories:
 
 ### Coding Preferences
-User preferences about coding style, library choices, patterns, and best practices. Examples:
-- "User prefers async/await over Promise.then()"
-- "Strongly favors functional programming patterns"
-- "Dislikes verbose type annotations"
+Solution-wide coding style, library choices, patterns, and best practices.
 
 ### Architectural Decisions
-Important design choices, trade-offs accepted, and architectural patterns. Examples:
-- "Chose event-driven architecture for state management"
-- "Using dependency injection to reduce coupling"
-- "Trade-off: Chose simplicity over extensibility"
+Design choices, trade-offs, and architectural patterns that affect multiple components.
 
 ### Project Conventions
-Naming conventions, file organization, tooling preferences, and project-specific standards. Examples:
-- "Variables use camelCase, constants use UPPER_SNAKE_CASE"
-- "Components organized by feature, not by type"
-- "All async operations wrapped in try/catch"
+Naming conventions, file organization, tooling preferences enforced everywhere.
 
 ### Bug Patterns
-Recurring issues, root causes identified, and fixes applied. Examples:
-- "Race conditions common in async state updates"
-- "Pattern: Off-by-one errors in array indexing"
-- "Fix: Always validate API response structure before access"
+Recurring issues and their fixes that apply broadly.
 
 ### Implementation Notes
-Lessons learned, approaches tried, and guidance for future work. Examples:
-- "Component refactoring using composition reduces coupling"
-- "Attempted validation library X, switched to Y due to performance"
-- "CSS modules provide better scoping than BEM"
+Cross-cutting lessons learned and guidance for future work.
 
 ## Response Format
 
@@ -775,25 +238,20 @@ Return ONLY valid JSON (no markdown, no explanations):
 3. **Source Attribution**: Each memory must clearly relate to something stated in the conversation
 4. **No Speculation**: Only extract what is directly supported by the conversation
 5. **De-duplication**: Avoid extracting the same memory multiple times
+6. **Scope**: Only extract solution-wide concerns, not feature-specific details
 ```
 
-**Implementation notes:**
-- Confidence threshold of 0.75 filters low-quality extractions
-- Prompt emphasizes specificity and avoiding generic advice
-- Clear category definitions reduce ambiguity
-- JSON-only response enables deterministic parsing
+### 2.2 Branch Memory Evolution Prompt Template
 
-### 2.2 Category Evolution Prompt Template
-
-Used when integrating new extracted items into existing category summaries.
+Used when integrating new extracted items into an existing branch memory file. The LLM rewrites the entire branch memory file.
 
 **Prompt:**
 ```
-You are a knowledge synthesis specialist. Your task is to integrate new memory items into an existing category summary, handling contradictions and maintaining coherence.
+You are a knowledge synthesis specialist. Your task is to integrate new memory items into an existing branch memory file, producing an updated version.
 
-## Existing Category Summary
+## Existing Branch Memory File
 
-[CURRENT_CATEGORY_CONTENT]
+[CURRENT_BRANCH_MEMORY_CONTENT]
 
 ## New Items to Integrate
 
@@ -801,62 +259,52 @@ You are a knowledge synthesis specialist. Your task is to integrate new memory i
 
 ## Integration Task
 
-1. **Assess Contradictions**: Identify any new items that contradict existing facts
-   - Note the specific contradictions
-   - Include confidence scores from both old and new items
-   - Flag items that may represent evolution of thinking (old → new)
+1. **Detect Conflicts**: Identify new items that contradict existing facts
+   - If the new item clearly supersedes the old: overwrite the old fact
+   - If ambiguous: document both in the "Contradictions and Conflicts" section
 
-2. **Update Core Facts**: Integrate non-contradictory items into "Key Facts" section
-   - Merge related items into single facts
-   - Update confidence scores based on repetition
-   - Add new source item references
+2. **Integrate New Facts**: Add non-contradictory items to the appropriate category sections
+   - Merge related items into single entries
+   - Update confidence scores when facts are reinforced
+   - Include source thread reference and extraction date
 
-3. **Handle Conflicts**: Document contradictions in "Contradictions and Conflicts" section
-   - Present both viewpoints with evidence
-   - Include timestamps to show recency
-   - Do NOT delete older items; preserve full history
+3. **Rewrite Summary**: Update the narrative summary to reflect the current state of knowledge
+   - Maintain coherence and readability
+   - Highlight significant new insights
 
-4. **Maintain Narrative**: Rewrite summary to reflect current state of knowledge
-   - Keep narrative coherent and actionable
-   - Highlight significant shifts or refinements in understanding
-   - Use clear language for non-technical audiences
+4. **Maintain Format**: Preserve the branch memory file structure:
+   - Summary section
+   - Category sections (Coding Preferences, Architectural Decisions, etc.)
+   - Contradictions section
 
 ## Response Format
 
-Return ONLY the updated category content in markdown format. Preserve the structure defined in Step 1.3.
+Return ONLY the complete updated branch memory file in markdown format. Include ALL existing facts plus new integrations.
 
 ## Constraints
 
-- Do NOT delete any facts, even outdated ones
-- DO document contradictions explicitly
-- DO update confidence scores based on reinforcement
-- DO preserve source item references for audit trails
-- DO flag time-sensitive information with expiration windows
+- Overwrite outdated facts with newer, higher-confidence information
+- Document genuinely ambiguous conflicts in "Contradictions and Conflicts"
+- Preserve inline metadata (confidence, source, date) for each fact
+- Update the "Last Updated" timestamp in the header
+- Keep the file readable and concise — this is a living document, not a log
 ```
-
-**Implementation notes:**
-- Explicitly handles contradictions without data loss
-- Supports incremental knowledge refinement
-- Maintains audit trail through source references
-- Emphasizes narrative coherence for human consumption
 
 ### 2.3 Edge Case Fallback Prompts
 
 **For empty conversations (no extractable content):**
 ```
-You are analyzing a development conversation. If this conversation contains meaningful development decisions, preferences, or insights, extract them using the standard format. If the conversation is primarily procedural or administrative with no substantive knowledge content, respond with:
+You are analyzing a development conversation. If this conversation contains meaningful development decisions, preferences, or insights that apply across the entire solution, extract them. If the conversation is primarily procedural, feature-specific, or administrative with no cross-cutting knowledge content, respond with:
 
 {"no_content_to_extract": true}
 ```
 
 **For unclear or ambiguous content:**
 ```
-You are analyzing unclear development content. For items you're unsure about, include them but lower the confidence score to reflect uncertainty. Items with confidence below 0.75 will be filtered by downstream processing. Only omit items if they're completely unrelated to development.
+You are analyzing unclear development content. For items you're unsure about, include them but lower the confidence score. Items with confidence below 0.75 will be filtered. Only omit items if they're completely unrelated to solution-wide development concerns.
 ```
 
 ### 2.4 Response Validation Schema
-
-**Validation rules for LLM responses:**
 
 ```javascript
 const responseSchema = {
@@ -879,7 +327,7 @@ validationRules = [
 **Fallback handling:**
 - If response is invalid JSON: Log error, return empty extraction
 - If no items meet confidence threshold: Return empty extraction (valid state)
-- If LLM fails: Return error, preserve previous category state
+- If LLM fails: Return error, preserve existing branch memory file unchanged
 
 ---
 
@@ -888,85 +336,83 @@ validationRules = [
 ### 3.1 File System Layer
 
 **Responsibilities:**
-- Create and manage directory structure
+- Create and manage branch memory directory
 - Ensure atomic write operations
 - Handle concurrent access safely
-- Manage file permissions
 
 **Implementation:**
 
 ```javascript
 class FileSystemLayer {
   constructor(basePath) {
-    this.basePath = basePath; // ~/.puffin/memory/<user-id>
+    this.basePath = basePath; // ~/.puffin/memory
+    this.branchesDir = path.join(basePath, 'branches');
     this.initialized = false;
   }
 
   async initialize() {
-    // Create base directory structure
-    const dirs = [
-      'resources',
-      'items',
-      'items/coding_preferences',
-      'items/architectural_decisions',
-      'items/project_conventions',
-      'items/bug_patterns',
-      'items/implementation_notes',
-      'categories'
-    ];
-    
-    for (const dir of dirs) {
-      await fs.mkdir(path.join(this.basePath, dir), { recursive: true });
-    }
-    
+    await fs.mkdir(this.branchesDir, { recursive: true });
     this.initialized = true;
   }
 
-  async writeFile(relativePath, content) {
-    // Atomic write: write to temp file, then rename
-    const fullPath = path.join(this.basePath, relativePath);
+  async writeBranchMemory(branchId, content) {
+    const fullPath = path.join(this.branchesDir, `${branchId}.md`);
     const tempPath = fullPath + '.tmp';
-    
-    await fs.writeFile(tempPath, content);
+    await fs.writeFile(tempPath, content, 'utf-8');
     await fs.rename(tempPath, fullPath);
   }
 
-  async readFile(relativePath) {
-    const fullPath = path.join(this.basePath, relativePath);
-    return await fs.readFile(fullPath, 'utf-8');
-  }
-
-  async fileExists(relativePath) {
+  async readBranchMemory(branchId) {
+    const fullPath = path.join(this.branchesDir, `${branchId}.md`);
     try {
-      await fs.access(path.join(this.basePath, relativePath));
-      return true;
-    } catch {
-      return false;
+      return await fs.readFile(fullPath, 'utf-8');
+    } catch (err) {
+      if (err.code === 'ENOENT') return null;
+      throw err;
     }
   }
 
-  async listFiles(relativePath) {
-    const fullPath = path.join(this.basePath, relativePath);
-    return await fs.readdir(fullPath);
+  async listBranchMemories() {
+    const files = await fs.readdir(this.branchesDir);
+    return files
+      .filter(f => f.endsWith('.md'))
+      .map(f => f.replace('.md', ''));
+  }
+
+  async deleteBranchMemory(branchId) {
+    const fullPath = path.join(this.branchesDir, `${branchId}.md`);
+    await fs.unlink(fullPath);
+  }
+
+  async readMaintenanceLog() {
+    const logPath = path.join(this.basePath, 'maintenance-log.json');
+    try {
+      const content = await fs.readFile(logPath, 'utf-8');
+      return JSON.parse(content);
+    } catch {
+      return {};
+    }
+  }
+
+  async writeMaintenanceLog(log) {
+    const logPath = path.join(this.basePath, 'maintenance-log.json');
+    const tempPath = logPath + '.tmp';
+    await fs.writeFile(tempPath, JSON.stringify(log, null, 2), 'utf-8');
+    await fs.rename(tempPath, logPath);
   }
 }
 ```
 
-**Key design decisions:**
-- Atomic writes via temp file + rename prevent corruption
-- `async/await` enables non-blocking I/O
-- Recursive directory creation handles first-run setup
-- Error handling delegates to callers for flexibility
-
 ### 3.2 Write Path Implementation
 
+Per the spec: "A thread should be processed once the developer creates a new thread; the memorization process should run in the background."
+
 **Responsibilities:**
-- Accept conversation text and metadata
-- Ingest as immutable resource
-- Call LLM for extraction
-- Batch and store extracted items
-- Evolve category summaries
-- Track metadata (timestamps, confidence, etc.)
+- Read branch thread conversation from Puffin (in-place, no copy)
+- Call LLM for extraction (filtering for domain-level scope)
+- Load existing branch memory file
+- Call LLM to integrate new items into branch memory (evolution)
+- Write updated branch memory file
 
 **Implementation:**
 
@@ -977,44 +423,62 @@ class MemoryWriter {
     this.llm = llmExtractor;
   }
 
-  async memorize(conversationText, branchId, sessionId) {
+  /**
+   * Memorize a branch thread conversation.
+   * Called when the developer creates a new thread (background).
+   * @param {string} conversationText - The thread conversation text
+   * @param {string} branchId - Branch identifier
+   * @returns {Object} Result with itemsExtracted count and categoriesUpdated
+   */
+  async memorize(conversationText, branchId) {
     try {
-      // Step 1: Ingest as resource (immutable)
-      const resourceId = await this.ingestResource(
-        conversationText,
-        branchId,
-        sessionId
-      );
-
-      // Step 2: Extract items via LLM
+      // Step 1: Extract items via LLM (scope-filtered)
       const extractedItems = await this.llm.extract(conversationText);
 
-      // Step 3: Batch and store items
-      const itemsByCategory = this.batchByCategory(extractedItems);
-      const storedItemIds = [];
-      
-      for (const [category, items] of Object.entries(itemsByCategory)) {
-        for (const item of items) {
-          const itemId = await this.storeItem(
-            category,
-            item,
-            resourceId
-          );
-          storedItemIds.push(itemId);
-        }
+      // Handle empty extraction
+      if (extractedItems.no_content_to_extract) {
+        return {
+          itemsExtracted: 0,
+          categoriesUpdated: []
+        };
       }
 
-      // Step 4: Evolve category summaries
-      const updatedCategories = [];
-      for (const category of Object.keys(itemsByCategory)) {
-        await this.evolveCategorySummary(category, storedItemIds);
-        updatedCategories.push(category);
+      // Step 2: Filter by confidence threshold
+      const filteredItems = this.filterByConfidence(extractedItems);
+      const itemCount = Object.values(filteredItems)
+        .reduce((sum, arr) => sum + arr.length, 0);
+
+      if (itemCount === 0) {
+        return { itemsExtracted: 0, categoriesUpdated: [] };
       }
+
+      // Step 3: Load existing branch memory (may be null for first extraction)
+      const existingMemory = await this.fs.readBranchMemory(branchId);
+
+      // Step 4: Evolve branch memory via LLM
+      const updatedMemory = await this.llm.evolveBranchMemory(
+        existingMemory,
+        filteredItems,
+        branchId
+      );
+
+      // Step 5: Write updated branch memory file
+      await this.fs.writeBranchMemory(branchId, updatedMemory);
+
+      // Step 6: Update maintenance log
+      const log = await this.fs.readMaintenanceLog();
+      log.lastThreadProcessed = {
+        branchId,
+        timestamp: new Date().toISOString()
+      };
+      await this.fs.writeMaintenanceLog(log);
+
+      const categoriesUpdated = Object.keys(filteredItems)
+        .filter(k => filteredItems[k].length > 0);
 
       return {
-        resourceId,
-        itemsExtracted: storedItemIds.length,
-        categoriesUpdated: updatedCategories
+        itemsExtracted: itemCount,
+        categoriesUpdated
       };
     } catch (error) {
       return {
@@ -1025,113 +489,39 @@ class MemoryWriter {
     }
   }
 
-  async ingestResource(conversationText, branchId, sessionId) {
-    const resourceId = `resource_${Date.now()}_${branchId}`;
-    const resource = {
-      id: resourceId,
-      timestamp: new Date().toISOString(),
-      branchId,
-      sessionId,
-      conversationText,
-      metadata: {
-        messageCount: (conversationText.match(/\n/g) || []).length,
-        bytesSize: conversationText.length
-      }
-    };
-
-    await this.fs.writeFile(
-      `resources/${resourceId}.json`,
-      JSON.stringify(resource, null, 2)
-    );
-
-    return resourceId;
-  }
-
-  batchByCategory(extractedItems) {
-    const batched = {};
-    
+  filterByConfidence(extractedItems) {
+    const filtered = {};
     for (const [category, items] of Object.entries(extractedItems)) {
-      batched[category] = items.filter(item => item.confidence >= 0.75);
-    }
-    
-    return batched;
-  }
-
-  async storeItem(category, itemData, sourceResourceId) {
-    const itemId = `item_${Date.now()}_${category.substring(0, 2)}_${Math.random().toString(36).substr(2, 9)}`;
-    const item = {
-      id: itemId,
-      category,
-      content: itemData.content,
-      sourceResourceId,
-      extractedAt: new Date().toISOString(),
-      lastAccessed: new Date().toISOString(),
-      accessCount: 0,
-      confidence: itemData.confidence,
-      metadata: {
-        tags: itemData.tags || [],
-        related_items: []
+      if (Array.isArray(items)) {
+        filtered[category] = items.filter(item => item.confidence >= 0.75);
       }
-    };
-
-    const filePath = `items/${category}/${itemId}.json`;
-    await this.fs.writeFile(filePath, JSON.stringify(item, null, 2));
-
-    return itemId;
-  }
-
-  async evolveCategorySummary(category, newItemIds) {
-    const categoryFile = `categories/${category}.md`;
-    const exists = await this.fs.fileExists(categoryFile);
-    
-    let currentContent = exists ? await this.fs.readFile(categoryFile) : '';
-    
-    // Load new items
-    const categoryPath = `items/${category}`;
-    const itemFiles = await this.fs.listFiles(categoryPath);
-    const items = [];
-    
-    for (const file of itemFiles.filter(f => f.endsWith('.json'))) {
-      const content = await this.fs.readFile(`${categoryPath}/${file}`);
-      items.push(JSON.parse(content));
     }
-
-    // Use LLM to integrate new items into summary
-    const updatedContent = await this.llm.evolveSummary(
-      currentContent,
-      items,
-      category
-    );
-
-    await this.fs.writeFile(categoryFile, updatedContent);
+    return filtered;
   }
 }
 ```
 
-**Validation:**
-- Resource IDs must be unique
-- All items must reference valid resource IDs
-- Category names must match configured categories
-- All files must be valid JSON/Markdown
-
 ### 3.3 Read Path Implementation
 
-**Responsibilities:**
-- Accept search query
-- Synthesize query into search keywords
-- Select relevant categories
-- Check if summaries are sufficient
-- Fall back to hierarchical search if needed
-- Assemble results within token budget
-- Detect and surface conflicts
+Per the spec's tiered retrieval:
+1. Query synthesis
+2. Branch selection (LLM identifies relevant branch memory files)
+3. Sufficiency check (do branch summaries answer the query?)
+4. Conflict detection
+5. Relevance filtering
+6. Context assembly within token budget
+
+**No temporal decay** — per the spec: "Facts are valid indefinitely until explicitly superseded."
 
 **Implementation:**
 
 ```javascript
 class MemoryReader {
-  constructor(fsLayer, llmRetriever) {
+  constructor(fsLayer, llmRetriever, config = {}) {
     this.fs = fsLayer;
     this.llm = llmRetriever;
+    this.maxTokens = config.maxTokens || 2000;
+    this.relevanceThreshold = config.relevanceThreshold || 0.7;
   }
 
   async retrieve(query, maxResults = 5) {
@@ -1139,33 +529,45 @@ class MemoryReader {
       // Step 1: Query synthesis
       const synthesizedQuery = await this.llm.synthesizeQuery(query);
 
-      // Step 2: Category selection
-      const relevantCategories = await this.selectCategories(synthesizedQuery);
+      // Step 2: Branch selection
+      const allBranches = await this.fs.listBranchMemories();
+      const relevantBranches = await this.llm.selectRelevantBranches(
+        synthesizedQuery,
+        allBranches
+      );
 
-      // Step 3: Load category summaries
-      const summaries = [];
-      for (const category of relevantCategories) {
-        const content = await this.loadCategorySummary(category);
-        summaries.push({ category, content });
+      // Step 3: Load branch memory files
+      const branchMemories = [];
+      for (const branchId of relevantBranches) {
+        const content = await this.fs.readBranchMemory(branchId);
+        if (content) {
+          branchMemories.push({ branchId, content });
+        }
       }
 
       // Step 4: Sufficiency check
-      const isSufficient = await this.llm.checkSufficiency(
+      const sufficiencyResult = await this.llm.checkSufficiency(
         query,
-        summaries
+        branchMemories
       );
 
-      if (isSufficient) {
-        // Return summaries
-        return this.assembleResults(summaries, maxResults);
+      let results;
+      if (sufficiencyResult.sufficient) {
+        // Branch summaries are enough
+        results = sufficiencyResult.relevantExtracts;
+      } else {
+        // Need deeper search within branch memories
+        results = await this.llm.deepSearch(
+          query,
+          branchMemories
+        );
       }
 
-      // Step 5: Hierarchical search fallback
-      const items = await this.searchItems(synthesizedQuery, relevantCategories);
-      const results = [...summaries];
-      results.push(...items.slice(0, maxResults - summaries.length));
+      // Step 5: Conflict detection across branches
+      const conflicts = await this.llm.detectCrossBranchConflicts(results);
 
-      return this.assembleResults(results, maxResults);
+      // Step 6: Assemble within token budget
+      return this.assembleResults(results, conflicts, maxResults);
     } catch (error) {
       return {
         error: true,
@@ -1175,298 +577,166 @@ class MemoryReader {
     }
   }
 
-  async selectCategories(query) {
-    const availableCategories = [
-      'coding_preferences',
-      'architectural_decisions',
-      'project_conventions',
-      'bug_patterns',
-      'implementation_notes'
-    ];
+  assembleResults(results, conflicts, maxResults) {
+    // Score by relevance × confidence (no temporal decay)
+    const sorted = results
+      .filter(r => (r.relevance || 0) >= this.relevanceThreshold)
+      .sort((a, b) => {
+        const scoreA = (a.relevance || 0) * (a.confidence || 1);
+        const scoreB = (b.relevance || 0) * (b.confidence || 1);
+        return scoreB - scoreA;
+      });
 
-    const selected = await this.llm.selectCategories(query, availableCategories);
-    return selected;
-  }
+    // Pack within token budget
+    let usedTokens = 0;
+    const included = [];
 
-  async loadCategorySummary(category) {
-    const exists = await this.fs.fileExists(`categories/${category}.md`);
-    if (!exists) return null;
-    
-    return await this.fs.readFile(`categories/${category}.md`);
-  }
-
-  async searchItems(query, categories) {
-    const items = [];
-    
-    for (const category of categories) {
-      const categoryPath = `items/${category}`;
-      const files = await this.fs.listFiles(categoryPath);
-      
-      for (const file of files.filter(f => f.endsWith('.json'))) {
-        const content = await this.fs.readFile(`items/${category}/${file}`);
-        const item = JSON.parse(content);
-        items.push(item);
-      }
+    for (const item of sorted) {
+      const tokens = Math.ceil(item.content.length * 0.25);
+      if (usedTokens + tokens > this.maxTokens) break;
+      included.push(item);
+      usedTokens += tokens;
     }
 
-    // Score items for relevance
-    const scored = await this.llm.scoreItems(query, items);
-    scored.sort((a, b) => b.score - a.score);
-    
-    return scored;
-  }
-
-  async detectConflicts(results) {
-    // Load conflict file if exists
-    const conflictFile = 'conflicts.json';
-    const exists = await this.fs.fileExists(conflictFile);
-    
-    if (!exists) return [];
-    
-    const content = await this.fs.readFile(conflictFile);
-    const conflicts = JSON.parse(content);
-    
-    // Filter to conflicts affecting current results
-    return conflicts.conflicts.filter(conflict => {
-      return conflict.items.some(item => 
-        results.some(r => r.id === item.itemId)
-      );
-    });
-  }
-
-  assembleResults(results, maxResults) {
     return {
-      memories: results.slice(0, maxResults),
-      totalCount: results.length,
+      memories: included.slice(0, maxResults),
+      conflicts,
+      totalTokens: usedTokens,
       retrievalTime: Date.now()
     };
   }
 }
 ```
 
-**Validation:**
-- Query must be non-empty string
-- Categories returned by LLM must be valid
-- All retrieved items must exist and be valid JSON
-- Results must be sorted by relevance
-
 ---
 
 ## Step 4: Implement Retrieval System
 
-### 4.1 Temporal Decay Calculator
+### 4.1 Relevance Scoring (No Temporal Decay)
 
-Implements the decay formula: `final_score = relevance_score × time_decay_factor`
+Per the spec: "There is no time-based temporal decay. Facts are valid indefinitely until explicitly superseded by newer information."
 
-Where: `time_decay_factor = 1.0 / (1.0 + (age_in_days / half_life_days))`
-
-```javascript
-class TemporalDecay {
-  constructor(halfLifeDays = 30) {
-    this.halfLifeDays = halfLifeDays;
-  }
-
-  calculateDecayFactor(timestampISO) {
-    const created = new Date(timestampISO);
-    const now = new Date();
-    const ageMs = now.getTime() - created.getTime();
-    const ageDays = ageMs / (1000 * 60 * 60 * 24);
-    
-    return 1.0 / (1.0 + (ageDays / this.halfLifeDays));
-  }
-
-  applyDecay(relevanceScore, timestampISO) {
-    const decayFactor = this.calculateDecayFactor(timestampISO);
-    return relevanceScore * decayFactor;
-  }
-}
-```
-
-**Validation:**
-- `halfLifeDays` must be positive number
-- Timestamp must be valid ISO 8601
-- Decay factor must be between 0.0 and 1.0
-- Recent items (age 0 days) must have decay factor of 1.0
-
-### 4.2 Relevance Scoring
-
-Multi-factor scoring algorithm combining relevance, recency, frequency, and confidence.
+The scoring model uses three factors: relevance, confidence, and access frequency.
 
 ```javascript
 class RelevanceScorer {
   constructor(config = {}) {
-    this.relevanceWeight = config.relevanceWeight || 0.5;
+    this.relevanceWeight = config.relevanceWeight || 0.6;
     this.confidenceWeight = config.confidenceWeight || 0.3;
     this.frequencyWeight = config.frequencyWeight || 0.1;
-    this.recencyWeight = config.recencyWeight || 0.1;
     this.relevanceThreshold = config.relevanceThreshold || 0.7;
-    this.decay = new TemporalDecay(config.halfLifeDays || 30);
   }
 
+  /**
+   * Score a memory item against a query.
+   * No temporal decay — facts are valid indefinitely.
+   */
   async scoreItem(item, query, llm) {
-    // LLM evaluates semantic relevance
     const relevanceScore = await llm.scoreRelevance(item.content, query);
-    
-    // Confidence is explicitly stored
-    const confidenceScore = item.confidence;
-    
-    // Access frequency (normalized to 0-1)
-    const maxAccessCount = 100; // Configurable
-    const frequencyScore = Math.min(item.accessCount / maxAccessCount, 1.0);
-    
-    // Temporal decay
-    const recencyScore = this.decay.calculateDecayFactor(item.extractedAt);
-    
-    // Combined score
+    const confidenceScore = item.confidence || 1.0;
+    const frequencyScore = Math.min((item.accessCount || 0) / 100, 1.0);
+
     const finalScore = (
       relevanceScore * this.relevanceWeight +
       confidenceScore * this.confidenceWeight +
-      frequencyScore * this.frequencyWeight +
-      recencyScore * this.recencyWeight
+      frequencyScore * this.frequencyWeight
     );
-    
+
     return {
-      itemId: item.id,
+      content: item.content,
       finalScore,
       components: {
         relevance: relevanceScore,
         confidence: confidenceScore,
-        frequency: frequencyScore,
-        recency: recencyScore
+        frequency: frequencyScore
       }
     };
   }
 
-  async filterByThreshold(scores) {
+  filterByThreshold(scores) {
     return scores.filter(s => s.finalScore >= this.relevanceThreshold);
   }
 }
 ```
 
-**Validation:**
-- All weights must sum to 1.0
-- Relevance threshold must be 0.0-1.0
-- All component scores must be 0.0-1.0
-- Final score must be 0.0-1.0
+### 4.2 Conflict Detection
 
-### 4.3 Conflict Detection
-
-Identifies contradictory memories and surfaces them to user.
+Identifies contradictory memories across branch memory files during retrieval.
 
 ```javascript
 class ConflictDetector {
-  async detectConflicts(memories, llm) {
-    const conflicts = [];
-    
+  /**
+   * Detect conflicts across branch memories.
+   * Since conflicts within a single branch are handled by the evolution LLM,
+   * this focuses on cross-branch contradictions.
+   */
+  async detectCrossBranchConflicts(results, llm) {
+    if (results.length < 2) return [];
+
     // Group by category
     const byCategory = {};
-    for (const memory of memories) {
-      if (!byCategory[memory.category]) {
-        byCategory[memory.category] = [];
-      }
-      byCategory[memory.category].push(memory);
+    for (const result of results) {
+      const cat = result.category || 'unknown';
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(result);
     }
-    
-    // Check each category for contradictions
+
+    const conflicts = [];
     for (const [category, items] of Object.entries(byCategory)) {
       if (items.length < 2) continue;
-      
+
       // LLM identifies contradictions
-      const contradictions = await llm.findContradictions(items);
-      conflicts.push(...contradictions);
+      const found = await llm.findContradictions(items);
+      conflicts.push(...found);
     }
-    
+
     return conflicts;
-  }
-
-  formatConflictReport(conflict) {
-    return {
-      id: conflict.id,
-      category: conflict.category,
-      items: conflict.items.map(item => ({
-        itemId: item.itemId,
-        content: item.content,
-        confidence: item.confidence,
-        extractedAt: item.extractedAt,
-        age: this.calculateAge(item.extractedAt)
-      })),
-      status: conflict.resolution.status,
-      notes: conflict.resolution.reasoningNotes
-    };
-  }
-
-  calculateAge(timestamp) {
-    const now = new Date();
-    const created = new Date(timestamp);
-    const days = (now - created) / (1000 * 60 * 60 * 24);
-    
-    if (days < 1) return 'today';
-    if (days < 7) return `${Math.floor(days)} days ago`;
-    if (days < 30) return `${Math.floor(days/7)} weeks ago`;
-    return `${Math.floor(days/30)} months ago`;
   }
 }
 ```
 
-### 4.4 Token Budget Manager
+### 4.3 Token Budget Manager
 
 Packs results to fit within token budget.
 
 ```javascript
 class TokenBudgetManager {
-  constructor(maxTokens = 2000, tokenRatio = 0.25) {
+  constructor(maxTokens = 2000) {
     this.maxTokens = maxTokens;
-    this.tokenRatio = tokenRatio; // ~1 token per 4 chars
   }
 
   estimateTokens(text) {
-    return Math.ceil(text.length * this.tokenRatio);
+    return Math.ceil(text.length * 0.25);
   }
 
   assembleContext(memories, conflicts) {
     let context = '';
     let usedTokens = 0;
-    const includedMemories = [];
-    
-    // First, add conflict information
+    const included = [];
+
+    // Add conflict warnings first
     for (const conflict of conflicts) {
-      const conflictText = this.formatConflict(conflict);
-      const tokens = this.estimateTokens(conflictText);
-      
+      const text = `**CONFLICT** in ${conflict.category}: ${conflict.description}\n`;
+      const tokens = this.estimateTokens(text);
       if (usedTokens + tokens <= this.maxTokens) {
-        context += conflictText + '\n\n';
+        context += text + '\n';
         usedTokens += tokens;
       }
     }
-    
-    // Then, add memories sorted by score
+
+    // Add memories sorted by score
     const sorted = [...memories].sort((a, b) => (b.score || 0) - (a.score || 0));
-    
     for (const memory of sorted) {
-      const memoryText = this.formatMemory(memory);
-      const tokens = this.estimateTokens(memoryText);
-      
+      const text = `**${memory.category}** (confidence: ${Math.round((memory.confidence || 1) * 100)}%)\n${memory.content}`;
+      const tokens = this.estimateTokens(text);
       if (usedTokens + tokens <= this.maxTokens) {
-        context += memoryText + '\n\n';
+        context += text + '\n\n';
         usedTokens += tokens;
-        includedMemories.push(memory.id);
+        included.push(memory);
       }
     }
-    
-    return {
-      context,
-      usedTokens,
-      includedMemories,
-      capacityRemaining: this.maxTokens - usedTokens
-    };
-  }
 
-  formatMemory(memory) {
-    return `**${memory.category}** (confidence: ${(memory.confidence * 100).toFixed(0)}%)\n${memory.content}`;
-  }
-
-  formatConflict(conflict) {
-    return `⚠️ **CONFLICTING MEMORY** in ${conflict.category}\n${conflict.items.map(i => `- ${i.content} (${i.extractedAt})`).join('\n')}`;
+    return { context, usedTokens, included, capacityRemaining: this.maxTokens - usedTokens };
   }
 }
 ```
@@ -1477,9 +747,7 @@ class TokenBudgetManager {
 
 ### 5.1 IPC Handler Mapping
 
-Each IPC channel maps to a handler function with input validation and error handling.
-
-**Handler registry:**
+Aligned with the spec's API (Section 4.1). Key change: `memory:memorize` no longer returns a `resourceId` (no resource layer).
 
 ```javascript
 class IPCRegistry {
@@ -1488,40 +756,106 @@ class IPCRegistry {
     this.handlers = {
       'memory:memorize': this.handleMemorize.bind(this),
       'memory:retrieve': this.handleRetrieve.bind(this),
-      'memory:get-category': this.handleGetCategory.bind(this),
+      'memory:get-branch-memory': this.handleGetBranchMemory.bind(this),
       'memory:get-stats': this.handleGetStats.bind(this),
       'memory:get-status': this.handleGetStatus.bind(this),
-      'memory:clear-category': this.handleClearCategory.bind(this),
-      'memory:run-maintenance': this.handleRunMaintenance.bind(this),
-      'memory:resolve-conflict': this.handleResolveConflict.bind(this)
+      'memory:clear-branch-memory': this.handleClearBranchMemory.bind(this),
+      'memory:run-maintenance': this.handleRunMaintenance.bind(this)
     };
   }
 
   register(ipcMain) {
     for (const [channel, handler] of Object.entries(this.handlers)) {
-      ipcMain.handle(channel, handler);
+      ipcMain.handle(channel, async (event, request) => {
+        try {
+          return await handler(request);
+        } catch (error) {
+          console.error(`[memory-plugin] ${channel} failed:`, error);
+          return ResponseFormatter.error('INTERNAL_ERROR', error.message);
+        }
+      });
     }
   }
 
-  async handleMemorize(event, request) {
+  async handleMemorize(request) {
     const validation = this.validateMemorizeRequest(request);
-    if (!validation.valid) return this.errorResponse('INVALID_INPUT', validation.error);
-    
+    if (!validation.valid) return ResponseFormatter.error('INVALID_INPUT', validation.error);
+
     return await this.manager.write.memorize(
       request.conversationText,
-      request.branchId,
-      request.sessionId
+      request.branchId
     );
   }
 
-  async handleRetrieve(event, request) {
+  async handleRetrieve(request) {
     const validation = this.validateRetrieveRequest(request);
-    if (!validation.valid) return this.errorResponse('INVALID_INPUT', validation.error);
-    
+    if (!validation.valid) return ResponseFormatter.error('INVALID_INPUT', validation.error);
+
     return await this.manager.read.retrieve(
       request.query,
       request.maxResults || 5
     );
+  }
+
+  async handleGetBranchMemory(request) {
+    if (!request.branch || typeof request.branch !== 'string') {
+      return ResponseFormatter.error('INVALID_INPUT', 'branch must be non-empty string');
+    }
+
+    const content = await this.manager.fs.readBranchMemory(request.branch);
+    if (!content) {
+      return ResponseFormatter.error('NOT_FOUND', `No memory file for branch: ${request.branch}`);
+    }
+
+    return {
+      branch: request.branch,
+      content,
+      lastUpdated: this.extractLastUpdated(content),
+      itemCount: this.countItems(content)
+    };
+  }
+
+  async handleGetStats() {
+    const branches = await this.manager.fs.listBranchMemories();
+    const log = await this.manager.fs.readMaintenanceLog();
+
+    return {
+      totalBranches: branches.length,
+      totalCategories: 5,
+      lastMemorized: log.lastThreadProcessed?.timestamp || null,
+      nextMaintenance: this.calculateNextMaintenance(log)
+    };
+  }
+
+  async handleGetStatus() {
+    return {
+      status: this.manager.isProcessing ? 'processing' : 'ready',
+      lastError: this.manager.lastError || null,
+      maintenanceInProgress: this.manager.maintenanceInProgress || false
+    };
+  }
+
+  async handleClearBranchMemory(request) {
+    if (!request.branch || typeof request.branch !== 'string') {
+      return ResponseFormatter.error('INVALID_INPUT', 'branch must be non-empty string');
+    }
+
+    await this.manager.fs.deleteBranchMemory(request.branch);
+    return { success: true };
+  }
+
+  async handleRunMaintenance(request) {
+    if (!request.type || !['weekly', 'monthly', 'full'].includes(request.type)) {
+      return ResponseFormatter.error('INVALID_INPUT', 'type must be weekly, monthly, or full');
+    }
+
+    const start = Date.now();
+    const results = await this.manager.maintenance.run(request.type);
+    return {
+      success: true,
+      duration: Date.now() - start,
+      results
+    };
   }
 
   validateMemorizeRequest(request) {
@@ -1530,9 +864,6 @@ class IPCRegistry {
     }
     if (!request.branchId || typeof request.branchId !== 'string') {
       return { valid: false, error: 'branchId must be non-empty string' };
-    }
-    if (!request.sessionId || typeof request.sessionId !== 'string') {
-      return { valid: false, error: 'sessionId must be non-empty string' };
     }
     return { valid: true };
   }
@@ -1544,32 +875,39 @@ class IPCRegistry {
     return { valid: true };
   }
 
-  errorResponse(code, message) {
-    return {
-      error: true,
-      code,
-      message
-    };
+  extractLastUpdated(content) {
+    const match = content.match(/\*\*Last Updated:\*\*\s*(\S+)/);
+    return match ? match[1] : null;
+  }
+
+  countItems(content) {
+    // Count bullet points in category sections
+    return (content.match(/^- \*\*/gm) || []).length;
+  }
+
+  calculateNextMaintenance(log) {
+    const lastWeekly = log.lastWeeklyConsolidation
+      ? new Date(log.lastWeeklyConsolidation)
+      : new Date(0);
+    const nextWeekly = new Date(lastWeekly.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return nextWeekly.toISOString();
   }
 }
 ```
 
 ### 5.2 Input Validation Schemas
 
-JSON Schema definitions for each IPC endpoint.
-
 ```javascript
 const validationSchemas = {
   memorizeRequest: {
     type: 'object',
-    required: ['conversationText', 'branchId', 'sessionId'],
+    required: ['conversationText', 'branchId'],
     properties: {
       conversationText: { type: 'string', minLength: 1 },
-      branchId: { type: 'string', minLength: 1 },
-      sessionId: { type: 'string', minLength: 1 }
+      branchId: { type: 'string', minLength: 1 }
     }
   },
-  
+
   retrieveRequest: {
     type: 'object',
     required: ['query'],
@@ -1578,37 +916,28 @@ const validationSchemas = {
       maxResults: { type: 'number', minimum: 1, maximum: 100 }
     }
   },
-  
-  getCategoryRequest: {
+
+  getBranchMemoryRequest: {
     type: 'object',
-    required: ['category'],
+    required: ['branch'],
     properties: {
-      category: {
-        type: 'string',
-        enum: ['coding_preferences', 'architectural_decisions', 'project_conventions', 'bug_patterns', 'implementation_notes']
-      }
+      branch: { type: 'string', minLength: 1 }
     }
   },
-  
-  clearCategoryRequest: {
+
+  clearBranchMemoryRequest: {
     type: 'object',
-    required: ['category'],
+    required: ['branch'],
     properties: {
-      category: {
-        type: 'string',
-        enum: ['coding_preferences', 'architectural_decisions', 'project_conventions', 'bug_patterns', 'implementation_notes']
-      }
+      branch: { type: 'string', minLength: 1 }
     }
   },
-  
+
   runMaintenanceRequest: {
     type: 'object',
     required: ['type'],
     properties: {
-      type: {
-        type: 'string',
-        enum: ['nightly', 'weekly', 'monthly', 'full']
-      }
+      type: { type: 'string', enum: ['weekly', 'monthly', 'full'] }
     }
   }
 };
@@ -1616,33 +945,21 @@ const validationSchemas = {
 
 ### 5.3 Error Handling and Response Formatting
 
-Consistent error responses and success responses.
-
 ```javascript
 class ResponseFormatter {
   static success(data) {
-    return {
-      success: true,
-      data,
-      timestamp: new Date().toISOString()
-    };
+    return { success: true, data, timestamp: new Date().toISOString() };
   }
 
   static error(code, message, context = null) {
-    return {
-      error: true,
-      code,
-      message,
-      context,
-      timestamp: new Date().toISOString()
-    };
+    return { error: true, code, message, context, timestamp: new Date().toISOString() };
   }
 }
 ```
 
 **Error codes:**
 - `INVALID_INPUT` - Validation failed
-- `NOT_FOUND` - Category or memory not found
+- `NOT_FOUND` - Branch memory not found
 - `EXTRACTION_FAILED` - LLM extraction error
 - `RETRIEVAL_FAILED` - Search failed
 - `STORAGE_ERROR` - File I/O error
@@ -1651,19 +968,15 @@ class ResponseFormatter {
 
 ### 5.4 Integration Tests
 
-Test each IPC endpoint with valid and invalid inputs.
-
 ```javascript
 describe('IPC Handlers', () => {
   describe('memory:memorize', () => {
     test('should extract and store memories from conversation', async () => {
       const response = await ipcMain.invoke('memory:memorize', {
-        conversationText: 'Discussed using async/await...',
-        branchId: 'feature-1',
-        sessionId: 'session-1'
+        conversationText: 'Discussed using async/await for all async operations...',
+        branchId: 'feature-1'
       });
-      
-      expect(response.resourceId).toBeDefined();
+
       expect(response.itemsExtracted).toBeGreaterThan(0);
       expect(response.categoriesUpdated).toBeInstanceOf(Array);
     });
@@ -1671,10 +984,9 @@ describe('IPC Handlers', () => {
     test('should reject invalid inputs', async () => {
       const response = await ipcMain.invoke('memory:memorize', {
         conversationText: '',
-        branchId: 'feature-1',
-        sessionId: 'session-1'
+        branchId: 'feature-1'
       });
-      
+
       expect(response.error).toBe(true);
       expect(response.code).toBe('INVALID_INPUT');
     });
@@ -1686,9 +998,21 @@ describe('IPC Handlers', () => {
         query: 'async/await pattern',
         maxResults: 5
       });
-      
+
       expect(response.memories).toBeInstanceOf(Array);
       expect(response.totalTokens).toBeGreaterThan(0);
+    });
+  });
+
+  describe('memory:get-branch-memory', () => {
+    test('should return branch memory content', async () => {
+      const response = await ipcMain.invoke('memory:get-branch-memory', {
+        branch: 'feature-1'
+      });
+
+      expect(response.branch).toBe('feature-1');
+      expect(response.content).toBeDefined();
+      expect(response.lastUpdated).toBeDefined();
     });
   });
 });
@@ -1698,164 +1022,148 @@ describe('IPC Handlers', () => {
 
 ## Step 6: Implement Maintenance Tasks
 
-### 6.1 Scheduler Setup
+### 6.1 Maintenance Trigger
 
-Uses `node-cron` or similar for scheduling maintenance.
+Per the spec: "When the developer opens Puffin, check if at least one week has elapsed since last consolidation."
+
+**No cron scheduling.** Maintenance is triggered on app startup.
 
 ```javascript
-const cron = require('node-cron');
-
-class MaintenanceScheduler {
-  constructor(maintenanceManager, config) {
-    this.manager = maintenanceManager;
-    this.config = config;
-    this.jobs = {};
+class MaintenanceManager {
+  constructor(fsLayer, llm) {
+    this.fs = fsLayer;
+    this.llm = llm;
   }
 
-  start() {
-    if (this.config.maintenance.nightly.enabled) {
-      this.jobs.nightly = cron.schedule(
-        this.config.maintenance.nightly.schedule,
-        () => this.manager.runNightly()
-      );
+  /**
+   * Check and run maintenance on plugin activation (app startup).
+   * Per spec: trigger weekly maintenance when developer opens Puffin
+   * if at least one week has elapsed.
+   */
+  async checkAndRun() {
+    const log = await this.fs.readMaintenanceLog();
+
+    const now = Date.now();
+    const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+    const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
+
+    const lastWeekly = log.lastWeeklyConsolidation
+      ? new Date(log.lastWeeklyConsolidation).getTime()
+      : 0;
+
+    const lastMonthly = log.lastMonthlyReindex
+      ? new Date(log.lastMonthlyReindex).getTime()
+      : 0;
+
+    if (now - lastMonthly >= oneMonthMs) {
+      await this.runMonthly();
+      log.lastMonthlyReindex = new Date().toISOString();
     }
 
-    if (this.config.maintenance.weekly.enabled) {
-      this.jobs.weekly = cron.schedule(
-        this.config.maintenance.weekly.schedule,
-        () => this.manager.runWeekly()
-      );
+    if (now - lastWeekly >= oneWeekMs) {
+      await this.runWeekly();
+      log.lastWeeklyConsolidation = new Date().toISOString();
     }
 
-    if (this.config.maintenance.monthly.enabled) {
-      this.jobs.monthly = cron.schedule(
-        this.config.maintenance.monthly.schedule,
-        () => this.manager.runMonthly()
-      );
+    await this.fs.writeMaintenanceLog(log);
+  }
+
+  async run(type) {
+    switch (type) {
+      case 'weekly': return await this.runWeekly();
+      case 'monthly': return await this.runMonthly();
+      case 'full':
+        const weekly = await this.runWeekly();
+        const monthly = await this.runMonthly();
+        return { weekly, monthly };
+      default:
+        throw new Error(`Unknown maintenance type: ${type}`);
     }
   }
 
-  stop() {
-    for (const job of Object.values(this.jobs)) {
-      job.stop();
+  /**
+   * Weekly consolidation per spec:
+   * - Consolidate and refactor branch memory files for clarity
+   * - Identify infrequently-accessed items and assess continued relevance
+   * - Merge redundant or superseded memories
+   * - Update branch summaries
+   */
+  async runWeekly() {
+    const branches = await this.fs.listBranchMemories();
+    let branchesConsolidated = 0;
+    let memoriesRemoved = 0;
+
+    for (const branchId of branches) {
+      const content = await this.fs.readBranchMemory(branchId);
+      if (!content) continue;
+
+      const consolidated = await this.llm.consolidateBranchMemory(content);
+      if (consolidated !== content) {
+        await this.fs.writeBranchMemory(branchId, consolidated);
+        branchesConsolidated++;
+      }
     }
+
+    return { branchesConsolidated, memoriesRemoved };
+  }
+
+  /**
+   * Monthly maintenance:
+   * - Validate integrity of all branch memory files
+   * - Placeholder for future embedding re-indexing
+   */
+  async runMonthly() {
+    const branches = await this.fs.listBranchMemories();
+    let valid = 0;
+    let invalid = 0;
+
+    for (const branchId of branches) {
+      const content = await this.fs.readBranchMemory(branchId);
+      if (content && this.isValidBranchMemory(content)) {
+        valid++;
+      } else {
+        invalid++;
+      }
+    }
+
+    return { branchesValidated: valid, branchesInvalid: invalid };
+  }
+
+  isValidBranchMemory(content) {
+    return content.includes('## Summary') && content.includes('**Last Updated:**');
   }
 }
 ```
 
-### 6.2 Nightly Consolidation
+### 6.2 Thread Processing Trigger
 
-Reviews conversations from past 24 hours, identifies redundancies.
-
-```javascript
-class NightlyConsolidation {
-  async run(fsLayer, llm) {
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const resources = await this.getResourcesSince(fsLayer, oneDayAgo);
-    
-    const duplicates = [];
-    const contradictions = [];
-    
-    for (let i = 0; i < resources.length; i++) {
-      for (let j = i + 1; j < resources.length; j++) {
-        const isDuplicate = await llm.areDuplicate(resources[i], resources[j]);
-        if (isDuplicate) {
-          duplicates.push([resources[i].id, resources[j].id]);
-        }
-        
-        const contradiction = await llm.findContradiction(resources[i], resources[j]);
-        if (contradiction) {
-          contradictions.push(contradiction);
-        }
-      }
-    }
-    
-    // Merge duplicates (keep higher confidence)
-    for (const [id1, id2] of duplicates) {
-      await this.mergeDuplicates(fsLayer, id1, id2);
-    }
-    
-    // Record contradictions
-    await this.recordContradictions(fsLayer, contradictions);
-    
-    return {
-      resourcesProcessed: resources.length,
-      duplicatesMerged: duplicates.length,
-      contradictionsFound: contradictions.length
-    };
-  }
-}
-```
-
-### 6.3 Weekly Summarization
-
-Compresses older memories, archives infrequent items.
+Per the spec: "A thread should be processed once the developer creates a new thread."
 
 ```javascript
-class WeeklySummarization {
-  async run(fsLayer, llm) {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    
-    // Find items older than 30 days
-    const oldItems = await this.getItemsOlderThan(fsLayer, thirtyDaysAgo);
-    
-    // Group by category
-    const byCategory = {};
-    for (const item of oldItems) {
-      if (!byCategory[item.category]) {
-        byCategory[item.category] = [];
-      }
-      byCategory[item.category].push(item);
-    }
-    
-    // Compress each category
-    for (const [category, items] of Object.entries(byCategory)) {
-      const compressed = await llm.compressItems(items);
-      await this.storeCompressed(fsLayer, category, compressed);
-    }
-    
-    // Archive infrequent items
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    const infrequent = await this.getInfrequentItems(fsLayer, ninetyDaysAgo);
-    await this.archiveItems(fsLayer, infrequent);
-    
-    return {
-      itemsCompressed: oldItems.length,
-      itemsArchived: infrequent.length
-    };
-  }
-}
-```
+/**
+ * In main.js activate():
+ * Subscribe to thread creation events and trigger background memorization.
+ */
+async activate(context) {
+  // Initialize storage
+  await this.fs.initialize();
 
-### 6.4 Monthly Re-indexing
+  // Register IPC handlers
+  this.ipcRegistry.register(context.ipcMain);
 
-Re-generates embeddings, re-weights relationships (placeholder for future).
+  // Check for pending maintenance on startup
+  await this.maintenance.checkAndRun();
 
-```javascript
-class MonthlyReIndexing {
-  async run(fsLayer, llm) {
-    // Future: Regenerate embeddings with latest model
-    // For v1: Just update access timestamps and validate integrity
-    
-    const allItems = await this.getAllItems(fsLayer);
-    let validItems = 0;
-    let invalidItems = 0;
-    
-    for (const item of allItems) {
-      try {
-        await this.validateItem(item);
-        validItems++;
-      } catch (error) {
-        invalidItems++;
-        await this.markInvalid(fsLayer, item.id);
-      }
+  // Subscribe to new-thread events for automatic memorization
+  context.on('thread:completed', async (threadId, branchId) => {
+    // Run in background — don't block UI
+    try {
+      const conversationText = await this.getThreadConversation(threadId);
+      await this.writer.memorize(conversationText, branchId);
+    } catch (error) {
+      console.error('[memory-plugin] Background memorization failed:', error);
     }
-    
-    return {
-      itemsValidated: validItems,
-      itemsInvalid: invalidItems
-    };
-  }
+  });
 }
 ```
 
@@ -1865,168 +1173,98 @@ class MonthlyReIndexing {
 
 ### 7.1 Status Indicator Component
 
-Displays memory system health in UI.
-
 ```javascript
-// MemoryStatusIndicator.js
 class MemoryStatusIndicator {
   render() {
     const { status, lastError, maintenanceInProgress } = this.state;
-    
+
     return `
       <div class="memory-status">
         <span class="status-dot ${status}"></span>
-        <span class="status-text">
-          ${this.getStatusText(status)}
-        </span>
+        <span class="status-text">${this.getStatusText(status)}</span>
         ${maintenanceInProgress ? '<span class="maintenance-badge">Maintenance</span>' : ''}
-        ${lastError ? `<span class="error-tooltip" title="${lastError}">⚠️</span>` : ''}
+        ${lastError ? `<span class="error-tooltip" title="${lastError}">!</span>` : ''}
       </div>
     `;
   }
 
   getStatusText(status) {
-    const statusMap = {
-      'ready': 'Memory System Ready',
-      'processing': 'Processing...',
-      'error': 'Error'
-    };
-    return statusMap[status] || 'Unknown';
+    return { ready: 'Memory System Ready', processing: 'Processing...', error: 'Error' }[status] || 'Unknown';
   }
 }
 ```
 
 ### 7.2 Statistics Dashboard
 
-Visualizes memory metrics.
-
 ```javascript
-// MemoryStatsDashboard.js
 class MemoryStatsDashboard {
   render() {
-    const { totalItems, totalCategories, totalResources, lastMemorized, nextMaintenance } = this.stats;
-    
+    const { totalBranches, totalCategories, lastMemorized, nextMaintenance } = this.stats;
+
     return `
       <div class="memory-dashboard">
-        <div class="stat-card">
-          <h3>Total Memories</h3>
-          <p class="stat-value">${totalItems}</p>
-        </div>
-        <div class="stat-card">
-          <h3>Categories</h3>
-          <p class="stat-value">${totalCategories}</p>
-        </div>
-        <div class="stat-card">
-          <h3>Conversations Processed</h3>
-          <p class="stat-value">${totalResources}</p>
-        </div>
-        <div class="stat-card">
-          <h3>Last Updated</h3>
-          <p class="stat-value">${this.formatTime(lastMemorized)}</p>
-        </div>
-        <div class="stat-card">
-          <h3>Next Maintenance</h3>
-          <p class="stat-value">${this.formatTime(nextMaintenance)}</p>
-        </div>
+        <div class="stat-card"><h3>Branch Memories</h3><p>${totalBranches}</p></div>
+        <div class="stat-card"><h3>Categories</h3><p>${totalCategories}</p></div>
+        <div class="stat-card"><h3>Last Updated</h3><p>${this.formatTime(lastMemorized)}</p></div>
+        <div class="stat-card"><h3>Next Maintenance</h3><p>${this.formatTime(nextMaintenance)}</p></div>
       </div>
     `;
   }
 
   formatTime(isoTime) {
-    const date = new Date(isoTime);
-    return date.toLocaleString();
+    return isoTime ? new Date(isoTime).toLocaleString() : 'Never';
   }
 }
 ```
 
-### 7.3 Conflict Resolution UI
+### 7.3 Branch Memory Browser
 
-Displays contradictory memories side-by-side.
+Replaces the previous category-based browser. Users browse by branch.
 
 ```javascript
-// ConflictResolutionPanel.js
-class ConflictResolutionPanel {
-  render(conflict) {
+class BranchMemoryBrowser {
+  render() {
     return `
-      <div class="conflict-panel">
-        <div class="conflict-header">
-          <h3>⚠️ Conflicting Memory in ${conflict.category}</h3>
-          <span class="conflict-id">${conflict.id}</span>
-        </div>
-        
-        <div class="conflict-items">
-          ${conflict.items.map((item, i) => `
-            <div class="conflict-item ${i === 0 ? 'older' : 'newer'}">
-              <div class="item-meta">
-                <span class="confidence">Confidence: ${(item.confidence * 100).toFixed(0)}%</span>
-                <span class="date">${item.extractedAt}</span>
-                <span class="age">${this.getAge(item.extractedAt)}</span>
-              </div>
-              <p class="content">${item.content}</p>
-            </div>
+      <div class="memory-browser">
+        <div class="branch-selector">
+          ${this.branches.map(b => `
+            <button onclick="this.loadBranch('${b}')">${b}</button>
           `).join('')}
         </div>
-        
-        <div class="resolution-actions">
-          <button onclick="this.resolveWith(0)">Keep Older</button>
-          <button onclick="this.resolveWith(1)">Keep Newer</button>
-          <button onclick="this.resolveKeepBoth()">Keep Both (with context)</button>
-          <button onclick="this.resolveMarkOutdated(0)">Mark Older as Outdated</button>
+        <div class="memory-content">
+          ${this.currentContent ? this.renderMarkdown(this.currentContent) : '<p>Select a branch</p>'}
         </div>
       </div>
     `;
   }
-
-  getAge(timestamp) {
-    const ms = Date.now() - new Date(timestamp);
-    const days = Math.floor(ms / (24 * 60 * 60 * 1000));
-    if (days === 0) return 'today';
-    if (days === 1) return 'yesterday';
-    return `${days} days ago`;
-  }
-
-  async resolveWith(index) {
-    const decision = index === 0 ? 'accepted_older' : 'accepted_newer';
-    await ipcRenderer.invoke('memory:resolve-conflict', {
-      conflictId: this.conflict.id,
-      decision,
-      userNotes: ''
-    });
-  }
 }
 ```
 
-### 7.4 Manual Review Interface
+### 7.4 Conflict Resolution UI
 
-Allows browsing and editing memories.
+Per the spec, conflicts within a branch are handled by the LLM during evolution. Cross-branch conflicts are surfaced during retrieval and shown to the user.
 
 ```javascript
-// MemoryBrowser.js
-class MemoryBrowser {
-  render() {
+class ConflictResolutionPanel {
+  render(conflict) {
     return `
-      <div class="memory-browser">
-        <div class="category-selector">
-          ${this.categories.map(cat => `
-            <button onclick="this.loadCategory('${cat}')">${cat}</button>
-          `).join('')}
-        </div>
-        
-        <div class="memory-list">
-          ${this.currentItems.map(item => `
-            <div class="memory-item">
-              <p class="content">${item.content}</p>
-              <div class="metadata">
-                <span>Confidence: ${(item.confidence * 100).toFixed(0)}%</span>
-                <span>Accessed: ${item.accessCount} times</span>
-                <span>Last: ${this.getAge(item.lastAccessed)}</span>
+      <div class="conflict-panel">
+        <h3>Conflicting Memory in ${conflict.category}</h3>
+        <div class="conflict-items">
+          ${conflict.items.map((item, i) => `
+            <div class="conflict-item">
+              <div class="item-meta">
+                <span>Branch: ${item.branchId}</span>
+                <span>Confidence: ${Math.round(item.confidence * 100)}%</span>
               </div>
-              <div class="actions">
-                <button onclick="this.editItem('${item.id}')">Edit</button>
-                <button onclick="this.deleteItem('${item.id}')">Delete</button>
-              </div>
+              <p>${item.content}</p>
             </div>
           `).join('')}
+        </div>
+        <div class="resolution-actions">
+          <button onclick="this.resolveKeepNewer()">Keep Newer</button>
+          <button onclick="this.resolveKeepBoth()">Keep Both</button>
+          <button onclick="this.resolveMarkOutdated(0)">Mark Older as Outdated</button>
         </div>
       </div>
     `;
@@ -2042,142 +1280,82 @@ class MemoryBrowser {
 
 ```javascript
 describe('Memorization Workflow (E2E)', () => {
-  test('should successfully memorize a conversation and retrieve memories', async () => {
-    // 1. Memorize
-    const conversationText = `
-      User: We should use async/await for all async operations.
-      Claude: Good idea. Let's refactor promises to async/await.
-      User: Also, let's adopt event-driven architecture.
-    `;
-    
-    const memorizeResponse = await ipcRenderer.invoke('memory:memorize', {
-      conversationText,
-      branchId: 'test-branch',
-      sessionId: 'test-session'
+  test('should memorize and create branch memory file', async () => {
+    const response = await ipcRenderer.invoke('memory:memorize', {
+      conversationText: 'User: We should use async/await.\nClaude: Good idea.',
+      branchId: 'test-branch'
     });
-    
-    expect(memorizeResponse.resourceId).toBeDefined();
-    expect(memorizeResponse.itemsExtracted).toBeGreaterThan(0);
-    
-    // 2. Retrieve
-    const retrieveResponse = await ipcRenderer.invoke('memory:retrieve', {
+
+    expect(response.itemsExtracted).toBeGreaterThan(0);
+
+    // Verify branch memory file was created
+    const branchMemory = await ipcRenderer.invoke('memory:get-branch-memory', {
+      branch: 'test-branch'
+    });
+
+    expect(branchMemory.content).toContain('async/await');
+    expect(branchMemory.content).toContain('## Summary');
+  });
+});
+```
+
+### 8.2 Retrieval Tests
+
+```javascript
+describe('Retrieval', () => {
+  test('should retrieve memories across branches', async () => {
+    const response = await ipcRenderer.invoke('memory:retrieve', {
       query: 'what async pattern do we use?'
     });
-    
-    expect(retrieveResponse.memories).toBeInstanceOf(Array);
-    expect(retrieveResponse.memories.some(m => m.content.includes('async/await'))).toBe(true);
+
+    expect(response.memories).toBeInstanceOf(Array);
+    expect(response.memories.length).toBeGreaterThan(0);
   });
-});
-```
 
-### 8.2 Retrieval Accuracy Tests
-
-```javascript
-describe('Retrieval Accuracy', () => {
-  test('should retrieve relevant memories for specific queries', async () => {
-    // Setup: Create test memories
-    const queries = [
-      { query: 'async pattern', expectedCategory: 'coding_preferences' },
-      { query: 'architecture decision', expectedCategory: 'architectural_decisions' },
-      { query: 'naming convention', expectedCategory: 'project_conventions' }
-    ];
-    
-    for (const test of queries) {
-      const response = await ipcRenderer.invoke('memory:retrieve', {
-        query: test.query
-      });
-      
-      expect(response.memories.length).toBeGreaterThan(0);
-      expect(response.memories.some(m => m.category === test.expectedCategory)).toBe(true);
-    }
-  });
-});
-```
-
-### 8.3 Conflict Detection Tests
-
-```javascript
-describe('Conflict Detection', () => {
-  test('should detect and report contradictory memories', async () => {
-    // Memorize conflicting preferences
+  test('should detect cross-branch conflicts', async () => {
+    // Memorize conflicting info in two branches
     await ipcRenderer.invoke('memory:memorize', {
       conversationText: 'We prefer async/await',
-      branchId: 'session-1',
-      sessionId: 'session-1'
+      branchId: 'branch-1'
     });
-    
+
     await ipcRenderer.invoke('memory:memorize', {
-      conversationText: 'Actually, Promise.then() is better for us',
-      branchId: 'session-2',
-      sessionId: 'session-2'
+      conversationText: 'Actually, Promise.then() chains are better',
+      branchId: 'branch-2'
     });
-    
-    // Retrieve should surface conflict
+
     const response = await ipcRenderer.invoke('memory:retrieve', {
       query: 'async pattern'
     });
-    
+
     expect(response.conflicts).toBeDefined();
-    expect(response.conflicts.length).toBeGreaterThan(0);
   });
 });
 ```
 
-### 8.4 Maintenance Task Verification
+### 8.3 Maintenance Tests
 
 ```javascript
-describe('Maintenance Tasks', () => {
-  test('should run nightly consolidation successfully', async () => {
-    const response = await ipcRenderer.invoke('memory:run-maintenance', {
-      type: 'nightly'
-    });
-    
-    expect(response.success).toBe(true);
-    expect(response.duration).toBeGreaterThan(0);
-    expect(response.results.duplicatesMerged).toBeDefined();
-  });
-  
-  test('should run weekly summarization', async () => {
+describe('Maintenance', () => {
+  test('should run weekly consolidation', async () => {
     const response = await ipcRenderer.invoke('memory:run-maintenance', {
       type: 'weekly'
     });
-    
+
     expect(response.success).toBe(true);
-    expect(response.results.itemsCompressed).toBeDefined();
+    expect(response.results.branchesConsolidated).toBeDefined();
   });
 });
 ```
 
-### 8.5 Performance Benchmarks
+### 8.4 Performance Benchmarks
 
 ```javascript
-describe('Performance Benchmarks', () => {
-  test('retrieval should complete in <500ms for typical query', async () => {
+describe('Performance', () => {
+  test('retrieval should complete in <500ms', async () => {
     const start = Date.now();
-    
-    await ipcRenderer.invoke('memory:retrieve', {
-      query: 'async pattern',
-      maxResults: 5
-    });
-    
-    const duration = Date.now() - start;
-    expect(duration).toBeLessThan(500);
-  });
-  
-  test('memorization should handle 1MB conversations', async () => {
-    const largeConversation = 'test'.repeat(256000); // ~1MB
-    
-    const start = Date.now();
-    
-    const response = await ipcRenderer.invoke('memory:memorize', {
-      conversationText: largeConversation,
-      branchId: 'large-test',
-      sessionId: 'large-session'
-    });
-    
-    const duration = Date.now() - start;
-    expect(response.error).not.toBeDefined();
-    expect(duration).toBeLessThan(5000); // Should complete in <5s
+    await ipcRenderer.invoke('memory:retrieve', { query: 'async pattern', maxResults: 5 });
+    expect(Date.now() - start).toBeLessThan(500);
   });
 });
 ```
@@ -2190,130 +1368,76 @@ describe('Performance Benchmarks', () => {
 
 **File:** `plugins/memory-plugin/README.md`
 
-```markdown
-# Memory Plugin
-
-Automatically extracts and memorizes key decisions from development conversations.
-
-## Installation
-
-1. Copy the plugin directory to `plugins/memory-plugin/`
-2. Restart Puffin
-3. Plugin will initialize memory storage on first run
-
-## Configuration
-
-Edit `plugins/memory-plugin/config/default-config.json` to customize:
-
-- Storage location
-- Extraction confidence threshold
-- Retrieval relevance threshold
-- Maintenance schedules
-
-## Usage
-
-### Manual Memory Extraction
-
-Right-click on a branch thread → "Save to Memory"
-
-### Memory Retrieval
-
-Type `/memory: <query>` in Claude Code to retrieve relevant memories.
-
-### Memory Review
-
-Open Memory Dashboard from Puffin menu to:
-- Browse category summaries
-- Resolve conflicting memories
-- View statistics
-
-## Troubleshooting
-
-If memories aren't being extracted:
-1. Check DevTools console for errors
-2. Verify `~/.puffin/memory/<user-id>` directory exists
-3. Check file permissions
-4. Review memory plugin logs
-```
+- Purpose: Automatic extraction of domain-level knowledge from branch conversations
+- Architecture: Two-layer (branch threads → branch memory files)
+- Storage: `~/.puffin/memory/branches/{branchId}.md`
+- Trigger: Automatic on new thread creation, background processing
+- Maintenance: Weekly on app startup (if 7+ days elapsed)
 
 ### 9.2 API Documentation
 
 **File:** `plugins/memory-plugin/API.md`
 
-Provide complete IPC channel reference with examples.
+Complete IPC channel reference matching Section 5.1.
 
-### 9.3 Configuration Reference Guide
+### 9.3 Configuration Reference
 
 **File:** `plugins/memory-plugin/CONFIGURATION.md`
 
-Document all configuration options with defaults and impact.
-
-### 9.4 Troubleshooting Guide
-
-**File:** `plugins/memory-plugin/TROUBLESHOOTING.md`
-
-Common issues and solutions.
+Document config options from the spec's Section 3.4.
 
 ---
 
 ## Implementation Checklist
 
-Use this checklist when implementing each step:
-
 ### Step 1: Data Models
-- [ ] Resource schema defined and documented
-- [ ] Item schema defined and documented
-- [ ] Category summary template created
-- [ ] Conflict record schema defined
-- [ ] All schemas validated as JSON/Markdown
+- [ ] Branch memory file template defined
+- [ ] Storage directory structure created
+- [ ] Maintenance log schema defined
+- [ ] No separate resource/item/category files (confirmed removed)
 
 ### Step 2: LLM Prompts
-- [ ] Main extraction prompt finalized
-- [ ] Category evolution prompt created
-- [ ] Edge case prompts defined
-- [ ] Response validation schema implemented
-- [ ] Fallback handling designed
+- [ ] Main extraction prompt with scope filtering
+- [ ] Branch memory evolution prompt
+- [ ] Edge case prompts
+- [ ] Response validation schema
 
 ### Step 3: Core Memory Manager
-- [ ] FileSystemLayer implemented and tested
-- [ ] MemoryWriter with write path complete
-- [ ] MemoryReader with read path complete
-- [ ] All file operations atomic and safe
+- [ ] FileSystemLayer with branch-level operations
+- [ ] MemoryWriter using branch memory evolution
+- [ ] MemoryReader with tiered retrieval
+- [ ] No resource ingestion layer (confirmed removed)
 
 ### Step 4: Retrieval System
-- [ ] TemporalDecay calculator implemented
-- [ ] RelevanceScorer with multi-factor scoring
-- [ ] ConflictDetector functional
-- [ ] TokenBudgetManager assembles results properly
+- [ ] RelevanceScorer without temporal decay
+- [ ] ConflictDetector for cross-branch conflicts
+- [ ] TokenBudgetManager
 
 ### Step 5: IPC Interface
-- [ ] All IPC channels registered
-- [ ] Input validation schemas complete
+- [ ] All IPC channels registered (branch-centric API)
+- [ ] Input validation schemas
 - [ ] Error handling consistent
-- [ ] Response formatting standardized
 - [ ] Integration tests passing
 
 ### Step 6: Maintenance Tasks
-- [ ] Scheduler configured and tested
-- [ ] Nightly consolidation working
-- [ ] Weekly summarization functional
-- [ ] Monthly re-indexing placeholder complete
+- [ ] Startup-triggered maintenance check (no cron)
+- [ ] Weekly consolidation
+- [ ] Monthly validation
+- [ ] Thread completion event subscription
 
 ### Step 7: Renderer UI
-- [ ] Status indicator component renders
-- [ ] Statistics dashboard displays metrics
-- [ ] Conflict resolution UI interactive
-- [ ] Manual review interface functional
+- [ ] Status indicator
+- [ ] Statistics dashboard (branch-centric)
+- [ ] Branch memory browser
+- [ ] Conflict resolution panel
 
 ### Step 8: Integration Testing
-- [ ] E2E workflows tested
-- [ ] Retrieval accuracy verified
-- [ ] Conflict detection working
-- [ ] Maintenance tasks validated
-- [ ] Performance benchmarks acceptable
+- [ ] E2E memorization workflow
+- [ ] Cross-branch retrieval
+- [ ] Conflict detection
+- [ ] Performance benchmarks
 
 ### Step 9: Documentation
-- [ ] README with installation instructions complete
-- [ ] API documentation comprehensive
-- [ ] Configuration reference detailed
-- [ ] Troubleshooting guide created
+- [ ] README
+- [ ] API documentation
+- [ ] Configuration reference

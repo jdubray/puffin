@@ -21,14 +21,15 @@ function buildEvolutionPrompt(existingSections, newExtractions, branchId) {
   const existingFormatted = formatExistingSections(existingSections)
   const newFormatted = formatNewExtractions(newExtractions)
 
-  return `You are a knowledge evolution engine for the "${branchId}" branch memory of a software project.
+  return `You are a JSON-only knowledge evolution engine. You MUST respond with raw JSON and nothing else. No markdown, no explanation, no preamble.
 
-Your job is to merge NEW extractions into the EXISTING memory. You must:
+Branch: "${branchId}"
 
-1. **Detect conflicts**: If a new item contradicts an existing item, keep the newer one and mark the old one as superseded.
-2. **Merge compatible items**: If a new item refines or extends an existing item, combine them into a single, more complete statement.
-3. **Deduplicate**: If a new item is already captured by an existing item, discard the new one.
-4. **Preserve valid knowledge**: Do not remove existing items unless they are contradicted or subsumed.
+Merge NEW extractions into EXISTING memory:
+- Detect conflicts: keep newer, mark old as superseded
+- Merge compatible: combine into single statement
+- Deduplicate: discard if already captured
+- Preserve valid: don't remove unless contradicted
 
 ## Existing Memory
 
@@ -38,32 +39,12 @@ ${existingFormatted}
 
 ${newFormatted}
 
-## Output Format
+Respond with ONLY this JSON (no other text):
+{"sections": {"${SECTIONS.FACTS}": ["item1"], "${SECTIONS.ARCHITECTURAL_DECISIONS}": ["item1"], "${SECTIONS.CONVENTIONS}": ["item1"], "${SECTIONS.BUG_PATTERNS}": ["item1"]}, "changes": [{"action": "added|updated|removed|kept", "section": "id", "item": "text", "reason": "why"}]}
 
-Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
+"sections" = complete merged result. "changes" = audit log. If no changes needed, return existing items with empty "changes" array.
 
-\`\`\`
-{
-  "sections": {
-    "${SECTIONS.FACTS}": ["<merged item 1>", "<merged item 2>"],
-    "${SECTIONS.ARCHITECTURAL_DECISIONS}": ["<merged item 1>"],
-    "${SECTIONS.CONVENTIONS}": ["<merged item 1>"],
-    "${SECTIONS.BUG_PATTERNS}": ["<merged item 1>"]
-  },
-  "changes": [
-    {
-      "action": "<added | updated | removed | kept>",
-      "section": "<section id>",
-      "item": "<the item text>",
-      "reason": "<brief explanation>"
-    }
-  ]
-}
-\`\`\`
-
-The "sections" object is the complete merged result for each section. The "changes" array documents what you did and why (for audit purposes).
-
-If no changes are needed, return the existing items unchanged with an empty "changes" array.`
+IMPORTANT: Your entire response must be parseable by JSON.parse(). Do not wrap in markdown fences. Do not include any text before or after the JSON.`
 }
 
 /**

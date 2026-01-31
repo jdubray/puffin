@@ -11,16 +11,47 @@
 const { SECTIONS } = require('../branch-template.js')
 
 /**
- * Format an array of prompt/response pairs into a readable transcript
+ * Maximum character budget for the transcript portion of the prompt.
+ * Claude CLI input has practical limits; exceeding ~100k chars risks exit code 1.
+ * We cap per-turn content and the overall transcript to stay within bounds.
+ */
+const MAX_TRANSCRIPT_CHARS = 80000
+const MAX_TURN_CHARS = 2000
+
+/**
+ * Format an array of prompt/response pairs into a readable transcript.
+ * Truncates individual turns and the overall transcript to stay within
+ * CLI input limits.
  * @param {Array<{ content: string, response: { content: string } }>} prompts
  * @returns {string} Formatted conversation transcript
  */
 function formatTranscript(prompts) {
-  return prompts.map((p, i) => {
-    const userText = p.content || ''
-    const assistantText = (p.response && p.response.content) || ''
+  const turns = prompts.map((p, i) => {
+    let userText = p.content || ''
+    let assistantText = (p.response && p.response.content) || ''
+
+    // Truncate individual turn content to avoid single massive turns
+    if (userText.length > MAX_TURN_CHARS) {
+      userText = userText.slice(0, MAX_TURN_CHARS) + '\n[...truncated]'
+    }
+    if (assistantText.length > MAX_TURN_CHARS) {
+      assistantText = assistantText.slice(0, MAX_TURN_CHARS) + '\n[...truncated]'
+    }
+
     return `--- Turn ${i + 1} ---\nUser: ${userText}\n\nAssistant: ${assistantText}`
-  }).join('\n\n')
+  })
+
+  // Build transcript within the character budget
+  let transcript = ''
+  for (const turn of turns) {
+    if (transcript.length + turn.length > MAX_TRANSCRIPT_CHARS) {
+      transcript += `\n\n[...${turns.length - turns.indexOf(turn)} remaining turns truncated for length]`
+      break
+    }
+    transcript += (transcript ? '\n\n' : '') + turn
+  }
+
+  return transcript
 }
 
 /**
@@ -32,48 +63,27 @@ function formatTranscript(prompts) {
 function buildExtractionPrompt(prompts, branchId) {
   const transcript = formatTranscript(prompts)
 
-  return `You are a knowledge extraction engine for the "${branchId}" branch of a software project.
+  return `You are a JSON-only knowledge extraction engine. You MUST respond with raw JSON and nothing else. No markdown, no explanation, no apologies, no preamble.
 
-Analyze the following conversation transcript and extract ONLY domain-level knowledge that applies across the entire codebase. Do NOT extract feature-specific implementation details.
+Branch: "${branchId}"
 
-## What to Extract
+Analyze the conversation transcript below and extract ONLY domain-level knowledge that applies across the entire codebase. Do NOT extract feature-specific implementation details.
 
-1. **${SECTIONS.FACTS}**: Cross-cutting technical facts, assumptions, constraints, and glossary terms that affect the whole solution.
-2. **${SECTIONS.ARCHITECTURAL_DECISIONS}**: Design choices, trade-offs, and rationale that span multiple components.
-3. **${SECTIONS.CONVENTIONS}**: Coding standards, naming patterns, structural rules, and project-wide conventions.
-4. **${SECTIONS.BUG_PATTERNS}**: Recurring issues, root causes, and fixes that could affect multiple areas.
+Extract into these sections:
+- "${SECTIONS.FACTS}": Cross-cutting technical facts, constraints, glossary terms
+- "${SECTIONS.ARCHITECTURAL_DECISIONS}": Design choices and trade-offs spanning multiple components
+- "${SECTIONS.CONVENTIONS}": Coding standards, naming patterns, structural rules
+- "${SECTIONS.BUG_PATTERNS}": Recurring issues and root causes affecting multiple areas
 
-## Scope Filter — IMPORTANT
+REJECT knowledge that is feature-specific, transient, trivially obvious, or opinion without project-wide impact.
+ACCEPT knowledge that applies broadly, affects architecture, or represents project-wide decisions/constraints.
 
-REJECT any knowledge that is:
-- Specific to a single feature, module, or component
-- About transient implementation state (e.g. "we fixed bug X in file Y")
-- Trivially obvious or already implied by the tech stack
-- Opinion or preference without project-wide impact
+If nothing worth extracting, respond: {"extractions": []}
 
-ACCEPT only knowledge that:
-- Needs to be known and enforced across the entire solution
-- Affects architectural or cross-cutting concerns
-- Represents a decision, constraint, or pattern that applies broadly
+Otherwise respond with ONLY this JSON (no other text):
+{"extractions": [{"section": "<${Object.values(SECTIONS).join('|')}>", "content": "<concise statement>", "confidence": <0.0-1.0>, "source_turns": [<turn numbers>]}]}
 
-## Output Format
-
-Respond with ONLY valid JSON matching this schema (no markdown, no explanation):
-
-\`\`\`
-{
-  "extractions": [
-    {
-      "section": "<one of: ${Object.values(SECTIONS).join(', ')}>",
-      "content": "<concise statement of the knowledge>",
-      "confidence": <0.0 to 1.0>,
-      "source_turns": [<turn numbers that support this extraction>]
-    }
-  ]
-}
-\`\`\`
-
-If there is nothing worth extracting, return: {"extractions": []}
+IMPORTANT: Your entire response must be parseable by JSON.parse(). Do not wrap in markdown fences. Do not include any text before or after the JSON.
 
 ## Conversation Transcript
 

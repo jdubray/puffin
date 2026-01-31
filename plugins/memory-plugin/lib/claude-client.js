@@ -10,8 +10,8 @@
 
 const { spawn } = require('child_process')
 
-/** Default timeout for LLM invocations (60 seconds) */
-const DEFAULT_TIMEOUT_MS = 60000
+/** Default timeout for LLM invocations (120 seconds) */
+const DEFAULT_TIMEOUT_MS = 120000
 
 class ClaudeClient {
   /**
@@ -40,7 +40,7 @@ class ClaudeClient {
     const model = options.model || this.model
     const timeoutMs = options.timeoutMs || this.timeoutMs
 
-    const args = ['--print', '--model', model]
+    const args = ['--print', '--model', model, '--max-turns', '1']
 
     return new Promise((resolve, reject) => {
       let stdout = ''

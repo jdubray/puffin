@@ -12,6 +12,7 @@ const { PluginStateStore } = require('./plugin-state-store')
 const { PluginManager } = require('./plugin-manager')
 const { ViewRegistry } = require('./view-registry')
 const { HistoryService } = require('./services/history-service')
+const { StoryService } = require('./services/story-service')
 const {
   parseViewContributions,
   validateViewContribution,
@@ -35,6 +36,7 @@ module.exports = {
   PluginManager,
   ViewRegistry,
   HistoryService,
+  StoryService,
   // Contribution parser exports
   parseViewContributions,
   validateViewContribution,

@@ -172,18 +172,32 @@ class DAGEngine {
     }
 
     const NODE_X_SPACING = 200
-    const NODE_Y_SPACING = 120
+    const NODE_Y_SPACING = 80
+
+    // For layer 0 with many disconnected nodes, use a grid layout
+    const GRID_COLUMNS = 5
 
     const nodes = []
     for (const [layer, ids] of layers) {
+      const useGrid = layer === 0 && ids.length > 6 && layers.size === 1
       ids.forEach((id, idx) => {
         const lc = lcMap.get(id)
+        let x, y
+        if (useGrid) {
+          const col = idx % GRID_COLUMNS
+          const row = Math.floor(idx / GRID_COLUMNS)
+          x = col * NODE_X_SPACING
+          y = row * NODE_Y_SPACING
+        } else {
+          x = layer * NODE_X_SPACING
+          y = idx * NODE_Y_SPACING
+        }
         nodes.push({
           id: lc.id,
           title: lc.title,
           status: lc.status,
-          x: layer * NODE_X_SPACING,
-          y: idx * NODE_Y_SPACING
+          x,
+          y
         })
       })
     }

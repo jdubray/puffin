@@ -68,6 +68,15 @@ const OutcomeLifecycleAPI = {
   },
   async removeDependency(fromId, toId) {
     return window.puffin.plugins.invoke(PLUGIN_NAME, 'removeDependency', { fromId, toId })
+  },
+  async getSynthesizedDag() {
+    return window.puffin.plugins.invoke(PLUGIN_NAME, 'getSynthesizedDag')
+  },
+  async resynthesizeDag() {
+    return window.puffin.plugins.invoke(PLUGIN_NAME, 'resynthesizeDag')
+  },
+  async resetAndReprocess() {
+    return window.puffin.plugins.invoke(PLUGIN_NAME, 'resetAndReprocess')
   }
 }
 
@@ -138,7 +147,8 @@ class OutcomeLifecycleView {
       <div class="olc-sidebar" role="navigation" aria-label="Lifecycle list">
         <div class="olc-sidebar-header">
           <h2 class="olc-sidebar-title">Outcomes</h2>
-          <button class="olc-btn olc-dag-toggle" aria-label="Toggle dependency graph" title="Dependency Graph"><span class="olc-dag-toggle-icon">⊞</span></button>
+          <button class="olc-btn olc-dag-toggle" aria-label="Toggle outcome flow diagram" title="Outcome Flow"><span class="olc-dag-toggle-icon">⊞</span></button>
+          <button class="olc-btn olc-btn-reset" aria-label="Reset and reprocess from stories" title="Reprocess">↻</button>
           <button class="olc-btn olc-btn-create" aria-label="Create new lifecycle" title="New Lifecycle">+</button>
         </div>
         <div class="olc-create-form olc-hidden" aria-hidden="true">
@@ -152,8 +162,10 @@ class OutcomeLifecycleView {
         <ul class="olc-list" role="listbox" aria-label="Lifecycles" tabindex="0"></ul>
       </div>
       <div class="olc-detail" role="main" aria-label="Lifecycle details">
-        <div class="olc-detail-empty">
-          <p>Select a lifecycle to view details</p>
+        <div class="olc-detail-content">
+          <div class="olc-detail-empty">
+            <p>Select a lifecycle to view details</p>
+          </div>
         </div>
         <div class="olc-dag-section olc-hidden" aria-hidden="true">
           <div class="olc-dag-host"></div>
@@ -193,10 +205,12 @@ class OutcomeLifecycleView {
 
   _renderDetail() {
     if (!this._detailPane) return
+    const contentEl = this._detailPane.querySelector('.olc-detail-content')
+    if (!contentEl) return
     const lc = this._selectedLifecycle
 
     if (!lc) {
-      this._detailPane.innerHTML = '<div class="olc-detail-empty"><p>Select a lifecycle to view details</p></div>'
+      contentEl.innerHTML = '<div class="olc-detail-empty"><p>Select a lifecycle to view details</p></div>'
       return
     }
 
@@ -225,7 +239,7 @@ class OutcomeLifecycleView {
       return `<option value="${s}" ${s === lc.status ? 'selected' : ''}>${sc.icon} ${sc.label}</option>`
     }).join('')
 
-    this._detailPane.innerHTML = `
+    contentEl.innerHTML = `
       <div class="olc-detail-header">
         <h2 class="olc-detail-title">${this._escapeHtml(lc.title)}</h2>
         <div class="olc-detail-actions">
@@ -276,6 +290,11 @@ class OutcomeLifecycleView {
       // DAG toggle
       if (e.target.closest('.olc-dag-toggle')) {
         this._toggleDag()
+        return
+      }
+      // Reset & reprocess
+      if (e.target.closest('.olc-btn-reset')) {
+        this._handleResetAndReprocess()
         return
       }
       // Create button
@@ -526,19 +545,75 @@ class OutcomeLifecycleView {
   async _toggleDag() {
     this._dagVisible = !this._dagVisible
     const section = this.container.querySelector('.olc-dag-section')
+    const contentEl = this.container.querySelector('.olc-detail-content')
     if (!section) return
 
     section.classList.toggle('olc-hidden', !this._dagVisible)
     section.setAttribute('aria-hidden', String(!this._dagVisible))
 
+    // Hide detail content when DAG is visible, show when hidden
+    if (contentEl) {
+      contentEl.classList.toggle('olc-hidden', this._dagVisible)
+    }
+
+    // Update toggle button appearance
+    const toggleBtn = this.container.querySelector('.olc-dag-toggle')
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('olc-dag-toggle-active', this._dagVisible)
+    }
+
     if (this._dagVisible) {
       const host = section.querySelector('.olc-dag-host')
       if (!this._dagRenderer) {
         this._dagRenderer = new DAGRenderer(host, {
-          onNodeClick: (id) => this._selectLifecycle(id)
+          synthesized: true,
+          onNodeClick: (nodeId) => {
+            // Synthesized nodes don't map to granular lifecycle IDs, just log for now
+            console.log('[outcome-lifecycle-plugin] Flow node clicked:', nodeId)
+          },
+          onResynthesizeClick: () => this._handleResynthesize()
         })
       }
       await this._dagRenderer.render()
+    }
+  }
+
+  async _handleResynthesize() {
+    const host = this.container.querySelector('.olc-dag-host')
+    if (!host) return
+
+    host.innerHTML = '<div class="olc-dag-loading">Re-synthesizing outcome flow…</div>'
+
+    try {
+      await OutcomeLifecycleAPI.resynthesizeDag()
+      if (this._dagRenderer) await this._dagRenderer.render()
+    } catch (err) {
+      console.error('[outcome-lifecycle-plugin] Re-synthesis failed:', err)
+      host.innerHTML = '<div class="olc-dag-error">Synthesis failed. Check that Claude CLI is available.</div>'
+    }
+  }
+
+  async _handleResetAndReprocess() {
+    // Disable the button to prevent double-clicks
+    const btn = this.container.querySelector('.olc-btn-reset')
+    if (btn) btn.disabled = true
+
+    try {
+      await OutcomeLifecycleAPI.resetAndReprocess()
+      // Reload the sidebar list
+      this._selectedId = null
+      this._selectedLifecycle = null
+      this._selectedStories = []
+      await this._loadLifecycles()
+      this._renderDetail()
+      // If DAG is visible, re-render it (cache is stale now)
+      if (this._dagVisible && this._dagRenderer) {
+        await this._dagRenderer.render()
+      }
+    } catch (err) {
+      console.error('[outcome-lifecycle-plugin] Reset and reprocess failed:', err)
+    } finally {
+      if (btn) btn.disabled = false
     }
   }
 

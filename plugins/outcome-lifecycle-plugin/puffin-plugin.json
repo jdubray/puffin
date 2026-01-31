@@ -29,18 +29,21 @@
       "outcomeDelete"
     ],
     "ipcHandlers": [
-      "plugin:outcome-lifecycle-plugin:createLifecycle",
-      "plugin:outcome-lifecycle-plugin:getLifecycle",
-      "plugin:outcome-lifecycle-plugin:updateLifecycle",
-      "plugin:outcome-lifecycle-plugin:deleteLifecycle",
-      "plugin:outcome-lifecycle-plugin:listLifecycles",
-      "plugin:outcome-lifecycle-plugin:mapStory",
-      "plugin:outcome-lifecycle-plugin:unmapStory",
-      "plugin:outcome-lifecycle-plugin:getStoriesForLifecycle",
-      "plugin:outcome-lifecycle-plugin:getLifecyclesForStory",
-      "plugin:outcome-lifecycle-plugin:getDag",
-      "plugin:outcome-lifecycle-plugin:addDependency",
-      "plugin:outcome-lifecycle-plugin:removeDependency"
+      "outcome-lifecycle-plugin:createLifecycle",
+      "outcome-lifecycle-plugin:getLifecycle",
+      "outcome-lifecycle-plugin:updateLifecycle",
+      "outcome-lifecycle-plugin:deleteLifecycle",
+      "outcome-lifecycle-plugin:listLifecycles",
+      "outcome-lifecycle-plugin:mapStory",
+      "outcome-lifecycle-plugin:unmapStory",
+      "outcome-lifecycle-plugin:getStoriesForLifecycle",
+      "outcome-lifecycle-plugin:getLifecyclesForStory",
+      "outcome-lifecycle-plugin:getDag",
+      "outcome-lifecycle-plugin:addDependency",
+      "outcome-lifecycle-plugin:removeDependency",
+      "outcome-lifecycle-plugin:getSynthesizedDag",
+      "outcome-lifecycle-plugin:resynthesizeDag",
+      "outcome-lifecycle-plugin:resetAndReprocess"
     ],
     "components": [
       "OutcomeLifecycleView"

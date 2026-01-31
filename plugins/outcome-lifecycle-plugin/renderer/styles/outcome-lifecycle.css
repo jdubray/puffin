@@ -150,6 +150,14 @@
   padding: 20px 24px;
 }
 
+.olc-detail-content {
+  height: 100%;
+}
+
+.olc-detail-content.olc-hidden {
+  display: none;
+}
+
 .olc-detail-empty {
   display: flex;
   align-items: center;
@@ -337,6 +345,17 @@ textarea.olc-input {
 .olc-btn-icon:hover {
   color: var(--color-error, #ef4444);
   background: rgba(239, 68, 68, 0.1);
+}
+
+.olc-btn-reset {
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 4px 8px;
+}
+
+.olc-btn-reset:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .olc-btn-create {

@@ -18,8 +18,10 @@
  * @param {Object} deps
  * @param {import('./lifecycle-repository').LifecycleRepository} deps.repository
  * @param {import('./dag-engine').DAGEngine} deps.dagEngine
+ * @param {import('./synthesis-engine').SynthesisEngine} [deps.synthesisEngine]
+ * @param {Function} [deps.reprocessFn] - Async function to wipe and re-extract outcomes from stories
  */
-function register(context, { repository, dagEngine }) {
+function register(context, { repository, dagEngine, synthesisEngine, reprocessFn }) {
   // ── Lifecycle CRUD ──────────────────────────────────────────────
 
   context.registerIpcHandler('createLifecycle', async (args) => {
@@ -111,6 +113,35 @@ function register(context, { repository, dagEngine }) {
 
   context.registerIpcHandler('getDag', async () => {
     return dagEngine.serialize()
+  })
+
+  // ── Synthesis Operations ──────────────────────────────────────
+
+  context.registerIpcHandler('getSynthesizedDag', async () => {
+    if (!synthesisEngine) {
+      throw new Error('Synthesis engine not available')
+    }
+    // Return cached graph if valid, otherwise synthesize
+    const cached = await synthesisEngine.getCached()
+    if (cached) return cached
+    return synthesisEngine.synthesize()
+  })
+
+  context.registerIpcHandler('resynthesizeDag', async () => {
+    if (!synthesisEngine) {
+      throw new Error('Synthesis engine not available')
+    }
+    await synthesisEngine.clearCache()
+    return synthesisEngine.synthesize()
+  })
+
+  // ── Reset & Reprocess ───────────────────────────────────────
+
+  context.registerIpcHandler('resetAndReprocess', async () => {
+    if (!reprocessFn) {
+      throw new Error('Reprocess function not available')
+    }
+    return reprocessFn()
   })
 }
 

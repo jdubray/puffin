@@ -14,7 +14,7 @@ const { checkFallback } = require('./prompts/fallbacks.js')
 const { validateExtractionResponse, validateEvolutionResponse, extractJson } = require('./validation.js')
 
 /** Maximum extraction retries on validation failure */
-const MAX_RETRIES = 1
+const MAX_RETRIES = 2
 
 class MemoryManager {
   /**

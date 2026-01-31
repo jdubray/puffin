@@ -10,7 +10,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
 const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, setClaudeServicePluginManager } = require('./ipc-handlers')
-const { PluginLoader, PluginManager, HistoryService } = require('./plugins')
+const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 
 // Keep a global reference of the window object
 let mainWindow = null
@@ -350,15 +350,20 @@ app.whenReady().then(async () => {
     getPuffinState: getPuffinState
   })
 
+  const storyService = new StoryService({
+    getPuffinState: getPuffinState
+  })
+
   pluginLoader.loadPlugins()
     .then(() => {
       // Initialize plugin manager after plugins are loaded
-      // Pass history service so plugins can access it
+      // Pass services so plugins can access them
       pluginManager = new PluginManager({
         loader: pluginLoader,
         ipcMain: ipcMain,
         services: {
-          history: historyService
+          history: historyService,
+          stories: storyService
         },
         projectPath: currentProjectPath
       })

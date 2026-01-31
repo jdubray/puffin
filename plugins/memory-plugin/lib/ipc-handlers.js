@@ -7,7 +7,7 @@
  * @module ipc-handlers
  */
 
-const CHANNEL_PREFIX = 'memory-plugin'
+const CHANNEL_PREFIX = 'plugin:memory-plugin'
 
 /**
  * Register all IPC handlers for the memory plugin
@@ -64,7 +64,7 @@ function register(ipcMain, { memoryManager, fsLayer, maintenance, logger }) {
     if (!exists) {
       return { success: true, exists: false, data: null }
     }
-    return { success: true, exists: true, data: parsed, raw }
+    return { success: true, exists: true, data: { parsed, raw } }
   })
 
   // memory-plugin:clear-branch-memory — Delete a branch memory file

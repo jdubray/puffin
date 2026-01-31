@@ -396,6 +396,12 @@ app.whenReady().then(async () => {
       // Connect plugin manager to Claude service for branch focus retrieval
       setClaudeServicePluginManager(pluginManager)
 
+      // Connect plugin registry to PuffinState for story status events
+      const puffinState = getPuffinState()
+      if (puffinState && pluginManager.getRegistry()) {
+        puffinState.setPluginRegistry(pluginManager.getRegistry())
+      }
+
       // Initialize and activate enabled plugins
       return pluginManager.initialize()
     })

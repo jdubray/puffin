@@ -26,17 +26,26 @@
     ],
     "ipcHandlers": [
       "memory-plugin:memorize",
-      "memory-plugin:get-branch-memory",
-      "memory-plugin:clear-branch-memory",
-      "memory-plugin:list-branches",
-      "memory-plugin:run-maintenance"
+      "memory-plugin:getBranchMemory",
+      "memory-plugin:clearBranchMemory",
+      "memory-plugin:listBranches",
+      "memory-plugin:runMaintenance"
     ],
     "components": [
       "MemoryView"
     ]
   },
   "contributes": {
-    "views": [],
+    "views": [
+      {
+        "id": "memory-view",
+        "name": "Memory",
+        "location": "nav",
+        "icon": "🧠",
+        "order": 75,
+        "component": "MemoryView"
+      }
+    ],
     "commands": [],
     "menus": {},
     "configuration": {

@@ -56,6 +56,16 @@ class PuffinState {
     this.database = database // SQLite database manager
     this.useSqlite = true // Flag to enable/disable SQLite (for debugging)
     this.sprintService = null // Sprint service layer (initialized after database)
+    this._pluginRegistry = null // Plugin registry for emitting events
+  }
+
+  /**
+   * Set the plugin registry for emitting story lifecycle events.
+   * Called after PluginManager initializes (which happens after PuffinState).
+   * @param {Object} registry - PluginRegistry instance with emitPluginEvent()
+   */
+  setPluginRegistry(registry) {
+    this._pluginRegistry = registry
   }
 
   /**
@@ -120,10 +130,16 @@ class PuffinState {
               console.log(`[PUFFIN-STATE] SprintService: sprint archived ${sprint.id}`)
               this.invalidateCache(['activeSprint'])
             },
-            onStoryStatusChanged: ({ storyId, status, allStoriesCompleted }) => {
+            onStoryStatusChanged: ({ storyId, status, sprintId, allStoriesCompleted }) => {
               console.log(`[PUFFIN-STATE] SprintService: story ${storyId} -> ${status}`)
               if (allStoriesCompleted) {
                 console.log('[PUFFIN-STATE] SprintService: all stories completed!')
+              }
+              // Emit plugin event for story status changes (e.g., outcome-lifecycle-plugin)
+              if (this._pluginRegistry) {
+                this._pluginRegistry.emitPluginEvent('story:status-changed', 'puffin-state', {
+                  storyId, status, sprintId, allStoriesCompleted
+                })
               }
             }
           })

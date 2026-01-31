@@ -27,7 +27,8 @@ const MemoryPlugin = {
    */
   async activate(context) {
     this.context = context
-    const logger = context.log || console
+    const ctxLog = context.log || console
+    const logger = { ...ctxLog, log: ctxLog.log || ctxLog.info || console.log }
 
     try {
       // Determine project root
@@ -59,10 +60,11 @@ const MemoryPlugin = {
         logger
       })
 
-      // Create Maintenance
+      // Create Maintenance (needs historyService to discover unmemoized branches on startup)
       this.maintenance = new Maintenance({
         fsLayer: this.fsLayer,
         memoryManager: this.memoryManager,
+        historyService,
         logger
       })
 
@@ -92,7 +94,8 @@ const MemoryPlugin = {
    * Deactivate the plugin
    */
   async deactivate() {
-    const logger = (this.context && this.context.log) || console
+    const ctxLog = (this.context && this.context.log) || console
+    const logger = { ...ctxLog, log: ctxLog.log || ctxLog.info || console.log }
 
     // Unregister IPC handlers
     if (this.context && this.context.ipcMain && this.registeredChannels.length > 0) {
@@ -112,23 +115,51 @@ const MemoryPlugin = {
    * Create an adapter that bridges Puffin's HistoryService to MemoryManager's expected interface
    * @param {Object} context - Plugin context
    * @param {Object} logger
-   * @returns {Object} Adapter with getBranchPrompts(branchId)
+   * @returns {Object} Adapter with getBranchPrompts(branchId) and getBranches()
    * @private
    */
   _createHistoryAdapter(context, logger) {
     return {
+      /**
+       * Get all branch IDs from the history service
+       * @returns {Promise<string[]>} Array of branch ID strings
+       */
+      async getBranches() {
+        const historyService = context.getService && context.getService('history')
+        if (historyService) {
+          const branches = await historyService.getBranches()
+          return branches.map(b => b.id || b.name).filter(Boolean)
+        }
+
+        // Fallback: read branch keys from history.json
+        logger.warn('[memory-plugin] HistoryService not available, reading history.json for branch list')
+        const fs = require('fs').promises
+        const historyPath = path.join(context.projectPath || process.cwd(), '.puffin', 'history.json')
+        try {
+          const raw = await fs.readFile(historyPath, 'utf-8')
+          const history = JSON.parse(raw)
+          return Object.keys(history.branches || {})
+        } catch (err) {
+          if (err.code === 'ENOENT') return []
+          throw err
+        }
+      },
+
       async getBranchPrompts(branchId) {
         // Try context.getService('history') first
         const historyService = context.getService && context.getService('history')
         if (historyService) {
           const prompts = await historyService.getPrompts(branchId)
           // Transform to the format MemoryManager expects: { content, response: { content } }
-          return prompts.map(p => ({
-            content: p.content || p.userContent || '',
-            response: {
-              content: p.responseContent || p.response || (p.response && p.response.content) || ''
+          return prompts.map(p => {
+            const responseContent = p.responseContent
+              || (p.response && typeof p.response === 'object' ? p.response.content : p.response)
+              || ''
+            return {
+              content: p.content || p.userContent || '',
+              response: { content: responseContent }
             }
-          }))
+          })
         }
 
         // Fallback: direct history.json file read

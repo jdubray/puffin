@@ -134,11 +134,50 @@ function extractJson(raw) {
 
   // Try to find JSON in code fences
   const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-  if (fenceMatch) return fenceMatch[1].trim()
+  if (fenceMatch) {
+    const candidate = fenceMatch[1].trim()
+    try {
+      JSON.parse(candidate)
+      return candidate
+    } catch { /* fall through to brace matching */ }
+  }
 
-  // Try to find a JSON object directly
+  // Try to find a JSON object using balanced brace matching
+  const firstBrace = raw.indexOf('{')
+  if (firstBrace !== -1) {
+    // Walk forward to find the matching closing brace
+    let depth = 0
+    let inString = false
+    let escape = false
+    for (let i = firstBrace; i < raw.length; i++) {
+      const ch = raw[i]
+      if (escape) { escape = false; continue }
+      if (ch === '\\' && inString) { escape = true; continue }
+      if (ch === '"' && !escape) { inString = !inString; continue }
+      if (inString) continue
+      if (ch === '{') depth++
+      else if (ch === '}') {
+        depth--
+        if (depth === 0) {
+          const candidate = raw.slice(firstBrace, i + 1).trim()
+          try {
+            JSON.parse(candidate)
+            return candidate
+          } catch { /* keep searching is not worth it; fall through */ }
+          break
+        }
+      }
+    }
+  }
+
+  // Last resort: greedy match validated by parse
   const braceMatch = raw.match(/\{[\s\S]*\}/)
-  if (braceMatch) return braceMatch[0].trim()
+  if (braceMatch) {
+    try {
+      JSON.parse(braceMatch[0].trim())
+      return braceMatch[0].trim()
+    } catch { /* fall through */ }
+  }
 
   return raw.trim()
 }

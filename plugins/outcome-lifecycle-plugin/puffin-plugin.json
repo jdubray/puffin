@@ -1,0 +1,70 @@
+{
+  "name": "outcome-lifecycle-plugin",
+  "version": "1.0.0",
+  "displayName": "Outcome Lifecycle",
+  "description": "Track desired outcomes from user stories and visualize their lifecycle as a dependency DAG",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["outcome", "lifecycle", "dag", "dependencies", "stories"],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "styles": [
+      "renderer/styles/outcome-lifecycle.css",
+      "renderer/styles/dag-renderer.css"
+    ],
+    "components": [
+      {
+        "name": "OutcomeLifecycleView",
+        "export": "OutcomeLifecycleView",
+        "type": "class",
+        "description": "Outcome lifecycle browser with DAG visualization"
+      }
+    ]
+  },
+  "extensionPoints": {
+    "actions": [
+      "outcomeCreate",
+      "outcomeUpdate",
+      "outcomeDelete"
+    ],
+    "ipcHandlers": [
+      "plugin:outcome-lifecycle-plugin:createLifecycle",
+      "plugin:outcome-lifecycle-plugin:getLifecycle",
+      "plugin:outcome-lifecycle-plugin:updateLifecycle",
+      "plugin:outcome-lifecycle-plugin:deleteLifecycle",
+      "plugin:outcome-lifecycle-plugin:listLifecycles",
+      "plugin:outcome-lifecycle-plugin:mapStory",
+      "plugin:outcome-lifecycle-plugin:unmapStory",
+      "plugin:outcome-lifecycle-plugin:getStoriesForLifecycle",
+      "plugin:outcome-lifecycle-plugin:getLifecyclesForStory",
+      "plugin:outcome-lifecycle-plugin:getDag",
+      "plugin:outcome-lifecycle-plugin:addDependency",
+      "plugin:outcome-lifecycle-plugin:removeDependency"
+    ],
+    "components": [
+      "OutcomeLifecycleView"
+    ]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "outcome-lifecycle-view",
+        "name": "Outcomes",
+        "location": "nav",
+        "icon": "🎯",
+        "order": 80,
+        "component": "OutcomeLifecycleView"
+      }
+    ],
+    "commands": [],
+    "menus": {},
+    "configuration": {
+      "title": "Outcome Lifecycle Settings",
+      "properties": {}
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

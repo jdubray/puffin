@@ -112,7 +112,7 @@ class PlanGenerator {
     const now = new Date().toISOString();
 
     this._db.prepare(
-      `INSERT INTO cre_plans (id, sprint_id, status, file_path, iteration, created_at, updated_at)
+      `INSERT INTO plans (id, sprint_id, status, file_path, iteration, created_at, updated_at)
        VALUES (?, ?, 'draft', ?, 0, ?, ?)`
     ).run(planId, sprintId, filePath, now, now);
 
@@ -180,7 +180,7 @@ class PlanGenerator {
 
     // Update DB row (AC8)
     this._db.prepare(
-      `UPDATE cre_plans SET status = 'review_pending', iteration = 1, updated_at = ?
+      `UPDATE plans SET status = 'review_pending', iteration = 1, updated_at = ?
        WHERE id = ?`
     ).run(new Date().toISOString(), planId);
 
@@ -227,7 +227,7 @@ class PlanGenerator {
 
     // Update DB (AC8)
     this._db.prepare(
-      `UPDATE cre_plans SET status = 'review_pending', iteration = ?, updated_at = ?
+      `UPDATE plans SET status = 'review_pending', iteration = ?, updated_at = ?
        WHERE id = ?`
     ).run(iteration, currentPlan.updatedAt, planId);
 
@@ -263,7 +263,7 @@ class PlanGenerator {
 
     // Update DB with approval (AC8)
     this._db.prepare(
-      `UPDATE cre_plans SET status = 'approved', approved_at = ?, updated_at = ?
+      `UPDATE plans SET status = 'approved', approved_at = ?, updated_at = ?
        WHERE id = ?`
     ).run(now, now, planId);
 

@@ -147,7 +147,7 @@ class AssertionGenerator {
   }
 
   /**
-   * AC5: Store an assertion in the cre_inspection_assertions table.
+   * AC5: Store an assertion in the inspection_assertions table.
    *
    * @param {string} planId
    * @param {string} storyId
@@ -159,7 +159,7 @@ class AssertionGenerator {
     const now = new Date().toISOString();
 
     this._db.prepare(
-      `INSERT INTO cre_inspection_assertions (id, plan_id, story_id, type, target, message, assertion_data, result, created_at)
+      `INSERT INTO inspection_assertions (id, plan_id, story_id, type, target, message, assertion_data, result, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`
     ).run(id, planId, storyId, assertion.type, assertion.target, assertion.message, JSON.stringify(assertion.assertion), now);
 
@@ -340,7 +340,7 @@ class AssertionGenerator {
    */
   _persistResult(assertionId, result, verifiedAt) {
     this._db.prepare(
-      `UPDATE cre_inspection_assertions SET result = ?, verified_at = ? WHERE id = ?`
+      `UPDATE inspection_assertions SET result = ?, verified_at = ? WHERE id = ?`
     ).run(result, verifiedAt, assertionId);
   }
 
@@ -351,7 +351,7 @@ class AssertionGenerator {
    */
   getByPlan(planId) {
     const rows = this._db.prepare(
-      'SELECT * FROM cre_inspection_assertions WHERE plan_id = ? ORDER BY created_at'
+      'SELECT * FROM inspection_assertions WHERE plan_id = ? ORDER BY created_at'
     ).all(planId);
     return rows.map(r => ({
       ...r,
@@ -366,7 +366,7 @@ class AssertionGenerator {
    */
   getByStory(storyId) {
     const rows = this._db.prepare(
-      'SELECT * FROM cre_inspection_assertions WHERE story_id = ? ORDER BY created_at'
+      'SELECT * FROM inspection_assertions WHERE story_id = ? ORDER BY created_at'
     ).all(storyId);
     return rows.map(r => ({
       ...r,

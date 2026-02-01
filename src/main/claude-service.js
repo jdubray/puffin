@@ -89,6 +89,26 @@ class ClaudeService {
   }
 
   /**
+   * Acquire the process lock for an external caller (e.g. CRE).
+   * Throws if the lock is already held.
+   * @returns {boolean} true if lock was acquired
+   */
+  acquireLock() {
+    if (this.isProcessRunning()) {
+      throw new Error('Claude CLI process is busy. Wait for the current operation to complete.')
+    }
+    this._processLock = true
+    return true
+  }
+
+  /**
+   * Release the process lock held by an external caller.
+   */
+  releaseLock() {
+    this._processLock = false
+  }
+
+  /**
    * Set the working directory for Claude CLI
    * @param {string} projectPath - Path to the project directory
    */

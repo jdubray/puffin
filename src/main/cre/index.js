@@ -26,6 +26,10 @@ const { queryForTask, formatForPrompt } = require('./lib/context-builder');
 const { withRetry, validateAndFilter, markStaleArtifacts, detectPlanCycles } = require('./lib/cre-errors');
 const { PlanGenerator } = require('./plan-generator');
 const { AssertionGenerator } = require('./assertion-generator');
+const { SchemaManager } = require('./schema-manager');
+const { CodeModel } = require('./code-model');
+const { RISGenerator } = require('./ris-generator');
+const { Introspector } = require('./introspector');
 
 /**
  * CRE module state — populated during initialize().
@@ -40,6 +44,18 @@ let planGenerator = null;
 /** @type {AssertionGenerator|null} */
 let assertionGenerator = null;
 
+/** @type {SchemaManager|null} */
+let schemaManager = null;
+
+/** @type {CodeModel|null} */
+let codeModel = null;
+
+/** @type {RISGenerator|null} */
+let risGenerator = null;
+
+/** @type {Introspector|null} */
+let introspector = null;
+
 /**
  * Whether the CRE currently holds the claude-service process lock.
  * @type {boolean}
@@ -53,11 +69,7 @@ let _holdingLock = false;
 function acquireProcessLock() {
   if (!ctx || !ctx.claudeService) return;
 
-  if (ctx.claudeService.isProcessRunning()) {
-    throw new Error('Claude CLI process is busy. Wait for the current operation to complete.');
-  }
-
-  ctx.claudeService._processLock = true;
+  ctx.claudeService.acquireLock();
   _holdingLock = true;
   console.log('[CRE] Process lock acquired');
 }
@@ -69,7 +81,7 @@ function releaseProcessLock() {
   if (!_holdingLock) return;
 
   if (ctx && ctx.claudeService) {
-    ctx.claudeService._processLock = false;
+    ctx.claudeService.releaseLock();
     console.log('[CRE] Process lock released');
   }
   _holdingLock = false;
@@ -113,11 +125,29 @@ async function initialize(context) {
 
   ctx = { ipcMain, db, config, projectRoot, claudeService: claudeService || null };
 
+  // Initialize SchemaManager
+  const creConfig = getCreConfig(config);
+  schemaManager = new SchemaManager({ storage, projectRoot, config: creConfig });
+
+  // Initialize CodeModel
+  codeModel = new CodeModel({ storage, schemaManager });
+  try {
+    await codeModel.load(projectRoot);
+  } catch (err) {
+    console.warn('[CRE] CodeModel load failed (non-fatal):', err.message);
+  }
+
   // Initialize PlanGenerator with dependencies
   planGenerator = new PlanGenerator({ db, storage, projectRoot });
 
   // Initialize AssertionGenerator
   assertionGenerator = new AssertionGenerator({ db, projectRoot });
+
+  // Initialize RISGenerator
+  risGenerator = new RISGenerator({ db, codeModel, storage, projectRoot });
+
+  // Initialize Introspector
+  introspector = new Introspector({ codeModel, schemaManager, projectRoot, config: creConfig });
 
   // Register IPC handlers only once (state:init may be called multiple times)
   if (!initialized) {
@@ -149,7 +179,7 @@ async function shutdown() {
 }
 
 /**
- * Registers all 8 CRE IPC handlers.
+ * Registers all 10 CRE IPC handlers.
  * @param {Electron.IpcMain} ipcMain
  */
 function registerHandlers(ipcMain) {
@@ -221,13 +251,19 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:generate-ris', async (_event, args) => {
     try {
-      const { planId, storyId } = args;
+      const { planId, storyId, sprintId, branch } = args;
       if (!planId || !storyId) {
         return { success: false, error: 'planId and storyId are required' };
       }
       return await withProcessLock(async () => {
         return await withRetry(async () => {
-          return { success: true, data: { planId, storyId, status: 'not-implemented' } };
+          const result = await risGenerator.generateRIS({
+            userStoryId: storyId,
+            planId,
+            sprintId: sprintId || '',
+            branch: branch || 'unknown'
+          });
+          return { success: true, data: result };
         }, { label: 'generate-ris' });
       });
     } catch (err) {
@@ -274,52 +310,74 @@ function registerHandlers(ipcMain) {
     }
   });
 
-  // ── Read-only handlers (no process lock needed) ─────────────────────
+  // ── Model update handlers (process lock for write paths) ────────────
 
   ipcMain.handle('cre:update-model', async (_event, args) => {
     try {
-      const { instance: newInstance, existingFiles } = args || {};
+      const { deltas, instance: newInstance, existingFiles, branch, baseBranch } = args || {};
 
-      if (newInstance) {
-        // AC2: Validate against schema, skip invalid elements
-        let schema = null;
-        try {
-          schema = await storage.readSchema(ctx.projectRoot);
-        } catch {
-          console.warn('[CRE] Could not read schema for validation, proceeding without');
-        }
-
-        const { filtered, warnings } = validateAndFilter(newInstance, schema);
-
-        // AC4: Mark artifacts referencing deleted files as stale
-        if (existingFiles) {
-          markStaleArtifacts(filtered, existingFiles);
-        }
-
-        // AC3: Persist — storage errors surface to user but filtered instance is returned
-        try {
-          await storage.writeInstance(ctx.projectRoot, filtered);
-        } catch (storageErr) {
-          console.error('[CRE] Storage write failed during model update:', storageErr.message);
-          return {
-            success: false,
-            error: `Storage write failed: ${storageErr.message}`,
-            data: { filtered, warnings, inMemoryOnly: true }
-          };
-        }
-
-        return {
-          success: true,
-          data: { updated: true, warnings, skipped: warnings.length }
-        };
+      // AC6: Introspection path — analyze git changes between branches
+      if (branch && baseBranch) {
+        return await withProcessLock(async () => {
+          const deltaResults = await introspector.analyzeChanges(branch, baseBranch);
+          return { success: true, data: { updated: true, applied: deltaResults.length, source: 'introspection' } };
+        });
       }
 
-      return { success: true, data: { updated: false, status: 'not-implemented' } };
+      // Delta-based update path (preferred)
+      if (deltas && Array.isArray(deltas)) {
+        return await withProcessLock(async () => {
+          const result = codeModel.update(deltas);
+          await codeModel.save();
+          return { success: true, data: { updated: true, ...result } };
+        });
+      }
+
+      // Legacy full-instance replacement path
+      if (newInstance) {
+        return await withProcessLock(async () => {
+          let schema = null;
+          try {
+            schema = await storage.readSchema(ctx.projectRoot);
+          } catch {
+            console.warn('[CRE] Could not read schema for validation, proceeding without');
+          }
+
+          const { filtered, warnings } = validateAndFilter(newInstance, schema);
+
+          if (existingFiles) {
+            markStaleArtifacts(filtered, existingFiles);
+          }
+
+          try {
+            await storage.writeInstance(ctx.projectRoot, filtered);
+          } catch (storageErr) {
+            console.error('[CRE] Storage write failed during model update:', storageErr.message);
+            return {
+              success: false,
+              error: `Storage write failed: ${storageErr.message}`,
+              data: { filtered, warnings, inMemoryOnly: true }
+            };
+          }
+
+          // Reload CodeModel from disk after full replacement
+          await codeModel.load(ctx.projectRoot);
+
+          return {
+            success: true,
+            data: { updated: true, warnings, skipped: warnings.length }
+          };
+        });
+      }
+
+      return { success: true, data: { updated: false } };
     } catch (err) {
       console.error('[CRE] cre:update-model error:', err.message);
       return { success: false, error: err.message };
     }
   });
+
+  // ── Read-only handlers (no process lock needed) ─────────────────────
 
   ipcMain.handle('cre:query-model', async (_event, args) => {
     try {
@@ -328,50 +386,8 @@ function registerHandlers(ipcMain) {
         return { success: false, error: 'taskDescription is required' };
       }
 
-      let instance;
-      try {
-        instance = await storage.readInstance(ctx.projectRoot);
-      } catch (readErr) {
-        // AC3: Storage read failure — surface error but provide empty context
-        console.error('[CRE] Instance read failed:', readErr.message);
-        const emptyContext = queryForTask({ taskDescription, instance: null, schema: null, maxArtifacts: 0 });
-        return {
-          success: true,
-          data: {
-            context: emptyContext,
-            formatted: formatForPrompt(emptyContext),
-            warning: `Instance read failed: ${readErr.message}`
-          }
-        };
-      }
-
-      let schema = null;
-      try {
-        schema = await storage.readSchema(ctx.projectRoot);
-      } catch {
-        console.warn('[CRE] Schema read failed, querying without validation');
-      }
-
-      // AC2: Validate and filter invalid elements before querying
-      if (schema) {
-        const { filtered } = validateAndFilter(instance, schema);
-        instance = filtered;
-      }
-
-      const context = queryForTask({
-        taskDescription,
-        instance,
-        schema,
-        maxArtifacts: maxArtifacts || 20
-      });
-
-      return {
-        success: true,
-        data: {
-          context,
-          formatted: formatForPrompt(context)
-        }
-      };
+      const result = codeModel.queryForTask(taskDescription, { maxArtifacts: maxArtifacts || 20 });
+      return { success: true, data: result };
     } catch (err) {
       console.error('[CRE] cre:query-model error:', err.message);
       return { success: false, error: err.message };
@@ -404,10 +420,17 @@ function registerHandlers(ipcMain) {
         return { success: false, error: 'storyId is required' };
       }
 
-      // Query from DB
-      const row = ctx.db.prepare(
-        'SELECT * FROM cre_ris WHERE story_id = ? ORDER BY updated_at DESC LIMIT 1'
-      ).get(storyId);
+      // Query from DB, optionally filtering by planId
+      let row;
+      if (planId) {
+        row = ctx.db.prepare(
+          'SELECT * FROM ris WHERE story_id = ? AND plan_id = ? ORDER BY created_at DESC LIMIT 1'
+        ).get(storyId, planId);
+      } else {
+        row = ctx.db.prepare(
+          'SELECT * FROM ris WHERE story_id = ? ORDER BY created_at DESC LIMIT 1'
+        ).get(storyId);
+      }
 
       return { success: true, data: row || null };
     } catch (err) {

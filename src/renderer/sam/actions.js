@@ -826,7 +826,16 @@ export const startSprintPlanning = () => ({
   }
 })
 
-// CRE planning phase completed — stores plan + RIS map
+// CRE plan generated and ready for user review (no auto-approve)
+export const crePlanReady = (planData) => ({
+  type: 'CRE_PLAN_READY',
+  payload: {
+    planData,
+    timestamp: Date.now()
+  }
+})
+
+// CRE planning phase completed — stores plan + RIS map (after user-initiated approval)
 export const crePlanningComplete = (plan, risMap, storyOrder) => ({
   type: 'CRE_PLANNING_COMPLETE',
   payload: {
@@ -859,6 +868,15 @@ export const creIntrospectionComplete = (storyId) => ({
 export const approvePlan = () => ({
   type: 'APPROVE_PLAN',
   payload: {
+    timestamp: Date.now()
+  }
+})
+
+// Trigger CRE approval flow (approve-plan + generate-ris) then proceed
+export const approvePlanWithCre = (planId) => ({
+  type: 'APPROVE_PLAN_WITH_CRE',
+  payload: {
+    planId,
     timestamp: Date.now()
   }
 })
@@ -1119,10 +1137,30 @@ export const setSprintPlan = (planContent) => ({
  * @param {string} clarifications - User's clarifying answers and requirements
  * @returns {Object} Action with type ITERATE_SPRINT_PLAN
  */
-export const iterateSprintPlan = (clarifications) => ({
+export const iterateSprintPlan = (clarifications, planId) => ({
   type: 'ITERATE_SPRINT_PLAN',
   payload: {
     clarifications,
+    planId,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Submit answers to CRE clarifying questions
+ * @param {string} planId - The plan ID
+ * @param {string} sprintId - The sprint ID
+ * @param {Array<Object>} stories - Sprint stories
+ * @param {Array<Object>} answers - Answers to clarifying questions
+ * @returns {Object} Action with type SUBMIT_PLAN_ANSWERS
+ */
+export const submitPlanAnswers = (planId, sprintId, stories, answers) => ({
+  type: 'SUBMIT_PLAN_ANSWERS',
+  payload: {
+    planId,
+    sprintId,
+    stories,
+    answers,
     timestamp: Date.now()
   }
 })

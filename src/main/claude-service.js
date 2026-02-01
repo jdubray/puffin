@@ -1528,7 +1528,10 @@ ${content}`
    */
   async sendPrompt(prompt, options = {}) {
     // CRITICAL: Prevent multiple CLI instances from being spawned
-    if (this.isProcessRunning()) {
+    // Check currentProcess (actual running process), not _processLock alone.
+    // _processLock may be held by an external caller (e.g. CRE) that is
+    // invoking sendPrompt as part of its locked session — that is allowed.
+    if (this.currentProcess !== null) {
       console.error('[sendPrompt-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
       return { success: false, error: 'A Claude CLI process is already running. Please wait for it to complete.' }
     }

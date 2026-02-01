@@ -1,0 +1,411 @@
+TAP version 13
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+# Subtest: CRE index.js - initialize and shutdown
+    # Subtest: should initialize with all required context fields
+    ok 1 - should initialize with all required context fields
+      ---
+      duration_ms: 31.7787
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: should register exactly 10 IPC handlers
+    ok 2 - should register exactly 10 IPC handlers
+      ---
+      duration_ms: 6.5921
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: should not register handlers twice on re-initialize
+    ok 3 - should not register handlers twice on re-initialize
+      ---
+      duration_ms: 8.8166
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: should accept claudeService in context
+    ok 4 - should accept claudeService in context
+      ---
+      duration_ms: 7.7188
+      ...
+    # Subtest: shutdown should not throw when not initialized
+    ok 5 - shutdown should not throw when not initialized
+      ---
+      duration_ms: 2.2014
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: shutdown should release process lock if held
+    ok 6 - shutdown should release process lock if held
+      ---
+      duration_ms: 6.6945
+      ...
+    1..6
+ok 1 - CRE index.js - initialize and shutdown
+  ---
+  duration_ms: 65.3795
+  type: 'suite'
+  ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+# Subtest: CRE IPC handler response format
+    # Subtest: cre:generate-plan returns error on missing args
+    ok 1 - cre:generate-plan returns error on missing args
+      ---
+      duration_ms: 8.6961
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE-PLAN] State: idle → analyzing
+# [CRE-AI] Sending analyze-ambiguities (model: haiku, timeout: 60000ms)
+# [CRE-AI] analyze-ambiguities failed: mock
+# [CRE-PLAN] State: analyzing → questions_pending
+# [CRE-PLAN] State: questions_pending → generating
+# [CRE-AI] Sending generate-plan (model: sonnet, timeout: 120000ms)
+# [CRE-PLAN] AI ambiguity analysis unavailable, proceeding without questions
+# [CRE-AI] generate-plan failed: mock
+# [CRE-PLAN] AI plan generation unavailable, creating empty plan skeleton
+# [CRE-PLAN] State: generating → review_pending
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: cre:generate-plan returns success with valid args
+    ok 2 - cre:generate-plan returns success with valid args
+      ---
+      duration_ms: 10.5048
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:refine-plan returns error on missing args
+    ok 3 - cre:refine-plan returns error on missing args
+      ---
+      duration_ms: 7.5437
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE-PLAN] State: idle → analyzing
+# [CRE-AI] Sending analyze-ambiguities (model: haiku, timeout: 60000ms)
+# [CRE-AI] analyze-ambiguities failed: mock
+# [CRE-PLAN] AI ambiguity analysis unavailable, proceeding without questions
+# [CRE-PLAN] State: analyzing → questions_pending
+# [CRE-PLAN] State: questions_pending → generating
+# [CRE-AI] Sending generate-plan (model: sonnet, timeout: 120000ms)
+# [CRE-AI] generate-plan failed: mock
+# [CRE-PLAN] AI plan generation unavailable, creating empty plan skeleton
+# [CRE-PLAN] State: generating → review_pending
+# [CRE] Process lock released
+# [CRE] Process lock acquired
+# [CRE-PLAN] State: review_pending → generating
+# [CRE-AI] Sending refine-plan (model: sonnet, timeout: 120000ms)
+# [CRE-AI] refine-plan failed: mock
+# [CRE-PLAN] AI refinement unavailable, plan unchanged
+# [CRE-PLAN] State: generating → review_pending
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: cre:refine-plan returns success with valid args
+    ok 4 - cre:refine-plan returns success with valid args
+      ---
+      duration_ms: 9.8071
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:approve-plan returns error on missing planId
+    ok 5 - cre:approve-plan returns error on missing planId
+      ---
+      duration_ms: 6.2969
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE-PLAN] State: idle → analyzing
+# [CRE-AI] Sending analyze-ambiguities (model: haiku, timeout: 60000ms)
+# [CRE-AI] analyze-ambiguities failed: mock
+# [CRE-PLAN] AI ambiguity analysis unavailable, proceeding without questions
+# [CRE-AI] generate-plan failed: mock
+# [CRE-PLAN] AI plan generation unavailable, creating empty plan skeleton
+# [CRE-PLAN] State: analyzing → questions_pending
+# [CRE-PLAN] State: questions_pending → generating
+# [CRE-AI] Sending generate-plan (model: sonnet, timeout: 120000ms)
+# [CRE-PLAN] State: generating → review_pending
+# [CRE] Process lock released
+# [CRE] Process lock acquired
+# [CRE-PLAN] State: review_pending → approved
+# [CRE-PLAN] Plan a21977c6-ecc4-4de0-8aa4-8c8cb5129735 approved. 0 assertion prompts generated.
+# [CRE-PLAN] State: approved → idle
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: cre:approve-plan returns success with valid args
+    ok 6 - cre:approve-plan returns success with valid args
+      ---
+      duration_ms: 9.1329
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:generate-ris returns error on missing args
+    ok 7 - cre:generate-ris returns error on missing args
+      ---
+      duration_ms: 5.3882
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE] generate-ris failed, retrying in 1000ms: User story not found: s1
+# [CRE] generate-ris failed after retry: User story not found: s1
+# [CRE] Process lock released
+# [CRE] cre:generate-ris error: User story not found: s1
+# [CRE] Shutdown complete
+    # Subtest: cre:generate-ris returns success with valid args
+    not ok 8 - cre:generate-ris returns success with valid args
+      ---
+      duration_ms: 1016.2108
+      location: 'C:\\Users\\jjdub\\code\\puffin\\tests\\cre\\index.test.js:245:3'
+      failureType: 'testCodeFailure'
+      error: |-
+        Expected values to be strictly equal:
+        
+        false !== true
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: 'strictEqual'
+      stack: |-
+        TestContext.<anonymous> (C:\Users\jjdub\code\puffin\tests\cre\index.test.js:249:12)
+        async Test.run (node:internal/test_runner/test:797:9)
+        async Suite.processPendingSubtests (node:internal/test_runner/test:526:7)
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:update-model returns success
+    ok 9 - cre:update-model returns success
+      ---
+      duration_ms: 8.4265
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:query-model returns error on missing taskDescription
+    ok 10 - cre:query-model returns error on missing taskDescription
+      ---
+      duration_ms: 4.6827
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:get-plan returns error on missing sprintId
+    ok 11 - cre:get-plan returns error on missing sprintId
+      ---
+      duration_ms: 5.299
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:get-ris returns error on missing storyId
+    ok 12 - cre:get-ris returns error on missing storyId
+      ---
+      duration_ms: 5.6651
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:generate-assertions returns error on missing args
+    ok 13 - cre:generate-assertions returns error on missing args
+      ---
+      duration_ms: 6.7605
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE-AI] Sending generate-assertions (model: haiku, timeout: 60000ms)
+# [CRE-AI] generate-assertions failed: mock
+# [CRE-ASSERT] AI assertion generation unavailable, no assertions created
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: cre:generate-assertions returns success with valid args
+    ok 14 - cre:generate-assertions returns success with valid args
+      ---
+      duration_ms: 5.6226
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:verify-assertions returns error on missing args
+    ok 15 - cre:verify-assertions returns error on missing args
+      ---
+      duration_ms: 6.2136
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: cre:verify-assertions returns success with planId
+    ok 16 - cre:verify-assertions returns success with planId
+      ---
+      duration_ms: 5.9364
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+# [CRE] Shutdown complete
+    # Subtest: cre:get-ris returns null data for nonexistent story
+    ok 17 - cre:get-ris returns null data for nonexistent story
+      ---
+      duration_ms: 8.6934
+      ...
+    1..17
+not ok 2 - CRE IPC handler response format
+  ---
+  duration_ms: 1132.245
+  type: 'suite'
+  location: 'C:\\Users\\jjdub\\code\\puffin\\tests\\cre\\index.test.js:174:1'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+# Subtest: CRE process lock management
+    # Subtest: acquireProcessLock sets _processLock on claudeService
+    ok 1 - acquireProcessLock sets _processLock on claudeService
+      ---
+      duration_ms: 8.6132
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: releaseProcessLock clears _processLock on claudeService
+    ok 2 - releaseProcessLock clears _processLock on claudeService
+      ---
+      duration_ms: 7.6742
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: acquireProcessLock throws when claudeService is already busy
+    ok 3 - acquireProcessLock throws when claudeService is already busy
+      ---
+      duration_ms: 7.0799
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: withProcessLock acquires and releases around async work
+    ok 4 - withProcessLock acquires and releases around async work
+      ---
+      duration_ms: 6.2398
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: withProcessLock releases lock on error
+    ok 5 - withProcessLock releases lock on error
+      ---
+      duration_ms: 7.9978
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Process lock acquired
+# [CRE-PLAN] State: idle → analyzing
+# [CRE-AI] Sending analyze-ambiguities (model: haiku, timeout: 60000ms)
+# [CRE-AI] analyze-ambiguities failed: mock
+# [CRE-PLAN] AI ambiguity analysis unavailable, proceeding without questions
+# [CRE-PLAN] State: analyzing → questions_pending
+# [CRE-PLAN] State: questions_pending → generating
+# [CRE-AI] Sending generate-plan (model: sonnet, timeout: 120000ms)
+# [CRE-AI] generate-plan failed: mock
+# [CRE-PLAN] AI plan generation unavailable, creating empty plan skeleton
+# [CRE-PLAN] State: generating → review_pending
+# [CRE] Process lock released
+# [CRE] Shutdown complete
+    # Subtest: active IPC handlers acquire process lock
+    ok 6 - active IPC handlers acquire process lock
+      ---
+      duration_ms: 10.8842
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] cre:generate-plan error: Claude CLI process is busy. Wait for the current operation to complete.
+# [CRE] Shutdown complete
+    # Subtest: active IPC handler returns error when CLI is busy
+    ok 7 - active IPC handler returns error when CLI is busy
+      ---
+      duration_ms: 8.5487
+      ...
+# [CRE] Initialized default files: schema, instance, memo
+# [CRE] Registered 10 IPC handlers
+# [CRE] Initialized
+# [CRE] Shutdown complete
+    # Subtest: read-only handlers work even when CLI is busy
+    ok 8 - read-only handlers work even when CLI is busy
+      ---
+      duration_ms: 7.6366
+      ...
+    1..8
+ok 3 - CRE process lock management
+  ---
+  duration_ms: 65.4052
+  type: 'suite'
+  ...
+1..3
+# tests 31
+# suites 3
+# pass 30
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1338.4047

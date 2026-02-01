@@ -8,6 +8,7 @@ const {
   getState,
   reset,
   runPlanningPhase,
+  runApprovalPhase,
   runRefinement,
   runIntrospection
 } = require('../../src/main/cre/lib/cre-orchestrator');
@@ -21,13 +22,26 @@ function makeStories() {
   ];
 }
 
-function makeHandlers(overrides = {}) {
+function makePlanningHandlers(overrides = {}) {
   let locked = false;
   return {
     generatePlan: overrides.generatePlan || (async () => ({
       success: true,
       data: { planId: 'plan-1', planItems: [{ storyId: 'S1' }, { storyId: 'S2' }] }
     })),
+    submitAnswers: overrides.submitAnswers || (async () => ({
+      success: true,
+      data: { planId: 'plan-1' }
+    })),
+    acquireLock: overrides.acquireLock || (() => { locked = true; }),
+    releaseLock: overrides.releaseLock || (() => { locked = false; }),
+    get locked() { return locked; }
+  };
+}
+
+function makeApprovalHandlers(overrides = {}) {
+  let locked = false;
+  return {
     approvePlan: overrides.approvePlan || (async () => ({ success: true, data: { planId: 'plan-1' } })),
     generateRis: overrides.generateRis || (async ({ storyId }) => ({
       success: true,
@@ -53,33 +67,48 @@ describe('CRE Orchestrator - getState and reset', () => {
   });
 
   it('reset should clear all state', () => {
-    // Dirty the state by running something (we'll just check reset works)
     reset();
     const state = getState();
     assert.equal(state.phase, CrePhase.IDLE);
   });
 });
 
-describe('CRE Orchestrator - runPlanningPhase', () => {
+describe('CRE Orchestrator - runPlanningPhase (plan generation only)', () => {
   beforeEach(() => reset());
 
-  it('should run full sequence: generate → approve → RIS per story (AC2)', async () => {
-    const handlers = makeHandlers();
+  it('should generate plan and return for user review without approving (AC2)', async () => {
+    const handlers = makePlanningHandlers();
     const stories = makeStories();
     const result = await runPlanningPhase({ sprintId: 'sprint-1', stories }, handlers);
 
     assert.ok(result.plan);
     assert.equal(result.plan.planId, 'plan-1');
-    assert.ok(result.risMap.S1);
-    assert.ok(result.risMap.S2);
-    assert.equal(result.risMap.S1.markdown, '# RIS for S1');
-    assert.equal(result.risMap.S2.markdown, '# RIS for S2');
+    // Should NOT have risMap — approval is separate
+    assert.equal(result.risMap, undefined);
+  });
+
+  it('should call submitAnswers when provided', async () => {
+    let submitCalled = false;
+    const handlers = makePlanningHandlers({
+      submitAnswers: async () => { submitCalled = true; return { success: true, data: {} }; }
+    });
+
+    await runPlanningPhase({ sprintId: 'sprint-1', stories: makeStories() }, handlers);
+    assert.ok(submitCalled, 'submitAnswers should be called');
+  });
+
+  it('should skip submitAnswers when not provided', async () => {
+    const handlers = makePlanningHandlers();
+    delete handlers.submitAnswers;
+
+    const result = await runPlanningPhase({ sprintId: 'sprint-1', stories: makeStories() }, handlers);
+    assert.ok(result.plan);
   });
 
   it('should acquire and release process lock (AC3)', async () => {
     let lockAcquired = false;
     let lockReleased = false;
-    const handlers = makeHandlers({
+    const handlers = makePlanningHandlers({
       acquireLock: () => { lockAcquired = true; },
       releaseLock: () => { lockReleased = true; }
     });
@@ -91,7 +120,7 @@ describe('CRE Orchestrator - runPlanningPhase', () => {
 
   it('should release lock on plan generation failure (AC3)', async () => {
     let lockReleased = false;
-    const handlers = makeHandlers({
+    const handlers = makePlanningHandlers({
       generatePlan: async () => ({ success: false, error: 'AI timeout' }),
       releaseLock: () => { lockReleased = true; }
     });
@@ -104,7 +133,7 @@ describe('CRE Orchestrator - runPlanningPhase', () => {
   });
 
   it('should set error state on failure', async () => {
-    const handlers = makeHandlers({
+    const handlers = makePlanningHandlers({
       generatePlan: async () => ({ success: false, error: 'bad request' })
     });
 
@@ -116,9 +145,67 @@ describe('CRE Orchestrator - runPlanningPhase', () => {
     assert.ok(state.error.includes('bad request'));
   });
 
+  it('should return to IDLE phase on success (user reviews plan)', async () => {
+    await runPlanningPhase({ sprintId: 'sprint-1', stories: makeStories() }, makePlanningHandlers());
+    assert.equal(getState().phase, CrePhase.IDLE);
+  });
+});
+
+describe('CRE Orchestrator - runApprovalPhase (user-initiated)', () => {
+  beforeEach(() => reset());
+
+  it('should approve plan and generate RIS per story', async () => {
+    const handlers = makeApprovalHandlers();
+    const stories = makeStories();
+    const result = await runApprovalPhase({ planId: 'plan-1', stories }, handlers);
+
+    assert.ok(result.risMap);
+    assert.ok(result.risMap.S1);
+    assert.ok(result.risMap.S2);
+    assert.equal(result.risMap.S1.markdown, '# RIS for S1');
+    assert.equal(result.risMap.S2.markdown, '# RIS for S2');
+  });
+
+  it('should acquire and release process lock (AC3)', async () => {
+    let lockAcquired = false;
+    let lockReleased = false;
+    const handlers = makeApprovalHandlers({
+      acquireLock: () => { lockAcquired = true; },
+      releaseLock: () => { lockReleased = true; }
+    });
+
+    await runApprovalPhase({ planId: 'plan-1', stories: makeStories() }, handlers);
+    assert.ok(lockAcquired);
+    assert.ok(lockReleased);
+  });
+
+  it('should throw on approve failure', async () => {
+    const handlers = makeApprovalHandlers({
+      approvePlan: async () => ({ success: false, error: 'denied' })
+    });
+
+    await assert.rejects(
+      () => runApprovalPhase({ planId: 'plan-1', stories: makeStories() }, handlers),
+      { message: /Plan approval failed: denied/ }
+    );
+  });
+
+  it('should release lock on approval failure', async () => {
+    let lockReleased = false;
+    const handlers = makeApprovalHandlers({
+      approvePlan: async () => ({ success: false, error: 'denied' }),
+      releaseLock: () => { lockReleased = true; }
+    });
+
+    await assert.rejects(
+      () => runApprovalPhase({ planId: 'plan-1', stories: makeStories() }, handlers)
+    );
+    assert.ok(lockReleased);
+  });
+
   it('should continue if one RIS fails (graceful degradation)', async () => {
     let callCount = 0;
-    const handlers = makeHandlers({
+    const handlers = makeApprovalHandlers({
       generateRis: async ({ storyId }) => {
         callCount++;
         if (storyId === 'S1') return { success: false, error: 'RIS fail' };
@@ -126,26 +213,15 @@ describe('CRE Orchestrator - runPlanningPhase', () => {
       }
     });
 
-    const result = await runPlanningPhase({ sprintId: 'sprint-1', stories: makeStories() }, handlers);
+    const result = await runApprovalPhase({ planId: 'plan-1', stories: makeStories() }, handlers);
     assert.equal(callCount, 2, 'Should attempt RIS for both stories');
     assert.ok(result.risMap.S1.error, 'S1 should have error');
     assert.equal(result.risMap.S2.markdown, '# ok');
   });
 
   it('should reach COMPLETE phase on success', async () => {
-    await runPlanningPhase({ sprintId: 'sprint-1', stories: makeStories() }, makeHandlers());
+    await runApprovalPhase({ planId: 'plan-1', stories: makeStories() }, makeApprovalHandlers());
     assert.equal(getState().phase, CrePhase.COMPLETE);
-  });
-
-  it('should throw on approve failure', async () => {
-    const handlers = makeHandlers({
-      approvePlan: async () => ({ success: false, error: 'denied' })
-    });
-
-    await assert.rejects(
-      () => runPlanningPhase({ sprintId: 'sprint-1', stories: makeStories() }, handlers),
-      { message: /Plan approval failed: denied/ }
-    );
   });
 });
 

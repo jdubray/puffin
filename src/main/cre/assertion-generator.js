@@ -35,6 +35,7 @@ const AssertionResult = {
 };
 
 const { randomUUID: uuidv4 } = require('crypto');
+const { sendCrePrompt, MODEL_EXTRACT, TIMEOUT_EXTRACT } = require('./lib/ai-client');
 
 /** Maximum allowed length for user/AI-provided regex patterns. */
 const MAX_PATTERN_LENGTH = 200;
@@ -67,9 +68,10 @@ class AssertionGenerator {
    * @param {string} deps.projectRoot - Absolute path to project root.
    * @param {Object} [deps.promptBuilders] - Prompt template modules (for testing).
    */
-  constructor({ db, projectRoot, promptBuilders = null }) {
+  constructor({ db, projectRoot, claudeService = null, promptBuilders = null }) {
     this._db = db;
     this._projectRoot = projectRoot;
+    this._claudeService = claudeService;
     this._promptBuilders = promptBuilders || {
       generateAssertions: require('./lib/prompts/generate-assertions')
     };
@@ -107,10 +109,40 @@ class AssertionGenerator {
       codeModelContext
     });
 
-    // If assertions are provided (from AI response or test), store them
+    // Use provided assertions, or generate via AI if none given (FR-04)
+    let toStore = assertions;
+    let fromAI = false;
+    if (!toStore || toStore.length === 0) {
+      fromAI = true;
+      const aiResult = await sendCrePrompt(this._claudeService, prompt, {
+        model: MODEL_EXTRACT,
+        timeout: TIMEOUT_EXTRACT,
+        label: 'generate-assertions'
+      });
+
+      if (aiResult.success && aiResult.data && Array.isArray(aiResult.data.assertions)) {
+        toStore = aiResult.data.assertions;
+        console.log(`[CRE-ASSERT] AI generated ${toStore.length} assertions for story ${storyId}`);
+      } else {
+        console.warn('[CRE-ASSERT] AI assertion generation unavailable, no assertions created');
+        toStore = [];
+      }
+    }
+
+    // Validate and store assertions
     const stored = [];
-    if (assertions && assertions.length > 0) {
-      for (const a of assertions) {
+    for (const a of toStore) {
+      if (fromAI) {
+        // AI-generated assertions: skip invalid ones gracefully
+        try {
+          const validated = this._validateAssertion(a);
+          const record = this._storeAssertion(planId, storyId, validated);
+          stored.push(record);
+        } catch (err) {
+          console.warn(`[CRE-ASSERT] Skipping invalid assertion: ${err.message}`);
+        }
+      } else {
+        // User-provided assertions: throw on validation failure
         const validated = this._validateAssertion(a);
         const record = this._storeAssertion(planId, storyId, validated);
         stored.push(record);

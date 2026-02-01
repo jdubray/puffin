@@ -1,0 +1,7 @@
+{
+  "name": "@puffin/hdsl-types",
+  "version": "1.0.0",
+  "description": "Shared h-M3 v2 primitive type definitions, base schema, and prose operations for h-DSL consumers.",
+  "main": "index.js",
+  "license": "MIT"
+}

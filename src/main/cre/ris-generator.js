@@ -13,6 +13,7 @@ const path = require('path');
 const { randomUUID: uuidv4 } = require('crypto');
 const { formatRis } = require('./lib/ris-formatter');
 const generateRisPrompt = require('./lib/prompts/generate-ris');
+const { sendCrePrompt, MODEL_COMPLEX, TIMEOUT_COMPLEX } = require('./lib/ai-client');
 
 /** @readonly @enum {string} */
 const RisStatus = {
@@ -32,11 +33,12 @@ class RISGenerator {
    * @param {Object} deps.storage - CRE storage module.
    * @param {string} deps.projectRoot - Absolute path to project root.
    */
-  constructor({ db, codeModel, storage, projectRoot }) {
+  constructor({ db, codeModel, storage, projectRoot, claudeService = null }) {
     this._db = db;
     this._codeModel = codeModel;
     this._storage = storage;
     this._projectRoot = projectRoot;
+    this._claudeService = claudeService;
   }
 
   /**
@@ -96,26 +98,48 @@ class RISGenerator {
       projectConfig: { branch }
     });
 
-    // 7. AC4: Format RIS using the formatter
-    // TODO: Send `prompt` to 3CLI via claudeService and parse the AI response
-    // to produce risData instead of building it locally below.
-    const risData = {
-      context: {
-        branch,
-        dependencies: planItem.dependencies || [],
-        codeModelVersion: this._codeModel.schemaVersion
-      },
-      objective: `Implement "${parsedStory.title}": ${parsedStory.description}`,
-      instructions: this._buildInstructions(planItem),
-      conventions: ['Follow camelCase naming', 'Use JSDoc for public interfaces', 'Follow existing patterns in the codebase'],
-      assertions: assertions.map(a => ({
-        message: a.message || a.description || '',
-        type: a.type,
-        target: a.target
-      }))
-    };
+    // 7. AC4: Generate RIS via AI, with local fallback
+    let markdown;
+    const aiResult = await sendCrePrompt(this._claudeService, prompt, {
+      model: MODEL_COMPLEX,
+      timeout: TIMEOUT_COMPLEX,
+      label: 'generate-ris'
+    });
 
-    const markdown = formatRis(risData);
+    if (aiResult.success && aiResult.data) {
+      // AI returned structured RIS — use the markdown field directly
+      markdown = aiResult.data.markdown || '';
+      if (!markdown && aiResult.data.sections) {
+        // Fallback: reconstruct from sections if markdown field is missing
+        markdown = formatRis({
+          context: { branch, dependencies: planItem.dependencies || [], codeModelVersion: this._codeModel.schemaVersion },
+          objective: aiResult.data.sections.objective || `Implement "${parsedStory.title}"`,
+          instructions: [aiResult.data.sections.instructions || ''],
+          conventions: [aiResult.data.sections.conventions || ''],
+          assertions: assertions.map(a => ({ message: a.message || a.description || '', type: a.type, target: a.target }))
+        });
+      }
+      console.log(`[CRE-RIS] AI generated RIS for story ${userStoryId} (${markdown.length} chars)`);
+    } else {
+      // Local fallback — build RIS from plan metadata (FR-08 degraded)
+      console.warn('[CRE-RIS] AI RIS generation unavailable, using local fallback');
+      const risData = {
+        context: {
+          branch,
+          dependencies: planItem.dependencies || [],
+          codeModelVersion: this._codeModel.schemaVersion
+        },
+        objective: `Implement "${parsedStory.title}": ${parsedStory.description}`,
+        instructions: this._buildInstructions(planItem),
+        conventions: ['Follow camelCase naming', 'Use JSDoc for public interfaces', 'Follow existing patterns in the codebase'],
+        assertions: assertions.map(a => ({
+          message: a.message || a.description || '',
+          type: a.type,
+          target: a.target
+        }))
+      };
+      markdown = formatRis(risData);
+    }
 
     // 8. AC6: Store in ris table
     const risId = uuidv4();

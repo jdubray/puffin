@@ -14,6 +14,7 @@
  */
 
 const { randomUUID: uuidv4 } = require('crypto');
+const { sendCrePrompt, MODEL_COMPLEX, MODEL_EXTRACT, TIMEOUT_COMPLEX, TIMEOUT_EXTRACT } = require('./lib/ai-client');
 
 /**
  * Valid plan states.
@@ -51,12 +52,14 @@ class PlanGenerator {
    * @param {Object} deps.db - Database connection (better-sqlite3 instance).
    * @param {Object} deps.storage - CRE storage module.
    * @param {string} deps.projectRoot - Absolute path to project root.
+   * @param {Object} [deps.claudeService] - ClaudeService instance for AI calls.
    * @param {Object} [deps.promptBuilders] - Prompt template modules (for testing).
    */
-  constructor({ db, storage, projectRoot, promptBuilders = null }) {
+  constructor({ db, storage, projectRoot, claudeService = null, promptBuilders = null }) {
     this._db = db;
     this._storage = storage;
     this._projectRoot = projectRoot;
+    this._claudeService = claudeService;
     this._promptBuilders = promptBuilders || {
       analyzeAmbiguities: require('./lib/prompts/analyze-ambiguities'),
       generatePlan: require('./lib/prompts/generate-plan'),
@@ -70,6 +73,12 @@ class PlanGenerator {
     this._currentPlanId = null;
     /** @type {string|null} */
     this._currentSprintId = null;
+    /** @type {Array<Object>} */
+    this._currentStories = [];
+    /** @type {Array<string>} */
+    this._pendingQuestions = [];
+    /** @type {Array<{ questions: Array, answers: Array, feedback: string|null }>} */
+    this._clarificationHistory = [];
   }
 
   /** Current state machine state. */
@@ -77,6 +86,18 @@ class PlanGenerator {
 
   /** Current plan ID being worked on. */
   get currentPlanId() { return this._currentPlanId; }
+
+  /** Current pending questions from analysis. */
+  get pendingQuestions() { return this._pendingQuestions; }
+
+  /**
+   * Whether the plan generator is busy (not IDLE and not waiting for user input).
+   * Used by IPC handlers to reject concurrent calls gracefully.
+   * @returns {boolean}
+   */
+  get isBusy() {
+    return this._state === PlanState.ANALYZING || this._state === PlanState.GENERATING;
+  }
 
   /**
    * Transition to a new state. Throws if transition is invalid (AC6).
@@ -103,36 +124,74 @@ class PlanGenerator {
    * @returns {Promise<{ questions: Array, planId: string }>}
    */
   async analyzeSprint(sprintId, stories, codeModelSummary = '') {
+    // Reset to IDLE if a previous attempt left us in a non-idle state
+    // (e.g. retry after failure during analysis)
+    if (this._state !== PlanState.IDLE) {
+      console.log(`[CRE-PLAN] Resetting from ${this._state} to IDLE before analysis`);
+      this._state = PlanState.IDLE;
+    }
     this._transition(PlanState.ANALYZING);
     this._currentSprintId = sprintId;
+    this._currentStories = stories;
+    this._pendingQuestions = [];
+    this._clarificationHistory = [];
 
-    // Create plan record in DB (AC8)
-    const planId = uuidv4();
+    // Create or reuse plan record in DB (AC8)
+    // A previous failed attempt may have already inserted a row for this sprint
+    const existingPlan = this._db.prepare(
+      `SELECT id FROM plans WHERE sprint_id = ?`
+    ).get(sprintId);
+
+    let planId;
     const filePath = `plans/${sprintId}.json`;
     const now = new Date().toISOString();
 
-    this._db.prepare(
-      `INSERT INTO plans (id, sprint_id, status, file_path, iteration, created_at, updated_at)
-       VALUES (?, ?, 'draft', ?, 0, ?, ?)`
-    ).run(planId, sprintId, filePath, now, now);
+    if (existingPlan) {
+      planId = existingPlan.id;
+      this._db.prepare(
+        `UPDATE plans SET status = 'draft', iteration = 0, updated_at = ? WHERE id = ?`
+      ).run(now, planId);
+    } else {
+      planId = uuidv4();
+      this._db.prepare(
+        `INSERT INTO plans (id, sprint_id, status, file_path, iteration, created_at, updated_at)
+         VALUES (?, ?, 'draft', ?, 0, ?, ?)`
+      ).run(planId, sprintId, filePath, now, now);
+    }
 
     this._currentPlanId = planId;
 
     // Build analysis prompt
-    const prompt = this._promptBuilders.analyzeAmbiguities.buildPrompt({
+    const promptParts = this._promptBuilders.analyzeAmbiguities.buildPrompt({
       stories,
       codeModelSummary
     });
 
-    // Transition based on whether there would be questions
-    // In production, the AI response would be parsed here.
-    // For now, we return the prompt data and transition to QUESTIONS_PENDING.
+    // Send to AI for ambiguity analysis (FR-02)
+    let questions = [];
+    const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
+      model: MODEL_EXTRACT,
+      timeout: TIMEOUT_EXTRACT,
+      label: 'analyze-ambiguities'
+    });
+
+    if (aiResult.success && aiResult.data) {
+      questions = aiResult.data.questions || [];
+      console.log(`[CRE-PLAN] AI identified ${questions.length} clarifying questions`);
+    } else {
+      console.warn('[CRE-PLAN] AI ambiguity analysis unavailable, proceeding without questions');
+    }
+
+    // Store pending questions for the Q&A pause (FR-02)
+    this._pendingQuestions = questions;
+
+    // Always transition to QUESTIONS_PENDING — the UI decides whether to pause
     this._transition(PlanState.QUESTIONS_PENDING);
 
     return {
       planId,
-      prompt,
-      questions: [] // Populated by caller after AI invocation
+      prompt: promptParts,
+      questions
     };
   }
 
@@ -146,7 +205,12 @@ class PlanGenerator {
    * @returns {Promise<{ planId: string, plan: Object }>}
    */
   async generatePlan(sprintId, stories, answers = [], codeModelContext = '') {
-    // Allow generating from QUESTIONS_PENDING (after analysis) or ANALYZING (skip questions)
+    // Allow generating from QUESTIONS_PENDING (after analysis) or ANALYZING (skip questions).
+    // If a previous error left us in an unexpected state, force to QUESTIONS_PENDING first.
+    if (this._state !== PlanState.QUESTIONS_PENDING && this._state !== PlanState.ANALYZING) {
+      console.log(`[CRE-PLAN] generatePlan: resetting from ${this._state} to QUESTIONS_PENDING`);
+      this._state = PlanState.QUESTIONS_PENDING;
+    }
     this._transition(PlanState.GENERATING);
 
     const planId = this._currentPlanId;
@@ -154,23 +218,53 @@ class PlanGenerator {
       throw new Error('No active plan. Call analyzeSprint() first.');
     }
 
-    // Build generation prompt
-    const prompt = this._promptBuilders.generatePlan.buildPrompt({
+    // Record Q&A exchange in clarification history (FR-02)
+    if (this._pendingQuestions.length > 0 || answers.length > 0) {
+      this._clarificationHistory.push({
+        questions: [...this._pendingQuestions],
+        answers: Array.isArray(answers) ? answers : [],
+        feedback: null
+      });
+    }
+    this._pendingQuestions = [];
+
+    // Build generation prompt (includes answers if provided)
+    const promptParts = this._promptBuilders.generatePlan.buildPrompt({
       stories,
       answers,
       codeModelContext
     });
 
-    // Create plan document skeleton (AC7)
+    // Send to AI for plan generation (FR-03)
+    let planItems = [];
+    let sharedComponents = [];
+    let risks = [];
+    const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
+      model: MODEL_COMPLEX,
+      timeout: TIMEOUT_COMPLEX,
+      label: 'generate-plan'
+    });
+
+    if (aiResult.success && aiResult.data) {
+      planItems = aiResult.data.planItems || [];
+      sharedComponents = aiResult.data.sharedComponents || [];
+      risks = aiResult.data.risks || [];
+      console.log(`[CRE-PLAN] AI generated plan with ${planItems.length} items, ${risks.length} risks`);
+    } else {
+      console.warn('[CRE-PLAN] AI plan generation unavailable, creating empty plan skeleton');
+    }
+
+    // Create plan document (AC7) — includes clarification history for context preservation
     const plan = {
       id: planId,
       sprintId,
       status: 'review_pending',
       iteration: 1,
       stories: stories.map(s => ({ id: s.id, title: s.title })),
-      planItems: [],     // Populated after AI response
-      sharedComponents: [],
-      risks: [],
+      planItems,
+      sharedComponents,
+      risks,
+      clarificationHistory: this._clarificationHistory,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -186,7 +280,7 @@ class PlanGenerator {
 
     this._transition(PlanState.REVIEW_PENDING);
 
-    return { planId, plan, prompt };
+    return { planId, plan, prompt: promptParts };
   }
 
   /**
@@ -209,17 +303,47 @@ class PlanGenerator {
     const currentPlan = await this._storage.readPlan(this._projectRoot, this._currentSprintId);
     const iteration = (currentPlan.iteration || 0) + 1;
 
-    // Build refinement prompt
-    const prompt = this._promptBuilders.refinePlan.buildPrompt({
+    // Record refinement feedback in clarification history (FR-05)
+    this._clarificationHistory.push({
+      questions: [],
+      answers: [],
+      feedback
+    });
+
+    // Build refinement prompt — includes full clarification history for context
+    const promptParts = this._promptBuilders.refinePlan.buildPrompt({
       plan: currentPlan,
       feedback,
       codeModelContext,
       iteration
     });
 
-    // Update plan metadata
+    // Send to AI for plan refinement (FR-05)
+    const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
+      model: MODEL_COMPLEX,
+      timeout: TIMEOUT_COMPLEX,
+      label: 'refine-plan'
+    });
+
+    if (aiResult.success && aiResult.data) {
+      // Merge AI refinements into the plan
+      if (aiResult.data.planItems) currentPlan.planItems = aiResult.data.planItems;
+      if (aiResult.data.sharedComponents) currentPlan.sharedComponents = aiResult.data.sharedComponents;
+      if (aiResult.data.risks) currentPlan.risks = aiResult.data.risks;
+      if (aiResult.data.changelog) currentPlan.changelog = aiResult.data.changelog;
+      // Capture any new questions from refinement
+      if (aiResult.data.questions && Array.isArray(aiResult.data.questions)) {
+        currentPlan.questions = aiResult.data.questions;
+      }
+      console.log(`[CRE-PLAN] AI refined plan (iteration ${iteration})`);
+    } else {
+      console.warn('[CRE-PLAN] AI refinement unavailable, plan unchanged');
+    }
+
+    // Update plan metadata and clarification history
     currentPlan.iteration = iteration;
     currentPlan.status = 'review_pending';
+    currentPlan.clarificationHistory = this._clarificationHistory;
     currentPlan.updatedAt = new Date().toISOString();
 
     // Save updated plan (AC7)
@@ -233,7 +357,7 @@ class PlanGenerator {
 
     this._transition(PlanState.REVIEW_PENDING);
 
-    return { plan: currentPlan, prompt };
+    return { plan: currentPlan, prompt: promptParts };
   }
 
   /**
@@ -296,6 +420,9 @@ class PlanGenerator {
     this._state = PlanState.IDLE;
     this._currentPlanId = null;
     this._currentSprintId = null;
+    this._currentStories = [];
+    this._pendingQuestions = [];
+    this._clarificationHistory = [];
   }
 }
 

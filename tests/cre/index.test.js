@@ -38,6 +38,16 @@ function createMockClaudeService(busy = false) {
     currentProcess: null,
     isProcessRunning() {
       return this._processLock || this.currentProcess !== null;
+    },
+    acquireLock() {
+      if (this._processLock) throw new Error('Claude CLI process is busy. Wait for the current operation to complete.');
+      this._processLock = true;
+    },
+    releaseLock() {
+      this._processLock = false;
+    },
+    async sendPrompt() {
+      return { success: false, error: 'mock' };
     }
   };
 }
@@ -87,10 +97,10 @@ describe('CRE index.js - initialize and shutdown', () => {
     });
 
     const channels = Object.keys(ipcMain.handlers);
-    assert.equal(channels.length, 10, `Expected 10 handlers, got ${channels.length}: ${channels.join(', ')}`);
+    assert.equal(channels.length, 11, `Expected 11 handlers, got ${channels.length}: ${channels.join(', ')}`);
 
     const expected = [
-      'cre:generate-plan', 'cre:refine-plan', 'cre:approve-plan',
+      'cre:generate-plan', 'cre:submit-answers', 'cre:refine-plan', 'cre:approve-plan',
       'cre:generate-ris', 'cre:generate-assertions', 'cre:verify-assertions',
       'cre:update-model', 'cre:query-model',
       'cre:get-plan', 'cre:get-ris'
@@ -189,12 +199,32 @@ describe('CRE IPC handler response format', () => {
     assert.ok(result.error);
   });
 
-  it('cre:generate-plan returns success with valid args', async () => {
+  it('cre:generate-plan returns success with questions', async () => {
     const result = await ipcMain.handlers['cre:generate-plan'](null, {
       sprintId: 'sp-1', stories: [{ id: 's1' }]
     });
     assert.equal(result.success, true);
     assert.ok(result.data);
+    assert.ok(result.data.planId);
+    assert.ok(Array.isArray(result.data.questions));
+  });
+
+  it('cre:submit-answers returns error on missing args', async () => {
+    const result = await ipcMain.handlers['cre:submit-answers'](null, {});
+    assert.equal(result.success, false);
+    assert.ok(result.error);
+  });
+
+  it('cre:submit-answers returns success with valid args', async () => {
+    // Must analyze first (generate-plan is now analyze-only)
+    const genResult = await ipcMain.handlers['cre:generate-plan'](null, {
+      sprintId: 'sp-1b', stories: [{ id: 's1' }]
+    });
+    const result = await ipcMain.handlers['cre:submit-answers'](null, {
+      planId: genResult.data.planId, sprintId: 'sp-1b', stories: [{ id: 's1' }], answers: []
+    });
+    assert.equal(result.success, true);
+    assert.ok(result.data.plan);
   });
 
   it('cre:refine-plan returns error on missing args', async () => {
@@ -203,9 +233,12 @@ describe('CRE IPC handler response format', () => {
   });
 
   it('cre:refine-plan returns success with valid args', async () => {
-    // Must generate a plan first (state machine requires REVIEW_PENDING)
+    // Must analyze + submit answers first (state machine requires REVIEW_PENDING)
     const genResult = await ipcMain.handlers['cre:generate-plan'](null, {
       sprintId: 'sp-2', stories: [{ id: 's1' }]
+    });
+    await ipcMain.handlers['cre:submit-answers'](null, {
+      planId: genResult.data.planId, sprintId: 'sp-2', stories: [{ id: 's1' }], answers: []
     });
     const result = await ipcMain.handlers['cre:refine-plan'](null, {
       planId: genResult.data.planId, feedback: 'needs more detail'
@@ -219,9 +252,12 @@ describe('CRE IPC handler response format', () => {
   });
 
   it('cre:approve-plan returns success with valid args', async () => {
-    // Must generate a plan first (state machine requires REVIEW_PENDING)
+    // Must analyze + submit answers first (state machine requires REVIEW_PENDING)
     const genResult = await ipcMain.handlers['cre:generate-plan'](null, {
       sprintId: 'sp-3', stories: [{ id: 's1' }]
+    });
+    await ipcMain.handlers['cre:submit-answers'](null, {
+      planId: genResult.data.planId, sprintId: 'sp-3', stories: [{ id: 's1' }], answers: []
     });
     const result = await ipcMain.handlers['cre:approve-plan'](null, { planId: genResult.data.planId });
     assert.equal(result.success, true);

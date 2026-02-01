@@ -3495,8 +3495,9 @@ ${content}`
         // File doesn't exist yet, return empty history
         return { version: 1, toasts: [] }
       }
-      console.error('[PuffinState] Failed to read toast history:', error)
-      throw error
+      // Corrupt JSON — reset to empty history rather than crashing
+      console.warn('[PuffinState] Toast history corrupted, resetting:', error.message)
+      return { version: 1, toasts: [] }
     }
   }
 

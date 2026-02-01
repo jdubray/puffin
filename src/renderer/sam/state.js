@@ -78,6 +78,18 @@ export function computeState(model) {
     // Pending sprint planning (for Claude submission)
     _pendingSprintPlanning: model._pendingSprintPlanning || null,
 
+    // Pending CRE planning (for cre:generate-plan)
+    _pendingCrePlanning: model._pendingCrePlanning || null,
+
+    // Pending CRE iteration (for cre:refine-plan)
+    _pendingCreIteration: model._pendingCreIteration || null,
+
+    // Pending CRE answer submission (for cre:submit-answers)
+    _pendingCreAnswers: model._pendingCreAnswers || null,
+
+    // Pending CRE approval (for cre:approve-plan + cre:generate-ris)
+    _pendingCreApproval: model._pendingCreApproval || null,
+
     // Pending story implementation from sprint (for Claude submission)
     _pendingStoryImplementation: model._pendingStoryImplementation || null,
 

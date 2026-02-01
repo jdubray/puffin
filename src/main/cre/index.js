@@ -137,17 +137,19 @@ async function initialize(context) {
     console.warn('[CRE] CodeModel load failed (non-fatal):', err.message);
   }
 
+  const cs = claudeService || null;
+
   // Initialize PlanGenerator with dependencies
-  planGenerator = new PlanGenerator({ db, storage, projectRoot });
+  planGenerator = new PlanGenerator({ db, storage, projectRoot, claudeService: cs });
 
   // Initialize AssertionGenerator
-  assertionGenerator = new AssertionGenerator({ db, projectRoot });
+  assertionGenerator = new AssertionGenerator({ db, projectRoot, claudeService: cs });
 
   // Initialize RISGenerator
-  risGenerator = new RISGenerator({ db, codeModel, storage, projectRoot });
+  risGenerator = new RISGenerator({ db, codeModel, storage, projectRoot, claudeService: cs });
 
   // Initialize Introspector
-  introspector = new Introspector({ codeModel, schemaManager, projectRoot, config: creConfig });
+  introspector = new Introspector({ codeModel, schemaManager, projectRoot, config: creConfig, claudeService: cs });
 
   // Register IPC handlers only once (state:init may be called multiple times)
   if (!initialized) {
@@ -191,6 +193,10 @@ function registerHandlers(ipcMain) {
       if (!sprintId || !stories) {
         return { success: false, error: 'sprintId and stories are required' };
       }
+      // Guard against concurrent planning calls corrupting singleton state
+      if (planGenerator.isBusy) {
+        return { success: false, error: 'Plan generator is busy. Wait for the current operation to complete.' };
+      }
       // AC5: Detect dependency cycles before planning
       const cycleResult = detectPlanCycles(stories);
       if (cycleResult.hasCycle) {
@@ -199,16 +205,43 @@ function registerHandlers(ipcMain) {
 
       return await withProcessLock(async () => {
         return await withRetry(async () => {
-          // Step 1: Analyze sprint for ambiguities
-          await planGenerator.analyzeSprint(sprintId, stories);
-
-          // Step 2: Generate plan (with any answers — empty for auto flow)
-          const result = await planGenerator.generatePlan(sprintId, stories);
-          return { success: true, data: { planId: result.planId, plan: result.plan, sprintId } };
+          // Phase 1 only: Analyze sprint for ambiguities, return questions
+          const result = await planGenerator.analyzeSprint(sprintId, stories);
+          return {
+            success: true,
+            data: {
+              planId: result.planId,
+              questions: result.questions,
+              sprintId
+            }
+          };
         }, { label: 'generate-plan' });
       });
     } catch (err) {
       console.error('[CRE] cre:generate-plan error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('cre:submit-answers', async (_event, args) => {
+    try {
+      const { planId, sprintId, stories, answers } = args;
+      if (!planId || !sprintId || !stories) {
+        return { success: false, error: 'planId, sprintId, and stories are required' };
+      }
+      // Note: no isBusy guard here — submit-answers is a continuation of the
+      // generate-plan flow (QUESTIONS_PENDING → GENERATING). The process lock
+      // prevents concurrent operations. If the state machine is stuck from a
+      // previous failed attempt, generatePlan will transition from the current state.
+
+      return await withProcessLock(async () => {
+        return await withRetry(async () => {
+          const result = await planGenerator.generatePlan(sprintId, stories, answers || []);
+          return { success: true, data: { planId: result.planId, plan: result.plan, sprintId } };
+        }, { label: 'submit-answers' });
+      });
+    } catch (err) {
+      console.error('[CRE] cre:submit-answers error:', err.message);
       return { success: false, error: err.message };
     }
   });
@@ -218,6 +251,10 @@ function registerHandlers(ipcMain) {
       const { planId, feedback } = args;
       if (!planId || !feedback) {
         return { success: false, error: 'planId and feedback are required' };
+      }
+      // Guard against concurrent calls corrupting singleton state
+      if (planGenerator.isBusy) {
+        return { success: false, error: 'Plan generator is busy. Wait for the current operation to complete.' };
       }
       return await withProcessLock(async () => {
         return await withRetry(async () => {
@@ -299,11 +336,15 @@ function registerHandlers(ipcMain) {
       if (planId == null && storyId == null) {
         return { success: false, error: 'planId or storyId is required' };
       }
-      const assertions = planId != null
-        ? assertionGenerator.getByPlan(planId)
-        : assertionGenerator.getByStory(storyId);
-      const results = await assertionGenerator.verify(assertions);
-      return { success: true, data: results };
+      // Hold process lock during verification — reads project files that
+      // 3CLI may be writing to during active implementation
+      return await withProcessLock(async () => {
+        const assertions = planId != null
+          ? assertionGenerator.getByPlan(planId)
+          : assertionGenerator.getByStory(storyId);
+        const results = await assertionGenerator.verify(assertions);
+        return { success: true, data: results };
+      });
     } catch (err) {
       console.error('[CRE] cre:verify-assertions error:', err.message);
       return { success: false, error: err.message };
@@ -439,7 +480,7 @@ function registerHandlers(ipcMain) {
     }
   });
 
-  console.log('[CRE] Registered 10 IPC handlers');
+  console.log('[CRE] Registered 11 IPC handlers');
 }
 
 /**

@@ -391,9 +391,9 @@ class PuffinApp {
         return
       }
 
-      // Close modal and trigger plan iteration
+      // Close modal and trigger plan iteration via CRE
       closeModal()
-      this.intents.iterateSprintPlan(clarifications)
+      this.intents.iterateSprintPlan(clarifications, sprint.crePlanId)
       this.showToast('Resubmitting plan with your clarifications...', 'info')
     })
 
@@ -866,8 +866,8 @@ Please provide specific file locations and line numbers where issues are found, 
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
-      'approvePlan', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan',
+      'createSprint', 'startSprintPlanning', 'crePlanReady', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
+      'approvePlan', 'approvePlanWithCre', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan', 'submitPlanAnswers',
       'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'deleteSprint',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'updateStoryAssertionResults', 'toggleCriteriaCompletion',
@@ -995,14 +995,17 @@ Please provide specific file locations and line numbers where issues are found, 
           // Sprint actions
           ['CREATE_SPRINT', actions.createSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
+          ['CRE_PLAN_READY', actions.crePlanReady],
           ['CRE_PLANNING_COMPLETE', actions.crePlanningComplete],
           ['CRE_PLANNING_ERROR', actions.crePlanningError],
           ['CRE_INTROSPECTION_COMPLETE', actions.creIntrospectionComplete],
           ['APPROVE_PLAN', actions.approvePlan],
+          ['APPROVE_PLAN_WITH_CRE', actions.approvePlanWithCre],
           ['SELECT_IMPLEMENTATION_MODE', actions.selectImplementationMode],
           ['START_AUTOMATED_IMPLEMENTATION', actions.startAutomatedImplementation],
           ['SET_SPRINT_PLAN', actions.setSprintPlan],
           ['ITERATE_SPRINT_PLAN', actions.iterateSprintPlan],
+          ['SUBMIT_PLAN_ANSWERS', actions.submitPlanAnswers],
           ['CLEAR_SPRINT', actions.clearSprint],
           ['CLEAR_SPRINT_WITH_DETAILS', actions.clearSprintWithDetails],
           ['SHOW_SPRINT_CLOSE_MODAL', actions.showSprintCloseModal],
@@ -1795,6 +1798,33 @@ Please provide specific file locations and line numbers where issues are found, 
           this._handlingCrePlanning = false
         })
     }
+
+    // Handle pending CRE answer submission
+    if (state._pendingCreAnswers && !this._handlingCreAnswers) {
+      this._handlingCreAnswers = true
+      this.handleCreAnswerSubmission(state._pendingCreAnswers)
+        .finally(() => {
+          this._handlingCreAnswers = false
+        })
+    }
+
+    // Handle pending CRE iteration (refine-plan)
+    if (state._pendingCreIteration && !this._handlingCreIteration) {
+      this._handlingCreIteration = true
+      this.handleCreIteration(state._pendingCreIteration)
+        .finally(() => {
+          this._handlingCreIteration = false
+        })
+    }
+
+    // Handle pending CRE approval (user-initiated approve + RIS)
+    if (state._pendingCreApproval && !this._handlingCreApproval) {
+      this._handlingCreApproval = true
+      this.handleCreApproval(state._pendingCreApproval)
+        .finally(() => {
+          this._handlingCreApproval = false
+        })
+    }
   }
 
   /**
@@ -2391,6 +2421,13 @@ Please provide specific file locations and line numbers where issues are found, 
           // Warn if no plan exists (user can still proceed)
           if (!sprint.plan) {
             console.log('[SPRINT] No plan captured - assertions will be generated without implementation context')
+          }
+
+          // If CRE plan exists and not yet approved, trigger CRE approval flow
+          if (sprint.crePlanId && !sprint.planApprovedAt) {
+            console.log('[SPRINT] Triggering CRE approval flow for plan:', sprint.crePlanId)
+            this.intents.approvePlanWithCre(sprint.crePlanId)
+            return
           }
 
           // Approve the plan (updates status to in-progress)
@@ -4258,9 +4295,9 @@ Keep it concise but informative. Use markdown formatting.`
   }
 
   /**
-   * Handle CRE planning workflow (AC1, AC2, AC3).
-   * Sequence: generate-plan → approve → generate-ris per story.
-   * Process lock is held on the main process side for the entire phase.
+   * Handle CRE planning workflow Phase 1 (AC1, FR-02).
+   * Calls generate-plan (analyze only), then pauses for Q&A if questions exist.
+   * If no questions, auto-submits empty answers to proceed to plan generation.
    */
   async handleCrePlanning(planningData) {
     console.log('[CRE] Starting CRE planning workflow:', planningData.sprintId)
@@ -4271,27 +4308,250 @@ Keep it concise but informative. Use markdown formatting.`
     const { sprintId, stories } = planningData
 
     try {
+      this.showToast('CRE: Analyzing sprint...', 'info')
+
+      // Phase 1: Analyze sprint — returns questions for Q&A
+      const analyzeResult = await window.puffin.cre.generatePlan({ sprintId, stories })
+      if (!analyzeResult.success) {
+        throw new Error(analyzeResult.error)
+      }
+      console.log('[CRE] Analysis complete:', analyzeResult.data)
+
+      const { planId, questions } = analyzeResult.data
+
+      if (questions && questions.length > 0) {
+        // Pause: store context for Q&A, show iteration modal with CRE questions
+        this._pendingCreQA = { planId, sprintId, stories, questions }
+        this.showCreQuestionsModal(questions, planId, sprintId, stories)
+      } else {
+        // No questions — proceed directly to plan generation
+        this.intents.submitPlanAnswers(planId, sprintId, stories, [])
+      }
+    } catch (err) {
+      console.error('[CRE] Planning workflow failed:', err.message)
+      this.intents.crePlanningError(err)
+      this.showToast({
+        type: 'error',
+        title: 'CRE Planning Failed',
+        message: err.message,
+        duration: 8000
+      })
+    }
+  }
+
+  /**
+   * Show modal with CRE-generated clarifying questions.
+   * @param {string[]} questions - Questions from CRE analysis
+   * @param {string} planId - The plan ID
+   * @param {string} sprintId - The sprint ID
+   * @param {Array<Object>} stories - Sprint stories
+   */
+  showCreQuestionsModal(questions, planId, sprintId, stories) {
+    this.hidePlanIterationModal()
+
+    const prepopulatedText = questions.map((q, i) => {
+      const text = typeof q === 'string' ? q : (q.question || JSON.stringify(q))
+      const context = (typeof q === 'object' && q.reason) ? `\n   (Context: ${q.reason})` : ''
+      return `${i + 1}. ${text}${context}\n   Answer: `
+    }).join('\n\n')
+
+    const modal = document.createElement('div')
+    modal.id = 'plan-iteration-modal'
+    modal.className = 'plan-iteration-modal modal-overlay'
+    modal.innerHTML = `
+      <div class="plan-iteration-content modal-content">
+        <div class="modal-header">
+          <h3>CRE: Clarifying Questions</h3>
+          <button class="modal-close-btn" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="plan-iteration-hint">
+            The CRE has ${questions.length} question${questions.length > 1 ? 's' : ''} about the sprint stories. Fill in your answers below to generate the plan.
+          </p>
+          <div class="form-group">
+            <label for="plan-clarifications">Your answers:</label>
+            <textarea
+              id="plan-clarifications"
+              class="plan-clarifications-input"
+              rows="8"
+              placeholder="Answer the questions above...">${this.escapeHtml(prepopulatedText)}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn secondary plan-iteration-cancel">Skip Questions</button>
+          <button class="btn primary plan-iteration-submit">Submit Answers</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    const closeBtn = modal.querySelector('.modal-close-btn')
+    const cancelBtn = modal.querySelector('.plan-iteration-cancel')
+    const submitBtn = modal.querySelector('.plan-iteration-submit')
+    const textarea = modal.querySelector('#plan-clarifications')
+
+    const closeModal = () => this.hidePlanIterationModal()
+
+    closeBtn.addEventListener('click', () => {
+      closeModal()
+      // Skip — submit empty answers
+      this.intents.submitPlanAnswers(planId, sprintId, stories, [])
+    })
+
+    cancelBtn.addEventListener('click', () => {
+      closeModal()
+      // Skip — submit empty answers
+      this.intents.submitPlanAnswers(planId, sprintId, stories, [])
+    })
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeModal()
+        this.intents.submitPlanAnswers(planId, sprintId, stories, [])
+      }
+    })
+
+    submitBtn.addEventListener('click', () => {
+      const answerText = textarea.value.trim()
+      closeModal()
+      // Parse answers as array of {question, answer} objects
+      const answers = questions.map((q, i) => ({
+        question: q,
+        answer: this.extractAnswerForQuestion(answerText, i + 1) || ''
+      }))
+      this.intents.submitPlanAnswers(planId, sprintId, stories, answers)
+      this.showToast('CRE: Generating plan with your answers...', 'info')
+    })
+
+    setTimeout(() => textarea.focus(), 100)
+  }
+
+  /**
+   * Extract an answer for a numbered question from the user's text.
+   * @param {string} text - Full answer text
+   * @param {number} num - Question number (1-based)
+   * @returns {string} The extracted answer
+   */
+  extractAnswerForQuestion(text, num) {
+    // Look for "N. ... Answer: <text>" pattern
+    const regex = new RegExp(`${num}\\..*?Answer:\\s*(.+?)(?=\\n\\s*\\d+\\.|$)`, 's')
+    const match = text.match(regex)
+    return match ? match[1].trim() : text
+  }
+
+  /**
+   * Handle CRE answer submission — generates the plan, then approves + generates RIS.
+   * Triggered by SUBMIT_PLAN_ANSWERS action via _pendingCreAnswers state flag.
+   */
+  async handleCreAnswerSubmission(answerData) {
+    console.log('[CRE] Submitting answers for plan:', answerData.planId)
+
+    // Clear pending flag immediately
+    this.state._pendingCreAnswers = null
+
+    const { planId, sprintId, stories, answers } = answerData
+
+    try {
       this.showToast('CRE: Generating plan...', 'info')
 
-      // Step 1: Generate plan (AC1 — replaces old planning prompt)
-      const planResult = await window.puffin.cre.generatePlan({ sprintId, stories })
+      // Submit answers → generate plan
+      const planResult = await window.puffin.cre.submitAnswers({ planId, sprintId, stories, answers })
       if (!planResult.success) {
         throw new Error(planResult.error)
       }
       console.log('[CRE] Plan generated:', planResult.data)
 
-      const planId = planResult.data?.planId || sprintId
+      // Store plan for user review — do NOT auto-approve or generate RIS
+      this.intents.crePlanReady(planResult.data)
+      this.showToast('CRE: Plan ready for review. Approve when ready.', 'success')
+    } catch (err) {
+      console.error('[CRE] Answer submission failed:', err.message)
+      this.intents.crePlanningError(err)
+      this.showToast({
+        type: 'error',
+        title: 'CRE Planning Failed',
+        message: err.message,
+        duration: 8000
+      })
+    }
+  }
 
-      // Step 2: Approve plan (AC2 — auto-approve in orchestrated flow)
+  /**
+   * Handle CRE plan iteration (refine-plan).
+   * Triggered by ITERATE_SPRINT_PLAN action via _pendingCreIteration state flag.
+   */
+  async handleCreIteration(iterationData) {
+    console.log('[CRE] Refining plan:', iterationData.planId)
+
+    // Clear pending flag immediately
+    this.state._pendingCreIteration = null
+
+    const { planId, feedback } = iterationData
+
+    try {
+      this.showToast('CRE: Refining plan...', 'info')
+
+      const refineResult = await window.puffin.cre.refinePlan({ planId, feedback })
+      if (!refineResult.success) {
+        throw new Error(refineResult.error)
+      }
+      console.log('[CRE] Plan refined:', refineResult.data)
+
+      const resultPlanId = refineResult.data?.planId || planId
+
+      // Check if CRE has new questions after refinement
+      const newQuestions = refineResult.data?.questions || []
+      if (newQuestions.length > 0) {
+        // Pause again for more Q&A
+        const sprint = this.state.activeSprint
+        const stories = sprint?.stories?.map(s => ({
+          id: s.id, title: s.title,
+          description: s.description || '',
+          acceptanceCriteria: s.acceptanceCriteria || [],
+          dependsOn: s.dependsOn || []
+        })) || []
+        this.showCreQuestionsModal(newQuestions, resultPlanId, sprint?.id, stories)
+        return
+      }
+
+      // No new questions — store refined plan for user review (do NOT auto-approve)
+      this.intents.crePlanReady(refineResult.data)
+      this.showToast('CRE: Refined plan ready for review. Approve when ready.', 'success')
+    } catch (err) {
+      console.error('[CRE] Plan iteration failed:', err.message)
+      this.intents.crePlanningError(err)
+      this.showToast({
+        type: 'error',
+        title: 'CRE Plan Iteration Failed',
+        message: err.message,
+        duration: 8000
+      })
+    }
+  }
+
+  /**
+   * Handle user-initiated CRE plan approval.
+   * Calls cre:approve-plan → cre:generate-ris per story → dispatches crePlanningComplete.
+   * Triggered by APPROVE_PLAN_WITH_CRE action via _pendingCreApproval state flag.
+   */
+  async handleCreApproval(approvalData) {
+    console.log('[CRE] User-initiated approval for plan:', approvalData.planId)
+
+    const { planId } = approvalData
+
+    try {
+      // Step 1: Approve plan via CRE
       this.showToast('CRE: Approving plan...', 'info')
       const approveResult = await window.puffin.cre.approvePlan({ planId })
       if (!approveResult.success) {
         throw new Error(approveResult.error)
       }
 
-      // Step 3: Generate RIS for each story (AC2 — generate-ris per story)
+      // Step 2: Generate RIS for each story
+      const sprint = this.state.activeSprint
+      const stories = sprint?.stories || []
       const risMap = {}
-      const storyOrder = planResult.data?.planItems?.map(p => p.storyId) || stories.map(s => s.id)
+      const storyOrder = sprint?.implementationOrder || stories.map(s => s.id)
 
       for (const story of stories) {
         this.showToast(`CRE: Generating RIS for "${story.title}"...`, 'info')
@@ -4304,15 +4564,16 @@ Keep it concise but informative. Use markdown formatting.`
         }
       }
 
-      // Dispatch success — stores plan + RIS, transitions sprint to 'planned'
-      this.intents.crePlanningComplete(planResult.data, risMap, storyOrder)
-      this.showToast('CRE: Planning complete', 'success')
+      // Dispatch completion — this stores risMap and triggers approvePlan UI flow
+      this.intents.crePlanningComplete(sprint.crePlan, risMap, storyOrder)
+      this.intents.approvePlan()
+      this.showToast('CRE: Plan approved and RIS generated', 'success')
     } catch (err) {
-      console.error('[CRE] Planning workflow failed:', err.message)
+      console.error('[CRE] Plan approval failed:', err.message)
       this.intents.crePlanningError(err)
       this.showToast({
         type: 'error',
-        title: 'CRE Planning Failed',
+        title: 'CRE Plan Approval Failed',
         message: err.message,
         duration: 8000
       })

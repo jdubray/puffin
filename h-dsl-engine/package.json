@@ -1,0 +1,22 @@
+{
+  "name": "hdsl-bootstrap",
+  "version": "0.1.0",
+  "description": "Standalone CLI tool that scans an existing project and produces a populated h-DSL schema and Code Model for Puffin's Central Reasoning Engine.",
+  "main": "hdsl-bootstrap.js",
+  "bin": {
+    "hdsl-bootstrap": "./hdsl-bootstrap.js"
+  },
+  "scripts": {
+    "start": "node hdsl-bootstrap.js",
+    "test": "node --test tests/"
+  },
+  "keywords": ["hdsl", "code-model", "bootstrap", "puffin"],
+  "license": "MIT",
+  "dependencies": {
+    "acorn": "^8.14.0",
+    "acorn-walk": "^8.3.0",
+    "glob": "^10.4.0",
+    "commander": "^12.1.0",
+    "@puffin/hdsl-types": "file:../shared/hdsl-types"
+  }
+}

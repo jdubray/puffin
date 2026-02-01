@@ -15,6 +15,7 @@ const path = require('path');
 
 const inferIntentPrompt = require('./lib/prompts/infer-intent');
 const identifySchemaGapsPrompt = require('./lib/prompts/identify-schema-gaps');
+const { sendCrePrompt, MODEL_EXTRACT, TIMEOUT_EXTRACT } = require('./lib/ai-client');
 
 /**
  * Analyzes code changes and updates the code model.
@@ -27,11 +28,12 @@ class Introspector {
    * @param {string} deps.projectRoot - Absolute path to project root.
    * @param {Object} [deps.config] - CRE config (cre section).
    */
-  constructor({ codeModel, schemaManager, projectRoot, config = {} }) {
+  constructor({ codeModel, schemaManager, projectRoot, config = {}, claudeService = null }) {
     this._codeModel = codeModel;
     this._schemaManager = schemaManager;
     this._projectRoot = projectRoot;
     this._config = config;
+    this._claudeService = claudeService;
     this._excludePatterns = (config.introspection && config.introspection.excludePatterns) || [
       'node_modules/**', 'dist/**', '.git/**'
     ];
@@ -61,10 +63,13 @@ class Introspector {
       return [];
     }
 
-    // 4. AC5: Detect schema gaps and propose extensions
+    // 4. AC4: Infer intent via AI to generate PROSE descriptions
+    await this.inferIntent(artifacts);
+
+    // 5. AC5: Detect schema gaps and propose extensions
     await this.detectSchemaGaps(artifacts);
 
-    // 5. Generate deltas by comparing extracted artifacts to current model
+    // 6. Generate deltas by comparing extracted artifacts to current model
     const deltas = this._generateDeltas(artifacts);
 
     // 6. Apply deltas to the code model
@@ -172,14 +177,30 @@ class Introspector {
       }
 
       const existingArtifact = this._codeModel.peek(artifact.path);
-      const prompt = inferIntentPrompt.buildPrompt({
+      const promptParts = inferIntentPrompt.buildPrompt({
         sourceCode,
         filePath: artifact.path,
         artifactType: artifact.type || 'module',
         existingArtifact
       });
 
-      results.push({ ...artifact, _inferPrompt: prompt });
+      // Send to AI for intent inference (FR-13)
+      const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
+        model: MODEL_EXTRACT,
+        timeout: TIMEOUT_EXTRACT,
+        label: `infer-intent:${artifact.path}`
+      });
+
+      if (aiResult.success && aiResult.data) {
+        // Apply PROSE fields from AI response
+        if (aiResult.data.summary) artifact.summary = aiResult.data.summary;
+        if (aiResult.data.intent) artifact.intent = aiResult.data.intent;
+        if (aiResult.data.tags && Array.isArray(aiResult.data.tags)) artifact.tags = aiResult.data.tags;
+        if (aiResult.data.exports && Array.isArray(aiResult.data.exports)) artifact.exports = aiResult.data.exports;
+        if (aiResult.data.kind) artifact.kind = aiResult.data.kind;
+      }
+
+      results.push({ ...artifact, _inferPrompt: promptParts });
     }
 
     return results;
@@ -200,15 +221,33 @@ class Introspector {
       return `${a.path}: ${a.exports.length} exports${funcs ? `, functions: ${funcs}` : ''}`;
     });
 
-    const prompt = identifySchemaGapsPrompt.buildPrompt({
+    const promptParts = identifySchemaGapsPrompt.buildPrompt({
       schema,
       instance,
       recentChanges
     });
 
-    // In production, prompt is sent to 3CLI and response parsed.
-    // Auto-extension would call schemaManager.extend() for each proposed extension.
-    return { prompt, extensions: [] };
+    // Send to AI for schema gap detection (FR-14)
+    const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
+      model: MODEL_EXTRACT,
+      timeout: TIMEOUT_EXTRACT,
+      label: 'identify-schema-gaps'
+    });
+
+    const extensions = [];
+    if (aiResult.success && aiResult.data && Array.isArray(aiResult.data.proposedExtensions)) {
+      for (const ext of aiResult.data.proposedExtensions) {
+        try {
+          await this._schemaManager.extend(ext);
+          extensions.push(ext);
+          console.log(`[CRE] Schema extended: ${ext.target || ext.type} (${ext.rationale})`);
+        } catch (err) {
+          console.warn(`[CRE] Schema extension failed: ${err.message}`);
+        }
+      }
+    }
+
+    return { prompt: promptParts, extensions };
   }
 
   // ── Internal helpers ─────────────────────────────────────────────────

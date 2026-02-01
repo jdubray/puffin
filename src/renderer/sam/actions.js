@@ -818,10 +818,39 @@ export const createSprint = (stories) => ({
   }
 })
 
-// Start sprint planning - triggers planning prompt to Claude
+// Start sprint planning - triggers CRE planning workflow
 export const startSprintPlanning = () => ({
   type: 'START_SPRINT_PLANNING',
   payload: {
+    timestamp: Date.now()
+  }
+})
+
+// CRE planning phase completed — stores plan + RIS map
+export const crePlanningComplete = (plan, risMap, storyOrder) => ({
+  type: 'CRE_PLANNING_COMPLETE',
+  payload: {
+    plan,
+    risMap,
+    storyOrder,
+    timestamp: Date.now()
+  }
+})
+
+// CRE planning phase failed
+export const crePlanningError = (error) => ({
+  type: 'CRE_PLANNING_ERROR',
+  payload: {
+    error: error.message || error,
+    timestamp: Date.now()
+  }
+})
+
+// CRE introspection completed for a story
+export const creIntrospectionComplete = (storyId) => ({
+  type: 'CRE_INTROSPECTION_COMPLETE',
+  payload: {
+    storyId,
     timestamp: Date.now()
   }
 })

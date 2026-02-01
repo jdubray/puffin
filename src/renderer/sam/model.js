@@ -1965,135 +1965,98 @@ export const createSprintAcceptor = model => proposal => {
   }
 }
 
-// Start sprint planning - builds and submits planning prompt
+// Start sprint planning - triggers CRE planning workflow (AC1)
 export const startSprintPlanningAcceptor = model => proposal => {
   if (proposal?.type === 'START_SPRINT_PLANNING') {
     if (!model.activeSprint) return
 
     const sprint = model.activeSprint
-    const stories = sprint.stories
 
     // Update sprint status to planning
     sprint.status = 'planning'
 
-    // Build planning prompt with all story context (including IDs for order tracking)
-    const storyDescriptions = stories.map((story, i) => {
-      let desc = `### Story ${i + 1}: ${story.title}\n`
-      desc += `**Story ID:** \`${story.id}\`\n`
-      if (story.description) {
-        desc += `${story.description}\n`
-      }
-      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
-        desc += `\n**Acceptance Criteria:**\n`
-        desc += story.acceptanceCriteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n')
-      }
-      return desc
-    }).join('\n\n')
+    // Signal CRE planning phase — the renderer app.js will pick this up
+    // and call window.puffin.cre.generatePlan() → approve → generateRis per story
+    model._pendingCrePlanning = {
+      sprintId: sprint.id,
+      stories: sprint.stories.map(s => ({
+        id: s.id,
+        title: s.title,
+        description: s.description || '',
+        acceptanceCriteria: s.acceptanceCriteria || [],
+        dependsOn: s.dependsOn || []
+      }))
+    }
+  }
+}
 
-    // Build story ID reference list for the order/assignment outputs
-    const storyIdList = stories.map(s => `- \`${s.id}\`: ${s.title}`).join('\n')
+// CRE planning phase completed — stores plan data and RIS map (AC2)
+export const crePlanningCompleteAcceptor = model => proposal => {
+  if (proposal?.type === 'CRE_PLANNING_COMPLETE') {
+    if (!model.activeSprint) return
 
-    const planningPrompt = `## Sprint Planning Request
+    const { plan, risMap, storyOrder } = proposal.payload
+    const sprint = model.activeSprint
 
-**IMPORTANT: This is a PLANNING ONLY request. Do NOT make any code changes, create files, or modify the codebase. Only analyze and produce a written plan.**
+    // Store plan in sprint
+    sprint.plan = typeof plan === 'string' ? plan : JSON.stringify(plan, null, 2)
+    sprint.crePlan = plan
+    sprint.risMap = risMap || {}
+    sprint.status = 'planned'
 
-Please create a detailed implementation plan for the following user stories:
+    // Use CRE-determined story order if available, fallback to original
+    if (storyOrder && storyOrder.length > 0) {
+      sprint.implementationOrder = storyOrder
+    } else {
+      sprint.implementationOrder = sprint.stories.map(s => s.id)
+    }
 
-${storyDescriptions}
-
----
-
-**Planning Requirements:**
-
-1. **Architecture Analysis**: Analyze how these stories fit together and identify shared components or dependencies
-2. **Implementation Order**: Recommend the optimal order to implement these stories
-3. **Technical Approach**: For each story, outline the key technical decisions and approach
-4. **File Changes**: Identify the main files that will need to be created or modified
-5. **Risk Assessment**: Note any potential challenges or risks
-6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
-7. **Open Questions**: List any clarifications needed before implementation
-
----
-
-## Implementation Order & Branch Assignment Analysis
-
-After completing the implementation plans above, provide the following structured outputs for automated orchestration:
-
-### Story Reference (for your convenience):
-${storyIdList}
-
-### Required Outputs:
-
-**1. Implementation Order** - Analyze dependencies between stories and determine the optimal implementation sequence. Consider:
-- Dependencies (implement prerequisites first)
-- Complexity progression (simpler stories first when no dependencies)
-- Branch grouping (cluster UI stories together, Backend stories together)
-
-Output the recommended order as a single line:
-\`\`\`
-IMPLEMENTATION_ORDER: id1, id2, id3, ...
-\`\`\`
-
-**2. Branch Assignments** - For each story, determine the appropriate implementation branch:
-- **UI**: Visual components, styling, user interactions, frontend-only changes
-- **Backend**: Data processing, APIs, business logic, database changes
-- **Fullstack**: Stories requiring both UI and backend changes
-- **Plugin**: Extensions to the plugin system
-
-Output assignments as a single line:
-\`\`\`
-BRANCH_ASSIGNMENTS: id1=ui, id2=backend, id3=fullstack, ...
-\`\`\`
-
----
-
-**Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
-
-Please provide a comprehensive plan that I can review before starting implementation.`
-
-    // Get the current branch
-    const branchId = model.history.activeBranch || 'specifications'
-
-    // Ensure branch exists
-    if (!model.history.branches[branchId]) {
-      model.history.branches[branchId] = {
-        id: branchId,
-        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
-        prompts: []
+    // Default all to fullstack (CRE plan items have branch info if available)
+    if (!sprint.branchAssignments) {
+      sprint.branchAssignments = {}
+      for (const s of sprint.stories) {
+        const planItem = plan?.planItems?.find(p => p.storyId === s.id)
+        sprint.branchAssignments[s.id] = planItem?.branchType || 'fullstack'
       }
     }
 
-    // Create prompt entry
-    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
-    const prompt = {
-      id: promptId,
-      content: planningPrompt,
-      parentId: null,
-      timestamp: Date.now(),
-      response: null,
-      storyIds: stories.map(s => s.id)
+    // Clear pending CRE planning flag
+    model._pendingCrePlanning = null
+
+    console.log('[CRE] Planning complete. Story order:', sprint.implementationOrder)
+  }
+}
+
+// CRE planning error — revert sprint to created status
+export const crePlanningErrorAcceptor = model => proposal => {
+  if (proposal?.type === 'CRE_PLANNING_ERROR') {
+    if (!model.activeSprint) return
+
+    model.activeSprint.status = 'created'
+    model._pendingCrePlanning = null
+    model.sprintError = {
+      type: 'CRE_PLANNING_FAILED',
+      message: proposal.payload.error,
+      timestamp: proposal.payload.timestamp
     }
+    console.error('[CRE] Planning failed:', proposal.payload.error)
+  }
+}
 
-    // Add to branch
-    model.history.branches[branchId].prompts.push(prompt)
+// CRE introspection completed — unblocks next story (AC5)
+export const creIntrospectionCompleteAcceptor = model => proposal => {
+  if (proposal?.type === 'CRE_INTROSPECTION_COMPLETE') {
+    const sprint = model.activeSprint
+    if (!sprint?.orchestration) return
 
-    // Set as active prompt
-    model.history.activePromptId = promptId
-
-    // Set pending prompt for streaming
-    model.pendingPromptId = promptId
-    model.streamingResponse = ''
-
-    // Update sprint with prompt reference
-    sprint.promptId = promptId
-
-    // Store for IPC submission
-    model._pendingSprintPlanning = {
-      promptId,
-      promptContent: planningPrompt,
-      branchId,
-      storyIds: stories.map(s => s.id)
+    const { storyId } = proposal.payload
+    // Mark introspection done so orchestration can proceed to next story
+    if (!sprint.orchestration.introspectionCompleted) {
+      sprint.orchestration.introspectionCompleted = []
     }
+    sprint.orchestration.introspectionCompleted.push(storyId)
+
+    console.log('[CRE] Introspection complete for story:', storyId)
   }
 }
 
@@ -3826,9 +3789,27 @@ ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 `
   }
 
-  // Include the approved plan if available
+  // AC4: Include CRE-generated RIS if available, otherwise fall back to raw plan
   let planIncluded = false
-  if (sprint?.promptId && model) {
+  const ris = sprint?.risMap?.[story.id]
+  if (ris && !ris.error) {
+    planIncluded = true
+    const risMarkdown = ris.markdown || ris.sections
+      ? [ris.sections?.context, ris.sections?.objective, ris.sections?.instructions,
+         ris.sections?.conventions, ris.sections?.assertions].filter(Boolean).join('\n\n')
+      : JSON.stringify(ris, null, 2)
+    prompt += `
+### Refined Implementation Specification (RIS)
+
+The following RIS was generated by the CRE for this story. Follow it precisely:
+
+${risMarkdown}
+
+---
+
+`
+  } else if (sprint?.promptId && model) {
+    // Fallback: include raw plan from Claude response
     const planPrompt = findPromptById(model, sprint.promptId)
     if (planPrompt?.response?.content) {
       planIncluded = true
@@ -4171,6 +4152,9 @@ export const acceptors = [
   // Sprint
   createSprintAcceptor,
   startSprintPlanningAcceptor,
+  crePlanningCompleteAcceptor,
+  crePlanningErrorAcceptor,
+  creIntrospectionCompleteAcceptor,
   clearSprintAcceptor,
   clearSprintWithDetailsAcceptor,
   deleteSprintAcceptor,

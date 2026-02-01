@@ -866,7 +866,8 @@ Please provide specific file locations and line numbers where issues are found, 
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan',
+      'createSprint', 'startSprintPlanning', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
+      'approvePlan', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan',
       'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'deleteSprint',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'updateStoryAssertionResults', 'toggleCriteriaCompletion',
@@ -994,6 +995,9 @@ Please provide specific file locations and line numbers where issues are found, 
           // Sprint actions
           ['CREATE_SPRINT', actions.createSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
+          ['CRE_PLANNING_COMPLETE', actions.crePlanningComplete],
+          ['CRE_PLANNING_ERROR', actions.crePlanningError],
+          ['CRE_INTROSPECTION_COMPLETE', actions.creIntrospectionComplete],
           ['APPROVE_PLAN', actions.approvePlan],
           ['SELECT_IMPLEMENTATION_MODE', actions.selectImplementationMode],
           ['START_AUTOMATED_IMPLEMENTATION', actions.startAutomatedImplementation],
@@ -1065,7 +1069,14 @@ Please provide specific file locations and line numbers where issues are found, 
 
         const actionType = model?.__actionName || proposal?.__actionName || proposal?.type || this.lastAction?.type || 'UNKNOWN'
         const actionInfo = proposal || this.lastAction || { type: actionType }
-        samDebugger.recordAction(actionType, actionInfo, model, this.state)
+
+        // Skip debugger recording for high-frequency streaming actions to avoid
+        // deep-cloning the entire model (including growing streamingResponse) on every chunk.
+        // This prevents OOM crashes during long CLI sessions.
+        const skipDebuggerActions = new Set(['RECEIVE_RESPONSE_CHUNK', 'RECEIVE_RAW_MESSAGE'])
+        if (!skipDebuggerActions.has(actionType)) {
+          samDebugger.recordAction(actionType, actionInfo, model, this.state)
+        }
 
         console.log('[SAM-RENDER] actionType:', actionType, 'model.__actionName:', model?.__actionName)
 
@@ -1773,6 +1784,15 @@ Please provide specific file locations and line numbers where issues are found, 
       this.handleSprintPlanning(state._pendingSprintPlanning, state)
         .finally(() => {
           this._handlingSprintPlanning = false
+        })
+    }
+
+    // Handle pending CRE planning - run CRE planning workflow (AC1, AC2)
+    if (state._pendingCrePlanning && !this._handlingCrePlanning) {
+      this._handlingCrePlanning = true
+      this.handleCrePlanning(state._pendingCrePlanning)
+        .finally(() => {
+          this._handlingCrePlanning = false
         })
     }
   }
@@ -4238,6 +4258,68 @@ Keep it concise but informative. Use markdown formatting.`
   }
 
   /**
+   * Handle CRE planning workflow (AC1, AC2, AC3).
+   * Sequence: generate-plan → approve → generate-ris per story.
+   * Process lock is held on the main process side for the entire phase.
+   */
+  async handleCrePlanning(planningData) {
+    console.log('[CRE] Starting CRE planning workflow:', planningData.sprintId)
+
+    // Clear pending flag immediately to prevent re-entry
+    this.state._pendingCrePlanning = null
+
+    const { sprintId, stories } = planningData
+
+    try {
+      this.showToast('CRE: Generating plan...', 'info')
+
+      // Step 1: Generate plan (AC1 — replaces old planning prompt)
+      const planResult = await window.puffin.cre.generatePlan({ sprintId, stories })
+      if (!planResult.success) {
+        throw new Error(planResult.error)
+      }
+      console.log('[CRE] Plan generated:', planResult.data)
+
+      const planId = planResult.data?.planId || sprintId
+
+      // Step 2: Approve plan (AC2 — auto-approve in orchestrated flow)
+      this.showToast('CRE: Approving plan...', 'info')
+      const approveResult = await window.puffin.cre.approvePlan({ planId })
+      if (!approveResult.success) {
+        throw new Error(approveResult.error)
+      }
+
+      // Step 3: Generate RIS for each story (AC2 — generate-ris per story)
+      const risMap = {}
+      const storyOrder = planResult.data?.planItems?.map(p => p.storyId) || stories.map(s => s.id)
+
+      for (const story of stories) {
+        this.showToast(`CRE: Generating RIS for "${story.title}"...`, 'info')
+        const risResult = await window.puffin.cre.generateRis({ planId, storyId: story.id })
+        if (risResult.success) {
+          risMap[story.id] = risResult.data
+        } else {
+          console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
+          risMap[story.id] = { error: risResult.error }
+        }
+      }
+
+      // Dispatch success — stores plan + RIS, transitions sprint to 'planned'
+      this.intents.crePlanningComplete(planResult.data, risMap, storyOrder)
+      this.showToast('CRE: Planning complete', 'success')
+    } catch (err) {
+      console.error('[CRE] Planning workflow failed:', err.message)
+      this.intents.crePlanningError(err)
+      this.showToast({
+        type: 'error',
+        title: 'CRE Planning Failed',
+        message: err.message,
+        duration: 8000
+      })
+    }
+  }
+
+  /**
    * Handle rerun request from state
    */
   async handleRerunRequest(rerunRequest, state) {
@@ -4775,10 +4857,40 @@ Please proceed with the implementation.`
     console.log('[ORCH-TRACE-6] - Will call checkOrchestrationProgress in 1000ms')
     console.log('='.repeat(80))
 
-    // Check for next story after a small delay
-    setTimeout(() => {
-      this.checkOrchestrationProgress()
-    }, 1000)
+    // AC5: Run CRE introspection (cre:update-model) after story completes, blocking next story
+    this.runCreIntrospection(currentStoryId).finally(() => {
+      // Check for next story after introspection completes
+      setTimeout(() => {
+        this.checkOrchestrationProgress()
+      }, 1000)
+    })
+  }
+
+  /**
+   * Run CRE introspection after a story completes (AC5).
+   * Blocks the next story from starting until complete.
+   * @param {string} storyId - The completed story ID
+   */
+  async runCreIntrospection(storyId) {
+    if (!window.puffin?.cre) {
+      console.log('[CRE] CRE API not available, skipping introspection')
+      return
+    }
+
+    try {
+      console.log('[CRE] Running introspection for completed story:', storyId)
+      const result = await window.puffin.cre.updateModel({})
+      if (result.success) {
+        console.log('[CRE] Introspection complete for story:', storyId, result.data)
+      } else {
+        console.warn('[CRE] Introspection returned error:', result.error)
+      }
+      this.intents.creIntrospectionComplete(storyId)
+    } catch (err) {
+      console.error('[CRE] Introspection failed for story:', storyId, err.message)
+      // Don't block orchestration on introspection failure — log and proceed
+      this.intents.creIntrospectionComplete(storyId)
+    }
   }
 
   /**

@@ -50,6 +50,11 @@ const TOOL_EMOJIS = {
   default: '⚙️'
 }
 
+/** Maximum stored messages/raw lines before oldest are dropped */
+const MAX_MESSAGES = 500
+/** Maximum stream buffer size in characters before trimming */
+const MAX_STREAM_BUFFER_CHARS = 500000
+
 export class CliOutputComponent {
   constructor(intents) {
     this.intents = intents
@@ -137,11 +142,14 @@ export class CliOutputComponent {
    * Called for each JSON line from the CLI stream
    */
   handleRawMessage(jsonLine) {
-    // Store raw message
+    // Store raw message (cap to prevent unbounded growth)
     this.rawMessages.push({
       timestamp: Date.now(),
       raw: jsonLine
     })
+    if (this.rawMessages.length > MAX_MESSAGES) {
+      this.rawMessages = this.rawMessages.slice(-Math.floor(MAX_MESSAGES * 0.75))
+    }
 
     // Try to parse JSON
     try {
@@ -167,6 +175,9 @@ export class CliOutputComponent {
     }
 
     this.messages.push(message)
+    if (this.messages.length > MAX_MESSAGES) {
+      this.messages = this.messages.slice(-Math.floor(MAX_MESSAGES * 0.75))
+    }
 
     switch (msg.type) {
       case 'assistant':
@@ -202,11 +213,10 @@ export class CliOutputComponent {
         if (block.type === 'text') {
           this.appendToStream(block.text, 'assistant-text')
         } else if (block.type === 'tool_use') {
-          // Track active tool
+          // Track active tool (only store name — input is not needed here)
           this.activeTools.set(block.id, {
             name: block.name,
-            timestamp: Date.now(),
-            input: block.input // Store input for file path extraction
+            timestamp: Date.now()
           })
 
           // Create emoji element with tooltip and animation
@@ -314,6 +324,7 @@ export class CliOutputComponent {
    */
   appendToStream(text, className = '') {
     this.streamBuffer += `<div class="stream-line ${className}">${this.escapeHtml(text)}</div>`
+    this._trimStreamBuffer()
     this.updateStreamView()
   }
 
@@ -322,7 +333,25 @@ export class CliOutputComponent {
    */
   appendToStreamRaw(html, className = '') {
     this.streamBuffer += `<div class="stream-line ${className}">${html}</div>`
+    this._trimStreamBuffer()
     this.updateStreamView()
+  }
+
+  /**
+   * Trim stream buffer if it exceeds the character limit.
+   * Drops the oldest ~25% of content to avoid trimming on every append.
+   * @private
+   */
+  _trimStreamBuffer() {
+    if (this.streamBuffer.length > MAX_STREAM_BUFFER_CHARS) {
+      // Find a div boundary near the 25% mark to cut cleanly
+      const cutPoint = Math.floor(MAX_STREAM_BUFFER_CHARS * 0.25)
+      const divIndex = this.streamBuffer.indexOf('</div>', cutPoint)
+      if (divIndex !== -1) {
+        this.streamBuffer = '<div class="stream-line system">[...earlier output trimmed]</div>' +
+          this.streamBuffer.slice(divIndex + 6)
+      }
+    }
   }
 
   /**

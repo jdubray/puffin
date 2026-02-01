@@ -32,13 +32,18 @@ export class SAMDebugger {
   recordAction(actionType, proposal, modelSnapshot, stateSnapshot) {
     if (!this.enabled || this.isTimeTraveling) return
 
+    // Create a lightweight model snapshot — exclude large transient fields
+    // to prevent OOM from cloning accumulated streaming content and full history
+    const liteModel = this.lightweightClone(modelSnapshot)
+    const liteState = this.lightweightClone(stateSnapshot)
+
     const entry = {
       id: this.history.length,
       timestamp: Date.now(),
       actionType,
       proposal: this.deepClone(proposal),
-      model: this.deepClone(modelSnapshot),
-      state: this.deepClone(stateSnapshot),
+      model: liteModel,
+      state: liteState,
       controlStates: this.extractControlStates(modelSnapshot)
     }
 
@@ -218,6 +223,54 @@ export class SAMDebugger {
     } catch (e) {
       console.error('Failed to import history:', e)
     }
+  }
+
+  /**
+   * Create a lightweight clone of a model/state snapshot.
+   * Truncates large string fields and omits heavy nested data
+   * (e.g. full branch prompt arrays, streaming content) to prevent OOM.
+   * @private
+   */
+  lightweightClone(obj) {
+    const MAX_STRING_LEN = 500
+    const HEAVY_KEYS = new Set(['prompts', 'rawMessages', 'messages', 'streamBuffer'])
+
+    const trimmed = this._liteClone(obj, MAX_STRING_LEN, HEAVY_KEYS, 0)
+    return trimmed
+  }
+
+  /** @private */
+  _liteClone(value, maxStr, heavyKeys, depth) {
+    if (value === null || value === undefined) return value
+    if (typeof value === 'number' || typeof value === 'boolean') return value
+    if (typeof value === 'string') {
+      return value.length > maxStr ? value.slice(0, maxStr) + `...[${value.length} chars]` : value
+    }
+    // Prevent excessively deep cloning
+    if (depth > 6) return '[depth limit]'
+
+    if (Array.isArray(value)) {
+      // For large arrays, just record length
+      if (value.length > 20) {
+        return `[Array(${value.length})]`
+      }
+      return value.map(item => this._liteClone(item, maxStr, heavyKeys, depth + 1))
+    }
+
+    if (typeof value === 'object') {
+      const out = {}
+      for (const key of Object.keys(value)) {
+        if (heavyKeys.has(key)) {
+          const v = value[key]
+          out[key] = Array.isArray(v) ? `[Array(${v.length})]` : `[${typeof v}]`
+        } else {
+          out[key] = this._liteClone(value[key], maxStr, heavyKeys, depth + 1)
+        }
+      }
+      return out
+    }
+
+    return String(value)
   }
 
   /**

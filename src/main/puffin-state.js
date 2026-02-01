@@ -2086,6 +2086,9 @@ ${content}`
       if (!config.codingStandard) {
         config.codingStandard = { language: 'none', content: '' }
       }
+      // Ensure CRE config exists for older configs
+      const { ensureCreConfig } = require('./cre/lib/cre-config')
+      ensureCreConfig(config)
       return config
     } catch {
       // Create default config
@@ -2110,6 +2113,7 @@ ${content}`
           language: 'none',
           content: ''
         },
+        cre: require('./cre/lib/cre-config').getDefaultCreConfig(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }

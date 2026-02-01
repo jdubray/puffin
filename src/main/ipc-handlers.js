@@ -102,6 +102,25 @@ function setupStateHandlers(ipcMain) {
     try {
       const state = await puffinState.open(projectPath)
 
+      // Initialize CRE (Central Reasoning Engine)
+      try {
+        const cre = require('./cre')
+        await cre.initialize({
+          ipcMain,
+          app: require('electron').app,
+          db: puffinState.database.connection.getConnection(),
+          config: state.config || {},
+          projectRoot: projectPath,
+          claudeService
+        })
+        // Persist CRE defaults into config.json on first init
+        if (state.config?.cre) {
+          await puffinState.saveConfig()
+        }
+      } catch (creErr) {
+        console.error('[CRE] Initialization failed (non-fatal):', creErr.message)
+      }
+
       // Initialize CLAUDE.md generator and generate initial files
       await claudeMdGenerator.initialize(projectPath)
       const activeBranch = state.history?.activeBranch || 'specifications'
@@ -1223,29 +1242,44 @@ function setupClaudeHandlers(ipcMain) {
         codeModificationAllowed
       }
 
+      // Safe send helper — renderer frame may be disposed during long CLI sessions
+      const safeSend = (channel, data) => {
+        try {
+          event.sender.send(channel, data)
+        } catch (err) {
+          // Frame disposed — renderer crashed or reloaded. Log once and carry on.
+          if (!safeSend._warned) {
+            safeSend._warned = true
+            console.warn('[IPC-GUARD] Renderer frame disposed, suppressing further send errors')
+          }
+        }
+      }
+
       await claudeService.submit(
         submitData,
         // On chunk received (streaming output)
         (chunk) => {
-          event.sender.send('claude:response', chunk)
+          safeSend('claude:response', chunk)
         },
         // On complete
         (response) => {
-          event.sender.send('claude:complete', response)
+          safeSend('claude:complete', response)
         },
         // On raw JSON line (for CLI Output view)
         (jsonLine) => {
-          event.sender.send('claude:raw', jsonLine)
+          safeSend('claude:raw', jsonLine)
         },
         // On full prompt built (for debug view)
         (fullPrompt) => {
-          event.sender.send('claude:fullPrompt', fullPrompt)
+          safeSend('claude:fullPrompt', fullPrompt)
         }
       )
     } catch (error) {
       console.error('[IPC-ERROR] claude:submit failed:', error)
       console.error('[IPC-ERROR] Error stack:', error.stack)
-      event.sender.send('claude:error', { message: error.message })
+      try {
+        event.sender.send('claude:error', { message: error.message })
+      } catch { /* frame already gone */ }
     }
   })
 

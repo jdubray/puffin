@@ -49,7 +49,12 @@
       "Skill(rlm)",
       "Bash(grep:*)",
       "Bash(for i in {0..13})",
-      "Bash(do echo \"=== CHUNK $i ===\" grep -E \"## Plugin|## Technology|## Design|### Recommendation|Recommendation:|Rationale|Trade-off|trade-off\" \"/mnt/c/Users/jjdub/code/puffin/.claude/rlm_state/chunks/chunk_000$i.txt\")"
+      "Bash(do echo \"=== CHUNK $i ===\" grep -E \"## Plugin|## Technology|## Design|### Recommendation|Recommendation:|Rationale|Trade-off|trade-off\" \"/mnt/c/Users/jjdub/code/puffin/.claude/rlm_state/chunks/chunk_000$i.txt\")",
+      "mcp__hdsl__hdsl_stats"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "hdsl"
+  ]
 }

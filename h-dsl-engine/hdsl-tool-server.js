@@ -26,6 +26,47 @@ const isDirectRun = require.main === module;
 if (isDirectRun) {
   const args = process.argv.slice(2);
 
+  // Quick diagnostic flags (no --project required)
+  if (args.includes('--version')) {
+    console.log('hdsl-tool-server 0.1.0');
+    process.exit(0);
+  }
+
+  if (args.includes('--health')) {
+    const fs = require('fs');
+    let root = null;
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--project' && args[i + 1]) root = path.resolve(args[++i]);
+    }
+    root = root || process.cwd();
+    const cre = path.join(root, '.puffin', 'cre');
+    const schemaPath = path.join(cre, 'schema.json');
+    const instancePath = path.join(cre, 'instance.json');
+    const hasSchema = fs.existsSync(schemaPath);
+    const hasInstance = fs.existsSync(instancePath);
+    const status = hasSchema && hasInstance ? 'ok' : 'degraded';
+    const report = {
+      status,
+      version: '0.1.0',
+      project: root,
+      dataDir: cre,
+      schema: hasSchema ? 'found' : 'missing',
+      instance: hasInstance ? 'found' : 'missing'
+    };
+    if (hasInstance) {
+      try {
+        const inst = JSON.parse(fs.readFileSync(instancePath, 'utf8'));
+        report.artifacts = Object.keys(inst.artifacts || {}).length;
+        report.dependencies = (inst.dependencies || []).length;
+      } catch (e) {
+        report.instance = `error: ${e.message}`;
+        report.status = 'degraded';
+      }
+    }
+    console.log(JSON.stringify(report, null, 2));
+    process.exit(status === 'ok' ? 0 : 1);
+  }
+
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) {
       projectRoot = path.resolve(args[++i]);
@@ -295,7 +336,9 @@ async function handleMessage(msg) {
   try {
     parsed = JSON.parse(msg);
   } catch {
-    return makeError(null, -32700, 'Parse error');
+    // Cannot determine id from unparseable message; silently drop per JSON-RPC 2.0
+    // (sending error with id=null fails MCP SDK Zod validation)
+    return null;
   }
 
   const { id, method, params } = parsed;
@@ -303,6 +346,7 @@ async function handleMessage(msg) {
   switch (method) {
     case 'initialize':
       return makeResponse(id, {
+        protocolVersion: '2024-11-05',
         serverInfo: { name: 'hdsl', version: '0.1.0' },
         capabilities: { tools: {} }
       });
@@ -337,6 +381,8 @@ async function handleMessage(msg) {
     }
 
     default:
+      // Notifications (no id) must not receive a response per JSON-RPC 2.0
+      if (id === undefined || id === null) return null;
       return makeError(id, -32601, `Method not found: ${method}`);
   }
 }

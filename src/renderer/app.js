@@ -931,7 +931,7 @@ Please provide specific file locations and line numbers where issues are found, 
       // Sprint actions
       'createSprint', 'startSprintPlanning', 'crePlanReady', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
       'approvePlan', 'approvePlanWithCre', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan', 'submitPlanAnswers',
-      'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'deleteSprint',
+      'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'clearPendingCrePlanning', 'clearPendingCreAnswers', 'clearPendingCreIteration', 'deleteSprint',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'updateStoryAssertionResults', 'toggleCriteriaCompletion',
       // Acceptance criteria validation actions
@@ -1075,6 +1075,9 @@ Please provide specific file locations and line numbers where issues are found, 
           ['CLEAR_SPRINT_WITH_DETAILS', actions.clearSprintWithDetails],
           ['SHOW_SPRINT_CLOSE_MODAL', actions.showSprintCloseModal],
           ['CLEAR_PENDING_SPRINT_PLANNING', actions.clearPendingSprintPlanning],
+          ['CLEAR_PENDING_CRE_PLANNING', actions.clearPendingCrePlanning],
+          ['CLEAR_PENDING_CRE_ANSWERS', actions.clearPendingCreAnswers],
+          ['CLEAR_PENDING_CRE_ITERATION', actions.clearPendingCreIteration],
           ['DELETE_SPRINT', actions.deleteSprint],
           ['START_SPRINT_STORY_IMPLEMENTATION', actions.startSprintStoryImplementation],
           ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation],
@@ -4370,8 +4373,8 @@ Keep it concise but informative. Use markdown formatting.`
   async handleCrePlanning(planningData) {
     console.log('[CRE] Starting CRE planning workflow:', planningData.sprintId)
 
-    // Clear pending flag immediately to prevent re-entry
-    this.state._pendingCrePlanning = null
+    // Clear pending flag on the MODEL to prevent re-entry on next render cycle
+    this.intents.clearPendingCrePlanning()
 
     const { sprintId, stories } = planningData
 
@@ -4527,8 +4530,8 @@ Keep it concise but informative. Use markdown formatting.`
   async handleCreAnswerSubmission(answerData) {
     console.log('[CRE] Submitting answers for plan:', answerData.planId)
 
-    // Clear pending flag immediately
-    this.state._pendingCreAnswers = null
+    // Clear pending flag on the MODEL to prevent re-entry on next render cycle
+    this.intents.clearPendingCreAnswers()
 
     const { planId, sprintId, stories, answers } = answerData
 
@@ -4596,8 +4599,8 @@ Keep it concise but informative. Use markdown formatting.`
   async handleCreIteration(iterationData) {
     console.log('[CRE] Refining plan:', iterationData.planId)
 
-    // Clear pending flag immediately
-    this.state._pendingCreIteration = null
+    // Clear pending flag on the MODEL to prevent re-entry on next render cycle
+    this.intents.clearPendingCreIteration()
 
     const { planId, feedback } = iterationData
 

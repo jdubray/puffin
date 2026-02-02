@@ -1230,6 +1230,24 @@ export const clearPendingSprintPlanning = () => ({
   payload: {}
 })
 
+// Clear pending CRE planning flag (after generate-plan IPC call starts)
+export const clearPendingCrePlanning = () => ({
+  type: 'CLEAR_PENDING_CRE_PLANNING',
+  payload: {}
+})
+
+// Clear pending CRE answers flag (after submit-answers IPC call starts)
+export const clearPendingCreAnswers = () => ({
+  type: 'CLEAR_PENDING_CRE_ANSWERS',
+  payload: {}
+})
+
+// Clear pending CRE iteration flag (after refine-plan IPC call starts)
+export const clearPendingCreIteration = () => ({
+  type: 'CLEAR_PENDING_CRE_ITERATION',
+  payload: {}
+})
+
 // Start implementation for a specific story and branch (sprint workflow)
 export const startSprintStoryImplementation = (storyId, branchType) => ({
   type: 'START_SPRINT_STORY_IMPLEMENTATION',

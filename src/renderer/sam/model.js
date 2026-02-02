@@ -283,12 +283,24 @@ export const loadStateAcceptor = model => proposal => {
     model.storyGenerations = state.storyGenerations || model.storyGenerations
     model.uiGuidelines = state.uiGuidelines || model.uiGuidelines
 
+    // Reset sprint to 'created' if it was mid-planning when the app closed.
+    // The CRE workflow is transient (process lock, state machine) and cannot
+    // resume across restarts, so the user must re-trigger "Plan Sprint".
+    if (model.activeSprint && model.activeSprint.status === 'planning') {
+      console.log('[INIT] Sprint was in planning state on restart — resetting to created')
+      model.activeSprint.status = 'created'
+    }
+
     // Clear any in-progress state from previous session
     // This ensures the prompt textarea is enabled on startup
     model.pendingPromptId = null
     model.streamingResponse = ''
     model._pendingStoryImplementation = null
     model._pendingSprintPlanning = null
+    model._pendingCrePlanning = null
+    model._pendingCreAnswers = null
+    model._pendingCreIteration = null
+    model._pendingCreApproval = null
     model.storyDerivation = {
       status: 'idle',
       pendingStories: [],
@@ -2955,6 +2967,27 @@ export const clearPendingSprintPlanningAcceptor = model => proposal => {
   }
 }
 
+// Clear pending CRE planning flag (after generate-plan IPC call starts)
+export const clearPendingCrePlanningAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PENDING_CRE_PLANNING') {
+    model._pendingCrePlanning = null
+  }
+}
+
+// Clear pending CRE answers flag (after submit-answers IPC call starts)
+export const clearPendingCreAnswersAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PENDING_CRE_ANSWERS') {
+    model._pendingCreAnswers = null
+  }
+}
+
+// Clear pending CRE iteration flag (after refine-plan IPC call starts)
+export const clearPendingCreIterationAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PENDING_CRE_ITERATION') {
+    model._pendingCreIteration = null
+  }
+}
+
 // Iterate on the sprint plan with clarifying answers
 export const iterateSprintPlanAcceptor = model => proposal => {
   if (proposal?.type === 'ITERATE_SPRINT_PLAN') {
@@ -4173,6 +4206,9 @@ export const acceptors = [
   iterateSprintPlanAcceptor,
   submitPlanAnswersAcceptor,
   clearPendingSprintPlanningAcceptor,
+  clearPendingCrePlanningAcceptor,
+  clearPendingCreAnswersAcceptor,
+  clearPendingCreIterationAcceptor,
   startSprintStoryImplementationAcceptor,
   clearPendingStoryImplementationAcceptor,
   completeStoryBranchAcceptor,

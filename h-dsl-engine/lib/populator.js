@@ -19,6 +19,28 @@ const BATCH_SIZE = 8;
 /** Max file content sent to AI (chars). */
 const MAX_FILE_CONTENT = 3000;
 
+/** Pattern for splitting camelCase/PascalCase into words. */
+const CAMEL_SPLIT = /([a-z])([A-Z])/g;
+
+/** Common verb prefixes that hint at function purpose. */
+const VERB_INTENTS = {
+  get: 'Retrieves', set: 'Sets', update: 'Updates', create: 'Creates',
+  delete: 'Deletes', remove: 'Removes', add: 'Adds', load: 'Loads',
+  save: 'Saves', init: 'Initializes', start: 'Starts', stop: 'Stops',
+  handle: 'Handles', on: 'Handles event for', emit: 'Emits',
+  parse: 'Parses', build: 'Builds', render: 'Renders', format: 'Formats',
+  validate: 'Validates', check: 'Checks', is: 'Tests whether',
+  has: 'Tests whether it has', find: 'Finds', search: 'Searches for',
+  filter: 'Filters', sort: 'Sorts', transform: 'Transforms',
+  compute: 'Computes', calculate: 'Calculates', derive: 'Derives',
+  resolve: 'Resolves', normalize: 'Normalizes', clear: 'Clears',
+  reset: 'Resets', toggle: 'Toggles', show: 'Shows', hide: 'Hides',
+  open: 'Opens', close: 'Closes', connect: 'Connects', disconnect: 'Disconnects',
+  send: 'Sends', receive: 'Receives', fetch: 'Fetches', submit: 'Submits',
+  cancel: 'Cancels', complete: 'Completes', mark: 'Marks',
+  extract: 'Extracts', inject: 'Injects', register: 'Registers'
+};
+
 /**
  * Populate the Code Model instance from discovery results.
  *
@@ -41,9 +63,11 @@ async function populate({ discovery, schema, projectRoot, log }) {
   for (const [dir, artifacts] of Object.entries(batches)) {
     log(`  Processing: ${dir}/ (${artifacts.length} files)`);
 
-    // Create artifact entries with structured fields
+    // Create artifact entries with structured fields and children
     for (const raw of artifacts) {
       const kind = classifyArtifact(raw, schema);
+      const children = buildChildren(raw);
+
       instance.artifacts[raw.path] = {
         type: kind,
         path: raw.path,
@@ -52,7 +76,8 @@ async function populate({ discovery, schema, projectRoot, log }) {
         intent: '',
         exports: raw.exports || [],
         tags: deriveTags(raw),
-        size: null
+        size: null,
+        children: children.length > 0 ? children : undefined
       };
 
       // Get file size
@@ -69,22 +94,14 @@ async function populate({ discovery, schema, projectRoot, log }) {
     for (const raw of artifacts) {
       for (const imp of raw.imports || []) {
         if (imp.source.startsWith('.')) {
-          const resolvedTo = resolveImport(raw.path, imp.source);
-          // Only add dependency if target exists in our artifacts
-          const targetExists = instance.artifacts[resolvedTo] ||
-            instance.artifacts[resolvedTo.replace(/\.js$/, '')] ||
-            instance.artifacts[resolvedTo + '/index.js'];
-
-          if (targetExists) {
-            const targetPath = instance.artifacts[resolvedTo] ? resolvedTo
-              : instance.artifacts[resolvedTo.replace(/\.js$/, '')] ? resolvedTo.replace(/\.js$/, '')
-              : resolvedTo + '/index.js';
-
+          const targetPath = resolveImportToArtifact(raw.path, imp.source, instance.artifacts);
+          if (targetPath) {
             instance.dependencies.push({
               from: raw.path,
               to: targetPath,
               kind: 'imports',
-              weight: 'normal'
+              weight: 'normal',
+              intent: imp.specifiers.length > 0 ? `Imports ${imp.specifiers.join(', ')}` : ''
             });
           }
         }
@@ -205,7 +222,8 @@ function deriveTags(raw) {
 }
 
 /**
- * Generate prose summaries for a batch of artifacts using AI.
+ * Generate prose summaries for a batch of artifacts using AI,
+ * with heuristic fallback when AI is unavailable.
  * @param {Array} artifacts
  * @param {Object} instance
  * @param {string} projectRoot
@@ -242,10 +260,11 @@ Return ONLY valid JSON — no markdown code blocks.`;
         }
       }
     } else {
-      // Graceful degradation (BNR-04): mark as unavailable
+      // Heuristic fallback (BNR-04): generate summaries from structural data
+      log('    AI unavailable — generating heuristic prose from JSDoc and structure');
       for (const art of batch) {
-        if (instance.artifacts[art.path] && !instance.artifacts[art.path].summary) {
-          instance.artifacts[art.path].summary = 'AI summary unavailable';
+        if (instance.artifacts[art.path]) {
+          generateHeuristicProse(art, instance.artifacts[art.path]);
         }
       }
     }
@@ -253,16 +272,236 @@ Return ONLY valid JSON — no markdown code blocks.`;
 }
 
 /**
- * Resolve a relative import to a project-relative path.
- * @param {string} fromFile
- * @param {string} importSource
+ * Build child artifact entries (functions/classes) from raw parsed data.
+ * @param {Object} raw - Raw artifact with functionDetails and classDetails.
+ * @returns {Array} Array of child SLOT descriptors.
+ */
+function buildChildren(raw) {
+  const children = [];
+
+  // Add class children
+  if (raw.classDetails) {
+    for (const cls of raw.classDetails) {
+      const child = {
+        name: cls.name,
+        kind: 'class',
+        line: cls.line,
+        endLine: cls.endLine,
+        superClass: cls.superClass || undefined,
+        summary: cls.jsdoc ? extractFirstSentence(cls.jsdoc) : heuristicClassSummary(cls),
+        intent: cls.jsdoc || ''
+      };
+      if (cls.methods && cls.methods.length > 0) {
+        child.methods = cls.methods.map(m => ({
+          name: m.name,
+          params: m.params,
+          line: m.line,
+          summary: m.jsdoc ? extractFirstSentence(m.jsdoc) : heuristicFunctionSummary(m.name, m.params)
+        }));
+      }
+      children.push(child);
+    }
+  }
+
+  // Add function children
+  if (raw.functionDetails) {
+    for (const fn of raw.functionDetails) {
+      const signature = `${fn.async ? 'async ' : ''}${fn.name}(${fn.params.join(', ')})`;
+      children.push({
+        name: fn.name,
+        kind: 'function',
+        signature,
+        line: fn.line,
+        endLine: fn.endLine,
+        params: fn.params,
+        async: fn.async || undefined,
+        summary: fn.jsdoc ? extractFirstSentence(fn.jsdoc) : heuristicFunctionSummary(fn.name, fn.params),
+        intent: fn.jsdoc || ''
+      });
+    }
+  }
+
+  return children;
+}
+
+/**
+ * Extract the first sentence from a JSDoc comment.
+ * @param {string} jsdoc
  * @returns {string}
  */
-function resolveImport(fromFile, importSource) {
+function extractFirstSentence(jsdoc) {
+  // Strip @tags
+  const lines = jsdoc.split('\n').filter(l => !l.trim().startsWith('@'));
+  const text = lines.join(' ').trim();
+  // Take first sentence
+  const match = text.match(/^(.+?[.!?])\s/);
+  return match ? match[1] : text.slice(0, 120);
+}
+
+/**
+ * Generate a heuristic summary for a function from its name and params.
+ * @param {string} name
+ * @param {string[]} params
+ * @returns {string}
+ */
+function heuristicFunctionSummary(name, params) {
+  // Split camelCase name into words
+  const words = name.replace(CAMEL_SPLIT, '$1 $2').replace(/_/g, ' ').split(' ');
+  const verb = words[0].toLowerCase();
+  const rest = words.slice(1).join(' ').toLowerCase();
+
+  const verbIntent = VERB_INTENTS[verb];
+  if (verbIntent) {
+    const paramNote = params.length > 0 ? ` given ${params.join(', ')}` : '';
+    return `${verbIntent} ${rest || 'data'}${paramNote}.`;
+  }
+
+  // Fallback: just describe shape
+  const paramNote = params.length > 0 ? ` (${params.join(', ')})` : '';
+  return `${name}${paramNote}`;
+}
+
+/**
+ * Generate a heuristic summary for a class.
+ * @param {Object} cls - ClassDetail.
+ * @returns {string}
+ */
+function heuristicClassSummary(cls) {
+  const words = cls.name.replace(CAMEL_SPLIT, '$1 $2').split(' ');
+  const suffix = words[words.length - 1];
+  const prefix = words.slice(0, -1).join(' ');
+
+  const methodNames = (cls.methods || []).map(m => m.name).filter(n => n !== 'constructor');
+  const methodNote = methodNames.length > 0 ? ` Methods: ${methodNames.slice(0, 5).join(', ')}${methodNames.length > 5 ? '...' : ''}.` : '';
+
+  if (cls.superClass) {
+    return `${cls.name} extends ${cls.superClass}.${methodNote}`;
+  }
+  return `${prefix || ''} ${suffix.toLowerCase() || 'class'}.${methodNote}`.trim();
+}
+
+/**
+ * Generate heuristic prose for a module artifact when AI is unavailable.
+ * Uses the file's leading JSDoc block, children JSDoc, export names, and structural patterns.
+ * @param {Object} raw - Raw artifact data.
+ * @param {Object} artifact - Instance artifact entry to populate.
+ */
+function generateHeuristicProse(raw, artifact) {
+  const exportNames = raw.exports || [];
+  const fnDetails = raw.functionDetails || [];
+  const classDetails = raw.classDetails || [];
+  const basename = path.basename(raw.path, path.extname(raw.path));
+
+  // Try to find the module-level JSDoc from the raw file content.
+  // The module JSDoc comment is stored on the *first* child that has it,
+  // since buildJSDocMap maps it to the line after the comment block.
+  // We need to check all children for @module tags.
+  const allJsdocs = [
+    ...fnDetails.map(f => f.jsdoc),
+    ...classDetails.map(c => c.jsdoc)
+  ].filter(Boolean);
+
+  for (const jsdoc of allJsdocs) {
+    if (jsdoc.includes('@module')) {
+      const descLines = jsdoc.split('\n').filter(l => !l.trim().startsWith('@'));
+      const desc = descLines.join(' ').trim();
+      if (desc) {
+        artifact.summary = extractFirstSentence(desc);
+        artifact.intent = desc;
+        return;
+      }
+    }
+  }
+
+  // Also check if raw has a moduleJsdoc field (set by discoverer for leading comment)
+  if (raw.moduleJsdoc) {
+    const descLines = raw.moduleJsdoc.split('\n').filter(l => !l.trim().startsWith('@'));
+    const desc = descLines.join(' ').trim();
+    if (desc) {
+      artifact.summary = extractFirstSentence(desc);
+      artifact.intent = desc;
+      return;
+    }
+  }
+
+  // Build summary from structural data
+  const parts = [];
+
+  // Describe by what it exports
+  if (classDetails.length > 0) {
+    const classNames = classDetails.map(c => c.name);
+    parts.push(`Defines ${classNames.join(', ')}`);
+  }
+
+  if (exportNames.length > 0 && classDetails.length === 0) {
+    if (exportNames.length <= 3) {
+      parts.push(`Exports ${exportNames.join(', ')}`);
+    } else {
+      parts.push(`Exports ${exportNames.length} symbols including ${exportNames.slice(0, 3).join(', ')}`);
+    }
+  }
+
+  // Describe by function count and purpose
+  if (fnDetails.length > 0) {
+    const publicFns = fnDetails.filter(f => !f.name.startsWith('_'));
+    const privateFns = fnDetails.filter(f => f.name.startsWith('_'));
+
+    // Use function-level JSDoc to build a richer description
+    const fnSummaries = publicFns
+      .filter(f => f.jsdoc)
+      .map(f => `${f.name}: ${extractFirstSentence(f.jsdoc)}`)
+      .slice(0, 3);
+
+    if (fnSummaries.length > 0) {
+      parts.push(`Key functions — ${fnSummaries.join('; ')}`);
+    } else if (publicFns.length > 0) {
+      parts.push(`${publicFns.length} public function${publicFns.length > 1 ? 's' : ''}`);
+    }
+    if (privateFns.length > 0) {
+      parts.push(`${privateFns.length} internal helper${privateFns.length > 1 ? 's' : ''}`);
+    }
+  }
+
+  // Humanize the basename as a hint
+  const humanName = basename.replace(CAMEL_SPLIT, '$1 $2').replace(/[-_]/g, ' ').toLowerCase();
+
+  if (parts.length > 0) {
+    artifact.summary = `${parts[0]} — ${humanName} module.`;
+    artifact.intent = parts.join('. ') + '.';
+  } else {
+    artifact.summary = `Module: ${humanName}.`;
+    artifact.intent = '';
+  }
+}
+
+/**
+ * Resolve a relative import to an existing artifact path.
+ * Tries multiple resolution strategies to match CommonJS/ESM conventions.
+ * @param {string} fromFile - The importing file's path.
+ * @param {string} importSource - The import specifier (e.g. './config').
+ * @param {Object} artifacts - The instance artifacts map.
+ * @returns {string|null} The matching artifact path, or null.
+ */
+function resolveImportToArtifact(fromFile, importSource, artifacts) {
   const dir = path.posix.dirname(fromFile);
-  let resolved = path.posix.join(dir, importSource);
-  if (!path.extname(resolved)) resolved += '.js';
-  return resolved;
+  const base = path.posix.join(dir, importSource);
+
+  // Normalize: remove leading ./ if present after join
+  const normalize = (p) => p.replace(/^\.\//, '');
+
+  // Try in order: exact, .js, .mjs, .cjs, /index.js
+  const candidates = [
+    base,
+    base + '.js',
+    base + '.mjs',
+    base + '.cjs',
+    base + '/index.js'
+  ].map(normalize);
+
+  for (const candidate of candidates) {
+    if (artifacts[candidate]) return candidate;
+  }
+  return null;
 }
 
 /**

@@ -111,12 +111,28 @@ async function discover({ projectRoot, excludePatterns, includePatterns = [], lo
     }
 
     const parsed = parseFile(content, file.relativePath);
+
+    // Extract leading module-level JSDoc (the first /** */ block in the file)
+    let moduleJsdoc = null;
+    const moduleMatch = content.match(/^\s*\/\*\*([\s\S]*?)\*\//);
+    if (moduleMatch) {
+      const commentText = moduleMatch[1]
+        .split('\n')
+        .map(l => l.trim().replace(/^\*\s?/, ''))
+        .filter(l => l.length > 0)
+        .join('\n');
+      if (commentText) moduleJsdoc = commentText;
+    }
+
     rawArtifacts.push({
       path: file.relativePath,
       exports: parsed.exports,
       imports: parsed.imports,
       classes: parsed.classes,
       functions: parsed.functions,
+      functionDetails: parsed.functionDetails || [],
+      classDetails: parsed.classDetails || [],
+      moduleJsdoc,
       error: parsed.error
     });
 

@@ -1,0 +1,898 @@
+/* h-DSL Viewer Plugin Styles */
+
+.hdsl-viewer-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px 20px;
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-primary, #1e1e1e);
+}
+
+/* Loading / Error states */
+
+.hdsl-loading, .hdsl-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: var(--text-secondary, #aaa);
+}
+
+.hdsl-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color, #3a3a3a);
+  border-top-color: var(--accent-color, #4fc3f7);
+  border-radius: 50%;
+  animation: hdsl-spin 0.8s linear infinite;
+}
+
+@keyframes hdsl-spin {
+  to { transform: rotate(360deg); }
+}
+
+.hdsl-error-icon { font-size: 32px; }
+
+.hdsl-error h3 {
+  margin: 0;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.hdsl-error p {
+  max-width: 400px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* Buttons */
+
+.hdsl-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 4px;
+  background: var(--bg-secondary, #2a2a2a);
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.hdsl-btn:hover {
+  background: var(--bg-hover, #333);
+}
+
+.hdsl-btn-primary {
+  background: var(--accent-color, #4fc3f7);
+  color: #000;
+  border-color: transparent;
+}
+
+.hdsl-btn-primary:hover {
+  opacity: 0.85;
+}
+
+/* Header */
+
+.hdsl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.hdsl-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.hdsl-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+}
+
+/* Summary cards */
+
+.hdsl-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.hdsl-card {
+  background: var(--bg-secondary, #2a2a2a);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  padding: 12px;
+  text-align: center;
+}
+
+.hdsl-card-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent-color, #4fc3f7);
+}
+
+.hdsl-card-label {
+  font-size: 11px;
+  color: var(--text-secondary, #aaa);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Tabs */
+
+.hdsl-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-color, #3a3a3a);
+  margin-bottom: 12px;
+}
+
+.hdsl-tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.hdsl-tab:hover {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.hdsl-tab.active {
+  color: var(--accent-color, #4fc3f7);
+  border-bottom-color: var(--accent-color, #4fc3f7);
+}
+
+.hdsl-tab-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Schema tab — type cards */
+
+.hdsl-schema-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hdsl-type-card {
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-secondary, #2a2a2a);
+}
+
+.hdsl-type-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hdsl-type-header:hover {
+  background: var(--bg-hover, #333);
+}
+
+.hdsl-type-toggle {
+  font-size: 10px;
+  color: var(--text-secondary, #aaa);
+  width: 14px;
+}
+
+.hdsl-type-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.hdsl-type-field-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-secondary, #aaa);
+}
+
+/* Badges */
+
+.hdsl-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.hdsl-badge-slot {
+  background: #1b3a4b;
+  color: #4fc3f7;
+}
+
+.hdsl-badge-relation {
+  background: #3a2b1b;
+  color: #ffb74d;
+}
+
+/* Fields table */
+
+.hdsl-type-fields {
+  border-top: 1px solid var(--border-color, #3a3a3a);
+  padding: 8px 14px 12px;
+}
+
+.hdsl-fields-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.hdsl-fields-table th {
+  text-align: left;
+  padding: 4px 8px;
+  color: var(--text-secondary, #aaa);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-color, #3a3a3a);
+}
+
+.hdsl-fields-table td {
+  padding: 4px 8px;
+  vertical-align: top;
+}
+
+.hdsl-fields-table tr:not(:last-child) td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.hdsl-field-group td {
+  padding-top: 8px;
+  color: var(--text-secondary, #aaa);
+}
+
+.hdsl-field-name code {
+  color: var(--accent-color, #4fc3f7);
+  font-size: 12px;
+}
+
+.hdsl-field-attrs {
+  color: var(--text-secondary, #aaa);
+  font-size: 11px;
+}
+
+.hdsl-m3-term {
+  color: #81c784;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.hdsl-m3-prose {
+  color: #ce93d8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Extension log */
+
+.hdsl-extension-log {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  background: var(--bg-secondary, #2a2a2a);
+}
+
+.hdsl-extension-log h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.hdsl-extension-log ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hdsl-extension-log li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.hdsl-ext-types {
+  font-weight: 600;
+  color: var(--accent-color, #4fc3f7);
+}
+
+.hdsl-ext-rationale {
+  color: var(--text-secondary, #aaa);
+  flex: 1;
+}
+
+.hdsl-ext-source {
+  font-size: 10px;
+  color: var(--text-secondary, #777);
+}
+
+/* Instance tab */
+
+.hdsl-instance-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.hdsl-instance-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+  padding: 8px 12px;
+  background: var(--bg-secondary, #2a2a2a);
+  border-radius: 4px;
+}
+
+.hdsl-instance-stats strong {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.hdsl-instance-filter {
+  margin-bottom: 4px;
+}
+
+.hdsl-filter-input {
+  width: 100%;
+  padding: 7px 12px;
+  font-size: 12px;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 4px;
+  background: var(--bg-secondary, #2a2a2a);
+  color: var(--text-primary, #e0e0e0);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.hdsl-filter-input:focus {
+  border-color: var(--accent-color, #4fc3f7);
+}
+
+.hdsl-artifact-group h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.hdsl-count {
+  font-weight: 400;
+  color: var(--text-secondary, #aaa);
+}
+
+/* Artifact cards */
+
+.hdsl-artifact-card {
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: var(--bg-secondary, #2a2a2a);
+  overflow: hidden;
+}
+
+.hdsl-artifact-card.expanded {
+  border-color: var(--accent-color, #4fc3f7);
+}
+
+.hdsl-artifact-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hdsl-artifact-header:hover {
+  background: var(--bg-hover, #333);
+}
+
+.hdsl-artifact-toggle {
+  font-size: 10px;
+  color: var(--text-secondary, #aaa);
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.hdsl-artifact-path {
+  color: var(--accent-color, #4fc3f7);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hdsl-artifact-meta {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.hdsl-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(79, 195, 247, 0.12);
+  color: var(--accent-color, #4fc3f7);
+  font-weight: 500;
+}
+
+.hdsl-artifact-size {
+  font-size: 10px;
+  color: var(--text-secondary, #777);
+  white-space: nowrap;
+}
+
+.hdsl-artifact-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 12px 8px 34px;
+  font-size: 11px;
+}
+
+.hdsl-artifact-summary-text {
+  color: var(--text-secondary, #aaa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80%;
+}
+
+.hdsl-artifact-export-count {
+  font-size: 10px;
+  color: var(--text-secondary, #777);
+  flex-shrink: 0;
+}
+
+/* Artifact detail panels */
+
+.hdsl-artifact-details {
+  border-top: 1px solid var(--border-color, #3a3a3a);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hdsl-detail-section {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  align-items: baseline;
+}
+
+.hdsl-detail-label {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-secondary, #aaa);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  min-width: 70px;
+}
+
+.hdsl-detail-section code {
+  font-size: 11px;
+  padding: 1px 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  color: var(--text-primary, #e0e0e0);
+}
+
+/* Children / symbols table */
+
+.hdsl-children-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hdsl-children-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.hdsl-children-table th {
+  text-align: left;
+  padding: 3px 8px;
+  color: var(--text-secondary, #aaa);
+  border-bottom: 1px solid var(--border-color, #3a3a3a);
+  font-weight: 500;
+  font-size: 10px;
+}
+
+.hdsl-children-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  vertical-align: top;
+}
+
+.hdsl-kind-function code { color: #81c784; }
+.hdsl-kind-class code { color: #ce93d8; }
+.hdsl-kind-method code { color: #90a4ae; padding-left: 12px; }
+
+.hdsl-kind-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.hdsl-kind-badge.hdsl-kind-function { background: rgba(129, 199, 132, 0.15); color: #81c784; }
+.hdsl-kind-badge.hdsl-kind-class { background: rgba(206, 147, 216, 0.15); color: #ce93d8; }
+.hdsl-kind-badge.hdsl-kind-method { background: rgba(144, 164, 174, 0.15); color: #90a4ae; }
+
+.hdsl-signature {
+  font-size: 10px;
+  color: var(--text-secondary, #777);
+}
+
+.hdsl-line-num {
+  color: var(--text-secondary, #777);
+  font-size: 10px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hdsl-child-summary {
+  color: var(--text-secondary, #aaa);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hdsl-method-row td {
+  padding-left: 16px;
+}
+
+/* Dependency edges */
+
+.hdsl-deps-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hdsl-dep-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hdsl-dep-edge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+.hdsl-dep-outbound {
+  background: rgba(79, 195, 247, 0.06);
+}
+
+.hdsl-dep-inbound {
+  background: rgba(255, 183, 77, 0.06);
+}
+
+.hdsl-dep-arrow-out {
+  color: var(--accent-color, #4fc3f7);
+  font-weight: 600;
+}
+
+.hdsl-dep-arrow-in {
+  color: #ffb74d;
+  font-weight: 600;
+}
+
+.hdsl-dep-edge code {
+  color: var(--text-primary, #e0e0e0);
+  font-size: 11px;
+}
+
+.hdsl-dep-intent {
+  color: var(--text-secondary, #777);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.hdsl-dep-weight {
+  font-size: 9px;
+  color: var(--text-secondary, #666);
+}
+
+/* Flows */
+
+.hdsl-flows-section h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.hdsl-flow-card {
+  background: var(--bg-secondary, #2a2a2a);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+.hdsl-flow-card strong {
+  font-size: 13px;
+}
+
+.hdsl-flow-card p {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+}
+
+.hdsl-flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.hdsl-flow-step code {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: rgba(79, 195, 247, 0.1);
+  border-radius: 3px;
+  color: var(--accent-color, #4fc3f7);
+}
+
+.hdsl-flow-arrow {
+  color: var(--text-secondary, #666);
+  font-size: 12px;
+}
+
+/* Graph tab — interactive graph */
+
+.hdsl-graph-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+
+.hdsl-graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.hdsl-graph-filter-input {
+  flex: 1;
+  max-width: 280px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 4px;
+  background: var(--bg-secondary, #2a2a2a);
+  color: var(--text-primary, #e0e0e0);
+  outline: none;
+}
+
+.hdsl-graph-filter-input:focus {
+  border-color: var(--accent-color, #4fc3f7);
+}
+
+.hdsl-graph-node-count {
+  font-size: 11px;
+  color: var(--text-secondary, #aaa);
+  white-space: nowrap;
+}
+
+.hdsl-graph-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.hdsl-graph-zoom-level {
+  font-size: 11px;
+  color: var(--text-secondary, #aaa);
+  min-width: 36px;
+  text-align: center;
+}
+
+/* Legend */
+
+.hdsl-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 11px;
+}
+
+.hdsl-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary, #aaa);
+}
+
+.hdsl-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+/* Viewport and canvas */
+
+.hdsl-graph-viewport {
+  flex: 1;
+  min-height: 400px;
+  overflow: hidden;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  background: var(--bg-primary, #1e1e1e);
+  position: relative;
+  cursor: grab;
+}
+
+.hdsl-graph-canvas {
+  position: relative;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.hdsl-graph-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* Graph nodes */
+
+.hdsl-gnode {
+  position: absolute;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 5px;
+  background: var(--bg-secondary, #2a2a2a);
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.hdsl-gnode:hover {
+  border-color: var(--accent-color, #4fc3f7);
+  box-shadow: 0 0 8px rgba(79, 195, 247, 0.2);
+}
+
+.hdsl-gnode-selected {
+  border-color: var(--accent-color, #4fc3f7);
+  box-shadow: 0 0 12px rgba(79, 195, 247, 0.35);
+  background: rgba(79, 195, 247, 0.08);
+}
+
+.hdsl-gnode-module { border-left: 3px solid #4fc3f7; }
+.hdsl-gnode-test { border-left: 3px solid #a5d6a7; }
+.hdsl-gnode-config { border-left: 3px solid #ffb74d; }
+
+.hdsl-gnode-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hdsl-gnode-type {
+  font-size: 9px;
+  color: var(--text-secondary, #777);
+  flex-shrink: 0;
+}
+
+/* Detail panel (overlaid on graph) */
+
+.hdsl-graph-detail {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 320px;
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
+  background: var(--bg-secondary, #2a2a2a);
+  border: 1px solid var(--accent-color, #4fc3f7);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.hdsl-graph-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, #3a3a3a);
+}
+
+.hdsl-graph-detail-header code {
+  font-size: 11px;
+  color: var(--accent-color, #4fc3f7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hdsl-graph-detail-close {
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+}
+
+.hdsl-graph-detail-close:hover {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.hdsl-graph-detail-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.hdsl-graph-dep-link {
+  cursor: pointer;
+}
+
+.hdsl-graph-dep-link:hover {
+  background: rgba(79, 195, 247, 0.12);
+}
+
+/* Empty state */
+
+.hdsl-empty {
+  color: var(--text-secondary, #aaa);
+  font-size: 13px;
+  padding: 20px;
+  text-align: center;
+}

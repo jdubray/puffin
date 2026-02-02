@@ -25,7 +25,7 @@ function aiQuery(systemPrompt, userPrompt, opts = {}) {
   try {
     const args = ['-p', userPrompt, '--output-format', 'json'];
     if (systemPrompt) {
-      args.push('--system', systemPrompt);
+      args.push('--system-prompt', systemPrompt);
     }
 
     log('  AI query...');

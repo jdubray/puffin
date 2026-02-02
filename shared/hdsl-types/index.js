@@ -108,7 +108,35 @@ function createBaseSchema() {
           intent: { m3Type: M3Primitives.PROSE, required: false },
           exports: { m3Type: M3Primitives.TERM, array: true },
           tags: { m3Type: M3Primitives.TERM, array: true },
-          size: { m3Type: M3Primitives.TERM, required: false }
+          size: { m3Type: M3Primitives.TERM, required: false },
+          children: {
+            m3Type: M3Primitives.SLOT,
+            array: true,
+            required: false,
+            fields: {
+              name: { m3Type: M3Primitives.TERM, required: true },
+              kind: { m3Type: M3Primitives.TERM, enum: ['function', 'class'] },
+              signature: { m3Type: M3Primitives.TERM, required: false },
+              summary: { m3Type: M3Primitives.PROSE, required: false },
+              intent: { m3Type: M3Primitives.PROSE, required: false },
+              line: { m3Type: M3Primitives.TERM, required: false },
+              endLine: { m3Type: M3Primitives.TERM, required: false },
+              params: { m3Type: M3Primitives.TERM, array: true },
+              async: { m3Type: M3Primitives.TERM, required: false },
+              superClass: { m3Type: M3Primitives.TERM, required: false },
+              methods: {
+                m3Type: M3Primitives.SLOT,
+                array: true,
+                required: false,
+                fields: {
+                  name: { m3Type: M3Primitives.TERM },
+                  params: { m3Type: M3Primitives.TERM, array: true },
+                  summary: { m3Type: M3Primitives.PROSE, required: false },
+                  line: { m3Type: M3Primitives.TERM }
+                }
+              }
+            }
+          }
         }
       },
       function: {

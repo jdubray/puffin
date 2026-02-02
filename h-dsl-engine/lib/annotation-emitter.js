@@ -46,6 +46,21 @@ function yamlEscape(str) {
  * @param {Function} params.log
  * @returns {Promise<string[]>} Paths of generated annotation files.
  */
+/** Directories matching these patterns get one aggregated annotation instead of per-file. */
+const AGGREGATE_DIR_PATTERNS = [/\btests?\b/i, /\b__tests__\b/i, /\bspec\b/i];
+
+/** Max lines for a file to be considered "small" (eligible for aggregation). */
+const SMALL_FILE_THRESHOLD = 500;
+
+/**
+ * Check whether a directory path should use aggregated annotation.
+ * @param {string} dirPath - Forward-slash relative directory path.
+ * @returns {boolean}
+ */
+function isAggregateDir(dirPath) {
+  return AGGREGATE_DIR_PATTERNS.some(re => re.test(dirPath));
+}
+
 async function emitAnnotations({ schema, instance, projectRoot, outputDir, log }) {
   const sourceArtifacts = Object.entries(instance.artifacts)
     .filter(([, art]) => art.kind === 'module' || art.kind === 'file');
@@ -65,11 +80,32 @@ async function emitAnnotations({ schema, instance, projectRoot, outputDir, log }
   const annotationDir = path.join(outputDir, 'annotations');
   await fs.mkdir(annotationDir, { recursive: true });
 
+  // Partition artifacts: aggregate test/spec dirs vs individual files
+  const individualArtifacts = [];
+  /** @type {Map<string, Array<[string, Object]>>} directory → artifacts */
+  const aggregateGroups = new Map();
+
+  for (const entry of sourceArtifacts) {
+    const [artPath] = entry;
+    const dirPath = path.dirname(artPath);
+    if (isAggregateDir(dirPath)) {
+      if (!aggregateGroups.has(dirPath)) aggregateGroups.set(dirPath, []);
+      aggregateGroups.get(dirPath).push(entry);
+    } else {
+      individualArtifacts.push(entry);
+    }
+  }
+
+  if (aggregateGroups.size > 0) {
+    const fileCount = [...aggregateGroups.values()].reduce((n, g) => n + g.length, 0);
+    log(`  Aggregating ${fileCount} files in ${aggregateGroups.size} test/spec directories`);
+  }
+
   const written = [];
 
-  // Process in batches to overlap file I/O and bound sequential AI calls
-  for (let i = 0; i < sourceArtifacts.length; i += ANNOTATION_BATCH_SIZE) {
-    const batch = sourceArtifacts.slice(i, i + ANNOTATION_BATCH_SIZE);
+  // Process individual artifacts in batches
+  for (let i = 0; i < individualArtifacts.length; i += ANNOTATION_BATCH_SIZE) {
+    const batch = individualArtifacts.slice(i, i + ANNOTATION_BATCH_SIZE);
 
     const results = await Promise.all(batch.map(async ([artPath, artifact]) => {
       const annotationContent = await buildAnnotation({
@@ -92,6 +128,26 @@ async function emitAnnotations({ schema, instance, projectRoot, outputDir, log }
     }));
 
     written.push(...results);
+  }
+
+  // Process aggregated directories
+  for (const [dirPath, artifacts] of aggregateGroups) {
+    const content = await buildDirectoryAnnotation({
+      dirPath,
+      artifacts,
+      schema,
+      outboundMap,
+      inboundMap,
+      projectRoot,
+      log
+    });
+
+    const annDir = path.join(annotationDir, dirPath);
+    await fs.mkdir(annDir, { recursive: true });
+    const annPath = path.join(annDir, '_directory.an.md');
+    await fs.writeFile(annPath, content, 'utf-8');
+    log(`    ${dirPath}/ → _directory.an.md (${artifacts.length} files)`);
+    written.push(annPath);
   }
 
   return written;
@@ -162,6 +218,134 @@ async function buildAnnotation({ artPath, artifact, schema, outboundDeps, inboun
 
   // Understanding
   sections.push(renderUnderstanding(artPath, artifact, deepAnalysis));
+
+  return sections.join('\n');
+}
+
+/**
+ * Build a single aggregated .an.md for all artifacts in a directory.
+ *
+ * @param {Object} params
+ * @param {string} params.dirPath - Relative directory path.
+ * @param {Array<[string, Object]>} params.artifacts - [artPath, artifact] entries.
+ * @param {Object} params.schema
+ * @param {Map} params.outboundMap
+ * @param {Map} params.inboundMap
+ * @param {string} params.projectRoot
+ * @param {Function} params.log
+ * @returns {Promise<string>}
+ */
+async function buildDirectoryAnnotation({ dirPath, artifacts, schema, outboundMap, inboundMap, projectRoot, log }) {
+  const sections = [];
+
+  // Header
+  sections.push(`# Annotations: ${dirPath}/\n`);
+  sections.push(`> **Directory**: \`${dirPath}/\``);
+  sections.push(`> **Files**: ${artifacts.length}`);
+  sections.push(`> **h-M3 Artifact Type**: SLOT (aggregated)\n`);
+  sections.push('---\n');
+
+  // Summary table
+  sections.push('## Files Overview\n');
+  sections.push('| File | Kind | Exports | Summary |');
+  sections.push('|------|------|---------|---------|');
+
+  let totalExports = 0;
+  let totalLines = 0;
+  const allOutbound = [];
+  const allInbound = [];
+  const allSymbols = [];
+
+  for (const [artPath, artifact] of artifacts) {
+    const exportCount = (artifact.exports || []).length;
+    totalExports += exportCount;
+
+    // Count lines
+    let lineCount = 0;
+    try {
+      const src = await fs.readFile(path.join(projectRoot, artPath), 'utf-8');
+      lineCount = src.split('\n').length;
+    } catch { /* ignore */ }
+    totalLines += lineCount;
+
+    sections.push(`| \`${path.basename(artPath)}\` | ${artifact.kind} | ${exportCount} | ${yamlEscape(artifact.summary || '—')} |`);
+
+    // Collect deps and symbols
+    allOutbound.push(...(outboundMap.get(artPath) || []));
+    allInbound.push(...(inboundMap.get(artPath) || []));
+    for (const exp of (artifact.exports || [])) {
+      allSymbols.push({ name: exp, file: path.basename(artPath) });
+    }
+
+    // Children (functions/classes)
+    if (Array.isArray(artifact.children)) {
+      for (const child of artifact.children) {
+        allSymbols.push({ name: child.name, file: path.basename(artPath), kind: child.kind });
+      }
+    }
+  }
+
+  sections.push('');
+  sections.push(`**Total**: ${totalLines} lines, ${totalExports} exports across ${artifacts.length} files\n`);
+  sections.push('---\n');
+
+  // Intent
+  sections.push('## Intent (PROSE / GROUND)\n');
+  sections.push(`Test/spec directory containing ${artifacts.length} files that verify the behavior of the project's modules.\n`);
+  sections.push('---\n');
+
+  // Symbols (aggregated)
+  if (allSymbols.length > 0) {
+    sections.push('## Symbols (TERM)\n');
+    sections.push('```yaml\nsymbols:');
+    for (const sym of allSymbols) {
+      sections.push(`  - name: ${yamlEscape(sym.name)}`);
+      sections.push(`    file: ${sym.file}`);
+      if (sym.kind) sections.push(`    kind: ${sym.kind}`);
+    }
+    sections.push('```\n');
+  } else {
+    sections.push('## Symbols (TERM)\n\nNo exported symbols.\n');
+  }
+  sections.push('---\n');
+
+  // Dependencies (aggregated, deduplicated targets)
+  if (allOutbound.length > 0 || allInbound.length > 0) {
+    sections.push('## Dependencies (RELATION)\n');
+    sections.push('```yaml\ndependencies:');
+    const seen = new Set();
+    for (const dep of allOutbound) {
+      const key = `${dep.from}->${dep.to}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      sections.push(`  - from: ${dep.from}`);
+      sections.push(`    to: ${dep.to}`);
+      sections.push(`    kind: ${dep.kind}`);
+    }
+    for (const dep of allInbound) {
+      const key = `${dep.from}->${dep.to}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      sections.push(`  - from: ${dep.from}`);
+      sections.push(`    to: ${dep.to}`);
+      sections.push(`    kind: ${dep.kind}`);
+      sections.push(`    direction: inbound`);
+    }
+    sections.push('```\n');
+  } else {
+    sections.push('## Dependencies (RELATION)\n\nNo dependencies detected.\n');
+  }
+  sections.push('---\n');
+
+  // Understanding
+  sections.push('## Understanding (OUTCOME / JUDGE)\n');
+  sections.push('```yaml\nunderstanding:');
+  sections.push(`  task: "Annotate ${yamlEscape(dirPath)}/ directory (aggregated)"`);
+  sections.push(`  confidence: 0.7`);
+  sections.push(`  key_findings:`);
+  sections.push(`    - "Directory contains ${artifacts.length} test/spec files"`);
+  sections.push(`    - "Total ${totalLines} lines, ${totalExports} exports"`);
+  sections.push('```\n');
 
   return sections.join('\n');
 }

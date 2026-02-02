@@ -872,6 +872,29 @@ export const approvePlan = () => ({
   }
 })
 
+/**
+ * Add a synthetic (non-Claude) prompt entry to branch history.
+ * Used by CRE to make plans, RIS, and assertions visible in the prompt view.
+ * @param {string} branchId - Target branch (e.g. 'specifications')
+ * @param {string} content - The "prompt" text (what was requested)
+ * @param {string} responseContent - The "response" text (the result)
+ * @param {object} [metadata] - Optional metadata (title, storyId, sprintId)
+ */
+export const addSyntheticPrompt = (branchId, content, responseContent, metadata = {}) => ({
+  type: 'ADD_SYNTHETIC_PROMPT',
+  payload: {
+    id: generateId(),
+    branchId,
+    content,
+    responseContent,
+    title: metadata.title || null,
+    storyId: metadata.storyId || null,
+    sprintId: metadata.sprintId || null,
+    parentId: metadata.parentId || null,
+    timestamp: Date.now()
+  }
+})
+
 // Trigger CRE approval flow (approve-plan + generate-ris) then proceed
 export const approvePlanWithCre = (planId) => ({
   type: 'APPROVE_PLAN_WITH_CRE',

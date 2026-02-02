@@ -766,6 +766,8 @@ contextBridge.exposeInMainWorld('puffin', {
     refinePlan: (args) => ipcRenderer.invoke('cre:refine-plan', args),
     approvePlan: (args) => ipcRenderer.invoke('cre:approve-plan', args),
     generateRis: (args) => ipcRenderer.invoke('cre:generate-ris', args),
+    generateAssertions: (args) => ipcRenderer.invoke('cre:generate-assertions', args),
+    verifyAssertions: (args) => ipcRenderer.invoke('cre:verify-assertions', args),
     updateModel: (args) => ipcRenderer.invoke('cre:update-model', args),
     queryModel: (args) => ipcRenderer.invoke('cre:query-model', args),
     getPlan: (args) => ipcRenderer.invoke('cre:get-plan', args),

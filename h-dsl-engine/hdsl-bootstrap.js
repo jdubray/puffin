@@ -28,6 +28,7 @@ program
   .option('--output <dir>', 'Output directory for schema/instance JSON')
   .option('--annotate', 'Generate .an.md annotation files for each source artifact', false)
   .option('--verbose', 'Print progress and decisions to stdout', false)
+  .option('--clean', 'Delete existing schema/instance before running', false)
   .action(run);
 
 program.parse();
@@ -59,6 +60,20 @@ async function run(opts) {
   if (!fs.existsSync(projectRoot) || !fs.statSync(projectRoot).isDirectory()) {
     console.error(`Error: Project directory does not exist: ${projectRoot}`);
     process.exit(1);
+  }
+
+  // Clean existing output if requested
+  if (opts.clean) {
+    const schemaPath = path.join(outputDir, 'schema.json');
+    const instancePath = path.join(outputDir, 'instance.json');
+    const annotationsDir = path.join(outputDir, 'annotations');
+    for (const p of [schemaPath, instancePath]) {
+      if (fs.existsSync(p)) { fs.unlinkSync(p); log(`  Deleted ${p}`); }
+    }
+    if (fs.existsSync(annotationsDir)) {
+      fs.rmSync(annotationsDir, { recursive: true }); log(`  Deleted ${annotationsDir}`);
+    }
+    log('Cleaned existing output.');
   }
 
   try {

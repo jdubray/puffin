@@ -887,7 +887,9 @@ Please provide specific file locations and line numbers where issues are found, 
       // Debug actions
       'storeDebugPrompt', 'clearDebugPrompt', 'setDebugMode',
       // Active implementation story
-      'clearActiveImplementationStory'
+      'clearActiveImplementationStory',
+      // Synthetic CRE prompt entries
+      'addSyntheticPrompt'
     ]
 
     const samResult = SAM({
@@ -1054,7 +1056,9 @@ Please provide specific file locations and line numbers where issues are found, 
           ['CLEAR_DEBUG_PROMPT', actions.clearDebugPrompt],
           ['SET_DEBUG_MODE', actions.setDebugMode],
           // Active implementation story
-          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory]
+          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory],
+          // Synthetic CRE prompt entries
+          ['ADD_SYNTHETIC_PROMPT', actions.addSyntheticPrompt]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -4463,6 +4467,16 @@ Keep it concise but informative. Use markdown formatting.`
 
       // Store plan for user review — do NOT auto-approve or generate RIS
       this.intents.crePlanReady(planResult.data)
+
+      // Create synthetic prompt entry so the plan is visible in the prompt view
+      const planMarkdown = this._formatPlanAsMarkdown(planResult.data, stories)
+      this.intents.addSyntheticPrompt(
+        'specifications',
+        `[CRE Sprint Plan] Generate implementation plan for ${stories.length} stories`,
+        planMarkdown,
+        { title: 'CRE Sprint Plan', sprintId }
+      )
+
       this.showToast('CRE: Plan ready for review. Approve when ready.', 'success')
     } catch (err) {
       console.error('[CRE] Answer submission failed:', err.message)
@@ -4547,17 +4561,62 @@ Keep it concise but informative. Use markdown formatting.`
         throw new Error(approveResult.error)
       }
 
-      // Step 2: Generate RIS for each story
+      // Step 2: Generate inspection assertions for each story (before RIS so they get included)
       const sprint = this.state.activeSprint
       const stories = sprint?.stories || []
-      const risMap = {}
+      const planItems = sprint?.crePlan?.planItems || sprint?.crePlan?.plan?.planItems || []
       const storyOrder = sprint?.implementationOrder || stories.map(s => s.id)
+
+      for (const story of stories) {
+        const planItem = planItems.find(p => p.storyId === story.id) || {
+          storyId: story.id,
+          approach: '',
+          filesCreated: [],
+          filesModified: [],
+          dependencies: []
+        }
+
+        this.showToast(`CRE: Generating assertions for "${story.title}"...`, 'info')
+        const assertResult = await window.puffin.cre.generateAssertions({
+          planId,
+          storyId: story.id,
+          planItem,
+          story: {
+            id: story.id,
+            title: story.title,
+            description: story.description || '',
+            acceptanceCriteria: story.acceptanceCriteria || []
+          }
+        })
+
+        if (assertResult.success) {
+          const count = assertResult.data?.assertions?.length || 0
+          console.log(`[CRE] Generated ${count} assertions for story:`, story.id)
+        } else {
+          console.warn('[CRE] Assertion generation failed for story:', story.id, assertResult.error)
+        }
+      }
+
+      // Step 3: Generate RIS for each story (assertions are now in DB and will be included)
+      const risMap = {}
+
+      // Get the plan synthetic prompt ID to thread RIS entries under it
+      const planPromptId = this.state?.history?.activePromptId || null
 
       for (const story of stories) {
         this.showToast(`CRE: Generating RIS for "${story.title}"...`, 'info')
         const risResult = await window.puffin.cre.generateRis({ planId, storyId: story.id })
         if (risResult.success) {
           risMap[story.id] = risResult.data
+
+          // Create synthetic prompt entry for this RIS so it's visible in the prompt view
+          const risContent = risResult.data?.markdown || JSON.stringify(risResult.data, null, 2)
+          this.intents.addSyntheticPrompt(
+            'specifications',
+            `[CRE RIS] ${story.title}`,
+            risContent,
+            { title: `RIS: ${story.title}`, storyId: story.id, sprintId: sprint.id, parentId: planPromptId }
+          )
         } else {
           console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
           risMap[story.id] = { error: risResult.error }
@@ -4567,7 +4626,7 @@ Keep it concise but informative. Use markdown formatting.`
       // Dispatch completion — this stores risMap and triggers approvePlan UI flow
       this.intents.crePlanningComplete(sprint.crePlan, risMap, storyOrder)
       this.intents.approvePlan()
-      this.showToast('CRE: Plan approved and RIS generated', 'success')
+      this.showToast('CRE: Plan approved, assertions generated, and RIS ready', 'success')
     } catch (err) {
       console.error('[CRE] Plan approval failed:', err.message)
       this.intents.crePlanningError(err)
@@ -4578,6 +4637,71 @@ Keep it concise but informative. Use markdown formatting.`
         duration: 8000
       })
     }
+  }
+
+  /**
+   * Format CRE plan data as readable markdown for display in the prompt view.
+   * @param {Object} planData - The plan data from CRE
+   * @param {Array} stories - Sprint stories
+   * @returns {string} Formatted markdown
+   */
+  _formatPlanAsMarkdown(planData, stories) {
+    const plan = planData?.plan || planData
+    const planItems = plan?.planItems || planData?.planItems || []
+    const risks = plan?.risks || planData?.risks || []
+    const sharedComponents = plan?.sharedComponents || planData?.sharedComponents || []
+
+    let md = '# CRE Implementation Plan\n\n'
+
+    if (planItems.length > 0) {
+      md += '## Implementation Order\n\n'
+      md += '| # | Story | Branch | Approach |\n'
+      md += '|---|-------|--------|----------|\n'
+      planItems.forEach((item, i) => {
+        const story = stories.find(s => s.id === item.storyId)
+        const title = story?.title || item.storyId
+        const branch = item.branchType || 'fullstack'
+        const approach = (item.approach || '').replace(/\n/g, ' ').slice(0, 80)
+        md += `| ${i + 1} | ${title} | ${branch} | ${approach}${approach.length >= 80 ? '…' : ''} |\n`
+      })
+      md += '\n'
+
+      // Detailed approach per story
+      md += '## Story Details\n\n'
+      planItems.forEach((item, i) => {
+        const story = stories.find(s => s.id === item.storyId)
+        const title = story?.title || item.storyId
+        md += `### ${i + 1}. ${title}\n\n`
+        if (item.approach) md += `**Approach:** ${item.approach}\n\n`
+        if (item.filesCreated?.length > 0) md += `**Files to create:** ${item.filesCreated.join(', ')}\n\n`
+        if (item.filesModified?.length > 0) md += `**Files to modify:** ${item.filesModified.join(', ')}\n\n`
+        if (item.dependencies?.length > 0) md += `**Dependencies:** ${item.dependencies.join(', ')}\n\n`
+      })
+    }
+
+    if (sharedComponents.length > 0) {
+      md += '## Shared Components\n\n'
+      sharedComponents.forEach(c => {
+        md += `- **${c.name || c}**${c.description ? ': ' + c.description : ''}\n`
+      })
+      md += '\n'
+    }
+
+    if (risks.length > 0) {
+      md += '## Risks\n\n'
+      risks.forEach(r => {
+        const risk = typeof r === 'string' ? r : `${r.description || r.risk}${r.mitigation ? ' — Mitigation: ' + r.mitigation : ''}`
+        md += `- ${risk}\n`
+      })
+      md += '\n'
+    }
+
+    // Fallback: if planItems is empty, show raw plan data
+    if (planItems.length === 0) {
+      md += '```json\n' + JSON.stringify(planData, null, 2) + '\n```\n'
+    }
+
+    return md
   }
 
   /**

@@ -2098,6 +2098,53 @@ export const crePlanningErrorAcceptor = model => proposal => {
   }
 }
 
+// Add a synthetic prompt entry to branch history (for CRE plan/RIS/assertion visibility)
+export const addSyntheticPromptAcceptor = model => proposal => {
+  if (proposal?.type === 'ADD_SYNTHETIC_PROMPT') {
+    const { id, branchId, content, responseContent, title, parentId, timestamp } = proposal.payload
+
+    // Ensure branch exists
+    if (!model.history.branches[branchId]) {
+      model.history.branches[branchId] = {
+        id: branchId,
+        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
+        prompts: []
+      }
+    }
+
+    const prompt = {
+      id,
+      parentId: parentId || null,
+      content,
+      title: title || null,
+      timestamp,
+      response: {
+        content: responseContent,
+        timestamp
+      },
+      children: []
+    }
+
+    // If parentId, add to parent's children array
+    if (parentId) {
+      const parent = model.history.branches[branchId].prompts.find(p => p.id === parentId)
+      if (parent) {
+        if (!parent.children) parent.children = []
+        parent.children.push(id)
+      }
+    }
+
+    model.history.branches[branchId].prompts.push(prompt)
+    model.history.activeBranch = branchId
+    model.history.activePromptId = id
+
+    // Navigate to prompt view so the user sees the entry
+    model.currentView = 'prompt'
+
+    console.log(`[CRE] Synthetic prompt added to ${branchId}:`, title || id)
+  }
+}
+
 // CRE introspection completed — unblocks next story (AC5)
 export const creIntrospectionCompleteAcceptor = model => proposal => {
   if (proposal?.type === 'CRE_INTROSPECTION_COMPLETE') {
@@ -4094,6 +4141,7 @@ export const acceptors = [
   approvePlanWithCreAcceptor,
   crePlanningCompleteAcceptor,
   crePlanningErrorAcceptor,
+  addSyntheticPromptAcceptor,
   creIntrospectionCompleteAcceptor,
   clearSprintAcceptor,
   clearSprintWithDetailsAcceptor,

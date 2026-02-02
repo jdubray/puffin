@@ -757,12 +757,34 @@
 .hdsl-graph-viewport {
   flex: 1;
   min-height: 400px;
-  overflow: hidden;
+  overflow: auto;
   border: 1px solid var(--border-color, #3a3a3a);
   border-radius: 6px;
   background: var(--bg-primary, #1e1e1e);
   position: relative;
   cursor: grab;
+}
+
+.hdsl-graph-viewport::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.hdsl-graph-viewport::-webkit-scrollbar-track {
+  background: var(--bg-primary, #1e1e1e);
+}
+
+.hdsl-graph-viewport::-webkit-scrollbar-thumb {
+  background: var(--border-color, #3a3a3a);
+  border-radius: 4px;
+}
+
+.hdsl-graph-viewport::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.hdsl-graph-viewport::-webkit-scrollbar-corner {
+  background: var(--bg-primary, #1e1e1e);
 }
 
 .hdsl-graph-canvas {
@@ -832,7 +854,7 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 320px;
+  width: min(560px, calc(100% - 16px));
   max-height: calc(100% - 16px);
   overflow-y: auto;
   background: var(--bg-secondary, #2a2a2a);
@@ -886,6 +908,128 @@
 
 .hdsl-graph-dep-link:hover {
   background: rgba(79, 195, 247, 0.12);
+}
+
+/* Annotation accordion */
+
+.hdsl-annotation-accordion {
+  margin-top: 4px;
+}
+
+.hdsl-accordion-item {
+  border-top: 1px solid var(--border-color, #3a3a3a);
+}
+
+.hdsl-accordion-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  color: var(--text-primary, #ddd);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.hdsl-accordion-toggle:hover {
+  background: rgba(79, 195, 247, 0.08);
+}
+
+.hdsl-accordion-arrow {
+  font-size: 8px;
+  width: 10px;
+  text-align: center;
+  color: var(--text-secondary, #aaa);
+}
+
+.hdsl-accordion-content {
+  padding: 4px 8px 8px 20px;
+}
+
+.hdsl-accordion-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary, #bbb);
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+}
+
+.hdsl-annotation-loading {
+  padding: 6px 0;
+  opacity: 0.5;
+}
+
+.hdsl-accordion-prose {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary, #bbb);
+  margin-bottom: 6px;
+}
+
+.hdsl-yaml-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin: 4px 0;
+}
+
+.hdsl-yaml-table tr {
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.hdsl-yaml-table tr:last-child {
+  border-bottom: none;
+}
+
+.hdsl-yaml-key {
+  padding: 3px 8px 3px 0;
+  color: var(--accent-color, #4fc3f7);
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: top;
+  width: 1%;
+}
+
+.hdsl-yaml-val {
+  padding: 3px 0;
+  color: var(--text-secondary, #bbb);
+  word-break: break-word;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10.5px;
+}
+
+.hdsl-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin: 4px 0;
+}
+
+.hdsl-md-th {
+  padding: 4px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--accent-color, #4fc3f7);
+  border-bottom: 2px solid var(--border-color, #444);
+  white-space: nowrap;
+}
+
+.hdsl-md-td {
+  padding: 3px 8px;
+  color: var(--text-secondary, #bbb);
+  border-bottom: 1px solid var(--border-color, #333);
+  font-size: 10.5px;
+  vertical-align: top;
+}
+
+.hdsl-md-table tbody tr:hover {
+  background: rgba(79, 195, 247, 0.06);
 }
 
 /* Empty state */

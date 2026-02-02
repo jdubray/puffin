@@ -283,6 +283,69 @@ class PuffinApp {
   }
 
   /**
+   * Show the CRE progress modal with step-by-step status.
+   * @param {string} title - Modal title (e.g. "CRE: Planning Sprint")
+   * @param {Array<{id: string, label: string}>} steps - Steps to display
+   */
+  showCreProgressModal(title, steps) {
+    this.hideCreProgressModal()
+    this._creProgressSteps = steps.map(s => ({ ...s, status: 'pending' }))
+    this._creBusy = true
+
+    const modal = document.createElement('div')
+    modal.id = 'cre-progress-modal'
+    modal.className = 'cre-progress-modal'
+    modal.innerHTML = `
+      <div class="cre-progress-content">
+        <div class="cre-progress-header">
+          <div class="cre-progress-spinner"></div>
+          <h3>${this.escapeHtml(title)}</h3>
+        </div>
+        <ul class="cre-progress-steps">
+          ${steps.map(s => `
+            <li class="cre-progress-step pending" data-step-id="${this.escapeHtml(s.id)}">
+              <span class="cre-progress-step-icon"></span>
+              <span>${this.escapeHtml(s.label)}</span>
+            </li>
+          `).join('')}
+        </ul>
+        <div class="cre-progress-detail"></div>
+      </div>
+    `
+    document.body.appendChild(modal)
+  }
+
+  /**
+   * Update a step in the CRE progress modal.
+   * @param {string} stepId - Step identifier
+   * @param {'active'|'completed'|'error'} status
+   * @param {string} [detail] - Optional detail text shown at the bottom
+   */
+  updateCreProgressStep(stepId, status, detail) {
+    const modal = document.getElementById('cre-progress-modal')
+    if (!modal) return
+
+    const stepEl = modal.querySelector(`[data-step-id="${stepId}"]`)
+    if (stepEl) {
+      stepEl.className = `cre-progress-step ${status}`
+    }
+
+    if (detail) {
+      const detailEl = modal.querySelector('.cre-progress-detail')
+      if (detailEl) detailEl.textContent = detail
+    }
+  }
+
+  /**
+   * Hide the CRE progress modal.
+   */
+  hideCreProgressModal() {
+    this._creBusy = false
+    const modal = document.getElementById('cre-progress-modal')
+    if (modal) modal.remove()
+  }
+
+  /**
    * Extract questions from a plan text
    * @param {string} planText - The plan text to extract questions from
    * @returns {string[]} Array of questions found in the plan
@@ -2338,14 +2401,15 @@ Please provide specific file locations and line numbers where issues are found, 
     // Iterate/Approve buttons: visible only when sprint status is 'planned' AND plan not yet approved
     // Once planApprovedAt is set, implementation mode was selected - don't show approve again
     const hasStories = sprint.stories && sprint.stories.length > 0
-    const canPlan = sprint.status === 'created'
-    const canApprove = hasStories && sprint.status === 'planned' && !sprint.planApprovedAt
+    const creBusy = this._creBusy || this._handlingCrePlanning || this._handlingCreAnswers || this._handlingCreApproval || this._handlingCreIteration
+    const canPlan = sprint.status === 'created' && !creBusy
+    const canApprove = hasStories && sprint.status === 'planned' && !sprint.planApprovedAt && !creBusy
     // Show start implementation button when plan is approved but sprint not yet in-progress
     // This handles cases where:
     // - App was closed after approving but before selecting mode
     // - Sprint status is stuck at 'planning' but planApprovedAt was set
     const isNotStarted = sprint.status !== 'in-progress' && sprint.status !== 'completed' && sprint.status !== 'closed'
-    const canStartImplementation = sprint.planApprovedAt && !sprint.implementationMode && isNotStarted
+    const canStartImplementation = sprint.planApprovedAt && !sprint.implementationMode && isNotStarted && !creBusy
 
     console.log('[SPRINT-BUTTONS] status:', sprint.status, 'hasStories:', hasStories, 'canPlan:', canPlan, 'canApprove:', canApprove, 'planApprovedAt:', sprint.planApprovedAt, 'canStartImplementation:', canStartImplementation)
 
@@ -4311,8 +4375,13 @@ Keep it concise but informative. Use markdown formatting.`
 
     const { sprintId, stories } = planningData
 
+    this.showCreProgressModal('CRE: Planning Sprint', [
+      { id: 'analyze', label: 'Analyzing sprint stories' },
+      { id: 'questions', label: 'Generating clarifying questions' }
+    ])
+
     try {
-      this.showToast('CRE: Analyzing sprint...', 'info')
+      this.updateCreProgressStep('analyze', 'active', 'Sending stories to CRE for analysis...')
 
       // Phase 1: Analyze sprint — returns questions for Q&A
       const analyzeResult = await window.puffin.cre.generatePlan({ sprintId, stories })
@@ -4320,19 +4389,25 @@ Keep it concise but informative. Use markdown formatting.`
         throw new Error(analyzeResult.error)
       }
       console.log('[CRE] Analysis complete:', analyzeResult.data)
+      this.updateCreProgressStep('analyze', 'completed')
 
       const { planId, questions } = analyzeResult.data
 
       if (questions && questions.length > 0) {
+        this.updateCreProgressStep('questions', 'completed', `${questions.length} questions generated`)
+        this.hideCreProgressModal()
         // Pause: store context for Q&A, show iteration modal with CRE questions
         this._pendingCreQA = { planId, sprintId, stories, questions }
         this.showCreQuestionsModal(questions, planId, sprintId, stories)
       } else {
+        this.updateCreProgressStep('questions', 'completed', 'No questions needed')
+        this.hideCreProgressModal()
         // No questions — proceed directly to plan generation
         this.intents.submitPlanAnswers(planId, sprintId, stories, [])
       }
     } catch (err) {
       console.error('[CRE] Planning workflow failed:', err.message)
+      this.hideCreProgressModal()
       this.intents.crePlanningError(err)
       this.showToast({
         type: 'error',
@@ -4455,8 +4530,13 @@ Keep it concise but informative. Use markdown formatting.`
 
     const { planId, sprintId, stories, answers } = answerData
 
+    this.showCreProgressModal('CRE: Generating Plan', [
+      { id: 'submit', label: 'Submitting answers to CRE' },
+      { id: 'generate', label: 'Generating implementation plan' }
+    ])
+
     try {
-      this.showToast('CRE: Generating plan...', 'info')
+      this.updateCreProgressStep('submit', 'active')
 
       // Submit answers → generate plan
       const planResult = await window.puffin.cre.submitAnswers({ planId, sprintId, stories, answers })
@@ -4464,6 +4544,8 @@ Keep it concise but informative. Use markdown formatting.`
         throw new Error(planResult.error)
       }
       console.log('[CRE] Plan generated:', planResult.data)
+      this.updateCreProgressStep('submit', 'completed')
+      this.updateCreProgressStep('generate', 'completed', 'Plan generated successfully')
 
       // Store plan for user review — do NOT auto-approve or generate RIS
       this.intents.crePlanReady(planResult.data)
@@ -4477,9 +4559,11 @@ Keep it concise but informative. Use markdown formatting.`
         { title: 'CRE Sprint Plan', sprintId }
       )
 
+      this.hideCreProgressModal()
       this.showToast('CRE: Plan ready for review. Approve when ready.', 'success')
     } catch (err) {
       console.error('[CRE] Answer submission failed:', err.message)
+      this.hideCreProgressModal()
       this.intents.crePlanningError(err)
       this.showToast({
         type: 'error',
@@ -4502,20 +4586,28 @@ Keep it concise but informative. Use markdown formatting.`
 
     const { planId, feedback } = iterationData
 
+    this.showCreProgressModal('CRE: Refining Plan', [
+      { id: 'refine', label: 'Refining plan with feedback' },
+      { id: 'result', label: 'Processing refined plan' }
+    ])
+
     try {
-      this.showToast('CRE: Refining plan...', 'info')
+      this.updateCreProgressStep('refine', 'active', 'Sending feedback to CRE...')
 
       const refineResult = await window.puffin.cre.refinePlan({ planId, feedback })
       if (!refineResult.success) {
         throw new Error(refineResult.error)
       }
       console.log('[CRE] Plan refined:', refineResult.data)
+      this.updateCreProgressStep('refine', 'completed')
 
       const resultPlanId = refineResult.data?.planId || planId
 
       // Check if CRE has new questions after refinement
       const newQuestions = refineResult.data?.questions || []
       if (newQuestions.length > 0) {
+        this.updateCreProgressStep('result', 'completed', `${newQuestions.length} follow-up questions`)
+        this.hideCreProgressModal()
         // Pause again for more Q&A
         const sprint = this.state.activeSprint
         const stories = sprint?.stories?.map(s => ({
@@ -4529,10 +4621,13 @@ Keep it concise but informative. Use markdown formatting.`
       }
 
       // No new questions — store refined plan for user review (do NOT auto-approve)
+      this.updateCreProgressStep('result', 'completed')
+      this.hideCreProgressModal()
       this.intents.crePlanReady(refineResult.data)
       this.showToast('CRE: Refined plan ready for review. Approve when ready.', 'success')
     } catch (err) {
       console.error('[CRE] Plan iteration failed:', err.message)
+      this.hideCreProgressModal()
       this.intents.crePlanningError(err)
       this.showToast({
         type: 'error',
@@ -4553,21 +4648,40 @@ Keep it concise but informative. Use markdown formatting.`
 
     const { planId } = approvalData
 
+    // Build steps dynamically based on story count
+    const sprint = this.state.activeSprint
+    const stories = sprint?.stories || []
+    const planItems = sprint?.crePlan?.planItems || sprint?.crePlan?.plan?.planItems || []
+    const storyOrder = sprint?.implementationOrder || stories.map(s => s.id)
+
+    const progressSteps = [
+      { id: 'approve', label: 'Approving plan' }
+    ]
+    for (let i = 0; i < stories.length; i++) {
+      progressSteps.push({ id: `assert-${i}`, label: `Assertions: ${stories[i].title}` })
+    }
+    for (let i = 0; i < stories.length; i++) {
+      progressSteps.push({ id: `ris-${i}`, label: `RIS: ${stories[i].title}` })
+    }
+    progressSteps.push({ id: 'complete', label: 'Finalizing' })
+
+    this.showCreProgressModal('CRE: Approving Plan', progressSteps)
+
     try {
       // Step 1: Approve plan via CRE
-      this.showToast('CRE: Approving plan...', 'info')
+      this.updateCreProgressStep('approve', 'active', 'Sending approval to CRE...')
       const approveResult = await window.puffin.cre.approvePlan({ planId })
       if (!approveResult.success) {
         throw new Error(approveResult.error)
       }
+      this.updateCreProgressStep('approve', 'completed')
 
       // Step 2: Generate inspection assertions for each story (before RIS so they get included)
-      const sprint = this.state.activeSprint
-      const stories = sprint?.stories || []
-      const planItems = sprint?.crePlan?.planItems || sprint?.crePlan?.plan?.planItems || []
-      const storyOrder = sprint?.implementationOrder || stories.map(s => s.id)
+      for (let i = 0; i < stories.length; i++) {
+        const story = stories[i]
+        const stepId = `assert-${i}`
+        this.updateCreProgressStep(stepId, 'active', `Generating assertions for "${story.title}"...`)
 
-      for (const story of stories) {
         const planItem = planItems.find(p => p.storyId === story.id) || {
           storyId: story.id,
           approach: '',
@@ -4576,7 +4690,6 @@ Keep it concise but informative. Use markdown formatting.`
           dependencies: []
         }
 
-        this.showToast(`CRE: Generating assertions for "${story.title}"...`, 'info')
         const assertResult = await window.puffin.cre.generateAssertions({
           planId,
           storyId: story.id,
@@ -4590,10 +4703,18 @@ Keep it concise but informative. Use markdown formatting.`
         })
 
         if (assertResult.success) {
-          const count = assertResult.data?.assertions?.length || 0
-          console.log(`[CRE] Generated ${count} assertions for story:`, story.id)
+          const assertions = assertResult.data?.assertions || []
+          console.log(`[CRE] Generated ${assertions.length} assertions for story:`, story.id)
+          this.updateCreProgressStep(stepId, 'completed', `${assertions.length} assertions`)
+
+          // Attach assertions to the sprint story so they're visible in the UI
+          // and available for post-implementation verification
+          if (assertions.length > 0) {
+            this.intents.updateSprintStoryAssertions(story.id, assertions)
+          }
         } else {
           console.warn('[CRE] Assertion generation failed for story:', story.id, assertResult.error)
+          this.updateCreProgressStep(stepId, 'error', 'Failed')
         }
       }
 
@@ -4603,11 +4724,15 @@ Keep it concise but informative. Use markdown formatting.`
       // Get the plan synthetic prompt ID to thread RIS entries under it
       const planPromptId = this.state?.history?.activePromptId || null
 
-      for (const story of stories) {
-        this.showToast(`CRE: Generating RIS for "${story.title}"...`, 'info')
+      for (let i = 0; i < stories.length; i++) {
+        const story = stories[i]
+        const stepId = `ris-${i}`
+        this.updateCreProgressStep(stepId, 'active', `Generating RIS for "${story.title}"...`)
+
         const risResult = await window.puffin.cre.generateRis({ planId, storyId: story.id })
         if (risResult.success) {
           risMap[story.id] = risResult.data
+          this.updateCreProgressStep(stepId, 'completed')
 
           // Create synthetic prompt entry for this RIS so it's visible in the prompt view
           const risContent = risResult.data?.markdown || JSON.stringify(risResult.data, null, 2)
@@ -4620,15 +4745,21 @@ Keep it concise but informative. Use markdown formatting.`
         } else {
           console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
           risMap[story.id] = { error: risResult.error }
+          this.updateCreProgressStep(stepId, 'error', 'Failed')
         }
       }
+
+      // Finalize
+      this.updateCreProgressStep('complete', 'completed')
 
       // Dispatch completion — this stores risMap and triggers approvePlan UI flow
       this.intents.crePlanningComplete(sprint.crePlan, risMap, storyOrder)
       this.intents.approvePlan()
+      this.hideCreProgressModal()
       this.showToast('CRE: Plan approved, assertions generated, and RIS ready', 'success')
     } catch (err) {
       console.error('[CRE] Plan approval failed:', err.message)
+      this.hideCreProgressModal()
       this.intents.crePlanningError(err)
       this.showToast({
         type: 'error',

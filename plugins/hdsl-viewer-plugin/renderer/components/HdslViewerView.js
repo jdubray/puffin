@@ -41,6 +41,7 @@ export class HdslViewerView {
     this.graphDragging = false
     this.graphDragStart = null     // {x, y} for pan start
     this._graphAbort = null        // AbortController for graph event listeners
+    this._annotationCache = new Map() // path → {sections, raw}
   }
 
   // ---------------------------------------------------------------------------
@@ -544,6 +545,9 @@ export class HdslViewerView {
       if (pos.x + NODE_W + 20 > maxX) maxX = pos.x + NODE_W + 20
       if (pos.y + NODE_H + 20 > maxY) maxY = pos.y + NODE_H + 20
     }
+    // Store content bounds for scrollbar sizing in applyGraphTransform
+    this.graphContentWidth = maxX
+    this.graphContentHeight = maxY
 
     // Build node HTML overlays
     let nodeHtml = ''
@@ -624,6 +628,9 @@ export class HdslViewerView {
                   </div>`).join('')}
                 </div>
               </div>` : ''}
+            <div class="hdsl-annotation-slot" data-path="${this.escapeHtml(this.graphSelectedNode)}">
+              <div class="hdsl-annotation-loading"><span class="hdsl-detail-label">Loading annotation...</span></div>
+            </div>
           </div>
         </div>`
     }
@@ -643,7 +650,7 @@ export class HdslViewerView {
         </div>
         ${legendHtml}
         <div class="hdsl-graph-viewport">
-          <div class="hdsl-graph-canvas" style="transform: scale(${this.graphZoom}) translate(${this.graphPanX}px, ${this.graphPanY}px); transform-origin: 0 0;">
+          <div class="hdsl-graph-canvas" style="width: ${maxX * this.graphZoom}px; height: ${maxY * this.graphZoom}px; transform: scale(${this.graphZoom}) translate(${this.graphPanX}px, ${this.graphPanY}px); transform-origin: 0 0;">
             <svg class="hdsl-graph-svg" width="${maxX}" height="${maxY}" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <marker id="hdsl-arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
@@ -948,6 +955,34 @@ export class HdslViewerView {
         this.container.querySelector('.hdsl-graph-filter-input')?.focus()
       }, { signal })
     }
+
+    // Async-load annotation into the detail panel slot
+    const annotationSlot = this.container.querySelector('.hdsl-annotation-slot')
+    if (annotationSlot && this.graphSelectedNode) {
+      this.fetchAnnotation(this.graphSelectedNode).then(ann => {
+        // Guard: slot may have been replaced by a new render
+        const currentSlot = this.container.querySelector('.hdsl-annotation-slot')
+        if (!currentSlot || currentSlot.dataset.path !== this.graphSelectedNode) return
+        if (ann && ann.sections.length > 0) {
+          currentSlot.innerHTML = this.buildAnnotationAccordion(ann.sections)
+          // Wire accordion toggles
+          currentSlot.querySelectorAll('.hdsl-accordion-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const idx = btn.dataset.index
+              const content = currentSlot.querySelector(`.hdsl-accordion-content[data-index="${idx}"]`)
+              const arrow = btn.querySelector('.hdsl-accordion-arrow')
+              if (content) {
+                const open = content.style.display !== 'none'
+                content.style.display = open ? 'none' : 'block'
+                if (arrow) arrow.textContent = open ? '\u25B6' : '\u25BC'
+              }
+            })
+          })
+        } else {
+          currentSlot.innerHTML = '<div class="hdsl-detail-section"><span class="hdsl-detail-label" style="opacity:0.5">No annotation file</span></div>'
+        }
+      })
+    }
   }
 
   /**
@@ -957,11 +992,273 @@ export class HdslViewerView {
     const canvas = this.container.querySelector('.hdsl-graph-canvas')
     if (canvas) {
       canvas.style.transform = `scale(${this.graphZoom}) translate(${this.graphPanX}px, ${this.graphPanY}px)`
+      // Update canvas dimensions so viewport scrollbars reflect zoomed content size
+      const w = (this.graphContentWidth || 800) * this.graphZoom
+      const h = (this.graphContentHeight || 600) * this.graphZoom
+      canvas.style.width = `${w}px`
+      canvas.style.height = `${h}px`
     }
     const zoomLabel = this.container.querySelector('.hdsl-graph-zoom-level')
     if (zoomLabel) {
       zoomLabel.textContent = `${Math.round(this.graphZoom * 100)}%`
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Annotation helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch and cache the .an.md annotation for a given artifact path.
+   * @param {string} artifactPath - e.g. 'src/main/claude-service.js'
+   * @returns {Promise<{sections: Array<{title: string, content: string}>}|null>}
+   */
+  async fetchAnnotation(artifactPath) {
+    if (this._annotationCache.has(artifactPath)) {
+      return this._annotationCache.get(artifactPath)
+    }
+    try {
+      const filePath = artifactPath + '.an.md'
+      const result = await window.puffin.plugins.invoke(
+        'hdsl-viewer-plugin', 'getAnnotation', { filePath }
+      )
+      if (result && result.content) {
+        const parsed = { sections: this.parseAnnotationSections(result.content) }
+        this._annotationCache.set(artifactPath, parsed)
+        return parsed
+      }
+    } catch (err) {
+      // Annotation file may not exist — that's fine
+      console.log('[HDSL] No annotation for', artifactPath, err.message)
+    }
+    this._annotationCache.set(artifactPath, null)
+    return null
+  }
+
+  /**
+   * Parse an .an.md file into accordion sections.
+   * Splits on ## headings, skipping the title (# heading).
+   * @param {string} markdown
+   * @returns {Array<{title: string, content: string}>}
+   */
+  parseAnnotationSections(markdown) {
+    const sections = []
+    const lines = markdown.split('\n')
+    let currentTitle = null
+    let currentLines = []
+
+    for (const line of lines) {
+      // Match ## Section Title (but not # top-level title)
+      const h2Match = line.match(/^## (.+)/)
+      if (h2Match) {
+        if (currentTitle) {
+          sections.push({ title: currentTitle, content: currentLines.join('\n').trim() })
+        }
+        currentTitle = h2Match[1]
+        currentLines = []
+      } else if (currentTitle) {
+        currentLines.push(line)
+      }
+    }
+    if (currentTitle) {
+      sections.push({ title: currentTitle, content: currentLines.join('\n').trim() })
+    }
+    return sections.filter(s => s.content && s.content !== '---')
+  }
+
+  /**
+   * Build accordion HTML for annotation sections.
+   * @param {Array<{title: string, content: string}>} sections
+   * @returns {string}
+   */
+  buildAnnotationAccordion(sections) {
+    if (!sections || sections.length === 0) return ''
+    const items = sections.map((s, i) => {
+      const contentHtml = this.renderSectionContent(s.content)
+      return `
+        <div class="hdsl-accordion-item">
+          <button class="hdsl-accordion-toggle" data-index="${i}">
+            <span class="hdsl-accordion-arrow">&#9654;</span>
+            ${this.escapeHtml(s.title)}
+          </button>
+          <div class="hdsl-accordion-content" data-index="${i}" style="display:none;">
+            ${contentHtml}
+          </div>
+        </div>`
+    }).join('')
+    return `
+      <div class="hdsl-annotation-accordion">
+        <div class="hdsl-detail-section"><span class="hdsl-detail-label">Annotation File</span></div>
+        ${items}
+      </div>`
+  }
+
+  /**
+   * Render section content, converting YAML code blocks and markdown
+   * tables to HTML tables, and leaving other text as prose.
+   * @param {string} content - Raw section content
+   * @returns {string} HTML
+   */
+  renderSectionContent(content) {
+    const chunks = this.splitContentChunks(content)
+    return chunks.map(chunk => {
+      if (chunk.type === 'yaml') return this.yamlToTable(chunk.text)
+      if (chunk.type === 'mdtable') return this.mdTableToHtml(chunk.text)
+      return `<div class="hdsl-accordion-prose">${this.escapeHtml(chunk.text).replace(/\n/g, '<br>')}</div>`
+    }).join('')
+  }
+
+  /**
+   * Split raw section content into typed chunks.
+   * Detects ```yaml fenced blocks and pipe-delimited markdown tables.
+   * @param {string} content
+   * @returns {Array<{type: 'yaml'|'mdtable'|'prose', text: string}>}
+   */
+  splitContentChunks(content) {
+    const lines = content.split('\n')
+    const chunks = []
+    let i = 0
+    let proseBuffer = []
+
+    const flushProse = () => {
+      const text = proseBuffer.join('\n').trim()
+      if (text && text !== '---') chunks.push({ type: 'prose', text })
+      proseBuffer = []
+    }
+
+    while (i < lines.length) {
+      const line = lines[i]
+
+      // Detect ```yaml fenced block
+      if (line.trim().startsWith('```yaml')) {
+        flushProse()
+        const yamlLines = []
+        i++
+        while (i < lines.length && !lines[i].trim().startsWith('```')) {
+          yamlLines.push(lines[i])
+          i++
+        }
+        i++ // skip closing ```
+        chunks.push({ type: 'yaml', text: yamlLines.join('\n') })
+        continue
+      }
+
+      // Detect markdown table (line starts with | and contains at least one inner |)
+      if (/^\s*\|.*\|/.test(line)) {
+        flushProse()
+        const tableLines = []
+        while (i < lines.length && /^\s*\|.*\|/.test(lines[i])) {
+          tableLines.push(lines[i])
+          i++
+        }
+        chunks.push({ type: 'mdtable', text: tableLines.join('\n') })
+        continue
+      }
+
+      proseBuffer.push(line)
+      i++
+    }
+    flushProse()
+    return chunks
+  }
+
+  /**
+   * Convert a markdown pipe table into an HTML table.
+   * @param {string} mdTable
+   * @returns {string} HTML
+   */
+  mdTableToHtml(mdTable) {
+    const lines = mdTable.split('\n').filter(l => l.trim())
+    if (lines.length === 0) return ''
+
+    const parseRow = (line) =>
+      line.split('|').slice(1, -1).map(c => c.trim())
+
+    const headers = parseRow(lines[0])
+
+    // Skip separator row (|---|---|...)
+    let dataStart = 1
+    if (lines.length > 1 && /^[\s|:-]+$/.test(lines[1])) {
+      dataStart = 2
+    }
+
+    const dataRows = lines.slice(dataStart).map(parseRow)
+    const thCells = headers.map(h => `<th class="hdsl-md-th">${this.escapeHtml(h)}</th>`).join('')
+    const bodyRows = dataRows.map(cells => {
+      const tds = cells.map(c => `<td class="hdsl-md-td">${this.escapeHtml(c)}</td>`).join('')
+      return `<tr>${tds}</tr>`
+    }).join('')
+
+    return `<table class="hdsl-md-table"><thead><tr>${thCells}</tr></thead><tbody>${bodyRows}</tbody></table>`
+  }
+
+  /**
+   * Convert a simple YAML string to an HTML table.
+   * Handles top-level keys and one level of nesting.
+   * Nested sub-levels or arrays are displayed as-is in the value column.
+   * @param {string} yaml
+   * @returns {string} HTML table
+   */
+  yamlToTable(yaml) {
+    const lines = yaml.split('\n')
+    const rows = []
+    let currentKey = null
+    let subLines = []
+
+    const flushSub = () => {
+      if (currentKey !== null) {
+        if (subLines.length > 0) {
+          // Render sub-level as-is in value column
+          const subText = subLines.map(l => this.escapeHtml(l)).join('<br>')
+          rows.push({ key: currentKey, value: subText })
+        }
+        subLines = []
+        currentKey = null
+      }
+    }
+
+    for (const line of lines) {
+      if (line.trim() === '') continue
+
+      // Top-level key with inline value: "key: value"
+      const topMatch = line.match(/^(\w[\w\s]*):\s+(.+)/)
+      // Top-level key starting a sub-block: "key:"
+      const blockMatch = line.match(/^(\w[\w\s]*):\s*$/)
+      // Indented line (sub-level)
+      const indented = line.match(/^(\s{2,}|\t)/)
+
+      if (topMatch && !indented) {
+        flushSub()
+        let val = topMatch[2].trim()
+        // Clean up YAML quoting
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1)
+        }
+        rows.push({ key: topMatch[1].trim(), value: this.escapeHtml(val) })
+      } else if (blockMatch && !indented) {
+        flushSub()
+        currentKey = blockMatch[1].trim()
+      } else if (currentKey && indented) {
+        subLines.push(line.trimStart())
+      } else {
+        // Unrecognized line — treat as continuation of previous sub or standalone
+        if (currentKey) {
+          subLines.push(line.trimStart())
+        } else {
+          rows.push({ key: '', value: this.escapeHtml(line.trim()) })
+        }
+      }
+    }
+    flushSub()
+
+    if (rows.length === 0) {
+      return `<pre class="hdsl-accordion-pre">${this.escapeHtml(yaml)}</pre>`
+    }
+
+    const tableRows = rows.map(r =>
+      `<tr><td class="hdsl-yaml-key">${this.escapeHtml(r.key)}</td><td class="hdsl-yaml-val">${r.value}</td></tr>`
+    ).join('')
+    return `<table class="hdsl-yaml-table">${tableRows}</table>`
   }
 
   // ---------------------------------------------------------------------------

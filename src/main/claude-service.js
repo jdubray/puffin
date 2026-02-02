@@ -90,15 +90,24 @@ class ClaudeService {
 
   /**
    * Acquire the process lock for an external caller (e.g. CRE).
-   * Throws if the lock is already held.
-   * @returns {boolean} true if lock was acquired
+   * Retries briefly to handle transient lock states, then throws if still held.
+   * @param {number} [retries=3] - Number of retry attempts
+   * @param {number} [delayMs=500] - Delay between retries in ms
+   * @returns {Promise<boolean>} true if lock was acquired
    */
-  acquireLock() {
-    if (this.isProcessRunning()) {
-      throw new Error('Claude CLI process is busy. Wait for the current operation to complete.')
+  async acquireLock(retries = 3, delayMs = 500) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      if (!this.isProcessRunning()) {
+        this._processLock = true
+        console.log(`[acquireLock] Lock acquired on attempt ${attempt + 1}`)
+        return true
+      }
+      if (attempt < retries) {
+        console.log(`[acquireLock] Lock busy (attempt ${attempt + 1}/${retries + 1}), retrying in ${delayMs}ms...`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
     }
-    this._processLock = true
-    return true
+    throw new Error('Claude CLI process is busy. Wait for the current operation to complete.')
   }
 
   /**
@@ -1536,9 +1545,16 @@ ${content}`
       return { success: false, error: 'A Claude CLI process is already running. Please wait for it to complete.' }
     }
 
-    // Acquire the process lock immediately
+    // Track whether we own the lock or an external caller (CRE) already holds it.
+    // If the lock is already held, we must NOT release it when the process finishes —
+    // the external caller's withProcessLock.finally will handle that.
+    const lockAlreadyHeld = this._processLock
     this._processLock = true
-    console.log('[sendPrompt-GUARD] Process lock acquired')
+    if (!lockAlreadyHeld) {
+      console.log('[sendPrompt-GUARD] Process lock acquired')
+    } else {
+      console.log('[sendPrompt-GUARD] Lock already held by external caller, proceeding')
+    }
 
     return new Promise((resolve) => {
       const model = options.model || 'haiku'
@@ -1566,7 +1582,7 @@ ${content}`
 
       if (!proc.pid) {
         console.error('[sendPrompt] Failed to spawn process - no PID')
-        this._processLock = false
+        if (!lockAlreadyHeld) { this._processLock = false }
         console.log('[sendPrompt-GUARD] Process lock released (no PID)')
         resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
         return
@@ -1632,9 +1648,9 @@ ${content}`
       })
 
       proc.on('close', (code) => {
-        // Release the process lock
-        this._processLock = false
-        console.log('[sendPrompt-GUARD] Process lock released (close)')
+        // Release the process lock only if we own it (not held by external caller)
+        if (!lockAlreadyHeld) { this._processLock = false }
+        console.log('[sendPrompt-GUARD] Process lock released (close), external:', lockAlreadyHeld)
 
         console.log('[sendPrompt] Process closed with code:', code)
         console.log('[sendPrompt] Data received:', dataReceived)
@@ -1674,9 +1690,9 @@ ${content}`
       })
 
       proc.on('error', (error) => {
-        // Release the process lock
-        this._processLock = false
-        console.log('[sendPrompt-GUARD] Process lock released (error)')
+        // Release the process lock only if we own it
+        if (!lockAlreadyHeld) { this._processLock = false }
+        console.log('[sendPrompt-GUARD] Process lock released (error), external:', lockAlreadyHeld)
 
         console.error('[sendPrompt] Process error:', error.message)
         if (resolved) return
@@ -1692,9 +1708,9 @@ ${content}`
         console.log('[sendPrompt] Result text length before timeout:', resultText.length)
         proc.kill()
         resolved = true
-        // Release the process lock
-        this._processLock = false
-        console.log('[sendPrompt-GUARD] Process lock released (timeout)')
+        // Release the process lock only if we own it
+        if (!lockAlreadyHeld) { this._processLock = false }
+        console.log('[sendPrompt-GUARD] Process lock released (timeout), external:', lockAlreadyHeld)
         if (resultText.length > 0) {
           resolve({ success: true, response: resultText.trim() })
         } else {

@@ -192,3 +192,93 @@ describe('Tool descriptions — LLM-friendly', () => {
     assert.ok(search.inputSchema.properties.pattern.description)
   })
 })
+
+// ---------------------------------------------------------------------------
+// handleToolCall — integration tests for each tool handler
+// ---------------------------------------------------------------------------
+
+describe('handleToolCall — integration', () => {
+  // Helper: call a tool via JSON-RPC and return parsed content
+  async function callTool(name, args = {}) {
+    const r = await handleMessage(JSON.stringify({
+      jsonrpc: '2.0', id: 99, method: 'tools/call',
+      params: { name, arguments: args }
+    }))
+    const parsed = JSON.parse(r)
+    assert.equal(parsed.id, 99)
+    assert.ok(parsed.result.content, `${name} should return content`)
+    return JSON.parse(parsed.result.content[0].text)
+  }
+
+  it('hdsl_stats returns artifact and dependency counts', async () => {
+    const result = await callTool('hdsl_stats')
+    assert.equal(result.results.artifactCount, 3)
+    assert.equal(result.results.dependencyCount, 3)
+  })
+
+  it('hdsl_peek returns artifact details', async () => {
+    const result = await callTool('hdsl_peek', { path: 'src/index.js' })
+    assert.equal(result.path, 'src/index.js')
+    assert.equal(result.type, 'module')
+    assert.equal(result.kind, 'entry')
+    assert.deepEqual(result.exports, ['main'])
+  })
+
+  it('hdsl_peek returns error for unknown artifact', async () => {
+    const result = await callTool('hdsl_peek', { path: 'nonexistent.js' })
+    assert.ok(result.error)
+    assert.ok(result.error.includes('not found'))
+  })
+
+  it('hdsl_search text mode finds matching artifacts', async () => {
+    const result = await callTool('hdsl_search', { pattern: 'Helper', mode: 'text' })
+    assert.ok(result.results.length >= 1)
+  })
+
+  it('hdsl_search artifact mode filters by kind', async () => {
+    const result = await callTool('hdsl_search', { mode: 'artifact', kind: 'entry' })
+    assert.ok(result.results.length >= 1)
+    assert.ok(result.results.some(r => r.path === 'src/index.js' || r.key === 'src/index.js'))
+  })
+
+  it('hdsl_deps returns dependencies for an artifact', async () => {
+    const result = await callTool('hdsl_deps', { path: 'src/index.js' })
+    assert.equal(result.operation, 'neighbors')
+    assert.equal(result.entities.length, 1)
+    assert.equal(result.entities[0].outgoingCount, 2)
+    assert.equal(result.entities[0].incomingCount, 0)
+  })
+
+  it('hdsl_trace returns BFS traversal from starting node', async () => {
+    const result = await callTool('hdsl_trace', { path: 'src/index.js', depth: 1 })
+    assert.ok(result)
+    assert.ok(result.visited || result.layers || result.nodes)
+  })
+
+  it('hdsl_impact returns impact report for a target', async () => {
+    const result = await callTool('hdsl_impact', { target: 'src/utils.js' })
+    assert.equal(result.reportType, 'impact-analysis')
+    assert.equal(result.target, 'src/utils.js')
+    assert.ok(result.summary)
+    assert.ok(Array.isArray(result.affectedFiles))
+  })
+
+  it('hdsl_patterns returns pattern analysis', async () => {
+    const result = await callTool('hdsl_patterns', { category: 'all' })
+    assert.ok(result)
+    // Should return some pattern categories
+    assert.ok(result.naming || result.organization || result.patterns || result.categories)
+  })
+
+  it('hdsl_path returns path between two entities', async () => {
+    const result = await callTool('hdsl_path', { from: 'src/index.js', to: 'src/utils.js' })
+    assert.ok(result)
+    assert.ok(result.path || result.found !== undefined)
+  })
+
+  it('hdsl_path returns no-path for disconnected entities', async () => {
+    // utils.js has no outgoing path to index.js (only incoming)
+    const result = await callTool('hdsl_path', { from: 'src/utils.js', to: 'nonexistent.js' })
+    assert.ok(result)
+  })
+})

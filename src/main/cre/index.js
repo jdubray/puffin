@@ -64,12 +64,13 @@ let _holdingLock = false;
 
 /**
  * Acquire the claude-service process lock for a CRE session.
- * Throws if the lock is already held (by CLI or another CRE session).
+ * Retries briefly to handle transient lock states.
+ * Throws if the lock cannot be acquired after retries.
  */
-function acquireProcessLock() {
+async function acquireProcessLock() {
   if (!ctx || !ctx.claudeService) return;
 
-  ctx.claudeService.acquireLock();
+  await ctx.claudeService.acquireLock();
   _holdingLock = true;
   console.log('[CRE] Process lock acquired');
 }
@@ -95,7 +96,7 @@ function releaseProcessLock() {
  * @returns {Promise<*>} Result of fn
  */
 async function withProcessLock(fn) {
-  acquireProcessLock();
+  await acquireProcessLock();
   try {
     return await fn();
   } finally {

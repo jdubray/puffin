@@ -350,6 +350,12 @@ export class ModalManager {
       case 'assertion-failures':
         this.renderAssertionFailures(modalTitle, modalContent, modalActions, modal.data)
         break
+      case 'ris-view':
+        this.renderRisView(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'plan-review':
+        this.renderPlanReview(modalTitle, modalContent, modalActions, modal.data)
+        break
       case 'alert':
         this.renderAlert(modalTitle, modalContent, modalActions, modal.data)
         break
@@ -2978,6 +2984,203 @@ export class ModalManager {
       } else if (e.key === 'Escape') {
         prompt.querySelector('.cancel-waive-btn').click()
       }
+    })
+  }
+
+  /**
+   * Render the RIS viewer modal
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - { storyId, storyTitle }
+   */
+  /**
+   * Render the plan review modal with split-pane layout.
+   * Left: plan content. Right: Q&A history.
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - { plan, stories, sprintId, readOnly }
+   */
+  renderPlanReview(title, content, actions, data) {
+    const { plan: planData, stories, sprintId, readOnly } = data || {}
+
+    // Normalise plan structure (may be nested under .plan)
+    const plan = planData?.plan || planData || {}
+    const planItems = plan.planItems || planData?.planItems || []
+    const risks = plan.risks || planData?.risks || []
+    const sharedComponents = plan.sharedComponents || planData?.sharedComponents || []
+    const clarificationHistory = plan.clarificationHistory || planData?.clarificationHistory || []
+    const planId = plan.id || planData?.id || ''
+
+    title.textContent = readOnly ? 'Sprint Plan' : 'CRE Plan Review'
+
+    // Build plan HTML (left pane)
+    let planHtml = ''
+
+    if (planItems.length > 0) {
+      planHtml += '<h4 class="plan-review-heading">Implementation Order</h4>'
+      planHtml += '<table class="plan-review-table"><thead><tr><th>#</th><th>Story</th><th>Branch</th><th>Approach</th></tr></thead><tbody>'
+      planItems.forEach((item, i) => {
+        const story = (stories || []).find(s => s.id === item.storyId)
+        const storyTitle = story?.title || item.storyId || `Story ${i + 1}`
+        const branch = item.branchType || 'fullstack'
+        const approach = (item.approach || '').replace(/\n/g, ' ').slice(0, 100)
+        planHtml += `<tr><td>${i + 1}</td><td>${this.escapeHtml(storyTitle)}</td><td>${this.escapeHtml(branch)}</td><td>${this.escapeHtml(approach)}${approach.length >= 100 ? '...' : ''}</td></tr>`
+      })
+      planHtml += '</tbody></table>'
+
+      planHtml += '<h4 class="plan-review-heading">Story Details</h4>'
+      planItems.forEach((item, i) => {
+        const story = (stories || []).find(s => s.id === item.storyId)
+        const storyTitle = story?.title || item.storyId || `Story ${i + 1}`
+        planHtml += `<div class="plan-review-story">`
+        planHtml += `<h5>${i + 1}. ${this.escapeHtml(storyTitle)}</h5>`
+        if (item.approach) planHtml += `<p><strong>Approach:</strong> ${this.escapeHtml(item.approach)}</p>`
+        if (item.filesCreated?.length > 0) planHtml += `<p><strong>Files to create:</strong> ${item.filesCreated.map(f => this.escapeHtml(f)).join(', ')}</p>`
+        if (item.filesModified?.length > 0) planHtml += `<p><strong>Files to modify:</strong> ${item.filesModified.map(f => this.escapeHtml(f)).join(', ')}</p>`
+        if (item.dependencies?.length > 0) planHtml += `<p><strong>Dependencies:</strong> ${item.dependencies.map(d => this.escapeHtml(d)).join(', ')}</p>`
+        planHtml += '</div>'
+      })
+    } else {
+      planHtml += '<p class="plan-review-empty">No plan items available.</p>'
+      if (planData) {
+        planHtml += `<pre class="plan-review-raw">${this.escapeHtml(JSON.stringify(planData, null, 2))}</pre>`
+      }
+    }
+
+    if (sharedComponents.length > 0) {
+      planHtml += '<h4 class="plan-review-heading">Shared Components</h4><ul>'
+      sharedComponents.forEach(c => {
+        const name = typeof c === 'string' ? c : c.name || JSON.stringify(c)
+        const desc = typeof c === 'object' && c.description ? `: ${c.description}` : ''
+        planHtml += `<li><strong>${this.escapeHtml(name)}</strong>${this.escapeHtml(desc)}</li>`
+      })
+      planHtml += '</ul>'
+    }
+
+    if (risks.length > 0) {
+      planHtml += '<h4 class="plan-review-heading">Risks</h4><ul>'
+      risks.forEach(r => {
+        const text = typeof r === 'string' ? r : `${r.description || r.risk || ''}${r.mitigation ? ' — Mitigation: ' + r.mitigation : ''}`
+        planHtml += `<li>${this.escapeHtml(text)}</li>`
+      })
+      planHtml += '</ul>'
+    }
+
+    // Build Q&A HTML (right pane)
+    let qaHtml = ''
+    if (clarificationHistory.length > 0) {
+      clarificationHistory.forEach((exchange, ei) => {
+        const questions = exchange.questions || []
+        const answers = exchange.answers || []
+        if (ei > 0) qaHtml += '<hr class="plan-qa-divider">'
+        if (clarificationHistory.length > 1) qaHtml += `<h5 class="plan-qa-round">Round ${ei + 1}</h5>`
+        questions.forEach((q, qi) => {
+          const qText = typeof q === 'string' ? q : (q.question || JSON.stringify(q))
+          const aText = answers[qi] ? (typeof answers[qi] === 'string' ? answers[qi] : (answers[qi].answer || JSON.stringify(answers[qi]))) : '<em>No answer</em>'
+          qaHtml += `<div class="plan-qa-item">`
+          qaHtml += `<div class="plan-qa-question"><strong>Q${qi + 1}:</strong> ${this.escapeHtml(qText)}</div>`
+          qaHtml += `<div class="plan-qa-answer"><strong>A:</strong> ${this.escapeHtml(aText)}</div>`
+          qaHtml += `</div>`
+        })
+        if (exchange.feedback) {
+          qaHtml += `<div class="plan-qa-feedback"><strong>Feedback:</strong> ${this.escapeHtml(exchange.feedback)}</div>`
+        }
+      })
+    } else {
+      qaHtml = '<p class="plan-qa-none">No clarifying questions were needed.</p>'
+    }
+
+    content.innerHTML = `
+      <div class="plan-review-container">
+        <div class="plan-review-left">
+          ${planHtml}
+        </div>
+        <div class="plan-review-right">
+          <h4 class="plan-review-heading">Questions & Answers</h4>
+          ${qaHtml}
+        </div>
+      </div>
+    `
+
+    if (readOnly) {
+      actions.innerHTML = '<button class="btn secondary" id="plan-review-close-btn">Close</button>'
+      document.getElementById('plan-review-close-btn')?.addEventListener('click', () => this.intents.hideModal())
+    } else {
+      actions.innerHTML = `
+        <button class="btn secondary" id="plan-review-changes-btn">Request Changes</button>
+        <button class="btn primary" id="plan-review-approve-btn">Approve Plan</button>
+      `
+      document.getElementById('plan-review-approve-btn')?.addEventListener('click', () => {
+        this.intents.hideModal()
+        this.intents.approvePlanWithCre(planId)
+      })
+
+      document.getElementById('plan-review-changes-btn')?.addEventListener('click', () => {
+        // Replace actions with feedback input
+        actions.innerHTML = `
+          <div class="plan-review-feedback-row">
+            <input type="text" id="plan-review-feedback" class="form-input" placeholder="Describe what should change..." autofocus>
+            <button class="btn primary" id="plan-review-send-btn">Send</button>
+            <button class="btn secondary" id="plan-review-cancel-btn">Cancel</button>
+          </div>
+        `
+        document.getElementById('plan-review-feedback')?.focus()
+        document.getElementById('plan-review-send-btn')?.addEventListener('click', () => {
+          const feedback = document.getElementById('plan-review-feedback')?.value?.trim()
+          if (feedback) {
+            this.intents.hideModal()
+            this.intents.iterateSprintPlan(planId, feedback)
+          }
+        })
+        document.getElementById('plan-review-feedback')?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            document.getElementById('plan-review-send-btn')?.click()
+          }
+        })
+        document.getElementById('plan-review-cancel-btn')?.addEventListener('click', () => {
+          // Restore original actions
+          this.renderPlanReview(title, content, actions, data)
+        })
+      })
+    }
+  }
+
+  renderRisView(title, content, actions, data) {
+    const { storyId, storyTitle } = data || {}
+
+    title.textContent = `RIS: ${storyTitle || 'Unknown Story'}`
+
+    content.innerHTML = '<div class="ris-loading">Loading RIS...</div>'
+    actions.innerHTML = '<button class="btn secondary" id="ris-close-btn">Close</button>'
+
+    document.getElementById('ris-close-btn')?.addEventListener('click', () => this.intents.hideModal())
+
+    // Fetch the RIS asynchronously
+    window.puffin.cre.getRis({ storyId }).then(result => {
+      if (!result.success || !result.data) {
+        content.innerHTML = '<p class="ris-empty">No RIS found for this story.</p>'
+        return
+      }
+
+      const ris = result.data
+      const risContent = ris.content || ris.markdown || ''
+
+      if (!risContent) {
+        content.innerHTML = '<p class="ris-empty">RIS exists but has no content.</p>'
+        return
+      }
+
+      // Render the RIS markdown as preformatted text with basic formatting
+      content.innerHTML = `
+        <div class="ris-viewer">
+          <pre class="ris-content">${this.escapeHtml(risContent)}</pre>
+        </div>
+      `
+    }).catch(err => {
+      console.error('[ModalManager] Failed to fetch RIS:', err)
+      content.innerHTML = `<p class="ris-error">Failed to load RIS: ${this.escapeHtml(err.message)}</p>`
     })
   }
 

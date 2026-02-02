@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "hdsl": {
+      "command": "node",
+      "args": ["h-dsl-engine/hdsl-tool-server.js", "--project", "."]
+    }
+  }
+}

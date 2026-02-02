@@ -4469,28 +4469,30 @@ Keep it concise but informative. Use markdown formatting.`
     const submitBtn = modal.querySelector('.plan-iteration-submit')
     const textarea = modal.querySelector('#plan-clarifications')
 
+    // Guard against double submission — once answers are submitted (or skipped),
+    // no other handler should fire submitPlanAnswers again.
+    let submitted = false
+
     const closeModal = () => this.hidePlanIterationModal()
 
-    closeBtn.addEventListener('click', () => {
+    const skipAndClose = () => {
+      if (submitted) return
+      submitted = true
       closeModal()
-      // Skip — submit empty answers
+      // Skip — submit empty answers to proceed without user input
       this.intents.submitPlanAnswers(planId, sprintId, stories, [])
-    })
+    }
 
-    cancelBtn.addEventListener('click', () => {
-      closeModal()
-      // Skip — submit empty answers
-      this.intents.submitPlanAnswers(planId, sprintId, stories, [])
-    })
+    closeBtn.addEventListener('click', skipAndClose)
+    cancelBtn.addEventListener('click', skipAndClose)
 
     modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeModal()
-        this.intents.submitPlanAnswers(planId, sprintId, stories, [])
-      }
+      if (e.target === modal) skipAndClose()
     })
 
     submitBtn.addEventListener('click', () => {
+      if (submitted) return
+      submitted = true
       const answerText = textarea.value.trim()
       closeModal()
       // Parse answers as array of {question, answer} objects
@@ -4550,27 +4552,40 @@ Keep it concise but informative. Use markdown formatting.`
       // Store plan for user review — do NOT auto-approve or generate RIS
       this.intents.crePlanReady(planResult.data)
 
-      // Create synthetic prompt entry so the plan is visible in the prompt view
-      const planMarkdown = this._formatPlanAsMarkdown(planResult.data, stories)
-      this.intents.addSyntheticPrompt(
-        'specifications',
-        `[CRE Sprint Plan] Generate implementation plan for ${stories.length} stories`,
-        planMarkdown,
-        { title: 'CRE Sprint Plan', sprintId }
-      )
-
       this.hideCreProgressModal()
-      this.showToast('CRE: Plan ready for review. Approve when ready.', 'success')
+
+      // Show plan review modal so user can read the plan before approving
+      this.intents.showModal('plan-review', {
+        plan: planResult.data,
+        stories,
+        sprintId
+      })
     } catch (err) {
       console.error('[CRE] Answer submission failed:', err.message)
       this.hideCreProgressModal()
-      this.intents.crePlanningError(err)
-      this.showToast({
-        type: 'error',
-        title: 'CRE Planning Failed',
-        message: err.message,
-        duration: 8000
-      })
+
+      // Preserve Q&A context: re-show the questions modal so the user can retry
+      // instead of resetting sprint to 'created' and losing all context.
+      const cachedQA = this._pendingCreQA
+      if (cachedQA && cachedQA.questions && cachedQA.questions.length > 0) {
+        this.showToast({
+          type: 'warning',
+          title: 'Plan Generation Failed',
+          message: `${err.message}. You can retry submitting your answers.`,
+          duration: 6000
+        })
+        // Re-show the questions modal with the same context
+        this.showCreQuestionsModal(cachedQA.questions, planId, sprintId, stories)
+      } else {
+        // No cached questions — fall back to error reset
+        this.intents.crePlanningError(err)
+        this.showToast({
+          type: 'error',
+          title: 'CRE Planning Failed',
+          message: err.message,
+          duration: 8000
+        })
+      }
     }
   }
 
@@ -4624,7 +4639,13 @@ Keep it concise but informative. Use markdown formatting.`
       this.updateCreProgressStep('result', 'completed')
       this.hideCreProgressModal()
       this.intents.crePlanReady(refineResult.data)
-      this.showToast('CRE: Refined plan ready for review. Approve when ready.', 'success')
+
+      // Show plan review modal so user can read the refined plan
+      this.intents.showModal('plan-review', {
+        plan: refineResult.data,
+        stories: stories,
+        sprintId: sprint?.id
+      })
     } catch (err) {
       console.error('[CRE] Plan iteration failed:', err.message)
       this.hideCreProgressModal()
@@ -4734,14 +4755,7 @@ Keep it concise but informative. Use markdown formatting.`
           risMap[story.id] = risResult.data
           this.updateCreProgressStep(stepId, 'completed')
 
-          // Create synthetic prompt entry for this RIS so it's visible in the prompt view
-          const risContent = risResult.data?.markdown || JSON.stringify(risResult.data, null, 2)
-          this.intents.addSyntheticPrompt(
-            'specifications',
-            `[CRE RIS] ${story.title}`,
-            risContent,
-            { title: `RIS: ${story.title}`, storyId: story.id, sprintId: sprint.id, parentId: planPromptId }
-          )
+          // RIS is stored in DB via cre:generate-ris and viewable from the story card
         } else {
           console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
           risMap[story.id] = { error: risResult.error }

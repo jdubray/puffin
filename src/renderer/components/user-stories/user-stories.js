@@ -490,6 +490,7 @@ export class UserStoriesComponent {
         </div>
         <div class="sprint-card-footer">
           <span class="sprint-card-count">${storyCount} ${storyCount === 1 ? 'story' : 'stories'}</span>
+          <a href="#" class="sprint-plan-link" data-sprint-id="${sprint.id}" title="View sprint plan">Plan</a>
           <span class="sprint-card-status" aria-label="${this.getStatusLabel(statusClass)}">${this.getStatusLabel(statusClass)}</span>
         </div>
       </div>
@@ -594,6 +595,33 @@ export class UserStoriesComponent {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           tile.click()
+        }
+      })
+    })
+
+    // Plan link handler
+    this.sprintTilesList.querySelectorAll('.sprint-plan-link').forEach(link => {
+      link.addEventListener('click', async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const sprintId = link.dataset.sprintId
+        try {
+          const result = await window.puffin.cre.getPlan({ sprintId })
+          if (result.success && result.data) {
+            this.intents.showModal('plan-review', {
+              plan: result.data,
+              stories: result.data.stories || [],
+              sprintId,
+              readOnly: true
+            })
+          } else {
+            this.intents.showModal('alert', {
+              title: 'No Plan Found',
+              message: 'No CRE plan was generated for this sprint.'
+            })
+          }
+        } catch (err) {
+          console.error('[USER-STORIES] Failed to load plan:', err)
         }
       })
     })
@@ -963,6 +991,7 @@ export class UserStoriesComponent {
           <span class="story-date">${this.formatDate(story.createdAt)}</span>
           ${story.branchId ? `<span class="story-branch">${this.formatBranchName(story.branchId)}</span>` : ''}
           ${story.sourcePromptId ? '<span class="story-source">Auto-extracted</span>' : ''}
+          ${story.status === 'completed' || story.status === 'archived' ? `<a href="#" class="story-ris-link" data-story-id="${story.id}" title="View Refined Implementation Specification">RIS</a>` : ''}
         </div>
       </div>
     `
@@ -1059,6 +1088,20 @@ export class UserStoriesComponent {
         const card = e.target.closest('.story-card')
         const storyId = card.dataset.storyId
         this.archiveStory(storyId)
+      })
+    })
+
+    // View RIS link
+    this.listContainer.querySelectorAll('.story-ris-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const storyId = link.dataset.storyId
+        const story = this.stories.find(s => s.id === storyId)
+        this.intents.showModal('ris-view', {
+          storyId,
+          storyTitle: story?.title || 'Unknown'
+        })
       })
     })
 

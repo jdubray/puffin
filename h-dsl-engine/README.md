@@ -292,7 +292,7 @@ node --test tests/evaluation/
 
 ### Evaluation Test Suite
 
-The `tests/evaluation/` directory contains a comparative test suite that measures the value of the h-DSL Code Model over standard tools (Grep, Glob, Read, Bash). Each test poses the same question twice -- once answered using a simulated baseline (standard tool counts), once using actual Code Model queries -- and compares accuracy, tool calls, and token consumption against manually verified ground truth.
+The `tests/evaluation/` directory contains a comparative test suite that measures the value of the h-DSL Code Model over standard tools (Grep, Glob, Read). Both sides execute **real operations** — the baseline performs actual file system grep/glob/read calls, and the Code Model runs actual queries against the loaded instance.json. Results, timing, and accuracy are compared against manually verified ground truth.
 
 **18 test cases across 5 categories:**
 
@@ -307,17 +307,32 @@ The `tests/evaluation/` directory contains a comparative test suite that measure
 **Latest results (against Puffin's own codebase, 302 artifacts):**
 
 ```
-Total baseline tool calls: 130
-Total Code Model calls:     21
-Overall reduction:          6.19x
+Total baseline time:     385.9ms  (4095 fs ops)
+Total Code Model time:    10.1ms  (21 query ops)
+Overall time speedup:     38.3x
 ```
 
-| Category | Reduction | Accuracy |
-|----------|-----------|----------|
-| A: Dependency Tracing | 3--50x | F1 0.88--1.0 |
-| B: Semantic Search | 4--6x | All expected modules found |
-| C: Artifact Discovery | 1--5x | Exact match on stats, summaries, exports |
-| D: Cross-File Flows | 2.5--5x | F1 1.0 on startup sequence |
-| E: Change Planning | 4--6x | 16 target entities, 18 affected files |
+| Category | Time Speedup | Accuracy |
+|----------|-------------|----------|
+| A: Dependency Tracing | 3.6--92.7x | F1 0.88--1.0, both sides match ground truth |
+| B: Semantic Search | 59.8--113x | Both find expected modules; baseline 88 noisy matches vs model 23 |
+| C: Artifact Discovery | 3.7--69.5x | 56.8x token reduction on file summaries |
+| D: Cross-File Flows | 2.6--13.3x | F1 1.0 on startup sequence |
+| E: Change Planning | 1.0--28.1x | Model finds 16 targets + 18 affected files vs baseline's 1 grep match |
 
 Ground truth is in `tests/evaluation/ground-truth.json`. To update it after rebootstrapping, re-verify the expected values against the current instance.json.
+
+#### Debug Mode
+
+Set `HDSL_EVAL_DEBUG=1` to see step-by-step interactions for each test — the question, baseline approach, Code Model query with parameters, raw results, ground truth comparison, and final verdict:
+
+```bash
+# Linux / macOS
+HDSL_EVAL_DEBUG=1 node --test tests/evaluation/
+
+# Windows (cmd)
+set HDSL_EVAL_DEBUG=1 && node --test tests/evaluation/
+
+# Windows (PowerShell)
+$env:HDSL_EVAL_DEBUG="1"; node --test tests/evaluation/
+```

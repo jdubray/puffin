@@ -268,6 +268,47 @@ async function runIntrospection({ instance, existingFiles }, updateModel) {
   return result;
 }
 
+/**
+ * Run Code Model refresh at sprint end.
+ * Called when all stories are complete (before commit).
+ *
+ * Respects config.cre.sprintEnd settings:
+ * - autoRefresh: if false, returns without refreshing (manual trigger required)
+ * - fullRebuild: if true, runs hdsl-bootstrap --clean; otherwise incremental update
+ *
+ * @param {Object} params
+ * @param {Object} params.config - CRE config with sprintEnd settings.
+ * @param {Function} refreshModel - cre:refresh-model handler.
+ * @returns {Promise<Object>} Refresh result.
+ */
+async function runSprintEndRefresh({ config }, refreshModel) {
+  const sprintEndConfig = config?.sprintEnd || {};
+  const { autoRefresh = false, fullRebuild = false } = sprintEndConfig;
+
+  if (!autoRefresh) {
+    console.log('[CRE-ORCH] Sprint end auto-refresh disabled. Manual refresh required before commit.');
+    return {
+      success: true,
+      data: {
+        refreshed: false,
+        reason: 'auto-refresh-disabled',
+        message: 'Code Model refresh is manual. Use cre:refresh-model before committing.'
+      }
+    };
+  }
+
+  console.log(`[CRE-ORCH] Running sprint-end Code Model refresh (fullRebuild: ${fullRebuild})`);
+  const result = await refreshModel({ forceRebuild: fullRebuild });
+
+  if (!result.success) {
+    console.warn('[CRE-ORCH] Sprint-end refresh failed:', result.error);
+  } else {
+    console.log('[CRE-ORCH] Sprint-end refresh complete:', result.data?.source);
+  }
+
+  return result;
+}
+
 module.exports = {
   CrePhase,
   getState,
@@ -275,5 +316,6 @@ module.exports = {
   runPlanningPhase,
   runApprovalPhase,
   runRefinement,
-  runIntrospection
+  runIntrospection,
+  runSprintEndRefresh
 };

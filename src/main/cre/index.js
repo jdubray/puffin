@@ -14,7 +14,8 @@
  *   cre:generate-ris         — generate RIS for a story
  *   cre:generate-assertions  — create inspection assertions for a plan item
  *   cre:verify-assertions    — verify assertions against the codebase
- *   cre:update-model         — update code model after implementation
+ *   cre:update-model         — update code model after implementation (auto freshness check)
+ *   cre:refresh-model        — manual Code Model refresh (for sprint end/debugging)
  *   cre:query-model          — query code model for context
  *   cre:get-plan             — retrieve a plan by sprint ID
  *   cre:get-ris              — retrieve a RIS by story ID
@@ -412,9 +413,107 @@ function registerHandlers(ipcMain) {
         });
       }
 
-      return { success: true, data: { updated: false } };
+      // Freshness-based update path — use git-based freshness checking
+      // This is the default when called without specific args (e.g., after story completion)
+      const { ensureFresh } = require('../../h-dsl-engine/lib/freshness');
+      const dataDir = require('path').join(ctx.projectRoot, '.puffin', 'cre');
+
+      console.log('[CRE] Running freshness-based model update');
+      const freshnessResult = await ensureFresh({
+        projectRoot: ctx.projectRoot,
+        dataDir,
+        autoUpdate: true,
+        log: (...args) => console.log('[CRE-FRESHNESS]', ...args)
+      });
+
+      // Reload CodeModel if an update was performed
+      if (freshnessResult.action === 'incremental-update') {
+        await codeModel.load(ctx.projectRoot);
+        console.log('[CRE] Code model reloaded after incremental update');
+      }
+
+      return {
+        success: true,
+        data: {
+          updated: freshnessResult.action === 'incremental-update',
+          source: 'freshness',
+          ...freshnessResult
+        }
+      };
     } catch (err) {
       console.error('[CRE] cre:update-model error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // cre:refresh-model — manual Code Model refresh (for sprint end or debugging)
+  // Supports both incremental (autoUpdate) and full rebuild (forceRebuild)
+  ipcMain.handle('cre:refresh-model', async (_event, args) => {
+    try {
+      const { forceRebuild = false } = args || {};
+      const path = require('path');
+      const { ensureFresh } = require('../../h-dsl-engine/lib/freshness');
+      const dataDir = path.join(ctx.projectRoot, '.puffin', 'cre');
+
+      console.log(`[CRE] Manual model refresh requested (forceRebuild: ${forceRebuild})`);
+
+      if (forceRebuild) {
+        // Full rebuild requested — run hdsl-bootstrap via child process
+        const { execFile } = require('child_process');
+        const { promisify } = require('util');
+        const execFileAsync = promisify(execFile);
+
+        const bootstrapPath = path.join(__dirname, '..', '..', 'h-dsl-engine', 'hdsl-bootstrap.js');
+
+        console.log('[CRE] Running full Code Model rebuild...');
+        const { stdout, stderr } = await execFileAsync('node', [
+          bootstrapPath,
+          '--project', ctx.projectRoot,
+          '--clean'
+        ], { cwd: ctx.projectRoot, timeout: 120000 });
+
+        if (stderr) {
+          console.warn('[CRE] Bootstrap stderr:', stderr);
+        }
+        console.log('[CRE] Bootstrap complete');
+
+        // Reload CodeModel from disk
+        await codeModel.load(ctx.projectRoot);
+
+        return {
+          success: true,
+          data: {
+            updated: true,
+            source: 'full-rebuild',
+            output: stdout.slice(-500) // Last 500 chars of output
+          }
+        };
+      }
+
+      // Incremental update via freshness checking
+      const freshnessResult = await ensureFresh({
+        projectRoot: ctx.projectRoot,
+        dataDir,
+        autoUpdate: true,
+        log: (...args) => console.log('[CRE-FRESHNESS]', ...args)
+      });
+
+      // Reload CodeModel if an update was performed
+      if (freshnessResult.action === 'incremental-update') {
+        await codeModel.load(ctx.projectRoot);
+        console.log('[CRE] Code model reloaded after incremental update');
+      }
+
+      return {
+        success: true,
+        data: {
+          updated: freshnessResult.action === 'incremental-update',
+          source: 'freshness',
+          ...freshnessResult
+        }
+      };
+    } catch (err) {
+      console.error('[CRE] cre:refresh-model error:', err.message);
       return { success: false, error: err.message };
     }
   });

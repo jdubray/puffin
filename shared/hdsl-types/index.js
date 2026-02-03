@@ -102,7 +102,20 @@ function createBaseSchema() {
           kind: {
             m3Type: M3Primitives.TERM,
             required: true,
-            enum: ['module', 'file', 'config']
+            enum: [
+              'module',      // Generic JS module (default)
+              'service',     // Business logic, API clients, data access
+              'component',   // UI components (React, Vue, etc.)
+              'utility',     // Helper functions, utils
+              'config',      // Configuration files
+              'middleware',  // Express/Koa middleware
+              'controller',  // Route handlers, request handlers
+              'model',       // Data models, schemas
+              'test',        // Test files
+              'entry',       // Entry points (index.js, main.js)
+              'plugin',      // Plugin modules
+              'hook'         // React hooks, lifecycle hooks
+            ]
           },
           summary: { m3Type: M3Primitives.PROSE, required: true },
           intent: { m3Type: M3Primitives.PROSE, required: false },

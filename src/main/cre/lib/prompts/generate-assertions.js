@@ -8,6 +8,17 @@
  * codebase after implementation to confirm completeness.
  */
 
+// Code Model tool guidance for assertions
+const CODE_MODEL_TOOLS_BLOCK = `
+CODE MODEL TOOLS AVAILABLE:
+You can use h-DSL Code Model tools to inform assertion generation:
+- hdsl_peek: Check what exports a module should have based on existing patterns
+- hdsl_deps: Verify expected integration points
+- hdsl_search: Find similar modules to base assertions on existing patterns
+
+Use these to generate more accurate assertions that match codebase conventions.
+`;
+
 /**
  * Builds the generate-assertions prompt.
  *
@@ -16,12 +27,16 @@
  * @param {Object} params.story - The user story with acceptance criteria.
  * @param {string} [params.codeModelContext] - Structured code model context.
  * @param {string} [params.codingStandard] - Coding standard text.
+ * @param {boolean} [params.includeToolGuidance] - Whether to include Code Model tool guidance (default: true).
  * @returns {{ system: string, task: string, constraints: string }}
  */
-function buildPrompt({ planItem, story, codeModelContext = '', codingStandard = '' }) {
+function buildPrompt({ planItem, story, codeModelContext = '', codingStandard = '', includeToolGuidance = true }) {
+  const toolsBlock = includeToolGuidance ? CODE_MODEL_TOOLS_BLOCK : '';
+
   const system = `You are generating inspection assertions for a user story implementation. You operate using the DERIVE principle: generate new verifiable knowledge from the plan and acceptance criteria.
 
-Assertions will be automatically evaluated against the codebase to verify implementation completeness.`;
+Assertions will be automatically evaluated against the codebase to verify implementation completeness.
+${toolsBlock}`;
 
   const ac = (story.acceptanceCriteria || []).map((c, i) => `  ${i + 1}. ${c}`).join('\n');
 

@@ -71,7 +71,7 @@ async function populate({ discovery, schema, projectRoot, log }) {
       instance.artifacts[raw.path] = {
         type: kind,
         path: raw.path,
-        kind: getFileKind(raw),
+        kind: kind,  // Use same classification for both type and kind
         summary: '',
         intent: '',
         exports: raw.exports || [],
@@ -171,34 +171,139 @@ function groupByDirectory(rawArtifacts) {
 }
 
 /**
- * Classify an artifact into a schema element type.
- * @param {Object} raw
- * @param {Object} schema
- * @returns {string}
+ * Classify an artifact into a semantic kind based on multiple heuristics:
+ * 1. Path patterns (/components/, /services/, /utils/, etc.)
+ * 2. File name patterns (*.controller.js, *.service.js, etc.)
+ * 3. Class suffix patterns (FooService, BarController, etc.)
+ * 4. Export patterns (useXxx for hooks)
+ *
+ * @param {Object} raw - Raw artifact data from discovery.
+ * @param {Object} schema - The derived schema (unused but kept for API compatibility).
+ * @returns {string} One of: module, service, component, utility, config,
+ *                   middleware, controller, model, test, entry, plugin, hook
  */
 function classifyArtifact(raw, schema) {
-  const p = raw.path;
-  if (p.includes('.test.') || p.includes('.spec.') || p.includes('tests/') || p.includes('test/')) {
-    return schema.elementTypes.test ? 'test' : 'module';
+  const p = raw.path.toLowerCase();
+  const basename = path.basename(raw.path, path.extname(raw.path)).toLowerCase();
+
+  // 1. Test files (highest priority — test trumps other classifications)
+  if (p.includes('.test.') || p.includes('.spec.') ||
+      p.includes('/tests/') || p.includes('/test/') ||
+      p.includes('/__tests__/') || basename.endsWith('.test') || basename.endsWith('.spec')) {
+    return 'test';
   }
-  if (p.endsWith('.json') || p.endsWith('.yaml') || p.endsWith('.yml')) {
-    return schema.elementTypes.config ? 'config' : 'module';
+
+  // 2. Config files
+  if (p.endsWith('.json') || p.endsWith('.yaml') || p.endsWith('.yml') ||
+      basename.includes('config') || basename.endsWith('rc') ||
+      basename === '.eslintrc' || basename === '.prettierrc') {
+    return 'config';
   }
-  if (raw.classes && raw.classes.length > 0) {
-    return 'module'; // classes are modules in the base schema
+
+  // 3. Entry points
+  if (basename === 'index' || basename === 'main' || basename === 'app' ||
+      basename === 'server' || basename === 'cli') {
+    return 'entry';
   }
+
+  // 4. Path-based classification (directory structure)
+  if (p.includes('/component') || p.includes('/view') || p.includes('/ui/')) {
+    return 'component';
+  }
+  if (p.includes('/service') || p.includes('/api/') || p.includes('/client/')) {
+    return 'service';
+  }
+  if (p.includes('/util') || p.includes('/helper')) {
+    return 'utility';
+  }
+  if (p.includes('/middleware')) {
+    return 'middleware';
+  }
+  if (p.includes('/controller') || p.includes('/handler') || p.includes('/route')) {
+    return 'controller';
+  }
+  if (p.includes('/model') || p.includes('/entity') || p.includes('/schema')) {
+    return 'model';
+  }
+  if (p.includes('/hook')) {
+    return 'hook';
+  }
+  if (p.includes('/plugin')) {
+    return 'plugin';
+  }
+
+  // 5. File suffix patterns (e.g., user.service.js, auth.controller.js)
+  const suffixMatch = basename.match(/\.(\w+)$/);
+  if (suffixMatch) {
+    const suffix = suffixMatch[1];
+    if (['service', 'svc'].includes(suffix)) return 'service';
+    if (['component', 'comp'].includes(suffix)) return 'component';
+    if (['controller', 'ctrl'].includes(suffix)) return 'controller';
+    if (['middleware', 'mw'].includes(suffix)) return 'middleware';
+    if (['util', 'utils', 'helper', 'helpers'].includes(suffix)) return 'utility';
+    if (['model', 'entity'].includes(suffix)) return 'model';
+    if (['hook', 'hooks'].includes(suffix)) return 'hook';
+    if (['plugin'].includes(suffix)) return 'plugin';
+  }
+
+  // 6. Class-based classification (class name suffix patterns)
+  if (raw.classDetails && raw.classDetails.length > 0) {
+    const className = raw.classDetails[0].name;
+    if (className.endsWith('Service') || className.endsWith('Client') || className.endsWith('Api')) {
+      return 'service';
+    }
+    if (className.endsWith('Controller') || className.endsWith('Handler')) {
+      return 'controller';
+    }
+    if (className.endsWith('Component') || className.endsWith('View')) {
+      return 'component';
+    }
+    if (className.endsWith('Middleware')) {
+      return 'middleware';
+    }
+    if (className.endsWith('Model') || className.endsWith('Entity') || className.endsWith('Schema')) {
+      return 'model';
+    }
+    if (className.endsWith('Plugin') || className.endsWith('Extension')) {
+      return 'plugin';
+    }
+    if (className.endsWith('Helper') || className.endsWith('Utils') || className.endsWith('Util')) {
+      return 'utility';
+    }
+  }
+
+  // 7. Export-based classification (React hooks pattern: useXxx)
+  if (raw.exports && raw.exports.length > 0) {
+    const mainExport = raw.exports[0];
+    if (mainExport.startsWith('use') && mainExport.length > 3 && /^use[A-Z]/.test(mainExport)) {
+      return 'hook';
+    }
+  }
+
+  // 8. Function-based classification (check if all exports look like utilities)
+  if (raw.functionDetails && raw.functionDetails.length > 0 && (!raw.classDetails || raw.classDetails.length === 0)) {
+    // Files with only functions and no classes in util-like paths
+    const fnNames = raw.functionDetails.map(f => f.name);
+    const utilPatterns = ['get', 'set', 'is', 'has', 'to', 'from', 'parse', 'format', 'validate', 'convert', 'create'];
+    const utilCount = fnNames.filter(n => utilPatterns.some(p => n.toLowerCase().startsWith(p))).length;
+    if (utilCount > fnNames.length / 2) {
+      return 'utility';
+    }
+  }
+
+  // Default fallback
   return 'module';
 }
 
 /**
  * Determine the kind of a file artifact.
- * @param {Object} raw
+ * Delegates to classifyArtifact for consistent classification.
+ * @param {Object} raw - Raw artifact data.
+ * @param {Object} [schema] - Optional schema (for API compatibility).
  * @returns {string}
  */
-function getFileKind(raw) {
-  if (raw.classes && raw.classes.length > 0) return 'module';
-  if (raw.path.endsWith('.json')) return 'config';
-  return 'module';
+function getFileKind(raw, schema) {
+  return classifyArtifact(raw, schema || {});
 }
 
 /**

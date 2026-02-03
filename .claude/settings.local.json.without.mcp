@@ -50,19 +50,6 @@
       "Bash(grep:*)",
       "Bash(for i in {0..13})",
       "Bash(do echo \"=== CHUNK $i ===\" grep -E \"## Plugin|## Technology|## Design|### Recommendation|Recommendation:|Rationale|Trade-off|trade-off\" \"/mnt/c/Users/jjdub/code/puffin/.claude/rlm_state/chunks/chunk_000$i.txt\")",
-      "mcp__hdsl__hdsl_stats",
-      "mcp__hdsl__hdsl_peek",
-      "mcp__hdsl__hdsl_search",
-      "mcp__hdsl__hdsl_deps",
-      "mcp__hdsl__hdsl_trace",
-      "mcp__hdsl__hdsl_impact",
-      "mcp__hdsl__hdsl_patterns",
-      "mcp__hdsl__hdsl_path",
-      "mcp__hdsl__hdsl_freshness"
     ]
-  },
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "hdsl"
-  ]
+  }
 }

@@ -14,8 +14,28 @@
 const { Command } = require('commander');
 const path = require('path');
 const fs = require('fs');
+const readline = require('readline');
 
 const program = new Command();
+
+/**
+ * Prompt user for confirmation.
+ * @param {string} message - The prompt message.
+ * @returns {Promise<boolean>} True if user confirms, false otherwise.
+ */
+function confirm(message) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    rl.question(`${message} (y/N): `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+    });
+  });
+}
 
 program
   .name('hdsl-bootstrap')
@@ -34,6 +54,7 @@ program
   .option('--annotate', 'Generate .an.md annotation files for each source artifact', false)
   .option('--verbose', 'Print progress and decisions to stdout', false)
   .option('--clean', 'Delete existing schema/instance before running', false)
+  .option('-y, --yes', 'Skip confirmation prompts (for scripted/CI usage)', false)
   .action(run);
 
 // Explore command: query an existing code model
@@ -149,11 +170,31 @@ async function run(opts) {
     process.exit(1);
   }
 
-  // Clean existing output if requested
+  // Clean existing output if requested (with confirmation)
   if (opts.clean) {
     const schemaPath = path.join(outputDir, 'schema.json');
     const instancePath = path.join(outputDir, 'instance.json');
     const annotationsDir = path.join(outputDir, 'annotations');
+
+    // Check what exists
+    const existingFiles = [];
+    if (fs.existsSync(schemaPath)) existingFiles.push('schema.json');
+    if (fs.existsSync(instancePath)) existingFiles.push('instance.json');
+    if (fs.existsSync(annotationsDir)) existingFiles.push('annotations/');
+
+    if (existingFiles.length > 0 && !opts.yes) {
+      console.log('\n⚠️  WARNING: --clean will delete the existing Code Model:');
+      existingFiles.forEach(f => console.log(`   • ${path.join(outputDir, f)}`));
+      console.log('');
+
+      const confirmed = await confirm('Are you sure you want to delete and rebuild?');
+      if (!confirmed) {
+        console.log('Aborted. No changes made.');
+        process.exit(0);
+      }
+      console.log('');
+    }
+
     for (const p of [schemaPath, instancePath]) {
       if (fs.existsSync(p)) { fs.unlinkSync(p); log(`  Deleted ${p}`); }
     }

@@ -6,6 +6,55 @@
  * markdown document for a single user story.
  */
 
+// Code Model tool guidance block — this is CRITICAL for RIS because it tells the
+// implementing agent (Claude Code) how to use the Code Model tools during implementation.
+const CODE_MODEL_TOOLS_BLOCK = `
+CODE MODEL TOOLS AVAILABLE TO THE IMPLEMENTING AGENT:
+The coding agent executing this RIS has access to h-DSL Code Model tools via MCP:
+- hdsl_search: Find existing modules, patterns, or conventions by keyword or semantic query
+- hdsl_peek: Get a module's summary, exports, and purpose without reading the full file
+- hdsl_deps: List what a module imports and what imports it
+- hdsl_trace: Follow dependency chains from any starting module
+- hdsl_impact: Analyze which files would be affected by changes
+- hdsl_stats: Get codebase structure overview
+- hdsl_patterns: Discover naming conventions and architectural patterns
+- hdsl_path: Find the shortest path between two modules in the dependency graph
+- hdsl_freshness: Check if Code Model is stale and optionally trigger incremental update
+
+THE RIS SHOULD INSTRUCT THE AGENT TO USE THESE TOOLS:
+1. Before creating new files, use hdsl_search to check if similar functionality exists
+2. Before modifying shared modules, use hdsl_impact to understand ripple effects
+3. When integrating with existing code, use hdsl_peek to understand module interfaces
+4. When following patterns, use hdsl_patterns to discover conventions
+5. Prefer Code Model tools over raw Grep/Glob for codebase navigation — they're faster and more accurate
+
+IMPORTANT — CODE MODEL FRESHNESS:
+During debugging or when fixing issues after the initial implementation:
+- Run hdsl_freshness with autoUpdate: true to refresh the Code Model with recent changes
+- This ensures hdsl_impact and hdsl_deps reflect the latest code state
+- If you've made significant changes and Code Model results seem stale, refresh first
+`;
+
+// Instructions template for how to write tool usage guidance in the RIS
+const RIS_TOOL_INSTRUCTIONS_TEMPLATE = `
+## Codebase Navigation
+Before implementing, use the Code Model tools to understand the codebase:
+- Run \`hdsl_search\` with relevant keywords to find existing patterns
+- Run \`hdsl_peek\` on files you need to integrate with
+- Run \`hdsl_impact\` before modifying any file used by other modules
+
+Prefer Code Model queries over Grep/Glob for:
+- Finding where a pattern is used: hdsl_search instead of grep
+- Understanding module relationships: hdsl_deps instead of reading imports
+- Assessing change risk: hdsl_impact instead of manual tracing
+
+### During Debugging
+If fixing issues or making adjustments after the initial implementation:
+1. Run \`hdsl_freshness\` with \`autoUpdate: true\` to refresh the Code Model
+2. Then use hdsl_impact to assess how your fixes affect other modules
+3. This ensures accurate dependency information after code changes
+`;
+
 /**
  * Builds the generate-ris prompt.
  *
@@ -16,12 +65,16 @@
  * @param {string} [params.codeModelContext] - Structured code model context.
  * @param {Object} [params.projectConfig] - Project config (branch, conventions, etc.).
  * @param {number} [params.maxLength] - Maximum RIS length in characters.
+ * @param {boolean} [params.includeToolGuidance] - Whether to include Code Model tool guidance (default: true).
  * @returns {{ system: string, task: string, constraints: string }}
  */
-function buildPrompt({ planItem, story, assertions = [], codeModelContext = '', projectConfig = {}, maxLength = 12000 }) {
+function buildPrompt({ planItem, story, assertions = [], codeModelContext = '', projectConfig = {}, maxLength = 12000, includeToolGuidance = true }) {
+  const toolsBlock = includeToolGuidance ? CODE_MODEL_TOOLS_BLOCK : '';
+
   const system = `You are generating a Refined Implementation Specification (RIS) document. The RIS is the SOLE instruction document given to a coding agent (Claude Code CLI) to implement a user story. The coding agent has NO other context — it relies entirely on the RIS for what to build, how to build it, and how to verify it.
 
-Your RIS must be a complete, detailed, unambiguous implementation guide. Think of it as a senior developer writing step-by-step instructions for a capable but context-less implementor. Every file, every function, every data flow must be spelled out.`;
+Your RIS must be a complete, detailed, unambiguous implementation guide. Think of it as a senior developer writing step-by-step instructions for a capable but context-less implementor. Every file, every function, every data flow must be spelled out.
+${toolsBlock}`;
 
   const ac = (story.acceptanceCriteria || []).map((c, i) => `  ${i + 1}. ${c}`).join('\n');
 
@@ -61,6 +114,7 @@ Coding style: ${projectConfig.codingStyle || 'camelCase/JSDoc'}`;
   "sections": {
     "context": "<context section content>",
     "objective": "<objective section content>",
+    "navigation": "<codebase navigation tool guidance>",
     "instructions": "<instructions section content>",
     "conventions": "<conventions section content>",
     "assertions": "<assertions checklist content>"
@@ -80,6 +134,17 @@ A clear, 2-3 sentence statement of what this implementation achieves and why it 
 
 ## Acceptance Criteria
 Reproduce ALL acceptance criteria from the user story verbatim as a numbered list. The coding agent needs these to verify completeness.
+
+## Codebase Navigation
+INCLUDE THIS SECTION to tell the implementing agent how to use Code Model tools:
+- Before creating new files, run \`hdsl_search\` with relevant keywords to find existing patterns
+- Before modifying shared modules, run \`hdsl_impact\` to understand ripple effects
+- When integrating with existing code, run \`hdsl_peek\` to understand module interfaces
+- Prefer Code Model queries (hdsl_*) over Grep/Glob for faster, more accurate navigation
+
+Include specific tool invocations relevant to this story, e.g.:
+- "Run hdsl_search pattern='authentication' to see how auth is handled elsewhere"
+- "Run hdsl_deps path='src/main/plugin-manager.js' before modifying plugin registration"
 
 ## Implementation Instructions
 This is the MOST IMPORTANT section. Provide exhaustive, step-by-step instructions:

@@ -2,7 +2,7 @@
   "mcpServers": {
     "hdsl": {
       "command": "node",
-      "args": ["h-dsl-engine/hdsl-tool-server.js", "--project", "."]
+      "args": ["C:/Users/jjdub/code/puffin/h-dsl-engine/hdsl-tool-server.js", "--project", "C:/Users/jjdub/code/puffin"]
     }
   }
 }

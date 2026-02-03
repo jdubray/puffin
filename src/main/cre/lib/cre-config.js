@@ -29,6 +29,14 @@ function getDefaultCreConfig() {
     schema: {
       allowAutoExtension: true,
       extensionApprovalRequired: false
+    },
+    sprintEnd: {
+      // Whether to automatically refresh the Code Model when a sprint completes
+      // If false, user must manually trigger refresh before committing
+      autoRefresh: false,
+      // Whether to perform a full rebuild (--clean) vs incremental update
+      // Full rebuild is more thorough but slower
+      fullRebuild: false
     }
   };
 }
@@ -78,6 +86,18 @@ function ensureCreConfig(config) {
     }
     if (cre.schema.extensionApprovalRequired === undefined) {
       cre.schema.extensionApprovalRequired = defaults.schema.extensionApprovalRequired;
+    }
+  }
+
+  // Backfill sprintEnd settings
+  if (!cre.sprintEnd) {
+    cre.sprintEnd = defaults.sprintEnd;
+  } else {
+    if (cre.sprintEnd.autoRefresh === undefined) {
+      cre.sprintEnd.autoRefresh = defaults.sprintEnd.autoRefresh;
+    }
+    if (cre.sprintEnd.fullRebuild === undefined) {
+      cre.sprintEnd.fullRebuild = defaults.sprintEnd.fullRebuild;
     }
   }
 

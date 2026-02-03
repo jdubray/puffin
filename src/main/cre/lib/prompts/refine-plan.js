@@ -5,6 +5,21 @@
  * FOLLOW operation — updates an existing plan based on developer feedback.
  */
 
+// Code Model tool guidance block for refinement prompts
+const CODE_MODEL_TOOLS_BLOCK = `
+CODE MODEL TOOLS AVAILABLE:
+You have access to h-DSL Code Model tools to validate plan changes:
+- hdsl_impact: CRITICAL — use this to assess ripple effects when feedback changes file targets
+- hdsl_deps: Check dependencies before removing or reordering plan items
+- hdsl_trace: Follow dependency chains to validate new orderings
+- hdsl_search: Find alternative implementation patterns if feedback suggests a different approach
+
+REFINEMENT GUIDANCE:
+- When feedback changes which files to modify, use hdsl_impact to check affected modules
+- When reordering plan items, use hdsl_deps to verify the new order respects dependencies
+- When feedback suggests using existing code, use hdsl_search to find it
+`;
+
 /**
  * Builds the refine-plan prompt.
  *
@@ -13,12 +28,16 @@
  * @param {string} params.feedback - Developer feedback text.
  * @param {string} [params.codeModelContext] - Structured code model context.
  * @param {number} [params.iteration] - Current refinement iteration number.
+ * @param {boolean} [params.includeToolGuidance] - Whether to include Code Model tool guidance (default: true).
  * @returns {{ system: string, task: string, constraints: string }}
  */
-function buildPrompt({ plan, feedback, codeModelContext = '', iteration = 1 }) {
+function buildPrompt({ plan, feedback, codeModelContext = '', iteration = 1, includeToolGuidance = true }) {
+  const toolsBlock = includeToolGuidance ? CODE_MODEL_TOOLS_BLOCK : '';
+
   const system = `You are an expert software architect refining an implementation plan based on developer feedback. You operate using the FOLLOW principle: preserve the valid parts of the existing plan while incorporating changes.
 
-Be conservative — only change what the feedback requires. Do not reorganize or rearchitect unprompted.`;
+Be conservative — only change what the feedback requires. Do not reorganize or rearchitect unprompted.
+${toolsBlock}`;
 
   const contextBlock = codeModelContext
     ? `\nCODEBASE CONTEXT:\n${codeModelContext}\n`

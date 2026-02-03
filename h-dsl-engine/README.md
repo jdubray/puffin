@@ -35,7 +35,8 @@ node hdsl-bootstrap.js --project <path> [options]
 | `--include <patterns>` | Comma-separated glob patterns to include (e.g. `"*.js,*.ts"`) | all recognized |
 | `--output <dir>` | Output directory for schema/instance JSON | `<project>/.puffin/cre` |
 | `--annotate` | Generate `.an.md` annotation files for each source artifact | `false` |
-| `--clean` | Delete existing schema/instance before running | `false` |
+| `--clean` | Delete existing schema/instance before running (prompts for confirmation) | `false` |
+| `-y, --yes` | Skip confirmation prompts (for scripted/CI usage) | `false` |
 | `--verbose` | Print progress and decisions to stdout | `false` |
 
 ### explore
@@ -240,6 +241,33 @@ All output goes to `<project>/.puffin/cre/` by default:
   instance.json     # Code Model: artifacts, dependencies, flows
   annotations/      # (if --annotate) .an.md files per source artifact
 ```
+
+### Annotations
+
+Annotations are optional human-readable markdown files (`.an.md`) generated for each source artifact. They provide:
+
+- **Summary and intent** extracted from JSDoc or AI-generated prose
+- **Exports** list with function signatures
+- **Dependencies** (what the module imports)
+- **Children** (functions and classes with their descriptions)
+
+**When to use annotations:**
+- Documentation generation or review
+- Onboarding new developers to a codebase
+- Code review preparation
+- Understanding unfamiliar modules without reading source
+
+**Generate annotations:**
+
+```bash
+# Add annotations to existing Code Model
+node hdsl-bootstrap.js --project . --annotate
+
+# Clean rebuild with annotations
+node hdsl-bootstrap.js --project . --clean --annotate
+```
+
+**Note:** Annotations are not required for the Code Model to function. The MCP tools and query commands work entirely from `instance.json`. Annotations are purely for human consumption.
 
 ## File Structure
 

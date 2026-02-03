@@ -328,6 +328,34 @@
                 </div>
               </fieldset>
 
+              <fieldset class="options-fieldset">
+                <legend>Central Reasoning Engine (CRE)</legend>
+                <p class="fieldset-description">Configure the h-DSL Code Model update behavior during sprint execution.</p>
+
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="cre-sprint-auto-refresh">
+                    <span>Auto-refresh Code Model at Sprint End</span>
+                  </label>
+                  <small class="form-hint">Automatically refresh the Code Model when all stories complete. If disabled, use manual refresh before committing.</small>
+                </div>
+
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="cre-sprint-full-rebuild">
+                    <span>Full Rebuild (instead of incremental)</span>
+                  </label>
+                  <small class="form-hint">Perform a complete Code Model rebuild at sprint end. More thorough but slower than incremental update.</small>
+                </div>
+
+                <div class="form-group">
+                  <button type="button" id="cre-manual-refresh-btn" class="btn secondary">
+                    Refresh Code Model Now
+                  </button>
+                  <small class="form-hint">Manually trigger Code Model refresh. Use after debugging or before committing changes.</small>
+                </div>
+              </fieldset>
+
               <fieldset class="options-fieldset plugins-fieldset">
                 <legend>Claude Code Plugins</legend>
                 <p class="fieldset-description">Manage skill plugins that extend Claude's capabilities. Plugins provide specialized context and instructions for specific tasks.</p>

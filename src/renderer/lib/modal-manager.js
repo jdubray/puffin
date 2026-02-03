@@ -2033,6 +2033,9 @@ export class ModalManager {
 
     content.innerHTML = `
       <form id="story-detail-form" class="story-detail-form">
+        <div class="story-detail-ris-bar">
+          <a href="#" class="story-ris-link story-detail-ris-link" data-story-id="${story.id}" title="View Refined Implementation Specification">View RIS</a>
+        </div>
         <div class="form-group">
           <label for="story-title">Title <span class="required">*</span></label>
           <input type="text" id="story-title" class="form-input" value="${this.escapeHtml(story.title)}" required maxlength="200">
@@ -2108,6 +2111,14 @@ export class ModalManager {
     // Save button
     document.getElementById('story-save-btn')?.addEventListener('click', () => {
       this.saveStoryDetail(data)
+    })
+
+    // RIS link
+    document.querySelector('.story-detail-ris-link')?.addEventListener('click', (e) => {
+      e.preventDefault()
+      const storyId = e.target.dataset.storyId
+      this.intents.hideModal()
+      this.intents.showModal('ris-view', { storyId, storyTitle: story.title })
     })
 
     // Add criterion button
@@ -3172,10 +3183,10 @@ export class ModalManager {
         return
       }
 
-      // Render the RIS markdown as preformatted text with basic formatting
+      // Render the RIS as formatted markdown
       content.innerHTML = `
         <div class="ris-viewer">
-          <pre class="ris-content">${this.escapeHtml(risContent)}</pre>
+          <div class="ris-content-markdown">${this.renderMarkdown(risContent)}</div>
         </div>
       `
     }).catch(err => {

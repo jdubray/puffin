@@ -35,6 +35,28 @@ Be thorough in testing and consider edge cases.
 | UI glitches | `src/renderer/app.js`, `src/renderer/components/` |
 | Plugin errors | `plugins/*-plugin/`, `src/main/plugin-loader.js` |
 
+## Branch Memory (auto-extracted)
+
+### Conventions
+
+- IPC handler naming: Main process handlers use pattern 'feature:action' (e.g., 'designer-plugin:listDesigns'). Plugin invoke calls reference the plugin name consistently across codebase. Inconsistencies (using 'designer' vs 'designer-plugin') cause silent failures.
+- State property naming inconsistency: Code uses both 'in_progress' (underscore) and 'in-progress' (hyphen) for story status values. Must standardize to 'in-progress' throughout codebase to avoid filtering failures.
+- Async handler re-entry protection: Async event handlers (handleSprintPlanning, handleRerunRequest) called from onStateChange need guard flags to prevent re-entry when handler calls state-changing intents. Pattern: _handlingSprintPlanning flag set during execution, cleared in finally().
+- Component managed modals list: Modal manager maintains whitelist of modal types it manages. New modal types must be added to componentManagedModals array or manager will clear content instead of letting component render.
+
+### Architectural Decisions
+
+- Plugin-Core interaction model: Plugins and core SAM should communicate exclusively through the file system (.puffin directory structure) rather than shared state. Each plugin manages its own state independently and reads/writes files that core can access.
+- Auto-continue feature disabled by default: Automatic CLI continuation was causing infinite loops in planning tasks. Auto-continue is now explicitly disabled and requires manual user action via Continue button. Auto-detection of turn limits should only trigger if explicitly enabled.
+- GUI definitions storage location: Designer plugin and core both reference GUI definitions in .puffin/gui-definitions/ directory. Core reads this directory on each Include GUI dropdown click (not via plugin IPC). Plugin manages CRUD operations on files in this directory.
+
+### Bug Patterns
+
+- Race conditions between plugin initialization and IPC calls: Frontend components attempting to invoke plugin handlers before plugins are fully initialized returns errors. Solution: Defer IPC calls until after LOAD_STATE action fires or implement retry logic with exponential backoff.
+- DOM element property access timing: Reading offsetLeft/offsetTop from DOM elements immediately after renderCanvas() (which removes and recreates elements) returns 0,0 instead of actual position. Must read position values from data model before DOM manipulation.
+- Stale state persistence causing re-entry loops: Pending action flags like _pendingSprintPlanning can persist across sessions causing async handlers to trigger repeatedly. Must clear all pending flags in loadStateAcceptor when loading fresh state.
+- Modal backdrop layering and opacity issues: Generic modal backdrop uses z-index and opacity that can be overridden by component-specific modals. Must ensure modal-managed components don't define their own conflicting backdrop styles.
+
 # Assigned Skills
 
 ## Code Architect

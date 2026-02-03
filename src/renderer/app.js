@@ -4735,6 +4735,7 @@ Keep it concise but informative. Use markdown formatting.`
           // and available for post-implementation verification
           if (assertions.length > 0) {
             this.intents.updateSprintStoryAssertions(story.id, assertions)
+            this.intents.updateUserStory(story.id, { inspectionAssertions: assertions })
           }
         } else {
           console.warn('[CRE] Assertion generation failed for story:', story.id, assertResult.error)

@@ -7348,6 +7348,12 @@
 }
 
 /* ===== Plan Review Modal ===== */
+.modal:has(.plan-review-container) {
+  width: 50vw;
+  max-width: 50vw;
+  min-width: 500px;
+}
+
 .plan-review-container {
   display: flex;
   flex-direction: row;
@@ -7515,7 +7521,21 @@
   background: rgba(34, 197, 94, 0.3);
 }
 
+.story-detail-ris-bar {
+  margin-bottom: 0.75rem;
+}
+
+.story-detail-ris-bar .story-ris-link {
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.625rem;
+}
+
 /* ===== RIS Viewer Modal ===== */
+.modal:has(.ris-viewer) {
+  width: 40vw;
+  max-width: 40vw;
+  min-width: 500px;
+}
 .ris-loading {
   text-align: center;
   padding: 2rem;
@@ -7549,6 +7569,57 @@
   border: 1px solid var(--border-secondary);
   color: var(--text-primary);
   margin: 0;
+}
+
+.ris-content-markdown {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  padding: 0.5rem 1rem;
+}
+
+.ris-content-markdown h2 {
+  font-size: 1.1rem;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-secondary);
+  padding-bottom: 0.25rem;
+}
+
+.ris-content-markdown h3 {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.375rem;
+  color: var(--text-primary);
+}
+
+.ris-content-markdown p {
+  margin: 0.5rem 0;
+}
+
+.ris-content-markdown ul,
+.ris-content-markdown ol {
+  margin: 0.375rem 0;
+  padding-left: 1.5rem;
+}
+
+.ris-content-markdown code {
+  background: var(--bg-secondary);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.8em;
+}
+
+.ris-content-markdown pre {
+  background: var(--bg-secondary);
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+.ris-content-markdown pre code {
+  background: none;
+  padding: 0;
 }
 
 /* ===== Assertion Editor (Story Creation) ===== */

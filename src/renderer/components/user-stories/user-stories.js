@@ -424,6 +424,10 @@ export class UserStoriesComponent {
       // Track active sprint state for single-sprint enforcement
       this.hasActiveSprint = !!state.activeSprint
       this.activeSprintTitle = state.activeSprint?.title || null
+      this.risAvailable = new Set(Object.keys(state.activeSprint?.risMap || {}).filter(id => {
+        const ris = state.activeSprint.risMap[id]
+        return ris && !ris.error
+      }))
 
       // Reload sprint history after state is loaded (database is now ready)
       if (actionType === 'LOAD_STATE' && this.sprintHistory.length === 0) {
@@ -991,7 +995,7 @@ export class UserStoriesComponent {
           <span class="story-date">${this.formatDate(story.createdAt)}</span>
           ${story.branchId ? `<span class="story-branch">${this.formatBranchName(story.branchId)}</span>` : ''}
           ${story.sourcePromptId ? '<span class="story-source">Auto-extracted</span>' : ''}
-          ${story.status === 'completed' || story.status === 'archived' ? `<a href="#" class="story-ris-link" data-story-id="${story.id}" title="View Refined Implementation Specification">RIS</a>` : ''}
+          ${this.risAvailable?.has(story.id) ? `<a href="#" class="story-ris-link" data-story-id="${story.id}" title="View Refined Implementation Specification">RIS</a>` : ''}
         </div>
       </div>
     `

@@ -283,7 +283,41 @@ CLI flags override config file values, which override built-in defaults.
 ## Tests
 
 ```bash
-node --test tests/h-dsl-engine/
+# Unit tests
+node --test tests/
+
+# Evaluation suite only
+node --test tests/evaluation/
 ```
 
-167 tests across 48 suites covering all library modules and the tool server.
+### Evaluation Test Suite
+
+The `tests/evaluation/` directory contains a comparative test suite that measures the value of the h-DSL Code Model over standard tools (Grep, Glob, Read, Bash). Each test poses the same question twice -- once answered using a simulated baseline (standard tool counts), once using actual Code Model queries -- and compares accuracy, tool calls, and token consumption against manually verified ground truth.
+
+**18 test cases across 5 categories:**
+
+| Category | Tests | What it measures |
+|----------|-------|------------------|
+| **A: Dependency Tracing** | A1--A4 | Graph queries vs grep chains (importers, transitive deps, orphans, impact) |
+| **B: Semantic Search** | B1--B4 | Prose-indexed search vs keyword grep (persistence, lifecycle, state, errors) |
+| **C: Artifact Discovery** | C1--C4 | Pre-computed metadata vs file reads (summaries, stats, exports, tags) |
+| **D: Cross-File Flows** | D1--D3 | Pre-traced flows vs manual reconstruction (startup, plugin activation, IPC) |
+| **E: Change Planning** | E1--E3 | Combined semantic + graph vs multi-step grep (IPC channels, plugin conventions, refactoring) |
+
+**Latest results (against Puffin's own codebase, 302 artifacts):**
+
+```
+Total baseline tool calls: 130
+Total Code Model calls:     21
+Overall reduction:          6.19x
+```
+
+| Category | Reduction | Accuracy |
+|----------|-----------|----------|
+| A: Dependency Tracing | 3--50x | F1 0.88--1.0 |
+| B: Semantic Search | 4--6x | All expected modules found |
+| C: Artifact Discovery | 1--5x | Exact match on stats, summaries, exports |
+| D: Cross-File Flows | 2.5--5x | F1 1.0 on startup sequence |
+| E: Change Planning | 4--6x | 16 target entities, 18 affected files |
+
+Ground truth is in `tests/evaluation/ground-truth.json`. To update it after rebootstrapping, re-verify the expected values against the current instance.json.

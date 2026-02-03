@@ -31,6 +31,35 @@ When deriving user stories, format them as:
 - Description: "As a [role], I want [feature] so that [benefit]"
 - Acceptance Criteria: Testable conditions for completion
 
+## Branch Memory (auto-extracted)
+
+### Conventions
+
+- User stories follow a standardized format: title, 'As a..., I want..., so that...' description, and acceptance criteria list
+- Implementation plans include: architecture analysis, technical approach, file changes, risk assessment, and complexity rating (Low/Medium/High)
+- IPC channels are prefixed with feature names (e.g., 'design-doc:load-content'), following a feature-name:action pattern
+- User-facing error messages use clear, concise language indicating what went wrong and what action the user should take
+- Acceptance criteria define success conditions and must be verifiable; they guide both implementation and testing
+- File path references in code use pattern 'file_path:line_number' to enable easy navigation to source
+- Defect detection uses keyword scanning on user prompt content (not Claude responses) to count problem reports per thread
+
+### Architectural Decisions
+
+- Sprints are limited to maximum 4 user stories to prevent token exhaustion and maintain manageability
+- Thread context is determined by parent-child relationships in prompts: a thread root has parentId=null, and descendants follow the chain
+- Context handoff between threads uses unidirectional flow from completed thread to target thread, with handoff summaries documenting what was implemented, API contracts, and integration points
+- Multi-layer validation pattern: validation functions in src/shared/validators.js, validation logic in acceptors (sam/model.js), errors set via model.appError which triggers toast notifications
+- Statistics are aggregated per branch, not per thread, to maintain historical metrics across all work in a branch
+- UI components follow a dropdown pattern for file/document selection, populating from directory scans and enabling single or multiple selection
+- Design documents and configuration files are stored in project root directories (docs/, .puffin/), not auto-generated during runtime
+- Sprint execution uses a state machine pattern with iteration counter, delay timer, and stuck detection threshold to manage auto-continue flows
+- Handoff summaries include files modified, API contracts, integration points, and assumptions; they can be versioned and chained if multiple handoffs occur
+- Implementation scope for user stories includes primary files, read-only files, estimated LOC budget, constraints, exclusions, and visual references
+
+### Bug Patterns
+
+- Features requiring cross-cutting context (UI + Backend) fail to complete both halves due to thread isolation; handoff mechanism required to bridge this gap
+
 # Assigned Skills
 
 ## Modularity Patterns

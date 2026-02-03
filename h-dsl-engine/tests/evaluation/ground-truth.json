@@ -1,0 +1,162 @@
+{
+  "_description": "Ground truth data for h-DSL Code Model vs Standard Tools evaluation tests. Manually verified against the Puffin codebase.",
+
+  "A1_direct_importers_of_plugin_loader": {
+    "question": "What files directly import plugin-loader.js?",
+    "answer": [
+      "src/main/plugins/plugin-manager.js",
+      "src/main/plugins/index.js"
+    ]
+  },
+
+  "A2_transitive_deps_main_js": {
+    "question": "What is the transitive dependency tree of main.js (depth 2)?",
+    "depth0": ["src/main/main.js"],
+    "depth1": ["src/main/ipc-handlers.js", "src/main/plugins/index.js"],
+    "depth2": [
+      "src/main/puffin-state.js",
+      "src/main/claude-service.js",
+      "src/main/developer-profile.js",
+      "src/main/git-service.js",
+      "src/main/claude-md-generator.js",
+      "src/main/evaluators/assertion-evaluator.js",
+      "src/main/generators/assertion-generator.js",
+      "src/main/services/index.js",
+      "src/main/plugins/plugin-loader.js",
+      "src/main/plugins/plugin-manager.js",
+      "src/main/plugins/plugin-registry.js",
+      "src/main/plugins/plugin-context.js",
+      "src/main/plugins/view-registry.js",
+      "src/main/plugins/plugin-state-store.js"
+    ]
+  },
+
+  "A3_orphan_modules": {
+    "question": "Which modules are orphans (no imports to or from them)?",
+    "minCount": 100,
+    "sampleOrphans": [
+      "tests/validators.test.js",
+      "tests/story-derivation.test.js"
+    ]
+  },
+
+  "A4_impact_of_ipc_handlers": {
+    "question": "If I change ipc-handlers.js, what might break (who depends on it)?",
+    "directDependents": ["src/main/main.js"],
+    "importedBy_ipc_handlers": [
+      "src/main/puffin-state.js",
+      "src/main/claude-service.js",
+      "src/main/developer-profile.js",
+      "src/main/git-service.js",
+      "src/main/claude-md-generator.js",
+      "src/main/evaluators/assertion-evaluator.js",
+      "src/main/generators/assertion-generator.js",
+      "src/main/services/index.js"
+    ]
+  },
+
+  "B1_persistence_modules": {
+    "question": "Which modules handle persistence?",
+    "expectedPaths": [
+      "src/main/database/connection.js",
+      "src/main/database/index.js",
+      "src/main/puffin-state.js"
+    ],
+    "keywords": ["database", "sqlite", "persist", "save", "store", "connection"]
+  },
+
+  "B2_plugin_lifecycle": {
+    "question": "What is responsible for the plugin lifecycle?",
+    "expectedPaths": [
+      "src/main/plugins/plugin-loader.js",
+      "src/main/plugins/plugin-manager.js",
+      "src/renderer/plugins/plugin-lifecycle-manager.js"
+    ],
+    "keywords": ["plugin", "lifecycle", "activate", "deactivate", "load"]
+  },
+
+  "B3_application_state": {
+    "question": "Find the module that manages application state",
+    "expectedPaths": [
+      "src/main/puffin-state.js",
+      "src/renderer/sam/state.js",
+      "src/renderer/sam/model.js"
+    ],
+    "keywords": ["state", "store", "puffin"]
+  },
+
+  "B4_error_recovery": {
+    "question": "Which functions handle error recovery?",
+    "searchTerms": ["error", "recovery", "catch", "retry"],
+    "expectedMinResults": 1
+  },
+
+  "C1_plugin_loader_summary": {
+    "question": "Give me a summary of plugin-loader.js without reading the whole file",
+    "path": "src/main/plugins/plugin-loader.js",
+    "expectedKind": "module",
+    "expectedHasSummary": true,
+    "expectedHasExports": true
+  },
+
+  "C2_codebase_overview": {
+    "question": "What does the codebase look like?",
+    "expectedArtifactCount": 302,
+    "expectedDependencyCount": 239,
+    "expectedFlowCount": 9,
+    "tolerance": 0.1
+  },
+
+  "C3_claude_service_exports": {
+    "question": "What symbols does claude-service.js export?",
+    "path": "src/main/claude-service.js",
+    "expectedHasExports": true
+  },
+
+  "C4_core_tagged_modules": {
+    "question": "List all modules tagged as 'test'",
+    "tag": "test",
+    "expectedMinCount": 50
+  },
+
+  "D1_app_startup_flow": {
+    "question": "What is the app startup sequence?",
+    "entryPoint": "src/main/main.js",
+    "expectedConnectedModules": [
+      "src/main/ipc-handlers.js",
+      "src/main/plugins/index.js"
+    ]
+  },
+
+  "D2_plugin_discovery_to_activation": {
+    "question": "How does a plugin go from discovery to activation?",
+    "relevantModules": [
+      "src/main/plugins/plugin-loader.js",
+      "src/main/plugins/plugin-manager.js",
+      "src/main/plugins/plugin-registry.js"
+    ]
+  },
+
+  "E1_new_ipc_channel": {
+    "question": "I need to add a new IPC channel — what files do I need to touch?",
+    "expectedFiles": [
+      "src/main/ipc-handlers.js",
+      "src/main/preload.js",
+      "src/renderer/app.js"
+    ]
+  },
+
+  "E2_plugin_convention": {
+    "question": "What's the convention for adding a new plugin?",
+    "expectedPluginModules_minCount": 5,
+    "expectedTag": "plugin"
+  },
+
+  "E3_database_refactor_impact": {
+    "question": "Which files would be affected if I refactor the database module?",
+    "databaseModules": [
+      "src/main/database/connection.js",
+      "src/main/database/index.js"
+    ]
+  }
+}

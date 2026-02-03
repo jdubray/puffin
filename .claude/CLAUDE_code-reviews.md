@@ -28,6 +28,27 @@ You are working on the **code review thread**. Focus on:
 - [ ] Edge cases covered
 - [ ] No broken existing tests
 
+## Branch Memory (auto-extracted)
+
+### Conventions
+
+- IPC handler naming convention uses colon-separated format: 'feature:action' (e.g., 'toast-history:getAll', 'image:save') for all main-to-renderer process communication
+- Plugin architecture requires plugins to implement initialize(context) and cleanup() methods; main process plugins receive context with ipcMain, app, mainWindow, config, pluginDir; renderer plugins receive ipcRenderer, document, window, config, pluginDir
+- Status naming in user stories uses 'pending', 'in-progress', 'completed', and 'archived'; consistency between database layer (StoryStatus constants) and UI layer is critical to prevent data loss
+- All IPC handlers must validate input and sanitize output; path operations must use path.resolve() and validate paths are within expected directories to prevent traversal attacks; HTML content must be escaped using escapeHtml() and attributes escaped with escapeAttr()
+
+### Architectural Decisions
+
+- Puffin uses a file-based persistence model stored in .puffin/ directory for project-specific data (user stories, sprints, git operations, etc.), while browser localStorage is reserved only for temporary UI state (handoff summaries) scoped by project ID to prevent cross-project interference
+- SQLite via better-sqlite3 is the authoritative persistence layer for user stories, sprints, and sprint history; replaces previous file-based JSON storage for improved reliability and structured querying
+- Toast history uses a single-source-of-truth architecture where puffin-state.js is the authoritative storage and plugins delegate to core IPC handlers rather than maintaining duplicate storage implementations
+
+### Bug Patterns
+
+- Status naming inconsistencies between database and UI cause data to disappear during sprint archival; database used 'implemented' while UI expected 'completed', requiring migrations to fix existing data
+- Modal form data not properly passed to backend methods leads to default values being persisted instead of user input; methods must receive override parameters or be refactored to accept complete form state
+- Duplicate implementations in plugin system and core application create architectural fragmentation where toast history, designer storage, and other features maintain parallel storage logic instead of delegating to single source of truth
+
 # Assigned Skills
 
 ## Code Explorer

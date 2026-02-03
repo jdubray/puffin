@@ -113,6 +113,32 @@ Main call-to-action button with primary styling
 - Screen reader compatibility
 - Touch-friendly targets for mobile
 
+## Branch Memory (auto-extracted)
+
+### Conventions
+
+- Plugin architecture uses naming convention '*-plugin' for plugin directories. Plugins export module with 'name', 'initialize(context)', and 'cleanup()' methods. Main process plugins access ipcMain, app, mainWindow, config, pluginDir. Renderer plugins access ipcRenderer, document, window, config, pluginDir via preload.
+- IPC communication uses channel naming pattern 'featureName:methodName'. All IPC handlers in main process must validate input. Preload script exposes APIs via window.puffin namespace with nested structure like window.puffin.github, window.puffin.git, window.puffin.file.
+- SAM (State-Action-Model) pattern: actions defined in actions.js, acceptors in model.js, state computed in state.js, rendering in components. Actions must be registered in app.js both in actionNames array and component.actions array to be available as intents.
+- Modal system uses centralized ModalManager.show() for displaying modals. Modal types handled in modal-manager.js with dedicated render methods. User stories component pattern includes review modal for user confirmation before actions.
+- CSS naming uses kebab-case for class names. Component-specific styles prefixed with component name (e.g., .git-panel-*, .handoff-*, .branch-select-*). Views managed via 'view' classes and display controlled via active/inactive states.
+- User stories workflow: stories persisted in .puffin/user-stories.json. Story updates should update individual stories rather than rewriting entire file to prevent data loss. State-persistence loops through stories and calls updateUserStory IPC handler for each.
+- Prompt content no longer synced through SAM on keystroke. Textarea value read directly on submit for performance. Button state updates via input listener without SAM action. Textarea cleared directly after submission rather than via state.
+
+### Architectural Decisions
+
+- CLI output persistence implemented by storing CLI output state in SAM model and syncing to disk via state-persistence.js. Only the last CLI output session is retained on app restart, no history kept.
+- GitHub authentication uses OAuth Device Flow for browser-based auth and Personal Access Token (PAT) method. Tokens stored encrypted using Electron's safeStorage. App already has registered GitHub OAuth app with Client ID 'Ov23liUkVBHmYgqhqfnP'.
+- Developer profile accessed only via modal (View menu), not as a regular view tab. Modal shown via ModalManager with branch selection and Git configuration options when connecting to GitHub.
+- Handoff system displays only current handoff context (not historical list). Workflow: 1) Click 'Handoff Ready' button, 2) Review summary in modal, 3) Select target branch, 4) Navigate to branch with handoff summary displayed above prompt input, 5) Submit prompt with handoff context prepended.
+- Commit message generation uses Claude to analyze staged git diff and generate meaningful commit messages. Falls back to file list if diff is empty (e.g., for new files). Implementation in git-panel.js with 'git:generateCommitMessage' IPC handler.
+- Markdown rendering in response viewer uses marked library with fallback simpleMarkdown parser. CSS provides table styling for proper markdown table display. 'Copy MD' and 'Save MD' buttons added to response content for markdown export.
+- Sidebar resizer implemented with mousedown/mousemove/mouseup event handlers. Sidebar width persisted in application state. Minimum width enforced to prevent collapsing too narrow.
+
+### Bug Patterns
+- State persistence can trigger infinite loops when updating certain state properties. The issue occurs when persist logic triggers actions that regenerate state, causing repeated state changes. Affects user story updates and branch activation.
+- Electron main process requires full restart to register new IPC handlers. Hot-reload does not apply to main.js and ipc-handlers.js. Users must quit and relaunch app for new handlers to become available.
+
 # Assigned Skills
 
 ## frontend-design

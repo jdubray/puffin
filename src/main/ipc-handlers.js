@@ -655,6 +655,50 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // ============ Completion Summary Operations ============
+
+  // Store a completion summary linked to a user story
+  ipcMain.handle('state:storeCompletionSummary', async (event, { storyId, summary }) => {
+    try {
+      if (!puffinState.database?.completionSummaries) {
+        return { success: false, error: 'Completion summary repository not available' }
+      }
+
+      const created = puffinState.database.completionSummaries.create({
+        storyId,
+        sessionId: summary.sessionId || null,
+        summary: summary.summary || '',
+        filesModified: summary.filesModified || [],
+        testsStatus: summary.testStatus || summary.testsStatus || 'unknown',
+        criteriaMatched: summary.criteriaStatus || summary.criteriaMatched || [],
+        turns: summary.turns || 0,
+        cost: summary.cost || 0,
+        duration: summary.duration || 0
+      })
+
+      console.log('[IPC] storeCompletionSummary: stored for story', storyId, 'id:', created.id)
+      return { success: true, completionSummary: created }
+    } catch (error) {
+      console.error('[IPC] storeCompletionSummary error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get completion summary for a story (most recent)
+  ipcMain.handle('state:getCompletionSummary', async (event, storyId) => {
+    try {
+      if (!puffinState.database?.completionSummaries) {
+        return { success: false, error: 'Completion summary repository not available' }
+      }
+
+      const summary = puffinState.database.completionSummaries.findByStoryId(storyId)
+      return { success: true, completionSummary: summary }
+    } catch (error) {
+      console.error('[IPC] getCompletionSummary error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
   // ============ Design Document Operations ============
 
   // Get list of available design documents from docs/ directory

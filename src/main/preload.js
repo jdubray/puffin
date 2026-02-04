@@ -115,6 +115,12 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('assertion-evaluation-complete', handler)
     },
 
+    // Completion summary operations
+    storeCompletionSummary: (storyId, summary) =>
+      ipcRenderer.invoke('state:storeCompletionSummary', { storyId, summary }),
+    getCompletionSummary: (storyId) =>
+      ipcRenderer.invoke('state:getCompletionSummary', storyId),
+
     // Design document operations
     getDesignDocuments: () => ipcRenderer.invoke('state:getDesignDocuments'),
     loadDesignDocument: (filename) => ipcRenderer.invoke('state:loadDesignDocument', filename),

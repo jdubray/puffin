@@ -428,6 +428,13 @@ export class UserStoriesComponent {
         const ris = state.activeSprint.risMap[id]
         return ris && !ris.error
       }))
+      const sprintStories = state.activeSprint?.stories || []
+      const backlogStories = state.userStories || []
+      this.summaryAvailable = new Set(
+        [...sprintStories, ...backlogStories]
+          .filter(s => s.status === 'completed' && s.completionSummary)
+          .map(s => s.id)
+      )
 
       // Reload sprint history after state is loaded (database is now ready)
       if (actionType === 'LOAD_STATE' && this.sprintHistory.length === 0) {
@@ -996,6 +1003,7 @@ export class UserStoriesComponent {
           ${story.branchId ? `<span class="story-branch">${this.formatBranchName(story.branchId)}</span>` : ''}
           ${story.sourcePromptId ? '<span class="story-source">Auto-extracted</span>' : ''}
           ${this.risAvailable?.has(story.id) ? `<a href="#" class="story-ris-link" data-story-id="${story.id}" title="View Refined Implementation Specification">RIS</a>` : ''}
+          ${this.summaryAvailable?.has(story.id) ? `<a href="#" class="story-summary-link" data-story-id="${story.id}" title="View Completion Summary">Summary</a>` : ''}
         </div>
       </div>
     `
@@ -1105,6 +1113,21 @@ export class UserStoriesComponent {
         this.intents.showModal('ris-view', {
           storyId,
           storyTitle: story?.title || 'Unknown'
+        })
+      })
+    })
+
+    // View completion summary link
+    this.listContainer.querySelectorAll('.story-summary-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const storyId = link.dataset.storyId
+        const story = this.stories.find(s => s.id === storyId)
+        this.intents.showModal('completion-summary-view', {
+          storyId,
+          storyTitle: story?.title || 'Unknown',
+          completionSummary: story?.completionSummary || null
         })
       })
     })

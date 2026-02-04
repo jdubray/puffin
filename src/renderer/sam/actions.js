@@ -945,13 +945,22 @@ export const orchestrationStoryStarted = (storyId) => ({
  * Mark a story as completed in the orchestration queue
  * @param {string} storyId - The ID of the completed story
  * @param {string} sessionId - The Claude session ID used for implementation
+ * @param {Object} [completionSummary] - Summary of work done
+ * @param {string[]} [completionSummary.filesModified] - Files created/modified
+ * @param {string} [completionSummary.testStatus] - Test pass/fail summary
+ * @param {Object[]} [completionSummary.criteriaStatus] - AC match status
+ * @param {string} [completionSummary.summary] - Human-readable summary
+ * @param {number} [completionSummary.turns] - Number of CLI turns
+ * @param {number} [completionSummary.cost] - USD cost
+ * @param {number} [completionSummary.duration] - Duration in ms
  * @returns {Object} Action with type ORCHESTRATION_STORY_COMPLETED
  */
-export const orchestrationStoryCompleted = (storyId, sessionId) => ({
+export const orchestrationStoryCompleted = (storyId, sessionId, completionSummary = null) => ({
   type: 'ORCHESTRATION_STORY_COMPLETED',
   payload: {
     storyId,
     sessionId,
+    completionSummary,
     timestamp: Date.now()
   }
 })

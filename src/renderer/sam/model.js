@@ -2508,7 +2508,7 @@ export const orchestrationStoryCompletedAcceptor = model => proposal => {
     console.log('[MODEL-TRACE-C1] Has orchestration:', !!model.activeSprint?.orchestration)
 
     if (model.activeSprint?.orchestration) {
-      const { storyId, sessionId, timestamp } = proposal.payload
+      const { storyId, sessionId, timestamp, completionSummary } = proposal.payload
 
       console.log('[MODEL-TRACE-C2] Before update completedStories:', model.activeSprint.orchestration.completedStories)
 
@@ -2526,7 +2526,7 @@ export const orchestrationStoryCompletedAcceptor = model => proposal => {
 
       console.log('[MODEL-TRACE-C3] After update completedStories:', model.activeSprint.orchestration.completedStories)
 
-      // Update session tracking
+      // Update session tracking with completion summary
       if (!model.activeSprint.orchestration.storySessions) {
         model.activeSprint.orchestration.storySessions = {}
       }
@@ -2534,7 +2534,8 @@ export const orchestrationStoryCompletedAcceptor = model => proposal => {
         status: 'completed',
         startedAt: model.activeSprint.orchestration.storySessions[storyId]?.startedAt,
         completedAt: timestamp,
-        sessionId: sessionId
+        sessionId: sessionId,
+        completionSummary: completionSummary || null
       }
 
       // Clear current story if it matches

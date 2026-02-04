@@ -1700,7 +1700,7 @@ Please provide specific file locations and line numbers where issues are found, 
           currentStoryId: orchState?.currentStoryId,
           implementationMode: this.state?.activeSprint?.implementationMode
         })
-        this.handleOrchestrationCompletion(response)
+        await this.handleOrchestrationCompletion(response)
       } catch (err) {
         console.error('[SAM-ERROR] handleOrchestrationCompletion failed:', err)
       }
@@ -5249,7 +5249,7 @@ Please proceed with the implementation.`
    * Called when a Claude response completes during orchestration
    * Automatically continues if max turns was reached
    */
-  handleOrchestrationCompletion(response) {
+  async handleOrchestrationCompletion(response) {
     console.log('[ORCHESTRATION] handleOrchestrationCompletion called with response:', {
       hasResponse: !!response,
       sessionId: response?.sessionId,
@@ -5327,11 +5327,20 @@ Please proceed with the implementation.`
       if (this.orchestrationContinuationCount > maxContinuations) {
         console.warn('[ORCHESTRATION] Max continuations reached, marking story as complete')
         this.orchestrationContinuationCount = 0
-        // Use the same completion flow as normal completion
-        this.intents.orchestrationStoryCompleted(currentStoryId, sessionId)
+
+        // Build fallback summary since we hit max continuations
+        const fallbackSummary = this.buildFallbackSummary(currentStoryId, response, 'Max continuations reached')
+        this.intents.orchestrationStoryCompleted(currentStoryId, sessionId, fallbackSummary)
         this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
         this.autoCompleteAcceptanceCriteria(currentStoryId)
         this.evaluateStoryAssertions(currentStoryId)
+        if (fallbackSummary) {
+          this.intents.updateUserStory(currentStoryId, { completionSummary: fallbackSummary })
+          window.puffin.state.storeCompletionSummary(currentStoryId, {
+            ...fallbackSummary,
+            sessionId
+          }).catch(err => console.warn('[ORCH] Failed to persist fallback summary:', err.message))
+        }
         setTimeout(() => this.checkOrchestrationProgress(), 1000)
         return
       }
@@ -5373,17 +5382,16 @@ Please proceed with the implementation.`
     console.log('[ORCH-TRACE-1] Timestamp:', new Date().toISOString())
     console.log('='.repeat(80))
 
+    // STEP 0: Generate completion summary from session context before closing
+    const completionSummary = await this.generateCompletionSummary(currentStoryId, sessionId, response)
+
     // STEP 1: Mark orchestration story as completed (for internal tracking)
     console.log('[ORCH-TRACE-2] STEP 1: Calling orchestrationStoryCompleted intent')
-    console.log('[ORCH-TRACE-2] Pre-state completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
-    this.intents.orchestrationStoryCompleted(currentStoryId, sessionId)
-    console.log('[ORCH-TRACE-2] Post-call completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
+    this.intents.orchestrationStoryCompleted(currentStoryId, sessionId, completionSummary)
 
     // STEP 2: Mark the story status as 'completed' via proper intent (triggers persistence)
     console.log('[ORCH-TRACE-3] STEP 2: Calling updateSprintStoryStatus intent')
-    console.log('[ORCH-TRACE-3] Pre-state storyProgress:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
     this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
-    console.log('[ORCH-TRACE-3] Post-call storyProgress:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
 
     // STEP 3: Auto-complete all acceptance criteria for this story
     console.log('[ORCH-TRACE-4] STEP 3: Calling autoCompleteAcceptanceCriteria')
@@ -5393,12 +5401,25 @@ Please proceed with the implementation.`
     console.log('[ORCH-TRACE-5] STEP 4: Calling evaluateStoryAssertions')
     this.evaluateStoryAssertions(currentStoryId)
 
+    // Store summary on the user story for backlog visibility AND persist to completion_summaries table
+    if (completionSummary) {
+      this.intents.updateUserStory(currentStoryId, { completionSummary })
+      window.puffin.state.storeCompletionSummary(currentStoryId, {
+        ...completionSummary,
+        sessionId
+      }).then(result => {
+        if (result.success) {
+          console.log('[ORCH-TRACE] Completion summary persisted to DB, id:', result.completionSummary?.id)
+        } else {
+          console.warn('[ORCH-TRACE] Failed to persist completion summary:', result.error)
+        }
+      }).catch(err => {
+        console.warn('[ORCH-TRACE] Error persisting completion summary:', err.message)
+      })
+    }
+
     console.log('='.repeat(80))
     console.log('[ORCH-TRACE-6] ====== STORY COMPLETION FLOW END ======')
-    console.log('[ORCH-TRACE-6] Final state check:')
-    console.log('[ORCH-TRACE-6] - orchestration.completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
-    console.log('[ORCH-TRACE-6] - storyProgress[storyId]:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
-    console.log('[ORCH-TRACE-6] - Will call checkOrchestrationProgress in 1000ms')
     console.log('='.repeat(80))
 
     // AC5: Run CRE introspection (cre:update-model) after story completes, blocking next story
@@ -5434,6 +5455,96 @@ Please proceed with the implementation.`
       console.error('[CRE] Introspection failed for story:', storyId, err.message)
       // Don't block orchestration on introspection failure — log and proceed
       this.intents.creIntrospectionComplete(storyId)
+    }
+  }
+
+  /**
+   * Generate a completion summary for a story using Claude.
+   * Falls back to a basic summary if the Claude call fails.
+   * @param {string} storyId - The completed story ID
+   * @param {string} sessionId - The Claude session ID
+   * @param {Object} response - The CLI response object
+   * @returns {Object} Completion summary
+   */
+  async generateCompletionSummary(storyId, sessionId, response) {
+    const story = this.state?.activeSprint?.stories?.find(s => s.id === storyId)
+    const filesModified = this.activityTracker?.getFilesModified() || []
+    const ac = story?.acceptanceCriteria || []
+
+    try {
+      console.log('[ORCH-SUMMARY] Generating completion summary for story:', storyId)
+
+      const summaryPrompt = `You just finished implementing a user story. Provide a brief JSON completion summary.
+
+Story: "${story?.title || 'Unknown'}"
+Description: ${story?.description || 'N/A'}
+
+Acceptance Criteria:
+${ac.map((c, i) => `${i + 1}. ${c}`).join('\n') || 'None'}
+
+Files modified during this session:
+${filesModified.length > 0 ? filesModified.join('\n') : 'Unknown'}
+
+Your response (the implementation output) ended with:
+${(response?.content || '').slice(-500)}
+
+Respond with ONLY a JSON object (no markdown, no code fences):
+{
+  "summary": "1-2 sentence summary of what was accomplished",
+  "testStatus": "passing|failing|not_run|unknown",
+  "criteriaStatus": [{"criterion": "short AC text", "met": true/false}]
+}`
+
+      const result = await window.puffin.claude.sendPrompt(summaryPrompt, {
+        model: 'haiku',
+        maxTurns: 1,
+        timeout: 30000
+      })
+
+      if (result.success && result.content) {
+        // Parse JSON from the response — handle potential markdown wrapping
+        let jsonStr = result.content.trim()
+        const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (fenceMatch) jsonStr = fenceMatch[1].trim()
+
+        const parsed = JSON.parse(jsonStr)
+        console.log('[ORCH-SUMMARY] Generated summary:', parsed.summary)
+
+        return {
+          summary: parsed.summary || '',
+          testStatus: parsed.testStatus || 'unknown',
+          criteriaStatus: parsed.criteriaStatus || [],
+          filesModified,
+          turns: response?.turns || 0,
+          cost: response?.cost || 0,
+          duration: response?.duration || 0
+        }
+      }
+    } catch (err) {
+      console.warn('[ORCH-SUMMARY] Summary generation failed, using fallback:', err.message)
+    }
+
+    // Fallback summary
+    return this.buildFallbackSummary(storyId, response, 'Completed normally')
+  }
+
+  /**
+   * Build a basic fallback summary when Claude summary generation fails.
+   * @param {string} storyId - The story ID
+   * @param {Object} response - The CLI response object
+   * @param {string} reason - Completion reason
+   * @returns {Object} Basic completion summary
+   */
+  buildFallbackSummary(storyId, response, reason) {
+    const filesModified = this.activityTracker?.getFilesModified() || []
+    return {
+      summary: reason,
+      testStatus: 'unknown',
+      criteriaStatus: [],
+      filesModified,
+      turns: response?.turns || 0,
+      cost: response?.cost || 0,
+      duration: response?.duration || 0
     }
   }
 

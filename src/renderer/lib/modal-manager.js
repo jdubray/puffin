@@ -353,6 +353,9 @@ export class ModalManager {
       case 'ris-view':
         this.renderRisView(modalTitle, modalContent, modalActions, modal.data)
         break
+      case 'completion-summary-view':
+        this.renderCompletionSummaryView(modalTitle, modalContent, modalActions, modal.data)
+        break
       case 'plan-review':
         this.renderPlanReview(modalTitle, modalContent, modalActions, modal.data)
         break
@@ -2082,6 +2085,33 @@ export class ModalManager {
           <button type="button" id="add-assertion-btn" class="btn small secondary">+ Add Assertion</button>
         </div>
 
+        ${story.completionSummary ? `
+        <div class="form-group completion-summary-section">
+          <label>Completion Summary</label>
+          <div class="completion-summary">
+            <p class="completion-summary-text">${this.escapeHtml(story.completionSummary.summary || '')}</p>
+            ${story.completionSummary.filesModified?.length > 0 ? `
+              <details class="completion-detail">
+                <summary>Files modified (${story.completionSummary.filesModified.length})</summary>
+                <ul class="completion-files">${story.completionSummary.filesModified.map(f => `<li>${this.escapeHtml(f)}</li>`).join('')}</ul>
+              </details>
+            ` : ''}
+            ${story.completionSummary.criteriaStatus?.length > 0 ? `
+              <details class="completion-detail">
+                <summary>Acceptance criteria status</summary>
+                <ul class="completion-criteria">${story.completionSummary.criteriaStatus.map(c => `<li class="${c.met ? 'met' : 'unmet'}">${c.met ? '&#10003;' : '&#10007;'} ${this.escapeHtml(c.criterion || '')}</li>`).join('')}</ul>
+              </details>
+            ` : ''}
+            <div class="completion-stats">
+              ${story.completionSummary.testStatus ? `<span class="completion-stat">Tests: ${this.escapeHtml(story.completionSummary.testStatus)}</span>` : ''}
+              ${story.completionSummary.turns ? `<span class="completion-stat">Turns: ${story.completionSummary.turns}</span>` : ''}
+              ${story.completionSummary.cost ? `<span class="completion-stat">Cost: $${story.completionSummary.cost.toFixed(4)}</span>` : ''}
+              ${story.completionSummary.duration ? `<span class="completion-stat">Duration: ${Math.round(story.completionSummary.duration / 1000)}s</span>` : ''}
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
         <div class="story-meta">
           <span class="meta-item">Created: ${this.formatDate(story.createdAt)}</span>
           ${story.branchId ? `<span class="meta-item">Branch: ${this.escapeHtml(story.branchId)}</span>` : ''}
@@ -3196,6 +3226,100 @@ export class ModalManager {
       console.error('[ModalManager] Failed to fetch RIS:', err)
       content.innerHTML = `<p class="ris-error">Failed to load RIS: ${this.escapeHtml(err.message)}</p>`
     })
+  }
+
+  /**
+   * Render a completion summary viewer modal
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - { storyId, storyTitle }
+   */
+  renderCompletionSummaryView(title, content, actions, data) {
+    const { storyId, storyTitle, completionSummary } = data || {}
+
+    title.textContent = `Completion Summary: ${storyTitle || 'Unknown Story'}`
+    actions.innerHTML = '<button class="btn secondary" id="summary-close-btn">Close</button>'
+    document.getElementById('summary-close-btn')?.addEventListener('click', () => this.intents.hideModal())
+
+    // Use in-memory data if available, otherwise fetch from DB
+    if (completionSummary) {
+      this._renderCompletionSummaryContent(content, completionSummary)
+    } else {
+      content.innerHTML = '<div class="summary-loading">Loading completion summary...</div>'
+      window.puffin.state.getCompletionSummary(storyId).then(result => {
+        if (!result.success || !result.completionSummary) {
+          content.innerHTML = '<p class="summary-empty">No completion summary found for this story.</p>'
+          return
+        }
+        this._renderCompletionSummaryContent(content, result.completionSummary)
+      }).catch(err => {
+        console.error('[ModalManager] Failed to fetch completion summary:', err)
+        content.innerHTML = `<p class="summary-error">Failed to load summary: ${this.escapeHtml(err.message)}</p>`
+      })
+    }
+  }
+
+  /**
+   * Render completion summary content into the modal content element.
+   * @private
+   * @param {HTMLElement} content - Modal content element
+   * @param {Object} s - Completion summary data
+   */
+  _renderCompletionSummaryContent(content, s) {
+    // Normalize field names (renderer uses criteriaStatus, DB uses criteriaMatched)
+    const criteria = s.criteriaMatched || s.criteriaStatus || []
+    const testStatus = s.testsStatus || s.testStatus || ''
+
+    // Build markdown content for rendering
+    const mdParts = []
+
+    if (s.summary) {
+      mdParts.push(this.escapeHtml(s.summary))
+    }
+
+    if (s.filesModified?.length > 0) {
+      mdParts.push(`\n## Files Modified (${s.filesModified.length})`)
+      mdParts.push(s.filesModified.map(f => `- \`${this.escapeHtml(f)}\``).join('\n'))
+    }
+
+    if (testStatus) {
+      mdParts.push(`\n## Test Results`)
+      mdParts.push(`Status: **${this.escapeHtml(testStatus)}**`)
+    }
+
+    const stats = []
+    if (s.turns) stats.push(`**Turns:** ${s.turns}`)
+    if (s.cost) stats.push(`**Cost:** $${Number(s.cost).toFixed(4)}`)
+    if (s.duration) stats.push(`**Duration:** ${Math.round(s.duration / 1000)}s`)
+    if (stats.length > 0) {
+      mdParts.push(`\n## Session Stats`)
+      mdParts.push(stats.join(' | '))
+    }
+
+    if (s.sessionId) {
+      mdParts.push(`\n---\nSession: \`${this.escapeHtml(s.sessionId)}\``)
+    }
+
+    const markdownContent = mdParts.join('\n\n')
+
+    const criteriaHtml = (criteria.length > 0) ? `
+      <div class="completion-criteria-section">
+        <h3>Acceptance Criteria</h3>
+        <ul class="completion-criteria">${criteria.map(c => {
+          const status = c.met === true ? 'met' : c.met === false ? 'unmet' : 'unknown'
+          const icon = c.met === true ? '&#10003;' : c.met === false ? '&#10007;' : '&#63;'
+          return `<li class="${status}"><span class="criteria-indicator">${icon}</span> ${this.escapeHtml(c.criterion || '')}</li>`
+        }).join('')}</ul>
+      </div>
+    ` : ''
+
+    content.innerHTML = `
+      <div class="completion-summary-viewer">
+        <div class="ris-content-markdown">${this.renderMarkdown(markdownContent)}</div>
+        ${criteriaHtml}
+      </div>
+    `
   }
 
   /**

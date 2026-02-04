@@ -265,6 +265,16 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('claude:error', handler)
     },
 
+    // Subscribe to question events (AskUserQuestion from Claude)
+    onQuestion: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('claude:question', handler)
+      return () => ipcRenderer.removeListener('claude:question', handler)
+    },
+
+    // Send answer to a pending question
+    answerQuestion: (data) => ipcRenderer.invoke('claude:answer', data),
+
     // Subscribe to raw JSON messages (for CLI Output view)
     onRawMessage: (callback) => {
       const handler = (event, jsonLine) => callback(jsonLine)

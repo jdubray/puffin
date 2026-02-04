@@ -27,7 +27,11 @@
       "src/main/plugins/plugin-registry.js",
       "src/main/plugins/plugin-context.js",
       "src/main/plugins/view-registry.js",
-      "src/main/plugins/plugin-state-store.js"
+      "src/main/plugins/plugin-state-store.js",
+      "src/main/plugins/contribution-parser.js",
+      "src/main/plugins/manifest-validator.js",
+      "src/main/plugins/services/history-service.js",
+      "src/main/plugins/services/story-service.js"
     ]
   },
 
@@ -94,15 +98,15 @@
   "C1_plugin_loader_summary": {
     "question": "Give me a summary of plugin-loader.js without reading the whole file",
     "path": "src/main/plugins/plugin-loader.js",
-    "expectedKind": "module",
+    "expectedKind": "plugin",
     "expectedHasSummary": true,
     "expectedHasExports": true
   },
 
   "C2_codebase_overview": {
     "question": "What does the codebase look like?",
-    "expectedArtifactCount": 302,
-    "expectedDependencyCount": 239,
+    "expectedArtifactCount": 323,
+    "expectedDependencyCount": 243,
     "expectedFlowCount": 9,
     "tolerance": 0.1
   },

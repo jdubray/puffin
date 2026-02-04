@@ -1272,6 +1272,13 @@ function setupClaudeHandlers(ipcMain) {
         // On full prompt built (for debug view)
         (fullPrompt) => {
           safeSend('claude:fullPrompt', fullPrompt)
+        },
+        // On question from Claude (AskUserQuestion tool)
+        (questionData) => {
+          safeSend('claude:question', {
+            toolUseId: questionData.toolUseId,
+            questions: questionData.questions
+          })
         }
       )
     } catch (error) {
@@ -1286,6 +1293,12 @@ function setupClaudeHandlers(ipcMain) {
   // Cancel current request
   ipcMain.on('claude:cancel', () => {
     claudeService.cancel()
+  })
+
+  // Answer a question from Claude (AskUserQuestion tool response)
+  ipcMain.handle('claude:answer', async (event, { toolUseId, answers }) => {
+    console.log('[IPC] claude:answer received, toolUseId:', toolUseId)
+    return claudeService.sendAnswer(toolUseId, answers)
   })
 
   // Derive user stories from a prompt

@@ -7622,6 +7622,104 @@
   padding: 0;
 }
 
+/* ===== Claude Question Modal ===== */
+.modal:has(.claude-question-modal) {
+  width: 40vw;
+  max-width: 40vw;
+  min-width: 420px;
+}
+
+.claude-question-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.cq-question {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cq-header {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-xs);
+  align-self: flex-start;
+}
+
+.cq-text {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.cq-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.cq-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.cq-option:hover {
+  border-color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.cq-option input[type="radio"],
+.cq-option input[type="checkbox"] {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.cq-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.cq-option-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.cq-option-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.cq-other {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.cq-other-input {
+  font-size: 0.8125rem;
+  margin-left: 1.5rem;
+}
+
 /* ===== Assertion Editor (Story Creation) ===== */
 .assertions-section {
   margin-top: 1rem;

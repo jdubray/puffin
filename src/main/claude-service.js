@@ -171,7 +171,7 @@ class ClaudeService {
    * @param {Function} onRaw - Callback for raw JSON lines (optional)
    * @param {Function} onFullPrompt - Callback with the full built prompt (optional)
    */
-  async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null) {
+  async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null, onQuestion = null) {
     // CRITICAL: Prevent multiple CLI instances from being spawned
     if (this.isProcessRunning()) {
       console.error('[CLAUDE-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
@@ -218,9 +218,12 @@ class ClaudeService {
 
       console.log('Claude CLI process started, PID:', this.currentProcess.pid)
 
-      // Write prompt to stdin and close it
-      this.currentProcess.stdin.write(prompt)
-      this.currentProcess.stdin.end()
+      // Write prompt as stream-json message to stdin (keep stdin open for answers)
+      const promptMessage = JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'text', text: prompt }] }
+      })
+      this.currentProcess.stdin.write(promptMessage + '\n')
 
       // Handle stdout (streaming JSON response)
       this.currentProcess.stdout.on('data', (chunk) => {
@@ -256,6 +259,18 @@ class ClaudeService {
                   }
                   messageText += block.text
                   streamedContent += block.text
+                } else if (block.type === 'tool_use' && block.name === 'AskUserQuestion') {
+                  // Claude is asking the user a question — emit for UI handling
+                  console.log('[CLAUDE-QUESTION] AskUserQuestion detected, tool_use_id:', block.id)
+                  if (onQuestion) {
+                    onQuestion({
+                      toolUseId: block.id,
+                      questions: block.input?.questions || [],
+                      // Store process reference for answer delivery
+                      _processRef: this.currentProcess
+                    })
+                  }
+                  streamedContent += '\n❓'
                 } else if (block.type === 'tool_use') {
                   // Add tool emoji indicator to content with line break
                   const toolEmoji = getToolEmoji(block.name)
@@ -277,6 +292,11 @@ class ClaudeService {
             if (json.type === 'result') {
               resultData = json
               console.log('[CLAUDE-DEBUG] Captured result, result field length:', json.result?.length || 0)
+
+              // Close stdin now that the session is complete
+              if (this.currentProcess?.stdin && !this.currentProcess.stdin.destroyed) {
+                this.currentProcess.stdin.end()
+              }
 
               // Call onComplete immediately when we get the result message
               // Don't wait for process close - the CLI may hang
@@ -448,6 +468,40 @@ class ClaudeService {
   }
 
   /**
+   * Send an answer to a pending AskUserQuestion from the CLI process.
+   * Writes a tool_result message to the process stdin.
+   * @param {string} toolUseId - The tool_use_id from the AskUserQuestion block
+   * @param {object} answers - Answer data keyed by question index
+   */
+  sendAnswer(toolUseId, answers) {
+    if (!this.currentProcess || !this.currentProcess.stdin || this.currentProcess.stdin.destroyed) {
+      console.error('[CLAUDE-ANSWER] No active process or stdin closed')
+      return false
+    }
+
+    // Format answers as the tool result content string
+    const answerText = Object.entries(answers)
+      .map(([, value]) => value)
+      .join('\n')
+
+    const resultMessage = JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content: answerText
+        }]
+      }
+    })
+
+    console.log('[CLAUDE-ANSWER] Sending answer for tool_use_id:', toolUseId)
+    this.currentProcess.stdin.write(resultMessage + '\n')
+    return true
+  }
+
+  /**
    * Build CLI arguments
    * @private
    */
@@ -460,6 +514,9 @@ class ClaudeService {
     // Use streaming JSON for structured output (requires --verbose with --print)
     args.push('--output-format', 'stream-json')
     args.push('--verbose')
+
+    // Enable bidirectional streaming for interactive question support
+    args.push('--input-format', 'stream-json')
 
     // Limit turns to prevent runaway processes
     args.push('--max-turns', String(data.maxTurns || '40'))
@@ -482,8 +539,12 @@ class ClaudeService {
       args.push('--system-prompt', data.systemPrompt)
     }
 
-    // Prompt will be passed via stdin (using pipe operator)
-    // This is handled by the caller writing to stdin
+    // Disallow specific tools (e.g., suppress AskUserQuestion in automated flows)
+    if (data.disallowedTools?.length > 0) {
+      args.push('--disallowedTools', ...data.disallowedTools)
+    }
+
+    // Prompt will be passed via stdin as stream-json
     args.push('-')
 
     return args
@@ -1203,6 +1264,7 @@ Guidelines:
         '--output-format', 'stream-json',
         '--verbose',
         '--max-turns', '1',  // Single turn - no tool use, just output JSON
+        '--disallowedTools', 'AskUserQuestion',
         '-'
       ]
 
@@ -1464,7 +1526,7 @@ ${feedback}`
 ${content}`
 
       // Use minimal options for title generation
-      const args = ['--print', '--max-turns', '1', '--model', 'haiku', '-']
+      const args = ['--print', '--max-turns', '1', '--model', 'haiku', '--disallowedTools', 'AskUserQuestion', '-']
 
       const cwd = this.projectPath || process.cwd()
       const spawnOptions = this.getSpawnOptions(cwd)
@@ -1568,6 +1630,7 @@ ${content}`
         '--max-turns', String(maxTurns),
         '--model', model,
         '--permission-mode', 'acceptEdits',
+        '--disallowedTools', 'AskUserQuestion',
         '-'
       ]
 
@@ -1867,6 +1930,7 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
         '--output-format', 'stream-json',
         '--verbose',
         '--max-turns', '40',  // Allow multiple turns for tool use
+        '--disallowedTools', 'AskUserQuestion',
         '-'
       ]
 

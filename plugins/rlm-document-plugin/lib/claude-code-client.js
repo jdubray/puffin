@@ -123,7 +123,8 @@ class ClaudeCodeClient extends EventEmitter {
       // Response length is controlled by the prompt itself
       const args = [
         '--print',                          // Non-interactive, single response
-        '--model', model
+        '--model', model,
+        '--disallowedTools', 'AskUserQuestion'
       ]
 
       const proc = spawn(this.config.claudePath, args, {

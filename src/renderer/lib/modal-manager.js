@@ -365,6 +365,9 @@ export class ModalManager {
       case 'orchestration-plan':
         this.renderOrchestrationPlan(modalTitle, modalContent, modalActions, modal.data, state)
         break
+      case 'claude-question':
+        this.renderClaudeQuestion(modalTitle, modalContent, modalActions, modal.data)
+        break
       default:
         console.warn('Unknown modal type:', modal.type)
         // Provide a way to close unknown modals
@@ -3192,6 +3195,110 @@ export class ModalManager {
     }).catch(err => {
       console.error('[ModalManager] Failed to fetch RIS:', err)
       content.innerHTML = `<p class="ris-error">Failed to load RIS: ${this.escapeHtml(err.message)}</p>`
+    })
+  }
+
+  /**
+   * Render a Claude question modal (AskUserQuestion tool response)
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - { toolUseId, questions }
+   */
+  renderClaudeQuestion(title, content, actions, data) {
+    const { toolUseId, questions } = data || {}
+
+    title.textContent = 'Claude has a question'
+
+    if (!questions || questions.length === 0) {
+      content.innerHTML = '<p>No questions received.</p>'
+      actions.innerHTML = '<button class="btn secondary" id="cq-close-btn">Dismiss</button>'
+      document.getElementById('cq-close-btn')?.addEventListener('click', () => this.intents.hideModal())
+      return
+    }
+
+    // Render each question with its options
+    const questionsHtml = questions.map((q, qi) => {
+      const optionsHtml = (q.options || []).map((opt, oi) => `
+        <label class="cq-option">
+          <input type="${q.multiSelect ? 'checkbox' : 'radio'}" name="cq-${qi}" value="${oi}" />
+          <div class="cq-option-content">
+            <span class="cq-option-label">${this.escapeHtml(opt.label)}</span>
+            ${opt.description ? `<span class="cq-option-desc">${this.escapeHtml(opt.description)}</span>` : ''}
+          </div>
+        </label>
+      `).join('')
+
+      return `
+        <div class="cq-question" data-index="${qi}">
+          ${q.header ? `<span class="cq-header">${this.escapeHtml(q.header)}</span>` : ''}
+          <p class="cq-text">${this.escapeHtml(q.question)}</p>
+          <div class="cq-options">${optionsHtml}</div>
+          <div class="cq-other">
+            <label class="cq-option">
+              <input type="${q.multiSelect ? 'checkbox' : 'radio'}" name="cq-${qi}" value="other" />
+              <div class="cq-option-content">
+                <span class="cq-option-label">Other</span>
+              </div>
+            </label>
+            <input type="text" class="cq-other-input form-input" placeholder="Type your answer..." style="display:none" />
+          </div>
+        </div>
+      `
+    }).join('')
+
+    content.innerHTML = `<div class="claude-question-modal">${questionsHtml}</div>`
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="cq-skip-btn">Skip</button>
+      <button class="btn primary" id="cq-submit-btn">Submit Answer</button>
+    `
+
+    // Show/hide "Other" text input when radio/checkbox selected
+    content.querySelectorAll('.cq-other input[type="radio"], .cq-other input[type="checkbox"]').forEach(radio => {
+      const otherInput = radio.closest('.cq-other').querySelector('.cq-other-input')
+      const questionDiv = radio.closest('.cq-question')
+      const name = radio.name
+
+      // Listen on all inputs in this question group for the radio case
+      questionDiv.querySelectorAll(`input[name="${name}"]`).forEach(input => {
+        input.addEventListener('change', () => {
+          otherInput.style.display = radio.checked ? 'block' : 'none'
+          if (radio.checked) otherInput.focus()
+        })
+      })
+    })
+
+    // Submit handler
+    document.getElementById('cq-submit-btn')?.addEventListener('click', () => {
+      const answers = {}
+      questions.forEach((q, qi) => {
+        const selected = content.querySelectorAll(`input[name="cq-${qi}"]:checked`)
+        const values = []
+        selected.forEach(input => {
+          if (input.value === 'other') {
+            const otherInput = input.closest('.cq-other').querySelector('.cq-other-input')
+            values.push(otherInput?.value || 'Other')
+          } else {
+            const optIndex = parseInt(input.value)
+            values.push(q.options[optIndex]?.label || input.value)
+          }
+        })
+        answers[qi] = values.join(', ') || 'No answer provided'
+      })
+
+      window.puffin.claude.answerQuestion({ toolUseId, answers })
+      this.intents.hideModal()
+    })
+
+    // Skip handler — send empty answer so CLI continues with defaults
+    document.getElementById('cq-skip-btn')?.addEventListener('click', () => {
+      const answers = {}
+      questions.forEach((q, qi) => {
+        answers[qi] = 'Please proceed with your best judgment.'
+      })
+      window.puffin.claude.answerQuestion({ toolUseId, answers })
+      this.intents.hideModal()
     })
   }
 

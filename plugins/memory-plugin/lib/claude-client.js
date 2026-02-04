@@ -40,7 +40,7 @@ class ClaudeClient {
     const model = options.model || this.model
     const timeoutMs = options.timeoutMs || this.timeoutMs
 
-    const args = ['--print', '--model', model, '--max-turns', '1']
+    const args = ['--print', '--model', model, '--max-turns', '1', '--disallowedTools', 'AskUserQuestion']
 
     return new Promise((resolve, reject) => {
       let stdout = ''

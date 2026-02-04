@@ -1727,6 +1727,16 @@ Please provide specific file locations and line numbers where issues are found, 
     })
     this.claudeListeners.push(unsubError)
 
+    // Claude asking a question (AskUserQuestion tool)
+    const unsubQuestion = window.puffin.claude.onQuestion((data) => {
+      console.log('[CLAUDE-QUESTION] Question received:', data.toolUseId, data.questions?.length, 'questions')
+      this.intents.showModal('claude-question', {
+        toolUseId: data.toolUseId,
+        questions: data.questions
+      })
+    })
+    this.claudeListeners.push(unsubQuestion)
+
     // Story derivation - stories derived
     const unsubStoriesDerived = window.puffin.claude.onStoriesDerived((data) => {
       console.log('[STORY-DERIVATION] Stories derived event received')

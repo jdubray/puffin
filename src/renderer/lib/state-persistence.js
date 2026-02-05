@@ -19,7 +19,10 @@ async function triggerAssertionEvaluation(storyId, showToast = null) {
 
   console.log('[ASSERTION] Triggering evaluation for story:', storyId)
 
-  // First check if this story has any assertions - skip evaluation if none
+  // Check story info for display purposes, but always proceed to evaluation.
+  // The evaluation handler reads assertions from the DB (user_stories.inspection_assertions),
+  // which may have been written directly by the CRE assertion generator even if
+  // the in-memory model hasn't been updated yet.
   let story = null
   let storyTitle = ''
   try {
@@ -29,15 +32,6 @@ async function triggerAssertionEvaluation(storyId, showToast = null) {
       storyTitle = story?.title?.substring(0, 30) || 'Story'
       console.log('[ASSERTION] Story found:', story?.title)
       console.log('[ASSERTION] Has inspectionAssertions:', story?.inspectionAssertions?.length || 0)
-
-      // Skip evaluation if no assertions defined
-      if (!story?.inspectionAssertions || story.inspectionAssertions.length === 0) {
-        console.log('[ASSERTION] Skipping evaluation - no assertions defined for this story')
-        if (showToast) {
-          showToast(`Story completed! No inspection assertions to verify.`, 'info')
-        }
-        return null
-      }
     }
   } catch (e) {
     console.error('[ASSERTION] Error checking story assertions:', e)
@@ -128,6 +122,7 @@ export class StatePersistence {
       'APPROVE_PLAN', 'SET_SPRINT_PLAN', 'ITERATE_SPRINT_PLAN',
       'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS', 'DELETE_SPRINT',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
+      'UPDATE_SPRINT_STORY_ASSERTIONS',
       'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
       // Story generation tracking
       'RECEIVE_DERIVED_STORIES', 'CREATE_STORY_GENERATION', 'UPDATE_GENERATED_STORY_FEEDBACK',

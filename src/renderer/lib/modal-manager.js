@@ -3087,9 +3087,19 @@ export class ModalManager {
         planHtml += '</div>'
       })
     } else {
-      planHtml += '<p class="plan-review-empty">No plan items available.</p>'
-      if (planData) {
-        planHtml += `<pre class="plan-review-raw">${this.escapeHtml(JSON.stringify(planData, null, 2))}</pre>`
+      // Show a clear message when plan generation produced no items
+      // (can happen if AI plan generation failed or returned empty result)
+      planHtml += '<p class="plan-review-empty">Plan generation did not produce implementation items.</p>'
+      planHtml += '<p class="plan-review-empty" style="opacity:0.7;font-size:0.85em;">This usually means the AI was unable to generate a structured plan. Try requesting changes with more specific instructions, or re-run planning.</p>'
+
+      // Show stories list if available so the user knows what was requested
+      const planStories = plan.stories || []
+      if (planStories.length > 0) {
+        planHtml += '<h4 class="plan-review-heading">Stories in this sprint</h4><ul>'
+        planStories.forEach(s => {
+          planHtml += `<li>${this.escapeHtml(s.title || s.id)}</li>`
+        })
+        planHtml += '</ul>'
       }
     }
 

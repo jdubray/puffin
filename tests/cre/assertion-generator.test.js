@@ -515,3 +515,83 @@ describe('AssertionGenerator - multiple assertions verify (AC4)', () => {
     assert.equal(results[3].result, 'fail');
   });
 });
+
+// ─── Regression: assertions must be available for user_stories persistence ────
+// Bug: CRE-generated assertions were stored in inspection_assertions table
+// but never written to user_stories.inspection_assertions column, causing
+// "0 inspection assertions" when evaluation was triggered on story completion.
+describe('AssertionGenerator - regression: assertions returned for user_stories persistence', () => {
+  let gen, db, projectRoot;
+
+  beforeEach(() => {
+    projectRoot = createTempDir();
+    db = createTrackingDb();
+    gen = new AssertionGenerator({ db, projectRoot });
+  });
+
+  afterEach(() => {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  it('should return generated assertions array that can be persisted to user_stories', async () => {
+    const assertions = [
+      { type: 'file_exists', target: 'src/widget.js', message: 'Widget file exists', assertion: { kind: 'file' } },
+      { type: 'function_exists', target: 'src/widget.js', message: 'render function exists', assertion: { name: 'render' } }
+    ];
+    const result = await gen.generate({
+      planItem: samplePlanItem,
+      story: sampleStory,
+      planId: 'plan-regression-1',
+      assertions
+    });
+
+    // The returned assertions array must have the shape needed for user_stories persistence
+    assert.ok(Array.isArray(result.assertions), 'generate() must return assertions array');
+    assert.equal(result.assertions.length, 2, 'All valid assertions should be returned');
+
+    // Each assertion must have the fields the UI reads
+    for (const a of result.assertions) {
+      assert.ok(a.id, 'assertion must have id');
+      assert.ok(a.type, 'assertion must have type');
+      assert.ok(a.target, 'assertion must have target');
+      assert.ok(a.message !== undefined, 'assertion must have message');
+      assert.ok(a.storyId, 'assertion must have storyId for DB association');
+      assert.equal(a.result, 'pending', 'new assertions must have pending result');
+    }
+  });
+
+  it('should return empty array (not undefined/null) when AI generation unavailable', async () => {
+    // No claudeService and no provided assertions → AI path returns []
+    const result = await gen.generate({
+      planItem: samplePlanItem,
+      story: sampleStory,
+      planId: 'plan-regression-2'
+    });
+
+    assert.ok(Array.isArray(result.assertions), 'assertions must be an array even when empty');
+    assert.equal(result.assertions.length, 0, 'empty array when no AI and no provided assertions');
+  });
+
+  it('should store assertions in inspection_assertions table AND return them for user_stories', async () => {
+    const assertions = [
+      { type: 'file_exists', target: 'src/main.js', message: 'Main file', assertion: { kind: 'file' } }
+    ];
+    const result = await gen.generate({
+      planItem: samplePlanItem,
+      story: sampleStory,
+      planId: 'plan-regression-3',
+      assertions
+    });
+
+    // Assertions in inspection_assertions table (via _storeAssertion)
+    assert.equal(db._store.size, 1, 'assertion stored in inspection_assertions table');
+
+    // Same assertions returned for user_stories persistence
+    assert.equal(result.assertions.length, 1, 'assertion returned for user_stories');
+    assert.equal(result.assertions[0].storyId, 'story-1');
+
+    // The returned assertion ID matches the stored one
+    const storedRow = [...db._store.values()][0];
+    assert.equal(result.assertions[0].id, storedRow.id, 'returned assertion ID matches DB row');
+  });
+});

@@ -1643,7 +1643,7 @@ Please provide specific file locations and line numbers where issues are found, 
     this.claudeListeners.push(unsubResponse)
 
     // Response complete
-    const unsubComplete = window.puffin.claude.onComplete((response) => {
+    const unsubComplete = window.puffin.claude.onComplete(async (response) => {
       console.log('[SAM-DEBUG] app.js onComplete received:', {
         contentLength: response?.content?.length || 0,
         turns: response?.turns,
@@ -4568,8 +4568,9 @@ Keep it concise but informative. Use markdown formatting.`
       this.hideCreProgressModal()
 
       // Show plan review modal so user can read the plan before approving
+      // planResult.data is { planId, plan: {...}, sprintId } — extract the actual plan object
       this.intents.showModal('plan-review', {
-        plan: planResult.data,
+        plan: planResult.data.plan || planResult.data,
         stories,
         sprintId
       })
@@ -4654,8 +4655,9 @@ Keep it concise but informative. Use markdown formatting.`
       this.intents.crePlanReady(refineResult.data)
 
       // Show plan review modal so user can read the refined plan
+      // refineResult.data is { planId, plan: {...}, sprintId } — extract the actual plan object
       this.intents.showModal('plan-review', {
-        plan: refineResult.data,
+        plan: refineResult.data.plan || refineResult.data,
         stories: stories,
         sprintId: sprint?.id
       })
@@ -4741,16 +4743,27 @@ Keep it concise but informative. Use markdown formatting.`
           console.log(`[CRE] Generated ${assertions.length} assertions for story:`, story.id)
           this.updateCreProgressStep(stepId, 'completed', `${assertions.length} assertions`)
 
-          // Attach assertions to the sprint story so they're visible in the UI
-          // and available for post-implementation verification
-          if (assertions.length > 0) {
-            this.intents.updateSprintStoryAssertions(story.id, assertions)
-            this.intents.updateUserStory(story.id, { inspectionAssertions: assertions })
-          }
+          // Always update sprint and user story state with assertions (even if empty).
+          // The CRE IPC handler persists to user_stories DB directly, but we also
+          // update the in-memory model so the UI reflects the change immediately.
+          this.intents.updateSprintStoryAssertions(story.id, assertions)
+          this.intents.updateUserStory(story.id, { inspectionAssertions: assertions })
         } else {
           console.warn('[CRE] Assertion generation failed for story:', story.id, assertResult.error)
           this.updateCreProgressStep(stepId, 'error', 'Failed')
         }
+      }
+
+      // Refresh stories from DB to ensure in-memory model has assertions
+      // (CRE handler persists directly to user_stories table)
+      try {
+        const storiesResult = await window.puffin.state.getUserStories()
+        if (storiesResult.success && Array.isArray(storiesResult.stories) && storiesResult.stories.length > 0) {
+          console.log('[CRE] Refreshing stories from DB after assertion generation:', storiesResult.stories.length, 'stories')
+          this.intents.loadUserStories(storiesResult.stories)
+        }
+      } catch (refreshError) {
+        console.warn('[CRE] Failed to refresh stories from DB:', refreshError)
       }
 
       // Step 3: Generate RIS for each story (assertions are now in DB and will be included)

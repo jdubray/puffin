@@ -324,6 +324,29 @@ function registerHandlers(ipcMain) {
           planId,
           assertions: providedAssertions || null
         });
+
+        // Persist assertions directly to user_stories.inspection_assertions column.
+        // The CRE assertion generator stores to the inspection_assertions table,
+        // but the UI reads from user_stories.inspection_assertions. Without this
+        // direct write, assertions depend on the renderer's state-persistence chain
+        // which can silently fail, causing "0 inspection assertions" on evaluation.
+        const generated = result.assertions || [];
+        if (generated.length > 0) {
+          try {
+            const existing = ctx.db.prepare('SELECT inspection_assertions FROM user_stories WHERE id = ?').get(storyId);
+            if (existing) {
+              ctx.db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
+                .run(JSON.stringify(generated), new Date().toISOString(), storyId);
+              console.log(`[CRE] Persisted ${generated.length} assertions to user_stories for story: ${storyId}`);
+            } else {
+              console.warn(`[CRE] Story ${storyId} not found in user_stories — assertions only in inspection_assertions table`);
+            }
+          } catch (persistErr) {
+            console.error(`[CRE] Failed to persist assertions to user_stories: ${persistErr.message}`);
+            // Non-fatal: assertions are still in the inspection_assertions table
+          }
+        }
+
         return { success: true, data: result };
       });
     } catch (err) {

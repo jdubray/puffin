@@ -250,8 +250,12 @@ class PlanGenerator {
       sharedComponents = aiResult.data.sharedComponents || [];
       risks = aiResult.data.risks || [];
       console.log(`[CRE-PLAN] AI generated plan with ${planItems.length} items, ${risks.length} risks`);
+      if (planItems.length === 0) {
+        console.warn('[CRE-PLAN] AI returned success but with 0 planItems — plan may be incomplete');
+      }
     } else {
-      console.warn('[CRE-PLAN] AI plan generation unavailable, creating empty plan skeleton');
+      console.error('[CRE-PLAN] AI plan generation failed:', aiResult.error || 'no data returned');
+      console.warn('[CRE-PLAN] Creating empty plan skeleton — user will need to request changes');
     }
 
     // Create plan document (AC7) — includes clarification history for context preservation

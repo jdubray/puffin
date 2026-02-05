@@ -90,12 +90,15 @@ class RISGenerator {
     const assertions = this._loadAssertions(userStoryId);
 
     // 6. Build prompt
+    // Disable tool guidance — sendPrompt runs a one-shot CLI process without
+    // MCP server connections, so hdsl_* tools are not available.
     const prompt = generateRisPrompt.buildPrompt({
       planItem,
       story: parsedStory,
       assertions,
       codeModelContext: codeContext.formatted,
-      projectConfig: { branch }
+      projectConfig: { branch },
+      includeToolGuidance: false
     });
 
     // 7. AC4: Generate RIS via AI, with local fallback

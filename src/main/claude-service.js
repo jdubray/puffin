@@ -1620,7 +1620,12 @@ ${content}`
 
     return new Promise((resolve) => {
       const model = options.model || 'haiku'
-      const maxTurns = options.maxTurns || 1
+      const jsonSchema = options.jsonSchema || null
+      // When using --json-schema, Claude needs at least 2 turns for the
+      // StructuredOutput tool-use cycle (assistant tool_use → tool result)
+      const maxTurns = jsonSchema
+        ? Math.max(options.maxTurns || 1, 2)
+        : (options.maxTurns || 1)
       const timeout = options.timeout || 60000 // Default 60 seconds
 
       const args = [
@@ -1630,9 +1635,19 @@ ${content}`
         '--max-turns', String(maxTurns),
         '--model', model,
         '--permission-mode', 'acceptEdits',
-        '--disallowedTools', 'AskUserQuestion',
-        '-'
+        '--disallowedTools', 'AskUserQuestion'
       ]
+
+      // Append --json-schema when a schema is provided
+      if (jsonSchema) {
+        const schemaStr = typeof jsonSchema === 'string'
+          ? jsonSchema
+          : JSON.stringify(jsonSchema)
+        args.push('--json-schema', schemaStr)
+        console.log('[sendPrompt] Using --json-schema, maxTurns bumped to:', maxTurns)
+      }
+
+      args.push('-') // stdin prompt (must be last)
 
       const cwd = this.projectPath || process.cwd()
       const spawnOptions = this.getSpawnOptions(cwd)
@@ -1655,6 +1670,7 @@ ${content}`
 
       let buffer = ''
       let resultText = ''
+      let structuredData = null // Extracted from StructuredOutput tool_use block
       let errorOutput = ''
       let resolved = false
       let dataReceived = false
@@ -1679,10 +1695,14 @@ ${content}`
             const json = JSON.parse(line)
             console.log('[sendPrompt] Received JSON type:', json.type)
 
-            // Extract text from assistant messages
+            // Extract content from assistant messages
             if (json.type === 'assistant' && json.message?.content) {
               for (const block of json.message.content) {
-                if (block.type === 'text') {
+                // Detect StructuredOutput tool_use blocks (from --json-schema)
+                if (block.type === 'tool_use' && block.name === 'StructuredOutput') {
+                  structuredData = block.input
+                  console.log('[sendPrompt] StructuredOutput tool_use detected, keys:', Object.keys(block.input || {}).join(', '))
+                } else if (block.type === 'text') {
                   resultText += block.text
                   console.log('[sendPrompt] Accumulated text, total length:', resultText.length)
                 }
@@ -1718,6 +1738,7 @@ ${content}`
         console.log('[sendPrompt] Process closed with code:', code)
         console.log('[sendPrompt] Data received:', dataReceived)
         console.log('[sendPrompt] Result text length:', resultText.length)
+        console.log('[sendPrompt] StructuredOutput found:', structuredData !== null)
 
         if (resolved) {
           console.log('[sendPrompt] Already resolved, skipping close handler')
@@ -1737,12 +1758,21 @@ ${content}`
           }
         }
 
-        if (code === 0 || resultText.length > 0) {
+        // When --json-schema was used, prefer the StructuredOutput tool_use data.
+        // Serialize back to JSON string for backward compatibility with callers
+        // that call JSON.parse() on the response.
+        if (jsonSchema && structuredData !== null) {
+          const responseStr = JSON.stringify(structuredData)
+          console.log('[sendPrompt] Using StructuredOutput data, length:', responseStr.length)
+          resolve({ success: true, response: responseStr })
+        } else if (jsonSchema && structuredData === null && resultText.length > 0) {
+          // Schema was provided but no StructuredOutput block found — fall back
+          // to raw text so parseJsonResponse() heuristics can attempt extraction
+          console.warn('[sendPrompt] --json-schema was used but no StructuredOutput tool_use found, falling back to text')
+          resolve({ success: true, response: resultText.trim() })
+        } else if (code === 0 || resultText.length > 0) {
           console.log('[sendPrompt] Success, response length:', resultText.trim().length)
-          resolve({
-            success: true,
-            response: resultText.trim()
-          })
+          resolve({ success: true, response: resultText.trim() })
         } else {
           console.log('[sendPrompt] Failed, error:', errorOutput || `exit code ${code}`)
           resolve({
@@ -1774,7 +1804,9 @@ ${content}`
         // Release the process lock only if we own it
         if (!lockAlreadyHeld) { this._processLock = false }
         console.log('[sendPrompt-GUARD] Process lock released (timeout), external:', lockAlreadyHeld)
-        if (resultText.length > 0) {
+        if (structuredData !== null) {
+          resolve({ success: true, response: JSON.stringify(structuredData) })
+        } else if (resultText.length > 0) {
           resolve({ success: true, response: resultText.trim() })
         } else {
           resolve({ success: false, error: 'Request timed out' })

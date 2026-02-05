@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "puffin://schemas/title",
+  "title": "Generated Title",
+  "description": "A concise title generated for a conversation thread",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50,
+      "description": "Concise 2-5 word title for the conversation"
+    }
+  }
+}

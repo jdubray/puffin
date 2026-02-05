@@ -16,6 +16,10 @@
 const { randomUUID: uuidv4 } = require('crypto');
 const { sendCrePrompt, MODEL_COMPLEX, MODEL_EXTRACT, TIMEOUT_COMPLEX, TIMEOUT_EXTRACT } = require('./lib/ai-client');
 
+/** JSON Schemas for structured output validation. */
+const AMBIGUITY_SCHEMA = require('../schemas/cre-ambiguities.schema.json');
+const PLAN_SCHEMA = require('../schemas/cre-plan.schema.json');
+
 /**
  * Valid plan states.
  * @readonly
@@ -175,7 +179,8 @@ class PlanGenerator {
     const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
       model: MODEL_EXTRACT,
       timeout: TIMEOUT_EXTRACT,
-      label: 'analyze-ambiguities'
+      label: 'analyze-ambiguities',
+      jsonSchema: AMBIGUITY_SCHEMA
     });
 
     if (aiResult.success && aiResult.data) {
@@ -249,7 +254,8 @@ class PlanGenerator {
     const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
       model: MODEL_COMPLEX,
       timeout: TIMEOUT_COMPLEX,
-      label: 'generate-plan'
+      label: 'generate-plan',
+      jsonSchema: PLAN_SCHEMA
     });
 
     if (aiResult.success && aiResult.data) {
@@ -342,7 +348,8 @@ class PlanGenerator {
     const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
       model: MODEL_COMPLEX,
       timeout: TIMEOUT_COMPLEX,
-      label: 'refine-plan'
+      label: 'refine-plan',
+      jsonSchema: PLAN_SCHEMA
     });
 
     if (aiResult.success && aiResult.data) {

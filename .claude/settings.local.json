@@ -58,7 +58,10 @@
       "mcp__hdsl__hdsl_impact",
       "mcp__hdsl__hdsl_patterns",
       "mcp__hdsl__hdsl_path",
-      "mcp__hdsl__hdsl_freshness"
+      "mcp__hdsl__hdsl_freshness",
+      "WebSearch",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:claudelog.com)"
     ]
   },
   "enableAllProjectMcpServers": true,

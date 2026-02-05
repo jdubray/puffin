@@ -88,13 +88,15 @@ function parseJsonResponse(text) {
  * @param {string} [options.model] - Model to use (default: MODEL_EXTRACT).
  * @param {number} [options.timeout] - Timeout in ms (default: TIMEOUT_EXTRACT).
  * @param {string} [options.label] - Label for logging.
+ * @param {Object|string} [options.jsonSchema] - JSON Schema for structured output via --json-schema.
  * @returns {Promise<{ success: boolean, data: Object|null, error: string|null, raw: string|null }>}
  */
 async function sendCrePrompt(claudeService, promptParts, options = {}) {
   const {
     model = MODEL_EXTRACT,
     timeout = TIMEOUT_EXTRACT,
-    label = 'cre-prompt'
+    label = 'cre-prompt',
+    jsonSchema = null
   } = options;
 
   if (!claudeService) {
@@ -107,11 +109,15 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
   try {
     console.log(`[CRE-AI] Sending ${label} (model: ${model}, timeout: ${timeout}ms)`);
 
-    const result = await claudeService.sendPrompt(prompt, {
-      model,
-      maxTurns: 1,
-      timeout
-    });
+    const sendOptions = { model, maxTurns: 1, timeout };
+    if (jsonSchema) {
+      sendOptions.jsonSchema = jsonSchema;
+      // StructuredOutput requires at least 2 turns (tool_use → tool_result)
+      sendOptions.maxTurns = 2;
+      console.log(`[CRE-AI] ${label}: using --json-schema for structured output`);
+    }
+
+    const result = await claudeService.sendPrompt(prompt, sendOptions);
 
     if (!result.success) {
       console.warn(`[CRE-AI] ${label} failed:`, result.error);
@@ -123,7 +129,21 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
       console.log(`[CRE-AI] ${label}: response preview:`, result.response.substring(0, 300));
     }
 
-    const parsed = parseJsonResponse(result.response);
+    // When jsonSchema was used, sendPrompt() returns clean JSON from StructuredOutput.
+    // Try direct parse first; only fall back to heuristic extraction if needed.
+    let parsed = null;
+    if (jsonSchema) {
+      try {
+        parsed = JSON.parse(result.response);
+        console.log(`[CRE-AI] ${label}: StructuredOutput JSON parsed directly`);
+      } catch {
+        console.warn(`[CRE-AI] ${label}: StructuredOutput direct parse failed, falling back to heuristics`);
+        parsed = parseJsonResponse(result.response);
+      }
+    } else {
+      parsed = parseJsonResponse(result.response);
+    }
+
     if (!parsed) {
       console.warn(`[CRE-AI] ${label}: could not parse JSON from response (${(result.response || '').length} chars)`);
       console.warn(`[CRE-AI] ${label}: response start:`, (result.response || '').substring(0, 500));

@@ -37,6 +37,9 @@ const AssertionResult = {
 const { randomUUID: uuidv4 } = require('crypto');
 const { sendCrePrompt, MODEL_EXTRACT, TIMEOUT_EXTRACT } = require('./lib/ai-client');
 
+/** JSON Schema for structured assertion output. */
+const ASSERTION_SCHEMA = require('../schemas/cre-assertions.schema.json');
+
 /** Maximum allowed length for user/AI-provided regex patterns. */
 const MAX_PATTERN_LENGTH = 200;
 
@@ -103,10 +106,13 @@ class AssertionGenerator {
     }
 
     // Build prompt for AI (AC2)
+    // Disable tool guidance — sendPrompt runs a one-shot CLI process without
+    // MCP server connections, so hdsl_* tools are not available.
     const prompt = this._promptBuilders.generateAssertions.buildPrompt({
       planItem,
       story,
-      codeModelContext
+      codeModelContext,
+      includeToolGuidance: false
     });
 
     // Use provided assertions, or generate via AI if none given (FR-04)
@@ -117,20 +123,28 @@ class AssertionGenerator {
       const aiResult = await sendCrePrompt(this._claudeService, prompt, {
         model: MODEL_EXTRACT,
         timeout: TIMEOUT_EXTRACT,
-        label: 'generate-assertions'
+        label: 'generate-assertions',
+        jsonSchema: ASSERTION_SCHEMA
       });
 
       if (aiResult.success && aiResult.data && Array.isArray(aiResult.data.assertions)) {
         toStore = aiResult.data.assertions;
         console.log(`[CRE-ASSERT] AI generated ${toStore.length} assertions for story ${storyId}`);
       } else {
-        console.warn('[CRE-ASSERT] AI assertion generation unavailable, no assertions created');
+        console.warn(`[CRE-ASSERT] AI assertion generation failed for story ${storyId}`);
+        if (aiResult.error) {
+          console.warn('[CRE-ASSERT] Error:', aiResult.error);
+        }
+        if (aiResult.raw) {
+          console.warn('[CRE-ASSERT] Raw response (first 300 chars):', aiResult.raw.substring(0, 300));
+        }
         toStore = [];
       }
     }
 
     // Validate and store assertions
     const stored = [];
+    let validationFailures = 0;
     for (const a of toStore) {
       if (fromAI) {
         // AI-generated assertions: skip invalid ones gracefully
@@ -139,7 +153,8 @@ class AssertionGenerator {
           const record = this._storeAssertion(planId, storyId, validated);
           stored.push(record);
         } catch (err) {
-          console.warn(`[CRE-ASSERT] Skipping invalid assertion: ${err.message}`);
+          validationFailures++;
+          console.warn(`[CRE-ASSERT] Skipping invalid assertion: ${err.message}`, JSON.stringify(a).substring(0, 200));
         }
       } else {
         // User-provided assertions: throw on validation failure
@@ -147,6 +162,9 @@ class AssertionGenerator {
         const record = this._storeAssertion(planId, storyId, validated);
         stored.push(record);
       }
+    }
+    if (validationFailures > 0) {
+      console.warn(`[CRE-ASSERT] ${validationFailures}/${toStore.length} assertions failed validation for story ${storyId}`);
     }
 
     return { prompt, assertions: stored };

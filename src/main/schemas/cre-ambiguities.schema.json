@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "puffin://schemas/cre-ambiguities",
+  "title": "CRE Ambiguity Analysis",
+  "description": "Clarifying questions about ambiguous user stories",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["questions"],
+  "properties": {
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["storyId", "question", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "storyId": {
+            "type": "string",
+            "description": "ID of the story this question relates to"
+          },
+          "question": {
+            "type": "string",
+            "description": "The clarifying question"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this ambiguity matters for implementation"
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Suggested options to resolve the ambiguity"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "How critical this ambiguity is"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "description": "Brief summary of overall ambiguity level"
+    }
+  }
+}

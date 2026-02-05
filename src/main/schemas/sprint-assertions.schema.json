@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "puffin://schemas/sprint-assertions",
+  "title": "Sprint Inspection Assertions",
+  "description": "Map of story IDs to inspection assertion arrays (non-CRE path, UPPERCASE types)",
+  "type": "object",
+  "patternProperties": {
+    "^.+$": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "target"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique assertion ID (format: IA + 3 digits, e.g. IA001)"
+          },
+          "criterion": {
+            "type": "string",
+            "description": "Which acceptance criterion this assertion verifies"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "FILE_EXISTS",
+              "FILE_CONTAINS",
+              "EXPORT_EXISTS",
+              "FUNCTION_SIGNATURE",
+              "IPC_HANDLER_REGISTERED",
+              "PATTERN_MATCH"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "description": "File path relative to project root"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable description of what this assertion checks"
+          },
+          "assertion": {
+            "type": "object",
+            "description": "Type-specific assertion data (shape varies by type)"
+          }
+        }
+      }
+    }
+  }
+}

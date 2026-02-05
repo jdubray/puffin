@@ -90,7 +90,10 @@ class AssertionEvaluator {
     const startTime = Date.now()
 
     try {
-      const evaluator = this.evaluators[assertion.type]
+      // Normalize type to UPPERCASE — CRE generates lowercase types (e.g. 'file_exists')
+      // while the non-CRE path and evaluator map use UPPERCASE (e.g. 'FILE_EXISTS').
+      const normalizedType = (assertion.type || '').toUpperCase()
+      const evaluator = this.evaluators[normalizedType]
 
       if (!evaluator) {
         return {

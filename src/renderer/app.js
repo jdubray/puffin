@@ -478,9 +478,22 @@ class PuffinApp {
    * Show confirmation dialog asking if user wants to start a code review
    * @param {Object} sprint - The approved sprint with stories and plan
    */
-  showCodeReviewConfirmation(sprint) {
+  async showCodeReviewConfirmation(sprint) {
+    // Fetch fresh story data from DB — the in-memory sprint/backlog story objects
+    // can be stale (e.g. assertions generated during plan approval may not have
+    // propagated through all SAM state transitions by the time the sprint is closed).
+    let freshStories = null
+    try {
+      const result = await window.puffin.state.getUserStories()
+      if (result.success && Array.isArray(result.stories)) {
+        freshStories = result.stories
+      }
+    } catch (e) {
+      console.warn('[CODE-REVIEW] Failed to fetch fresh stories from DB:', e)
+    }
+
     // Calculate assertion statistics across all sprint stories
-    const assertionStats = this.calculateSprintAssertionStats(sprint)
+    const assertionStats = this.calculateSprintAssertionStats(sprint, freshStories)
     const { total, passed, failed, pending, notEvaluated } = assertionStats
 
     // Determine recommendation based on assertion results
@@ -553,11 +566,13 @@ class PuffinApp {
   /**
    * Calculate assertion statistics across all stories in a sprint
    * @param {Object} sprint - The sprint with stories
+   * @param {Array|null} freshStories - Optional fresh stories from DB (preferred over in-memory backlog)
    * @returns {Object} Stats: { total, passed, failed, pending, notEvaluated }
    */
-  calculateSprintAssertionStats(sprint) {
+  calculateSprintAssertionStats(sprint, freshStories = null) {
     const stories = sprint.stories || []
-    const backlogStories = this.state?.userStories || []
+    // Prefer fresh DB stories over potentially stale in-memory backlog
+    const backlogStories = freshStories || this.state?.userStories || []
 
     let total = 0
     let passed = 0
@@ -566,10 +581,10 @@ class PuffinApp {
     let notEvaluated = 0
 
     stories.forEach(story => {
-      // Get assertions from sprint story or backlog
+      // Get assertions — prefer fresh DB data over stale in-memory sprint story
       const backlogStory = backlogStories.find(s => s.id === story.id)
-      const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
-      const results = story.assertionResults || backlogStory?.assertionResults
+      const assertions = backlogStory?.inspectionAssertions || story.inspectionAssertions || []
+      const results = backlogStory?.assertionResults || story.assertionResults
 
       total += assertions.length
 

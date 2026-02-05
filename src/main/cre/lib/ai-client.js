@@ -118,9 +118,15 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
       return { success: false, data: null, error: result.error || 'AI call failed', raw: null };
     }
 
+    console.log(`[CRE-AI] ${label}: response received (${(result.response || '').length} chars)`);
+    if (result.response) {
+      console.log(`[CRE-AI] ${label}: response preview:`, result.response.substring(0, 300));
+    }
+
     const parsed = parseJsonResponse(result.response);
     if (!parsed) {
       console.warn(`[CRE-AI] ${label}: could not parse JSON from response (${(result.response || '').length} chars)`);
+      console.warn(`[CRE-AI] ${label}: response start:`, (result.response || '').substring(0, 500));
       return {
         success: false,
         data: null,
@@ -129,7 +135,7 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
       };
     }
 
-    console.log(`[CRE-AI] ${label} succeeded`);
+    console.log(`[CRE-AI] ${label} succeeded, keys: [${Object.keys(parsed).join(', ')}]`);
     return { success: true, data: parsed, error: null, raw: result.response };
   } catch (err) {
     console.error(`[CRE-AI] ${label} error:`, err.message);

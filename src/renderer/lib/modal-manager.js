@@ -3090,7 +3090,11 @@ export class ModalManager {
       // Show a clear message when plan generation produced no items
       // (can happen if AI plan generation failed or returned empty result)
       planHtml += '<p class="plan-review-empty">Plan generation did not produce implementation items.</p>'
-      planHtml += '<p class="plan-review-empty" style="opacity:0.7;font-size:0.85em;">This usually means the AI was unable to generate a structured plan. Try requesting changes with more specific instructions, or re-run planning.</p>'
+      const errorReason = plan.aiError || planData?.aiError
+      if (errorReason) {
+        planHtml += `<p class="plan-review-empty" style="opacity:0.7;font-size:0.85em;"><strong>Reason:</strong> ${this.escapeHtml(errorReason)}</p>`
+      }
+      planHtml += '<p class="plan-review-empty" style="opacity:0.7;font-size:0.85em;">Try requesting changes with more specific instructions, or re-run planning.</p>'
 
       // Show stories list if available so the user knows what was requested
       const planStories = plan.stories || []

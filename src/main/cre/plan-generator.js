@@ -162,9 +162,12 @@ class PlanGenerator {
     this._currentPlanId = planId;
 
     // Build analysis prompt
+    // Disable tool guidance — sendPrompt runs a one-shot CLI process without
+    // MCP server connections, so hdsl_* tools are not available.
     const promptParts = this._promptBuilders.analyzeAmbiguities.buildPrompt({
       stories,
-      codeModelSummary
+      codeModelSummary,
+      includeToolGuidance: false
     });
 
     // Send to AI for ambiguity analysis (FR-02)
@@ -229,16 +232,20 @@ class PlanGenerator {
     this._pendingQuestions = [];
 
     // Build generation prompt (includes answers if provided)
+    // Disable tool guidance — sendPrompt runs a one-shot CLI process without
+    // MCP server connections, so hdsl_* tools are not available.
     const promptParts = this._promptBuilders.generatePlan.buildPrompt({
       stories,
       answers,
-      codeModelContext
+      codeModelContext,
+      includeToolGuidance: false
     });
 
     // Send to AI for plan generation (FR-03)
     let planItems = [];
     let sharedComponents = [];
     let risks = [];
+    let aiError = null;
     const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
       model: MODEL_COMPLEX,
       timeout: TIMEOUT_COMPLEX,
@@ -252,9 +259,14 @@ class PlanGenerator {
       console.log(`[CRE-PLAN] AI generated plan with ${planItems.length} items, ${risks.length} risks`);
       if (planItems.length === 0) {
         console.warn('[CRE-PLAN] AI returned success but with 0 planItems — plan may be incomplete');
+        aiError = 'AI returned a valid response but with 0 plan items';
       }
     } else {
-      console.error('[CRE-PLAN] AI plan generation failed:', aiResult.error || 'no data returned');
+      aiError = aiResult.error || 'AI plan generation returned no data';
+      console.error('[CRE-PLAN] AI plan generation failed:', aiError);
+      if (aiResult.raw) {
+        console.log('[CRE-PLAN] Raw AI response (first 500 chars):', aiResult.raw.substring(0, 500));
+      }
       console.warn('[CRE-PLAN] Creating empty plan skeleton — user will need to request changes');
     }
 
@@ -268,6 +280,7 @@ class PlanGenerator {
       planItems,
       sharedComponents,
       risks,
+      aiError,
       clarificationHistory: this._clarificationHistory,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -315,11 +328,14 @@ class PlanGenerator {
     });
 
     // Build refinement prompt — includes full clarification history for context
+    // Disable tool guidance — sendPrompt runs a one-shot CLI process without
+    // MCP server connections, so hdsl_* tools are not available.
     const promptParts = this._promptBuilders.refinePlan.buildPrompt({
       plan: currentPlan,
       feedback,
       codeModelContext,
-      iteration
+      iteration,
+      includeToolGuidance: false
     });
 
     // Send to AI for plan refinement (FR-05)

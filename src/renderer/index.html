@@ -462,12 +462,8 @@
                       <option value="haiku">Haiku</option>
                     </select>
                   </div>
-                  <label class="prompt-checkbox" title="Derive user stories from this prompt before implementation">
-                    <input type="checkbox" id="derive-stories-checkbox">
-                    <span>Derive User Stories</span>
-                  </label>
                   <div class="prompt-option-group" id="thinking-budget-group">
-                    <label for="thinking-budget" class="prompt-select-label">Thinking:</label>
+                    <label for="thinking-budget" class="prompt-select-label">Thinking Budget:</label>
                     <select id="thinking-budget" class="prompt-model-select" title="Set thinking budget for extended reasoning">
                       <option value="none" selected>None</option>
                       <option value="think">Think (25%)</option>
@@ -478,6 +474,9 @@
                   </div>
                 </div>
                 <div class="prompt-actions">
+                  <button id="derive-stories-btn" class="btn outline" title="Derive user stories from conversation context" disabled>
+                    Derive Stories
+                  </button>
                   <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread">
                     Create New Thread
                   </button>

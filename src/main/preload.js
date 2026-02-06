@@ -788,6 +788,7 @@ contextBridge.exposeInMainWorld('puffin', {
     refreshModel: (args) => ipcRenderer.invoke('cre:refresh-model', args),
     queryModel: (args) => ipcRenderer.invoke('cre:query-model', args),
     getPlan: (args) => ipcRenderer.invoke('cre:get-plan', args),
-    getRis: (args) => ipcRenderer.invoke('cre:get-ris', args)
+    getRis: (args) => ipcRenderer.invoke('cre:get-ris', args),
+    listRisStoryIds: () => ipcRenderer.invoke('cre:list-ris-story-ids')
   }
 })

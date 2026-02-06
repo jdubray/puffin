@@ -424,10 +424,27 @@ export class UserStoriesComponent {
       // Track active sprint state for single-sprint enforcement
       this.hasActiveSprint = !!state.activeSprint
       this.activeSprintTitle = state.activeSprint?.title || null
+      // Populate risAvailable from in-memory risMap first (covers current session),
+      // then asynchronously refresh from DB (covers restarts where risMap is lost).
       this.risAvailable = new Set(Object.keys(state.activeSprint?.risMap || {}).filter(id => {
         const ris = state.activeSprint.risMap[id]
         return ris && !ris.error
       }))
+      // Async DB refresh: load RIS story IDs from the ris table (persisted across restarts)
+      if (window.puffin?.cre?.listRisStoryIds) {
+        window.puffin.cre.listRisStoryIds().then(result => {
+          if (result.success && result.storyIds?.length > 0) {
+            let changed = false
+            for (const id of result.storyIds) {
+              if (!this.risAvailable.has(id)) {
+                this.risAvailable.add(id)
+                changed = true
+              }
+            }
+            if (changed) this.render()
+          }
+        }).catch(() => { /* non-critical */ })
+      }
       const sprintStories = state.activeSprint?.stories || []
       const backlogStories = state.userStories || []
       this.summaryAvailable = new Set(

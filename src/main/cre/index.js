@@ -602,7 +602,22 @@ function registerHandlers(ipcMain) {
     }
   });
 
-  console.log('[CRE] Registered 11 IPC handlers');
+  // Return story IDs that have RIS entries in the DB.
+  // Used by user-stories component to show RIS badges without relying on
+  // the ephemeral sprint.risMap (which is lost on restart).
+  ipcMain.handle('cre:list-ris-story-ids', async () => {
+    try {
+      const rows = ctx.db.prepare(
+        'SELECT DISTINCT story_id FROM ris WHERE content IS NOT NULL AND content != \'\''
+      ).all();
+      return { success: true, storyIds: rows.map(r => r.story_id) };
+    } catch (err) {
+      console.error('[CRE] cre:list-ris-story-ids error:', err.message);
+      return { success: false, storyIds: [] };
+    }
+  });
+
+  console.log('[CRE] Registered 13 IPC handlers');
 }
 
 /**

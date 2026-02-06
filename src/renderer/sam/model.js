@@ -3245,6 +3245,14 @@ export const updateSprintStoryStatusAcceptor = model => proposal => {
       sprintStory.updatedAt = timestamp
       if (status === 'completed') {
         sprintStory.completedAt = timestamp
+        // Clear activeImplementationStory if this story was being implemented.
+        // The orchestration flow sets activeImplementationStory when starting a story
+        // but never clears it on completion, causing the "Implementing..." badge
+        // to persist through code review and bugfix phases.
+        if (model.activeImplementationStory?.id === storyId) {
+          console.log('[MODEL-TRACE-A3] Clearing activeImplementationStory (was:', storyId, ')')
+          model.activeImplementationStory = null
+        }
       }
       console.log('[MODEL-TRACE-A3] Updated sprint story:', {
         storyId,

@@ -581,9 +581,11 @@ class PuffinApp {
     let notEvaluated = 0
 
     stories.forEach(story => {
-      // Get assertions — prefer fresh DB data over stale in-memory sprint story
+      // Get assertions — prefer whichever source has actual data (empty [] is truthy)
       const backlogStory = backlogStories.find(s => s.id === story.id)
-      const assertions = backlogStory?.inspectionAssertions || story.inspectionAssertions || []
+      const bAssert = backlogStory?.inspectionAssertions || []
+      const sAssert = story.inspectionAssertions || []
+      const assertions = bAssert.length > 0 ? bAssert : sAssert.length > 0 ? sAssert : []
       const results = backlogStory?.assertionResults || story.assertionResults
 
       total += assertions.length
@@ -2234,8 +2236,12 @@ Please provide specific file locations and line numbers where issues are found, 
         const passedCriteria = criteriaList.filter((c, idx) => criteriaProgress[idx]?.validationStatus === 'passed').length
         const failedCriteria = criteriaList.filter((c, idx) => criteriaProgress[idx]?.validationStatus === 'failed').length
 
-        // Get inspection assertions (from sprint story or backlog story)
-        const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
+        // Get inspection assertions — prefer whichever source has actual data.
+        // Empty arrays are truthy so we must check .length, not just truthiness.
+        const sprintAssertions = story.inspectionAssertions || []
+        const backlogAssertions = backlogStory?.inspectionAssertions || []
+        const assertions = sprintAssertions.length > 0 ? sprintAssertions
+          : backlogAssertions.length > 0 ? backlogAssertions : []
         const assertionResults = story.assertionResults || backlogStory?.assertionResults
         const hasAssertions = assertions.length > 0
 
@@ -4769,13 +4775,30 @@ Keep it concise but informative. Use markdown formatting.`
         }
       }
 
-      // Refresh stories from DB to ensure in-memory model has assertions
+      // Refresh backlog stories from DB to ensure in-memory model has assertions
       // (CRE handler persists directly to user_stories table)
       try {
         const storiesResult = await window.puffin.state.getUserStories()
         if (storiesResult.success && Array.isArray(storiesResult.stories) && storiesResult.stories.length > 0) {
           console.log('[CRE] Refreshing stories from DB after assertion generation:', storiesResult.stories.length, 'stories')
           this.intents.loadUserStories(storiesResult.stories)
+
+          // Also sync assertions from fresh DB data to sprint stories.
+          // The SAM updateSprintStoryAssertionsAcceptor sets them in-memory during the loop
+          // above, but if anything went wrong (story not found, race condition), the sprint
+          // stories could still have stale empty arrays. Belt-and-suspenders: copy from DB.
+          const currentSprint = this.state?.activeSprint
+          if (currentSprint?.stories) {
+            for (const sprintStory of currentSprint.stories) {
+              const freshStory = storiesResult.stories.find(s => s.id === sprintStory.id)
+              if (freshStory?.inspectionAssertions?.length > 0 &&
+                  (!sprintStory.inspectionAssertions || sprintStory.inspectionAssertions.length === 0)) {
+                sprintStory.inspectionAssertions = freshStory.inspectionAssertions
+                console.log('[CRE] Synced assertions from DB to sprint story:', sprintStory.id,
+                  freshStory.inspectionAssertions.length, 'assertions')
+              }
+            }
+          }
         }
       } catch (refreshError) {
         console.warn('[CRE] Failed to refresh stories from DB:', refreshError)
@@ -5360,6 +5383,7 @@ Please proceed with the implementation.`
         const fallbackSummary = this.buildFallbackSummary(currentStoryId, response, 'Max continuations reached')
         this.intents.orchestrationStoryCompleted(currentStoryId, sessionId, fallbackSummary)
         this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
+        this.intents.clearActiveImplementationStory()
         this.autoCompleteAcceptanceCriteria(currentStoryId)
         this.evaluateStoryAssertions(currentStoryId)
         if (fallbackSummary) {
@@ -5420,6 +5444,11 @@ Please proceed with the implementation.`
     // STEP 2: Mark the story status as 'completed' via proper intent (triggers persistence)
     console.log('[ORCH-TRACE-3] STEP 2: Calling updateSprintStoryStatus intent')
     this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
+
+    // STEP 2b: Clear the active implementation story so the "Implementing..." badge disappears.
+    // The acceptor also clears this, but we do it explicitly here as defense-in-depth.
+    console.log('[ORCH-TRACE-3b] STEP 2b: Clearing activeImplementationStory')
+    this.intents.clearActiveImplementationStory()
 
     // STEP 3: Auto-complete all acceptance criteria for this story
     console.log('[ORCH-TRACE-4] STEP 3: Calling autoCompleteAcceptanceCriteria')
@@ -5529,9 +5558,11 @@ Respond with ONLY a JSON object (no markdown, no code fences):
         timeout: 30000
       })
 
-      if (result.success && result.content) {
+      // sendPrompt() returns { success, response } — not "content"
+      const responseText = result.response || result.content || ''
+      if (result.success && responseText) {
         // Parse JSON from the response — handle potential markdown wrapping
-        let jsonStr = result.content.trim()
+        let jsonStr = responseText.trim()
         const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
         if (fenceMatch) jsonStr = fenceMatch[1].trim()
 

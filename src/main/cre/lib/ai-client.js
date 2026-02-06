@@ -112,8 +112,11 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
     const sendOptions = { model, maxTurns: 1, timeout };
     if (jsonSchema) {
       sendOptions.jsonSchema = jsonSchema;
-      // StructuredOutput requires at least 2 turns (tool_use → tool_result)
-      sendOptions.maxTurns = 2;
+      // StructuredOutput needs multiple turns: the model may produce thinking
+      // text or tool calls first, then call StructuredOutput (which itself
+      // consumes a tool_use → tool_result round-trip). 4 turns gives enough
+      // room for: think → explore → StructuredOutput call → result.
+      sendOptions.maxTurns = 4;
       console.log(`[CRE-AI] ${label}: using --json-schema for structured output`);
     }
 

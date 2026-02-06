@@ -35,11 +35,46 @@ This document describes the Central Reasoning Engine (CRE) process from start to
   [4] PLAN APPROVAL
        APPROVE_PLAN_WITH_CRE --> cre:approve-plan
        |
-       +---> cre:generate-assertions (per story, AI)
-       +---> cre:generate-ris (per story, AI)
+       |  PlanGenerator.approvePlan():
+       |    REVIEW_PENDING --> APPROVED --> IDLE
+       |    Save plan to storage + DB
+       |
+       +---> cre:generate-assertions (per story, sequential)
+       |       |
+       |       |  AssertionGenerator.generate():
+       |       +--- Build prompt (story + plan item + context)
+       |       +--- sendCrePrompt() w/ jsonSchema: ASSERTION_SCHEMA
+       |       +--- AI returns { assertions: [{ id, type, target, message }] }
+       |       +--- Validate each assertion (type ∈ VALID_TYPES)
+       |       +--- INSERT into inspection_assertions table (result='pending')
+       |       +--- UPDATE user_stories.inspection_assertions column
+       |       +--- Dispatch updateSprintStoryAssertions + updateUserStory
+       |
+       +---> state:getUserStories (DB refresh)
+       |       |
+       |       +--- Reload all stories with fresh assertion data
+       |       +--- Dispatch loadUserStories to sync in-memory state
+       |
+       +---> cre:generate-ris (per story, sequential)
+       |       |
+       |       |  RISGenerator.generateRIS():
+       |       +--- Load story from DB
+       |       +--- Load approved plan item
+       |       +--- Read branch memory (.puffin/memory/branches/{branch}.md)
+       |       +--- Query code model (consultModel → relevant artifacts)
+       |       +--- Load assertions from inspection_assertions table
+       |       +--- Build prompt (story + plan + memory + model + assertions)
+       |       +--- sendCrePrompt() — no JSON schema (markdown output)
+       |       +--- Fallback: local formatRis() template if AI fails
+       |       +--- INSERT into ris table (status='generated')
+       |       +--- Store in renderer risMap[storyId]
        |
        v
        CRE_PLANNING_COMPLETE
+       |  crePlanningCompleteAcceptor:
+       |    sprint.risMap = { storyId: risMarkdown, ... }
+       |    sprint.planApprovedAt = timestamp
+       |    Clear all pending CRE flags
        |
        v
   [5] SPRINT EXECUTION
@@ -254,30 +289,50 @@ The user approves the plan. The CRE then generates inspection assertions for eac
    - Generates assertion prompt templates for each plan item
    - Transitions: `APPROVED --> IDLE` (resets for next session)
 
-**Assertion Generation (per story):**
-6. For each story, renderer calls `window.puffin.cre.generateAssertions()`
-7. `cre:generate-assertions` handler calls `AssertionGenerator.generate()`:
-   - Builds prompt from plan item and story context
-   - Calls `sendCrePrompt()` with `jsonSchema: ASSERTION_SCHEMA`
+**Assertion Generation (per story, sequential):**
+6. For each story in the sprint, renderer calls `window.puffin.cre.generateAssertions(storyId)`
+7. `cre:generate-assertions` IPC handler (`cre/index.js:314-355`):
+   - Acquires **process lock** (one AI call at a time)
+   - Calls `AssertionGenerator.generate(storyId)`
+8. `AssertionGenerator.generate()` (`assertion-generator.js:98-171`):
+   - Loads story from DB, loads approved plan item for this story
+   - Builds prompt via `generate-assertions.buildPrompt()` with `includeToolGuidance: false`
+   - Calls `sendCrePrompt()` with `jsonSchema: ASSERTION_SCHEMA` (model: haiku, maxTurns: 2)
    - AI returns `{ assertions: [{ id, type, target, message, assertion }] }`
-   - Assertion types (lowercase): `file_exists`, `function_exists`, `export_exists`, `pattern_match`
-   - Each assertion validated and stored in `inspection_assertions` DB table
-   - Also persisted to `user_stories.inspection_assertions` JSON column (for UI access)
+   - Validates each assertion: `type` must be in `VALID_TYPES` (`file_exists`, `function_exists`, `export_exists`, `pattern_match`); invalid assertions silently dropped
+   - For each valid assertion: `_storeAssertion()` INSERTs into `inspection_assertions` DB table with `result = 'pending'`
+9. Back in IPC handler: unconditionally UPDATEs `user_stories.inspection_assertions` JSON column with the full generated array (even empty `[]`)
+10. Renderer dispatches two SAM actions:
+    - `updateSprintStoryAssertions(storyId, assertions)` — updates in-memory sprint story
+    - `updateUserStory({ id: storyId, inspectionAssertions: assertions })` — updates backlog copy
 
-**RIS Generation (per story):**
-8. For each story, renderer calls `window.puffin.cre.generateRis()`
-9. `cre:generate-ris` handler calls `RISGenerator.generateRIS()`:
-   - Loads story, plan item, branch memory, code model context, and assertions
-   - Sends to AI for RIS generation (returns markdown, no JSON schema)
-   - Falls back to local template if AI unavailable
-   - Stores in `ris` DB table with `status: 'generated'`
+**DB Refresh (between assertion and RIS generation):**
+11. Renderer calls `window.puffin.state.getUserStories()` to reload all stories from DB
+12. Dispatches `loadUserStories` — syncs in-memory model with DB (ensures assertion data is fresh for RIS generation)
+
+**RIS Generation (per story, sequential):**
+13. For each story in the sprint, renderer calls `window.puffin.cre.generateRis(storyId)`
+14. `cre:generate-ris` IPC handler (`cre/index.js:291-312`):
+    - Acquires **process lock**
+    - Calls `RISGenerator.generateRIS(storyId)`
+15. `RISGenerator.generateRIS()` (`ris-generator.js:54-162`) loads 5 inputs:
+    - Story from DB (`_loadStory()`)
+    - Approved plan item from `plans` table
+    - Branch memory from `.puffin/memory/branches/{branch}.md` (`_readBranchMemory()`)
+    - Code model context via `consultModel()` — queries CodeModel for relevant artifacts and dependencies
+    - Assertions from `inspection_assertions` DB table via `_loadAssertions(storyId)` — **this is why assertions must be generated first**
+16. Builds prompt via `generate-ris.buildPrompt()` with `includeToolGuidance: false`
+17. Calls `sendCrePrompt()` — **no JSON schema** (model: sonnet, maxTurns: 1, markdown output)
+18. If AI fails or returns empty: falls back to local `formatRis()` template function (generates basic RIS from story data and assertions without AI)
+19. INSERTs into `ris` DB table with `status = 'generated'`
+20. Renderer stores returned RIS markdown in `model.activeSprint.risMap[storyId]`
 
 **Completion:**
-10. `CRE_PLANNING_COMPLETE` action dispatched with `risMap` and final plan
-11. `crePlanningCompleteAcceptor` stores:
+21. `CRE_PLANNING_COMPLETE` action dispatched with `risMap` and final plan
+22. `crePlanningCompleteAcceptor` stores:
     - `sprint.risMap = { storyId: risMarkdown, ... }`
     - `sprint.planApprovedAt` timestamp
-    - Clears all pending CRE flags
+    - Clears all pending CRE flags (`_pendingCreApproval`, etc.)
 
 ### State Transition
 

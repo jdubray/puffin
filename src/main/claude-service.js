@@ -14,6 +14,8 @@
 
 const { spawn } = require('child_process')
 const path = require('path')
+const fs = require('fs')
+const os = require('os')
 
 /**
  * Tool emoji mapping for different tool types
@@ -75,6 +77,7 @@ class ClaudeService {
     this.currentProcess = null
     this.projectPath = null
     this._processLock = false // Prevents multiple CLI spawns
+    this._cancelRequested = false // Track explicit cancel to distinguish from errors
     this._pluginManager = null // Reference to plugin manager for branch focus retrieval
     this._pendingContextUpdate = null // Queued branch focus update to include in next prompt
     this._currentBranchId = null // Track current branch for context updates
@@ -86,6 +89,46 @@ class ClaudeService {
    */
   isProcessRunning() {
     return this._processLock || this.currentProcess !== null
+  }
+
+  /**
+   * Kill a spawned process, handling Windows process tree correctly.
+   * On Windows with shell: true, process.kill() only kills the shell (cmd.exe),
+   * leaving child processes orphaned. This method uses taskkill /T /F to kill
+   * the entire process tree.
+   * @param {ChildProcess} proc - The process to kill
+   * @private
+   */
+  _killProcess(proc) {
+    if (!proc) return
+    if (process.platform === 'win32' && proc.pid) {
+      const { exec } = require('child_process')
+      exec(`taskkill /pid ${proc.pid} /T /F`, (err) => {
+        if (err) {
+          try { proc.kill('SIGTERM') } catch { /* already dead */ }
+        }
+      })
+    } else {
+      try { proc.kill('SIGTERM') } catch { /* already dead */ }
+    }
+  }
+
+  /**
+   * Get path to an empty MCP config file. Used by sendPrompt with
+   * --strict-mcp-config to prevent the model from accessing MCP tools
+   * (e.g. hdsl_*) which cause it to explore the codebase instead of
+   * producing structured output.
+   * @returns {string} Absolute path to empty MCP config JSON file
+   * @private
+   */
+  _getEmptyMcpConfigPath() {
+    if (!this._emptyMcpConfigPath) {
+      this._emptyMcpConfigPath = path.join(os.tmpdir(), 'puffin-empty-mcp.json')
+      if (!fs.existsSync(this._emptyMcpConfigPath)) {
+        fs.writeFileSync(this._emptyMcpConfigPath, '{"mcpServers": {}}', 'utf8')
+      }
+    }
+    return this._emptyMcpConfigPath
   }
 
   /**
@@ -180,6 +223,7 @@ class ClaudeService {
 
     // Acquire the process lock immediately
     this._processLock = true
+    this._cancelRequested = false
     console.log('[CLAUDE-GUARD] Process lock acquired')
 
     // Build the prompt with project context (async for plugin-based branch context)
@@ -358,9 +402,11 @@ class ClaudeService {
 
       // Handle process completion
       this.currentProcess.on('close', (code) => {
+        const wasCancelled = this._cancelRequested
         this.currentProcess = null
         this._processLock = false
-        console.log('[CLAUDE-GUARD] Process lock released (close)')
+        this._cancelRequested = false
+        console.log('[CLAUDE-GUARD] Process lock released (close)', wasCancelled ? '(cancelled)' : '')
 
         console.log('[CLAUDE-DEBUG] Process closed with code:', code)
         console.log('[CLAUDE-DEBUG] buffer remaining:', buffer?.length || 0, 'chars')
@@ -449,6 +495,19 @@ class ClaudeService {
           })
           onComplete(response)
           resolve(response)
+        } else if (wasCancelled) {
+          // User cancelled — treat as normal completion with partial content
+          console.log('[CLAUDE-DEBUG] Process was cancelled by user')
+          if (!completionCalled) {
+            completionCalled = true
+            const response = {
+              content: streamedContent || fullOutput || '',
+              cancelled: true,
+              exitCode: code
+            }
+            onComplete(response)
+          }
+          resolve({ content: '', cancelled: true, exitCode: code })
         } else {
           const error = new Error(`Claude CLI exited with code ${code}: ${errorOutput}`)
           console.error('[CLAUDE-DEBUG] Process failed:', error.message)
@@ -896,29 +955,35 @@ ${updatedContext}
    * Cancel the current request
    */
   cancel() {
-    if (this.currentProcess) {
-      console.log('[CLAUDE-GUARD] Cancelling CLI process')
-      this.currentProcess.kill('SIGTERM')
+    this._cancelRequested = true
 
-      // Force kill after 2 seconds if still running
+    if (this.currentProcess) {
+      console.log('[CLAUDE-GUARD] Cancelling CLI process, PID:', this.currentProcess.pid)
+      this._killProcess(this.currentProcess)
+
+      // Force kill after 3 seconds if still running
       setTimeout(() => {
         if (this.currentProcess) {
           console.log('[CLAUDE-GUARD] Force killing CLI process')
-          this.currentProcess.kill('SIGKILL')
+          try { this.currentProcess.kill('SIGKILL') } catch { /* already dead */ }
           this.currentProcess = null
           this._processLock = false
+          this._cancelRequested = false
           console.log('[CLAUDE-GUARD] Process lock released (force kill)')
         }
-      }, 2000)
+      }, 3000)
     } else {
       // Ensure lock is released even if no process
       this._processLock = false
+      this._cancelRequested = false
     }
   }
 
   /**
-   * Get spawn options based on platform
-   * Windows requires shell: true for .cmd files
+   * Get spawn options based on platform.
+   * On Windows, shell: true is needed for .cmd files but breaks arguments
+   * containing JSON (double quotes get mangled by cmd.exe). We detect at
+   * first call whether `claude` is a native .exe and skip the shell if so.
    * @private
    */
   getSpawnOptions(cwd = null) {
@@ -941,9 +1006,27 @@ ${updatedContext}
       }
     }
 
+    // On Windows, detect whether `claude` is a native .exe (no shell needed)
+    // or a .cmd wrapper (shell required). Cache the result.
+    let useShell = false
+    if (process.platform === 'win32') {
+      if (this._claudeIsExe === undefined) {
+        try {
+          const { execSync } = require('child_process')
+          const claudePath = execSync('where claude', { encoding: 'utf8', timeout: 5000 }).trim().split('\n')[0].trim()
+          this._claudeIsExe = claudePath.endsWith('.exe')
+          console.log('[CLAUDE-SPAWN] claude resolved to:', claudePath, '(isExe:', this._claudeIsExe, ')')
+        } catch {
+          this._claudeIsExe = false
+          console.log('[CLAUDE-SPAWN] Could not resolve claude path, using shell: true')
+        }
+      }
+      useShell = !this._claudeIsExe
+    }
+
     const options = {
       env,
-      shell: process.platform === 'win32'
+      shell: useShell
     }
     if (cwd) {
       options.cwd = cwd
@@ -1264,7 +1347,8 @@ Guidelines:
         '--output-format', 'stream-json',
         '--verbose',
         '--max-turns', '1',  // Single turn - no tool use, just output JSON
-        '--disallowedTools', 'AskUserQuestion',
+        '--tools', '',
+        '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
         '-'
       ]
 
@@ -1443,7 +1527,7 @@ Guidelines:
         progress(`Data received before timeout: ${dataReceived}`)
         progress(`Messages received before timeout: ${allMessages.length}`)
         progress(`Result text length before timeout: ${resultText.length}`)
-        proc.kill()
+        this._killProcess(proc)
         // Release the process lock
         this._processLock = false
         console.log('[STORY-DERIVATION-GUARD] Process lock released (timeout)')
@@ -1525,8 +1609,13 @@ ${feedback}`
 
 ${content}`
 
-      // Use minimal options for title generation
-      const args = ['--print', '--max-turns', '1', '--model', 'haiku', '--disallowedTools', 'AskUserQuestion', '-']
+      // Use minimal options for title generation — disable all tools since we just need text output
+      const args = [
+        '--print', '--max-turns', '1', '--model', 'haiku',
+        '--tools', '',
+        '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
+        '-'
+      ]
 
       const cwd = this.projectPath || process.cwd()
       const spawnOptions = this.getSpawnOptions(cwd)
@@ -1579,7 +1668,7 @@ ${content}`
       // Timeout after 10 seconds
       setTimeout(() => {
         if (!resolved && titleProcess) {
-          titleProcess.kill()
+          this._killProcess(titleProcess)
           releaseAndResolve(this.generateFallbackTitle(content))
         }
       }, 10000)
@@ -1621,10 +1710,11 @@ ${content}`
     return new Promise((resolve) => {
       const model = options.model || 'haiku'
       const jsonSchema = options.jsonSchema || null
-      // When using --json-schema, Claude needs at least 2 turns for the
-      // StructuredOutput tool-use cycle (assistant tool_use → tool result)
+      // When using --json-schema, the StructuredOutput tool-use cycle needs
+      // multiple turns: text + tool_use call, tool_result, final text.
+      // Minimum 4 turns as a safety margin.
       const maxTurns = jsonSchema
-        ? Math.max(options.maxTurns || 1, 2)
+        ? Math.max(options.maxTurns || 1, 4)
         : (options.maxTurns || 1)
       const timeout = options.timeout || 60000 // Default 60 seconds
 
@@ -1633,10 +1723,16 @@ ${content}`
         '--output-format', 'stream-json',
         '--verbose',
         '--max-turns', String(maxTurns),
-        '--model', model,
-        '--permission-mode', 'acceptEdits',
-        '--disallowedTools', 'AskUserQuestion'
+        '--model', model
       ]
+
+      // sendPrompt is a one-shot prompt-in/response-out method. Disable ALL tools
+      // (built-in AND MCP) so the model answers from the prompt context instead of
+      // exploring the codebase (which burns turns and timeouts). When --json-schema
+      // is used, the StructuredOutput tool is added automatically by the CLI.
+      args.push('--tools', '')
+      // --strict-mcp-config with an empty config disables MCP tools (e.g. hdsl_*)
+      args.push('--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config')
 
       // Append --json-schema when a schema is provided
       if (jsonSchema) {
@@ -1799,7 +1895,7 @@ ${content}`
         console.log('[sendPrompt] Timeout after', timeout, 'ms')
         console.log('[sendPrompt] Data received before timeout:', dataReceived)
         console.log('[sendPrompt] Result text length before timeout:', resultText.length)
-        proc.kill()
+        this._killProcess(proc)
         resolved = true
         // Release the process lock only if we own it
         if (!lockAlreadyHeld) { this._processLock = false }
@@ -1961,8 +2057,9 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
-        '--max-turns', '40',  // Allow multiple turns for tool use
-        '--disallowedTools', 'AskUserQuestion',
+        '--max-turns', '1',
+        '--tools', '',
+        '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
         '-'
       ]
 
@@ -1992,7 +2089,7 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true
-          proc.kill()
+          this._killProcess(proc)
           this._processLock = false
           console.log('[ASSERTION-GEN-GUARD] Process lock released (timeout)')
           progress('ERROR: Timeout')

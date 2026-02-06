@@ -87,7 +87,7 @@ describe('CRE index.js - initialize and shutdown', () => {
     // Should not throw — initialization succeeded
   });
 
-  it('should register exactly 10 IPC handlers', async () => {
+  it('should register all CRE IPC handlers', async () => {
     await cre.initialize({
       ipcMain,
       app: {},
@@ -97,13 +97,13 @@ describe('CRE index.js - initialize and shutdown', () => {
     });
 
     const channels = Object.keys(ipcMain.handlers);
-    assert.equal(channels.length, 11, `Expected 11 handlers, got ${channels.length}: ${channels.join(', ')}`);
+    assert.equal(channels.length, 13, `Expected 13 handlers, got ${channels.length}: ${channels.join(', ')}`);
 
     const expected = [
       'cre:generate-plan', 'cre:submit-answers', 'cre:refine-plan', 'cre:approve-plan',
       'cre:generate-ris', 'cre:generate-assertions', 'cre:verify-assertions',
-      'cre:update-model', 'cre:query-model',
-      'cre:get-plan', 'cre:get-ris'
+      'cre:update-model', 'cre:refresh-model', 'cre:query-model',
+      'cre:get-plan', 'cre:get-ris', 'cre:list-ris-story-ids'
     ];
     for (const ch of expected) {
       assert.ok(ipcMain.handlers[ch], `Missing handler for ${ch}`);

@@ -41,6 +41,8 @@ export class PromptEditorComponent {
     this.dropZoneIndicator = null // Visual feedback for drag-drop
     this.imagePreviewModal = null // Modal for viewing full-size images
     this.supportedImageExtensions = ['.png', '.jpg', '.jpeg', '.webp']
+    // Track whether the current prompt session has written/edited files
+    this._writtenFileCount = 0
   }
 
   /**
@@ -695,10 +697,15 @@ export class PromptEditorComponent {
         }
       }
 
+      // Track file write count from activity state for cancel confirmation
+      const writtenFiles = (state.activity?.filesModified || []).filter(f => f.action === 'write')
+      this._writtenFileCount = writtenFiles.length
+
       // Clear textarea when processing completes (response received)
       if (this.wasProcessing && !state.prompt.isProcessing) {
         this.textarea.value = ''
         this.submitBtn.disabled = true
+        this._writtenFileCount = 0
 
         // Cleanup attached images from temp storage
         if (this._pendingImageCleanup && this._pendingImageCleanup.length > 0) {
@@ -1322,9 +1329,21 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Cancel the current request
+   * Cancel the current request.
+   * If files have been written/edited, prompts the user for confirmation
+   * since cancelling mid-edit could leave the codebase in an inconsistent state.
    */
   cancel() {
+    if (this._writtenFileCount > 0) {
+      const fileWord = this._writtenFileCount === 1 ? 'file has' : 'files have'
+      const confirmed = confirm(
+        `${this._writtenFileCount} ${fileWord} been created or edited during this session.\n\n` +
+        'Cancelling now may leave your code in an incomplete state.\n\n' +
+        'Are you sure you want to cancel?'
+      )
+      if (!confirmed) return
+    }
+
     this.intents.cancelPrompt()
     if (window.puffin) {
       window.puffin.claude.cancel()

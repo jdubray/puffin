@@ -661,7 +661,43 @@ class PuffinState {
    */
   getStoryInspectionAssertions(storyId) {
     const story = this.getUserStoryById(storyId)
-    return story?.inspectionAssertions || []
+    const fromStory = story?.inspectionAssertions || []
+    if (fromStory.length > 0) return fromStory
+
+    // Fallback: check the CRE inspection_assertions table.
+    // The CRE assertion generator writes assertions to BOTH places, but
+    // if the user_stories column write failed, the table may still have data.
+    if (this.database.isInitialized()) {
+      try {
+        const db = this.database.connection.getConnection()
+        const rows = db.prepare(
+          'SELECT id, type, target, message, assertion_data FROM inspection_assertions WHERE story_id = ? ORDER BY created_at'
+        ).all(storyId)
+        if (rows.length > 0) {
+          console.log(`[PUFFIN-STATE] Fallback: found ${rows.length} assertions in inspection_assertions table for story ${storyId}`)
+          const assertions = rows.map(r => ({
+            id: r.id,
+            type: r.type,
+            target: r.target,
+            message: r.message,
+            assertion: JSON.parse(r.assertion_data || '{}')
+          }))
+          // Sync back to user_stories so future reads don't need fallback
+          try {
+            db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
+              .run(JSON.stringify(assertions), new Date().toISOString(), storyId)
+            console.log(`[PUFFIN-STATE] Synced ${assertions.length} assertions to user_stories for story ${storyId}`)
+          } catch (syncErr) {
+            console.warn(`[PUFFIN-STATE] Failed to sync assertions to user_stories: ${syncErr.message}`)
+          }
+          return assertions
+        }
+      } catch (err) {
+        console.warn(`[PUFFIN-STATE] inspection_assertions table fallback error: ${err.message}`)
+      }
+    }
+
+    return fromStory
   }
 
   /**

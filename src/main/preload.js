@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('puffin', {
     // Inspection assertion evaluation
     evaluateStoryAssertions: (storyId) => ipcRenderer.invoke('state:evaluateStoryAssertions', storyId),
     getAssertionResults: (storyId) => ipcRenderer.invoke('state:getAssertionResults', storyId),
+    syncAssertionsFromCreTable: (storyIds) => ipcRenderer.invoke('state:syncAssertionsFromCreTable', storyIds),
     evaluateSingleAssertion: (storyId, assertionId) =>
       ipcRenderer.invoke('state:evaluateSingleAssertion', { storyId, assertionId }),
 

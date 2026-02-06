@@ -494,8 +494,11 @@ function setupStateHandlers(ipcMain) {
         return { success: false, error: 'Story not found' }
       }
 
-      // Get inspection assertions for the story
+      // Get inspection assertions for the story.
+      // getStoryInspectionAssertions checks user_stories.inspection_assertions first,
+      // then falls back to the CRE inspection_assertions table if the column is empty.
       const assertions = puffinState.getStoryInspectionAssertions(storyId)
+      console.log('[IPC] evaluateStoryAssertions:', storyId, 'assertions:', assertions?.length || 0)
       if (!assertions || assertions.length === 0) {
         return {
           success: true,
@@ -535,6 +538,48 @@ function setupStateHandlers(ipcMain) {
     } catch (error) {
       console.error('[IPC] evaluateStoryAssertions error:', error)
       return { success: false, error: error.message }
+    }
+  })
+
+  // Sync assertions from the CRE inspection_assertions table to user_stories column.
+  // The CRE generator writes to both, but the user_stories write can fail silently.
+  // This handler reconciles the two stores for a list of story IDs.
+  ipcMain.handle('state:syncAssertionsFromCreTable', async (_event, storyIds) => {
+    if (!Array.isArray(storyIds) || storyIds.length === 0) {
+      return { success: true, synced: 0 }
+    }
+    let synced = 0
+    try {
+      const db = puffinState.database.connection.getConnection()
+      for (const storyId of storyIds) {
+        // Check if user_stories already has assertions
+        const row = db.prepare('SELECT inspection_assertions FROM user_stories WHERE id = ?').get(storyId)
+        if (!row) continue
+        const existing = JSON.parse(row.inspection_assertions || '[]')
+        if (existing.length > 0) continue // already has assertions
+
+        // Check CRE inspection_assertions table
+        const creRows = db.prepare(
+          'SELECT id, type, target, message, assertion_data FROM inspection_assertions WHERE story_id = ? ORDER BY created_at'
+        ).all(storyId)
+        if (creRows.length === 0) continue
+
+        const assertions = creRows.map(r => ({
+          id: r.id,
+          type: r.type,
+          target: r.target,
+          message: r.message,
+          assertion: JSON.parse(r.assertion_data || '{}')
+        }))
+        db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
+          .run(JSON.stringify(assertions), new Date().toISOString(), storyId)
+        synced++
+        console.log(`[IPC] syncAssertionsFromCreTable: synced ${assertions.length} assertions for story ${storyId}`)
+      }
+      return { success: true, synced }
+    } catch (error) {
+      console.error('[IPC] syncAssertionsFromCreTable error:', error)
+      return { success: false, error: error.message, synced }
     }
   })
 

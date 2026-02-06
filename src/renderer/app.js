@@ -479,6 +479,24 @@ class PuffinApp {
    * @param {Object} sprint - The approved sprint with stories and plan
    */
   async showCodeReviewConfirmation(sprint) {
+    console.log('[CODE-REVIEW] showCodeReviewConfirmation called, sprint stories:', sprint?.stories?.length || 0)
+    console.log('[CODE-REVIEW] Sprint story IDs:', sprint?.stories?.map(s => s.id))
+
+    // Reconcile assertions: the CRE generator writes to both the inspection_assertions
+    // table and user_stories.inspection_assertions column, but the column write can fail
+    // silently. Sync from table → column before reading, so the stats are accurate.
+    const sprintStoryIds = (sprint?.stories || []).map(s => s.id)
+    if (sprintStoryIds.length > 0 && window.puffin?.state?.syncAssertionsFromCreTable) {
+      try {
+        const syncResult = await window.puffin.state.syncAssertionsFromCreTable(sprintStoryIds)
+        if (syncResult.synced > 0) {
+          console.log('[CODE-REVIEW] Synced assertions from CRE table for', syncResult.synced, 'stories')
+        }
+      } catch (e) {
+        console.warn('[CODE-REVIEW] Assertion sync failed (non-fatal):', e)
+      }
+    }
+
     // Fetch fresh story data from DB — the in-memory sprint/backlog story objects
     // can be stale (e.g. assertions generated during plan approval may not have
     // propagated through all SAM state transitions by the time the sprint is closed).
@@ -487,6 +505,13 @@ class PuffinApp {
       const result = await window.puffin.state.getUserStories()
       if (result.success && Array.isArray(result.stories)) {
         freshStories = result.stories
+        console.log('[CODE-REVIEW] Fetched', freshStories.length, 'fresh stories from DB')
+        // Log assertion counts per story for debugging
+        for (const s of freshStories) {
+          if (sprint?.stories?.some(ss => ss.id === s.id)) {
+            console.log('[CODE-REVIEW] DB story', s.id.substring(0, 8), '| assertions:', s.inspectionAssertions?.length || 0, '| results:', s.assertionResults ? 'present' : 'null')
+          }
+        }
       }
     } catch (e) {
       console.warn('[CODE-REVIEW] Failed to fetch fresh stories from DB:', e)
@@ -495,6 +520,7 @@ class PuffinApp {
     // Calculate assertion statistics across all sprint stories
     const assertionStats = this.calculateSprintAssertionStats(sprint, freshStories)
     const { total, passed, failed, pending, notEvaluated } = assertionStats
+    console.log('[CODE-REVIEW] Assertion stats:', { total, passed, failed, pending, notEvaluated })
 
     // Determine recommendation based on assertion results
     let recommendationClass = 'neutral'

@@ -89,6 +89,8 @@ function parseJsonResponse(text) {
  * @param {number} [options.timeout] - Timeout in ms (default: TIMEOUT_EXTRACT).
  * @param {string} [options.label] - Label for logging.
  * @param {Object|string} [options.jsonSchema] - JSON Schema for structured output via --json-schema.
+ * @param {boolean} [options.disableTools] - Disable built-in and MCP tools (default: false).
+ * @param {number} [options.maxTurns] - Override max turns (default: 1, or 4 when jsonSchema is used).
  * @returns {Promise<{ success: boolean, data: Object|null, error: string|null, raw: string|null }>}
  */
 async function sendCrePrompt(claudeService, promptParts, options = {}) {
@@ -96,7 +98,9 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
     model = MODEL_EXTRACT,
     timeout = TIMEOUT_EXTRACT,
     label = 'cre-prompt',
-    jsonSchema = null
+    jsonSchema = null,
+    disableTools = false,
+    maxTurns = null
   } = options;
 
   if (!claudeService) {
@@ -109,15 +113,17 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
   try {
     console.log(`[CRE-AI] Sending ${label} (model: ${model}, timeout: ${timeout}ms)`);
 
-    const sendOptions = { model, maxTurns: 1, timeout };
+    const sendOptions = { model, maxTurns: maxTurns || 1, timeout, disableTools };
     if (jsonSchema) {
       sendOptions.jsonSchema = jsonSchema;
-      // StructuredOutput needs multiple turns: the model may produce thinking
-      // text or tool calls first, then call StructuredOutput (which itself
-      // consumes a tool_use → tool_result round-trip). 4 turns gives enough
-      // room for: think → explore → StructuredOutput call → result.
-      sendOptions.maxTurns = 4;
-      console.log(`[CRE-AI] ${label}: using --json-schema for structured output`);
+      // When tools are disabled, the model only needs enough turns for
+      // StructuredOutput (think + call + result = 2-4 turns).
+      // When tools are enabled, the model needs more turns to explore the
+      // codebase before producing structured output.
+      if (!sendOptions.maxTurns || sendOptions.maxTurns < 4) {
+        sendOptions.maxTurns = disableTools ? 4 : 10;
+      }
+      console.log(`[CRE-AI] ${label}: using --json-schema for structured output, maxTurns: ${sendOptions.maxTurns}`);
     }
 
     const result = await claudeService.sendPrompt(prompt, sendOptions);

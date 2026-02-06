@@ -124,7 +124,7 @@ class AssertionGenerator {
         model: MODEL_EXTRACT,
         timeout: TIMEOUT_EXTRACT,
         label: 'generate-assertions',
-        jsonSchema: ASSERTION_SCHEMA
+        disableTools: true
       });
 
       if (aiResult.success && aiResult.data && Array.isArray(aiResult.data.assertions)) {
@@ -188,7 +188,7 @@ class AssertionGenerator {
     }
 
     return {
-      id: assertion.id || uuidv4(),
+      id: uuidv4(), // Always generate a unique ID — AI-generated IDs (e.g. "IA001") collide across stories
       type,
       target,
       message: message || '',
@@ -205,7 +205,7 @@ class AssertionGenerator {
    * @returns {Object} Stored assertion record.
    */
   _storeAssertion(planId, storyId, assertion) {
-    const id = assertion.id || uuidv4();
+    const id = assertion.id; // Already a UUID from _validateAssertion
     const now = new Date().toISOString();
 
     this._db.prepare(

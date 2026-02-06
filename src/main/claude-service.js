@@ -1712,10 +1712,8 @@ ${content}`
       const jsonSchema = options.jsonSchema || null
       // When using --json-schema, the StructuredOutput tool-use cycle needs
       // multiple turns: text + tool_use call, tool_result, final text.
-      // Minimum 4 turns as a safety margin.
-      const maxTurns = jsonSchema
-        ? Math.max(options.maxTurns || 1, 4)
-        : (options.maxTurns || 1)
+      // Use caller's maxTurns when provided, otherwise default to 4 minimum for jsonSchema.
+      const maxTurns = options.maxTurns || (jsonSchema ? 4 : 1)
       const timeout = options.timeout || 60000 // Default 60 seconds
 
       const args = [
@@ -1726,13 +1724,14 @@ ${content}`
         '--model', model
       ]
 
-      // sendPrompt is a one-shot prompt-in/response-out method. Disable ALL tools
-      // (built-in AND MCP) so the model answers from the prompt context instead of
-      // exploring the codebase (which burns turns and timeouts). When --json-schema
-      // is used, the StructuredOutput tool is added automatically by the CLI.
-      args.push('--tools', '')
-      // --strict-mcp-config with an empty config disables MCP tools (e.g. hdsl_*)
-      args.push('--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config')
+      // Optional: disable tools for methods that should answer from prompt context
+      // only (e.g., assertion generation). Plan generation, RIS, and refinement
+      // NEED tools to explore the codebase. Caller can pass { disableTools: true }.
+      if (options.disableTools) {
+        args.push('--tools', '')
+        // --strict-mcp-config with an empty config disables MCP tools (e.g. hdsl_*)
+        args.push('--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config')
+      }
 
       // Append --json-schema when a schema is provided
       if (jsonSchema) {

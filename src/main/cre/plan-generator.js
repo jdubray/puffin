@@ -180,7 +180,7 @@ class PlanGenerator {
       model: MODEL_EXTRACT,
       timeout: TIMEOUT_EXTRACT,
       label: 'analyze-ambiguities',
-      jsonSchema: AMBIGUITY_SCHEMA
+      disableTools: true
     });
 
     if (aiResult.success && aiResult.data) {
@@ -255,7 +255,7 @@ class PlanGenerator {
       model: MODEL_COMPLEX,
       timeout: TIMEOUT_COMPLEX,
       label: 'generate-plan',
-      jsonSchema: PLAN_SCHEMA
+      disableTools: true
     });
 
     if (aiResult.success && aiResult.data) {
@@ -349,7 +349,7 @@ class PlanGenerator {
       model: MODEL_COMPLEX,
       timeout: TIMEOUT_COMPLEX,
       label: 'refine-plan',
-      jsonSchema: PLAN_SCHEMA
+      disableTools: true
     });
 
     if (aiResult.success && aiResult.data) {

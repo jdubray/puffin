@@ -42,9 +42,15 @@ When deriving user stories, format them as:
 - Acceptance criteria define success conditions and must be verifiable; they guide both implementation and testing
 - File path references in code use pattern 'file_path:line_number' to enable easy navigation to source
 - Defect detection uses keyword scanning on user prompt content (not Claude responses) to count problem reports per thread
+- State mutations must go through SAM actions, never mutating this.state.* directly in handlers (transient copy). All changes dispatched via action creators, which update model through acceptors.
+- File operations use async fs.promises API. Plugin storage scoped to .puffin/ directory. File writes use atomic pattern: write to temp, then rename to prevent partial writes on failure.
+- Error handling distinguishes error types (DatabaseError, RecordNotFoundError, TransactionError, etc.) inheriting from base Error with code property. Errors propagated via model.appError triggering toast notifications.
+- UI components use vanilla JavaScript class pattern with lifecycle methods: constructor(element, options), init(), onActivate(), onDeactivate(), onDestroy(). Parent context passed via options.context containing storage, logging, events API.
+- Modal system routes by type string in switch-case. CSS width overrides use .modal:has(.classname) pattern. Modals use standardized API: ModalManager.show({title, content, buttons}) with button objects {label, action, primary, danger}.
+- camelCase naming convention for variables and functions. PascalCase for classes and components. kebab-case for HTML filenames and CSS classes.
+- Dropdown menus for document/definition selection follow pattern: button opens dropdown, displays list from directory scan, user selects item, content loaded and included in context. Used for GUI definitions, design documents.
 
 ### Architectural Decisions
-
 - Sprints are limited to maximum 4 user stories to prevent token exhaustion and maintain manageability
 - Thread context is determined by parent-child relationships in prompts: a thread root has parentId=null, and descendants follow the chain
 - Context handoff between threads uses unidirectional flow from completed thread to target thread, with handoff summaries documenting what was implemented, API contracts, and integration points
@@ -55,10 +61,6 @@ When deriving user stories, format them as:
 - Sprint execution uses a state machine pattern with iteration counter, delay timer, and stuck detection threshold to manage auto-continue flows
 - Handoff summaries include files modified, API contracts, integration points, and assumptions; they can be versioned and chained if multiple handoffs occur
 - Implementation scope for user stories includes primary files, read-only files, estimated LOC budget, constraints, exclusions, and visual references
-
-### Bug Patterns
-
-- Features requiring cross-cutting context (UI + Backend) fail to complete both halves due to thread isolation; handoff mechanism required to bridge this gap
 
 # Assigned Skills
 

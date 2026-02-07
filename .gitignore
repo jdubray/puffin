@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 out/
+plugins/excalidraw-plugin/renderer/excalidraw-bundle.js
 
 # Electron
 *.log

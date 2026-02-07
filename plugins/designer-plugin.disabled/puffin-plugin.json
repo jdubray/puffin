@@ -45,9 +45,7 @@
       ]
     }
   },
-  "activationEvents": [
-    "onStartup"
-  ],
+  "activationEvents": [],
   "renderer": {
     "entry": "renderer/components/index.js",
     "components": [

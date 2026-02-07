@@ -977,7 +977,9 @@ export const updateUserStoryAcceptor = model => proposal => {
 
 export const deleteUserStoryAcceptor = model => proposal => {
   if (proposal?.type === 'DELETE_USER_STORY') {
+    console.log('[DELETE-DEBUG] deleteUserStoryAcceptor called with storyId:', proposal.payload.id, 'current story count:', model.userStories.length)
     model.userStories = model.userStories.filter(s => s.id !== proposal.payload.id)
+    console.log('[DELETE-DEBUG] After filter, story count:', model.userStories.length)
   }
 }
 

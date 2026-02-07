@@ -1871,6 +1871,14 @@ Please provide specific file locations and line numbers where issues are found, 
       if (this.sidebarViewManager.hasActivePluginView()) {
         this.sidebarViewManager.showBuiltInView()
       }
+
+      // Reinitialize project form when switching to config view
+      // This ensures form fields are repopulated with latest config values
+      if (currentView === 'config' && this.components.projectForm) {
+        this.components.projectForm.reinitialize()
+        this.components.projectForm.init()
+      }
+
       this._lastCurrentView = currentView
     }
 
@@ -2566,9 +2574,11 @@ Please provide specific file locations and line numbers where issues are found, 
 
           try {
             // Generate assertions for all stories (plan is optional)
+            const selectedModel = document.getElementById('thread-model')?.value || 'sonnet'
             const result = await window.puffin.state.generateSprintAssertions(
               sprint.stories,
-              sprint.plan || ''  // Pass empty string if plan is null
+              sprint.plan || '',  // Pass empty string if plan is null
+              selectedModel
             )
 
             this.hideAssertionGenerationModal()

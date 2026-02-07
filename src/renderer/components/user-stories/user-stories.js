@@ -776,6 +776,7 @@ export class UserStoriesComponent {
     const archivedStories = filtered.filter(s => s.status === 'archived')
 
     this.listContainer.innerHTML = `
+      <div class="kanban-action-bar-anchor"></div>
       <div class="kanban-container">
         <div class="kanban-swimlane pending">
           <div class="kanban-swimlane-header">
@@ -971,7 +972,7 @@ export class UserStoriesComponent {
     const canImplement = story.status === 'pending' // Only pending stories can be started
     const canComplete = story.status === 'in-progress' // Only in-progress stories can be completed
     const canReopen = story.status === 'completed' || story.status === 'archived' // Completed/archived stories can be reopened
-    const canArchive = story.status === 'completed' // Completed stories can be archived manually
+    const canArchive = story.status !== 'archived' // Any non-archived story can be archived
     const isArchived = story.status === 'archived'
     const isKanban = this.currentView === VIEW_MODES.KANBAN
     const isDraggable = isKanban && !isArchived && this.isDragDropSupported()
@@ -1386,8 +1387,16 @@ export class UserStoriesComponent {
     if (!actionBar) {
       actionBar = document.createElement('div')
       actionBar.className = 'backlog-action-bar'
-      const toolbar = this.container.querySelector('.user-stories-toolbar')
-      toolbar.parentNode.insertBefore(actionBar, toolbar.nextSibling)
+
+      // In kanban view, insert inside the kanban container before the pending swimlane
+      const kanbanAnchor = this.container.querySelector('.kanban-action-bar-anchor')
+      if (kanbanAnchor) {
+        kanbanAnchor.parentNode.insertBefore(actionBar, kanbanAnchor)
+      } else {
+        // In list view, insert after the toolbar
+        const toolbar = this.container.querySelector('.user-stories-toolbar')
+        toolbar.parentNode.insertBefore(actionBar, toolbar.nextSibling)
+      }
     }
 
     // Determine if Create Sprint button should be disabled
@@ -1396,16 +1405,29 @@ export class UserStoriesComponent {
       ? `Cannot create: "${this.activeSprintTitle || 'Active sprint'}" is in progress. Close it first.`
       : 'Create a new sprint from selected stories'
 
+    // Count pending stories for "Select All" button
+    const pendingStories = this.getFilteredStories().filter(s => s.status === 'pending')
+    const allSelected = pendingStories.length > 0 && pendingStories.every(s => this.selectedStoryIds.has(s.id))
+
     actionBar.innerHTML = `
-      <span class="selection-count">${this.selectedStoryIds.size} ${this.selectedStoryIds.size === 1 ? 'story' : 'stories'} selected</span>
-      <div class="action-buttons">
-        <button class="btn secondary clear-selection-btn">Clear Selection</button>
-        <button class="btn primary create-sprint-btn" ${sprintBtnDisabled ? 'disabled' : ''} title="${sprintBtnTitle}">Create Sprint</button>
+      <div class="action-bar-content">
+        <div class="action-buttons">
+          <button class="btn secondary select-all-btn" ${allSelected ? 'disabled' : ''} title="${allSelected ? 'All pending stories already selected' : 'Select all pending stories'}">Select All</button>
+          <button class="btn secondary clear-selection-btn">Clear All</button>
+          <button class="btn primary create-sprint-btn" ${sprintBtnDisabled ? 'disabled' : ''} title="${sprintBtnTitle}">Create Sprint</button>
+        </div>
+        <span class="selection-count">${this.selectedStoryIds.size} ${this.selectedStoryIds.size === 1 ? 'user story' : 'user stories'} selected</span>
       </div>
-      ${sprintBtnDisabled ? `<span class="sprint-warning">Close active sprint to create a new one</span>` : ''}
+      ${sprintBtnDisabled ? `<div class="sprint-warning">Close active sprint to create a new one</div>` : ''}
     `
 
     // Bind action bar events
+    actionBar.querySelector('.select-all-btn').addEventListener('click', () => {
+      if (!allSelected) {
+        this.selectAllPending()
+      }
+    })
+
     actionBar.querySelector('.clear-selection-btn').addEventListener('click', () => {
       this.clearSelection()
     })
@@ -1416,6 +1438,15 @@ export class UserStoriesComponent {
         this.createSprint()
       }
     })
+  }
+
+  /**
+   * Select all pending stories
+   */
+  selectAllPending() {
+    const pendingStories = this.getFilteredStories().filter(s => s.status === 'pending')
+    pendingStories.forEach(s => this.selectedStoryIds.add(s.id))
+    this.render()
   }
 
   /**
@@ -1551,7 +1582,7 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Archive a completed story
+   * Archive a story (moves to archived status)
    */
   archiveStory(storyId) {
     this.intents.updateUserStory(storyId, { status: 'archived' })
@@ -1561,8 +1592,12 @@ export class UserStoriesComponent {
    * Delete a story
    */
   deleteStory(storyId) {
+    console.log('[DELETE-DEBUG] deleteStory called for storyId:', storyId)
     if (confirm('Are you sure you want to delete this story?')) {
+      console.log('[DELETE-DEBUG] Confirmation accepted, dispatching DELETE_USER_STORY action')
       this.intents.deleteUserStory(storyId)
+    } else {
+      console.log('[DELETE-DEBUG] Confirmation cancelled, no action dispatched')
     }
   }
 

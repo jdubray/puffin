@@ -367,24 +367,24 @@ puffin/
 
 ### Conventions
 
+- IPC channel naming uses fully qualified format `plugin:<name>:<channel>` for unambiguous identification across the plugin ecosystem. This prevents namespace collisions and improves discoverability.
 - GUI definitions use nested JSON format with metadata for both serialization and RLM queryability. This enables consistent querying across RLM contexts while maintaining human-readable structure.
 - Thread sharing system enforces three-tier visibility model: Private, Team, Public with inheritance. Access control is fine-grained on threads and prompts. Visibility is managed centrally through the permission system.
 - User stories are organized in three-tier hierarchy: Personal → Team → Organization, with rich metadata including owner, assignees, collaborators, visibility, and audit trails. Template system supports feature, bug, and design review templates.
+- Code Model artifact classification differentiates artifact types (service, component, utility, config, etc.) and tracks dependency kinds beyond imports (calls, inheritance, composition) for richer architectural queries.
+- Tiered model selection for RLM agents: Opus for orchestrator/specialist agents that require sophisticated reasoning, Haiku for recursive sub-calls that are parallelizable and simple. This balances capability with cost and latency.
 
 ### Architectural Decisions
 
 - Multi-user Puffin architecture follows a three-phase progression: Phase 1 (Local Multi-User Foundation) with user-scoped file storage at `.puffin/users/{userId}/` and enhanced SAM pattern with user context, Phase 2 (Hybrid Backend Integration) with GraphQL API and WebSocket-based collaboration, Phase 3 (Enterprise Features) with advanced permissions and analytics. Each phase builds on the previous without breaking existing functionality (progressive enhancement).
 - Multi-user architecture adopts Local-First design where primary data remains local and backend provides sync and collaboration via GraphQL API with real-time subscriptions. This pattern applies to all multi-user features.
-- Designer Plugin storage follows the plugin architecture pattern with IPC handlers for CRUD operations. GUI definitions are stored in `.puffin/plugins/designer/designs/` directory as JSON files with schema: { name, elements, createdAt, lastModifiedAt }. Plugin creates designs directory on activation if missing.
-- Plugin IPC channels use fully qualified naming format: `plugin:<name>:<channel>` for unambiguous channel identification across the system. This ensures no naming conflicts and clear plugin ownership of communication channels.
+- Designer Plugin storage uses plugin namespace (`.puffin/plugins/designer/designs/`) rather than core Puffin state directory. This makes the designer feature self-contained, portable, and aligns with the existing plugin infrastructure pattern.
+- GUI definitions use nested JSON with metadata (name, definition, createdAt, lastModifiedAt) for serialization and RLM queryability. This enables rich context capture for prompt composition while maintaining portability.
 - RLM (Recursive Language Model) execution uses smart parallelization with dependency detection for parallel sub-calls, but performs result aggregation only after all sub-calls complete before responding. This ensures consistent context and ordering.
 - RLM agent model selection is tiered: Opus for orchestrator and specialist agents (complex reasoning), Haiku for recursive sub-calls (efficiency and cost). This tiered approach balances capability with performance and cost constraints.
 - Context management for long-context reasoning tasks uses REPL-based external environment rather than direct injection or RAG, enabling stateful execution and efficient context handling across multiple agent calls.
 - Context Vault uses hierarchical four-domain organization (specifications, codebase-index, traceability, history, active-context) for structured knowledge management in long-context reasoning tasks. History is indexed by sprint-based + periodic checkpoints for efficient navigation.
-
-### Bug Patterns
-
-- When migrating existing functionality to plugin architecture (e.g., moving GUI definitions from core PuffinState to Designer Plugin), include migration script in plugin activation to copy from old location (`.puffin/gui-definitions/`) and maintain backward compatibility temporarily through dual IPC handlers before deprecation.
+- h-DSL Code Model implements five-phase pipeline (Discover → Derive → Populate → Emit → Annotate) for codebase analysis, with MCP server providing stdio transport JSON-RPC interface for tool invocation by Claude Code.
 
 # Assigned Skills
 

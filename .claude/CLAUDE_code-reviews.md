@@ -33,21 +33,26 @@ You are working on the **code review thread**. Focus on:
 ### Conventions
 
 - IPC handler naming convention uses colon-separated format: 'feature:action' (e.g., 'toast-history:getAll', 'image:save') for all main-to-renderer process communication
+- IPC handlers use naming pattern 'channel:ACTION_NAME' (e.g., 'toast-history:getAll') for request-response calls. Renderer invokes via window.puffin.channel.actionName() preload bridge. Core handlers in puffin-state.js are the authoritative source for persisted data; plugins delegate to core rather than implementing duplicate storage
 - Plugin architecture requires plugins to implement initialize(context) and cleanup() methods; main process plugins receive context with ipcMain, app, mainWindow, config, pluginDir; renderer plugins receive ipcRenderer, document, window, config, pluginDir
 - Status naming in user stories uses 'pending', 'in-progress', 'completed', and 'archived'; consistency between database layer (StoryStatus constants) and UI layer is critical to prevent data loss
 - All IPC handlers must validate input and sanitize output; path operations must use path.resolve() and validate paths are within expected directories to prevent traversal attacks; HTML content must be escaped using escapeHtml() and attributes escaped with escapeAttr()
+- Toast history architecture uses two places: core puffin-state.js (source of truth) and optional plugin delegation. All toast operations must be intercepted in showToast() method automatically, not require manual persistence calls
+- Maximum file size validation for uploads is 50MB. Enforcement must happen at IPC handler level before processing buffer, with clear error message returned to user
+- Error handling in async IPC handlers: Always return { success: boolean, error?: string, data?: any } format. Callers check result.success before accessing data. Silent failures (undefined returns) break component logic
+- Plugin-to-core delegation pattern: Plugins with storage responsibility should delegate to puffin-state.js core handlers rather than implementing parallel file I/O. Plugin index.js registers view; renderer component calls window.puffin.* bridge; main process core handlers manage persistence
 
 ### Architectural Decisions
 
 - Puffin uses a file-based persistence model stored in .puffin/ directory for project-specific data (user stories, sprints, git operations, etc.), while browser localStorage is reserved only for temporary UI state (handoff summaries) scoped by project ID to prevent cross-project interference
 - SQLite via better-sqlite3 is the authoritative persistence layer for user stories, sprints, and sprint history; replaces previous file-based JSON storage for improved reliability and structured querying
-- Toast history uses a single-source-of-truth architecture where puffin-state.js is the authoritative storage and plugins delegate to core IPC handlers rather than maintaining duplicate storage implementations
+- Single source of truth pattern: Toast history storage is centralized in puffin-state.js. Plugins access via core IPC handlers (toast-history:getAll, toast-history:add, etc.) instead of maintaining separate file I/O. Avoids data inconsistency and duplication between plugin and core implementations
+- Sprint closure is atomic: archive sprint, update all story statuses (completed→completed, incomplete→pending), delete sprint_stories relationships, and only delete sprint record after all updates succeed. If any step fails, entire transaction rolls back
+- Plugin architecture delegates file I/O to core puffin-state.js rather than implementing duplicate storage. Plugins are thin wrappers that register views and invoke core IPC handlers
+- Image attachment system has maximum limit of 5 attachments per prompt. Enforcement happens at UI level (prevent adding more) and backend level (reject on save). Warning toast shown when limit reached
 
 ### Bug Patterns
-
 - Status naming inconsistencies between database and UI cause data to disappear during sprint archival; database used 'implemented' while UI expected 'completed', requiring migrations to fix existing data
-- Modal form data not properly passed to backend methods leads to default values being persisted instead of user input; methods must receive override parameters or be refactored to accept complete form state
-- Duplicate implementations in plugin system and core application create architectural fragmentation where toast history, designer storage, and other features maintain parallel storage logic instead of delegating to single source of truth
 
 # Assigned Skills
 

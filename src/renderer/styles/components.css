@@ -11302,6 +11302,54 @@
   font-size: 0.8125rem;
 }
 
+/* ===== Backlog Action Bar ===== */
+.backlog-action-bar {
+  background: var(--surface-color, #2a2a2a);
+  border: 1px solid var(--border-color, #444);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+
+.backlog-action-bar .action-bar-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.backlog-action-bar .selection-count {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-color, #e0e0e0);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.backlog-action-bar .action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.backlog-action-bar .btn {
+  font-size: 0.8125rem;
+  padding: 0.5rem 1rem;
+  white-space: nowrap;
+  min-width: fit-content;
+}
+
+.backlog-action-bar .create-sprint-btn:disabled,
+.backlog-action-bar .select-all-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Hide the anchor element */
+.kanban-action-bar-anchor {
+  display: none;
+}
+
 /* ===== Sprint Warning (Single Sprint Enforcement) ===== */
 .sprint-warning {
   display: block;
@@ -11312,11 +11360,6 @@
   background: var(--warning-bg, rgba(230, 126, 34, 0.1));
   border-radius: 4px;
   text-align: center;
-}
-
-.backlog-action-bar .create-sprint-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* ===== Assertion Generation Modal ===== */

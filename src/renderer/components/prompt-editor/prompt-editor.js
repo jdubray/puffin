@@ -2030,6 +2030,7 @@ export class PromptEditorComponent {
       prompt: derivationPrompt,
       branchId: activeBranch,
       conversationContext: conversationContext,
+      model: this.modelSelect?.value || this.defaultModel || 'sonnet',
       project: state.config ? {
         name: state.config.name,
         description: state.config.description

@@ -1,0 +1,68 @@
+{
+  "name": "excalidraw-plugin",
+  "version": "1.0.0",
+  "displayName": "Sketcher",
+  "description": "Excalidraw-based sketching and diagramming plugin for hand-drawn style wireframes and architecture diagrams",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["excalidraw", "sketcher", "diagram", "wireframe", "drawing"],
+  "extensionPoints": {
+    "actions": ["saveDesign", "loadDesign", "listDesigns", "deleteDesign"],
+    "ipcHandlers": [
+      "excalidraw:saveDesign",
+      "excalidraw:loadDesign",
+      "excalidraw:listDesigns",
+      "excalidraw:updateDesign",
+      "excalidraw:deleteDesign",
+      "excalidraw:renameDesign",
+      "excalidraw:checkNameUnique",
+      "excalidraw:exportDesign",
+      "excalidraw:importDesign"
+    ],
+    "components": ["excalidraw-view"]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "excalidraw-view",
+        "name": "Sketcher",
+        "location": "nav",
+        "icon": "✏️",
+        "order": 51,
+        "component": "ExcalidrawView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "excalidraw.showSketcher",
+        "title": "Show Sketcher",
+        "category": "Excalidraw"
+      }
+    ],
+    "menus": {
+      "tools": [
+        {
+          "command": "excalidraw.showSketcher"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "ExcalidrawView",
+        "export": "ExcalidrawView",
+        "type": "class",
+        "description": "Main Excalidraw sketcher view"
+      }
+    ],
+    "styles": [
+      "renderer/styles/excalidraw-view.css"
+    ]
+  }
+}

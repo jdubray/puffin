@@ -42,7 +42,6 @@ window.puffin.channel.onEvent(callback)
 ## Branch Memory (auto-extracted)
 
 ### Conventions
-
 - Puffin uses a modular plugin architecture where each plugin follows the pattern: puffin-plugin.json manifest, main.js for IPC handlers and file I/O, and renderer.js/components for UI. Plugins register views, actions, and IPC channels through the manifest.
 - Database operations use atomic transactions via immediateTransaction() wrapper to ensure data consistency. All multi-step database operations (sprint creation, story status updates, sprint closure) must complete within a single transaction or rollback completely.
 - State management follows a SAM (Simple Application Model) pattern with Actions (intent creators), Acceptors (modify model state), and side effects via state-persistence layer. Changes flow: UI action → action creator → acceptor updates model → state-persistence calls IPC → main process updates database.
@@ -56,7 +55,5 @@ window.puffin.channel.onEvent(callback)
 - Git operations are available via window.puffin.git preload API with methods: stageFiles(), commit(message), getStatus(). Git integration is optional - operations fail gracefully if not in git repository or if git unavailable.
 - Modal dialogs use ModalManager from renderer/lib/modal-manager.js with standardized API: ModalManager.show({title, content, buttons}) where buttons are {label, action, primary, danger} objects. Modals support confirmation workflows with optional inline error messages.
 - No time estimates should ever be given for task completion - focus on what needs to be done and the work required, not how long it will take. Avoid phrases like 'quick fix', 'will take X minutes', or similar time predictions.
-
-### Architectural Decisions
-- Sprint closure is atomic: archive sprint, update all story statuses (completed→completed, incomplete→pending), delete sprint_stories relationships, and only delete sprint record after all updates succeed. If any step fails, entire transaction rolls back.
-- Assertion evaluation is triggered automatically when story completion changes via state-persistence layer. Evaluation runs asynchronously in main process with concurrent limit to prevent resource exhaustion. Results are persisted atomically with story status changes.
+- SAM action payload structure: actions include inspectionAssertions field when persisting user stories. Model acceptors copy payload fields directly. State-persistence layer intercepts UPDATE_USER_STORY and related actions to trigger IPC handlers.
+- IPC handler naming: state:ACTION_NAME for state mutations, cre:ACTION_NAME for CRE plugin calls, plugins.invoke() for plugin-specific handlers. Preload bridge exposes methods at window.puffin.* with snake_case channel names.

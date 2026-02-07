@@ -1273,7 +1273,7 @@ ${updatedContext}
    * @param {Object} project - Project context
    * @returns {Promise<{success: boolean, stories?: Array, error?: string, rawResponse?: string}>}
    */
-  async deriveStories(prompt, projectPath, project = null, progressCallback = null, conversationContext = null) {
+  async deriveStories(prompt, projectPath, project = null, progressCallback = null, conversationContext = null, model = null) {
     console.log('[STORY-DERIVATION] Starting story derivation for prompt:', prompt.substring(0, 100) + '...')
     console.log('[STORY-DERIVATION] Conversation context length:', conversationContext?.length || 0)
 
@@ -1342,11 +1342,13 @@ Guidelines:
 
     return new Promise((resolve, reject) => {
       const cwd = projectPath || this.projectPath || process.cwd()
+      const selectedModel = model || 'sonnet'
       const args = [
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
         '--max-turns', '1',  // Single turn - no tool use, just output JSON
+        '--model', selectedModel,
         '--tools', '',
         '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
         '-'
@@ -1548,7 +1550,7 @@ Guidelines:
    * @param {Object} project - Project context
    * @returns {Promise<{success: boolean, stories?: Array, error?: string}>}
    */
-  async modifyStories(currentStories, feedback, projectPath, project = null) {
+  async modifyStories(currentStories, feedback, projectPath, project = null, model = null) {
     const storiesJson = JSON.stringify(currentStories, null, 2)
 
     const systemPrompt = `You are a requirements analyst. You have previously derived user stories from a request.
@@ -1574,7 +1576,7 @@ Output ONLY the JSON array, no other text or markdown.`
 User's feedback:
 ${feedback}`
 
-    return this.deriveStories(fullPrompt, projectPath, project)
+    return this.deriveStories(fullPrompt, projectPath, project, null, null, model)
   }
 
   /**
@@ -1611,7 +1613,7 @@ ${content}`
 
       // Use minimal options for title generation — disable all tools since we just need text output
       const args = [
-        '--print', '--max-turns', '1', '--model', 'haiku',
+        '--print', '--output-format', 'text', '--max-turns', '1', '--model', 'haiku',
         '--tools', '',
         '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
         '-'
@@ -1965,7 +1967,7 @@ ${content}`
    * @returns {Promise<{success: boolean, assertions?: Object, error?: string}>}
    *          assertions is a map of storyId -> array of assertions
    */
-  async generateInspectionAssertions(stories, plan, codingStandard = '', progressCallback = null) {
+  async generateInspectionAssertions(stories, plan, codingStandard = '', progressCallback = null, model = null) {
     const progress = (msg) => {
       console.log('[ASSERTION-GEN]', msg)
       if (progressCallback) progressCallback(msg)
@@ -2052,11 +2054,13 @@ ${storiesContext}
 Generate inspection assertions for each story. Output ONLY the JSON object.`
 
     return new Promise((resolve) => {
+      const selectedModel = model || 'sonnet'
       const args = [
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
         '--max-turns', '1',
+        '--model', selectedModel,
         '--tools', '',
         '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
         '-'
@@ -2066,7 +2070,7 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
       const spawnOptions = this.getSpawnOptions(cwd)
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
 
-      progress(`Generating assertions for ${stories.length} stories...`)
+      progress(`Generating assertions for ${stories.length} stories with model ${selectedModel}...`)
 
       const proc = spawn('claude', args, spawnOptions)
 

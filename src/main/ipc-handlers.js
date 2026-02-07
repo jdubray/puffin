@@ -319,7 +319,9 @@ function setupStateHandlers(ipcMain) {
 
   ipcMain.handle('state:deleteUserStory', async (event, storyId) => {
     try {
+      console.log('[IPC] deleteUserStory called with storyId:', storyId)
       const deleted = await puffinState.deleteUserStory(storyId)
+      console.log('[IPC] deleteUserStory result:', deleted ? 'deleted successfully' : 'story not found')
 
       // Regenerate CLAUDE.md base (stories are in base context)
       const state = puffinState.getState()
@@ -328,6 +330,7 @@ function setupStateHandlers(ipcMain) {
 
       return { success: true, deleted }
     } catch (error) {
+      console.error('[IPC] deleteUserStory error:', error.message)
       return { success: false, error: error.message }
     }
   })
@@ -647,7 +650,7 @@ function setupStateHandlers(ipcMain) {
   })
 
   // Generate inspection assertions for sprint stories using Claude
-  ipcMain.handle('state:generateSprintAssertions', async (event, { stories, plan }) => {
+  ipcMain.handle('state:generateSprintAssertions', async (event, { stories, plan, model }) => {
     try {
       console.log('[IPC] generateSprintAssertions called with', stories.length, 'stories')
 
@@ -663,7 +666,7 @@ function setupStateHandlers(ipcMain) {
       const result = await claudeService.generateInspectionAssertions(stories, plan, codingStandard, (msg) => {
         // Send progress updates to renderer
         event.sender.send('assertion-generation-progress', { message: msg })
-      })
+      }, model)
 
       if (!result.success) {
         console.error('[IPC] generateSprintAssertions failed:', result.error)
@@ -1423,7 +1426,8 @@ function setupClaudeHandlers(ipcMain) {
         projectPath,
         data.project,
         sendProgress,  // Pass progress callback
-        data.conversationContext  // Pass conversation context
+        data.conversationContext,  // Pass conversation context
+        data.model  // Pass selected model
       )
 
       console.log('[IPC] deriveStories result:', result?.success, 'stories:', result?.stories?.length || 0)
@@ -1459,7 +1463,8 @@ function setupClaudeHandlers(ipcMain) {
         data.stories,
         data.feedback,
         projectPath,
-        data.project
+        data.project,
+        data.model
       )
 
       if (result.success) {

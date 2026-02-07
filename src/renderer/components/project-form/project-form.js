@@ -348,6 +348,16 @@ export class ProjectFormComponent {
   }
 
   /**
+   * Re-initialize the form (called when view is re-activated)
+   */
+  reinitialize() {
+    // Reset initialization flag so form repopulates on next render
+    this._initialized = false
+    // Clear form reference to force rebinding on next init()
+    this.form = null
+  }
+
+  /**
    * Populate form with config data
    */
   populateForm(config) {

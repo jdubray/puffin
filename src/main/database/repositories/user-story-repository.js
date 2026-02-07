@@ -542,10 +542,15 @@ class UserStoryRepository extends BaseRepository {
   delete(id) {
     const db = this.getDb()
 
+    console.log(`[SQL-TRACE] DELETE REQUEST: story id=${id}`)
+
     return this.immediateTransaction(() => {
       // Always clean up sprint references to prevent orphaned data
       // Remove from sprint_stories junction table
-      db.prepare('DELETE FROM sprint_stories WHERE story_id = ?').run(id)
+      const junctionResult = db.prepare('DELETE FROM sprint_stories WHERE story_id = ?').run(id)
+      if (junctionResult.changes > 0) {
+        console.log(`[SQL-TRACE] Cleaned up ${junctionResult.changes} sprint_stories junction rows for story ${id}`)
+      }
 
       // Clean storyProgress JSON in active sprint
       const sprintRow = db.prepare(`
@@ -559,11 +564,13 @@ class UserStoryRepository extends BaseRepository {
           db.prepare(`
             UPDATE sprints SET story_progress = ? WHERE id = ?
           `).run(this.toJson(progress), sprintRow.id)
+          console.log(`[SQL-TRACE] Cleaned up storyProgress for story ${id} in active sprint`)
         }
       }
 
       // Delete the story
       const result = db.prepare('DELETE FROM user_stories WHERE id = ?').run(id)
+      console.log(`[SQL-TRACE] DELETE FROM user_stories WHERE id = ${id}, changes: ${result.changes}`)
       return result.changes > 0
     })
   }

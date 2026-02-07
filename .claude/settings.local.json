@@ -61,7 +61,11 @@
       "mcp__hdsl__hdsl_freshness",
       "WebSearch",
       "WebFetch(domain:docs.anthropic.com)",
-      "WebFetch(domain:claudelog.com)"
+      "WebFetch(domain:claudelog.com)",
+      "Bash(npm ls:*)",
+      "Bash(npx esbuild:*)",
+      "Bash(npm install:*)",
+      "Bash(git status:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

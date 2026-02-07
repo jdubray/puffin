@@ -210,7 +210,8 @@ export class ExcalidrawView {
    */
   _handleExcalidrawAPIReady(api) {
     this.excalidrawAPI = api
-    console.log('[ExcalidrawView] Excalidraw API ready')
+    console.log('[ExcalidrawView] Excalidraw API ready, API object:', api)
+    console.log('[ExcalidrawView] API methods:', api ? Object.keys(api) : 'none')
   }
 
   // ============ Overlay Tracking ============
@@ -773,16 +774,30 @@ export class ExcalidrawView {
    * @returns {Object} { elements, appState, files }
    */
   getSceneData() {
+    console.log('[ExcalidrawView] getSceneData called, excalidrawAPI:', !!this.excalidrawAPI)
     if (this.excalidrawAPI) {
+      const elements = this.excalidrawAPI.getSceneElements() || []
+      const rawAppState = this.excalidrawAPI.getAppState() || {}
+      console.log('[ExcalidrawView] Got scene elements from API:', elements.length, 'elements')
+
+      // Strip non-serializable and problematic properties from appState
+      // collaborators is a Map at runtime but becomes plain object after JSON serialization,
+      // causing "collaborators.forEach is not a function" errors
+      const { collaborators, ...appState } = rawAppState
+
       return {
-        elements: this.excalidrawAPI.getSceneElements() || [],
-        appState: this.excalidrawAPI.getAppState() || {},
+        elements,
+        appState,
         files: this.excalidrawAPI.getFiles() || {}
       }
     }
+    console.warn('[ExcalidrawView] excalidrawAPI not available, using fallback internal state')
+
+    // Also strip collaborators from fallback state
+    const { collaborators, ...appState } = this.appState || {}
     return {
       elements: this.elements,
-      appState: this.appState,
+      appState,
       files: this.files
     }
   }
@@ -820,18 +835,59 @@ export class ExcalidrawView {
       const result = await window.puffin.plugins.invoke('excalidraw-plugin', 'loadDesign', filename)
       const { scene, meta } = result
 
+      console.log('[ExcalidrawView] Loaded scene data:', {
+        elementsCount: scene.elements?.length,
+        hasAppState: !!scene.appState,
+        filesType: typeof scene.files,
+        filesValue: scene.files,
+        filesIsArray: Array.isArray(scene.files)
+      })
+
       this.elements = scene.elements || []
-      this.appState = scene.appState || {}
-      this.files = scene.files || {}
+      // Strip collaborators from loaded appState to prevent "forEach is not a function" error
+      // (collaborators is a Map at runtime but becomes plain object after JSON serialization)
+      const { collaborators, ...cleanAppState } = scene.appState || {}
+      this.appState = cleanAppState
+      // Ensure files is an object, not an array or other type
+      this.files = (scene.files && typeof scene.files === 'object' && !Array.isArray(scene.files)) ? scene.files : {}
       this.currentFilename = filename
+
+      console.log('[ExcalidrawView] Prepared data for updateScene:', {
+        elementsCount: this.elements.length,
+        filesType: typeof this.files,
+        filesKeys: Object.keys(this.files),
+        strippedCollaborators: !!collaborators
+      })
 
       // Update Excalidraw canvas if API is available
       if (this.excalidrawAPI) {
-        this.excalidrawAPI.updateScene({
+        const sceneData = {
           elements: this.elements,
           appState: this.appState
+        }
+        // Only include files if non-empty (Excalidraw expects files to be omitted rather than {})
+        if (this.files && Object.keys(this.files).length > 0) {
+          sceneData.files = this.files
+        }
+        console.log('[ExcalidrawView] Calling updateScene with:', {
+          elementsCount: sceneData.elements.length,
+          hasFiles: 'files' in sceneData,
+          filesKeys: sceneData.files ? Object.keys(sceneData.files) : []
         })
-        this.excalidrawAPI.scrollToContent()
+        try {
+          this.excalidrawAPI.updateScene(sceneData)
+          console.log('[ExcalidrawView] updateScene completed successfully')
+        } catch (updateError) {
+          console.error('[ExcalidrawView] updateScene failed:', updateError)
+          throw updateError
+        }
+        try {
+          this.excalidrawAPI.scrollToContent()
+          console.log('[ExcalidrawView] scrollToContent completed successfully')
+        } catch (scrollError) {
+          console.error('[ExcalidrawView] scrollToContent failed:', scrollError)
+          throw scrollError
+        }
       }
 
       this.updateCanvasPlaceholder()
@@ -1141,6 +1197,7 @@ export class ExcalidrawView {
    * Toggle between light and dark themes
    */
   toggleTheme() {
+    console.log('[ExcalidrawView] toggleTheme called, current theme:', this.theme, 'excalidrawAPI:', !!this.excalidrawAPI)
     this.theme = this.theme === 'dark' ? 'light' : 'dark'
     this.appState = { ...this.appState, theme: this.theme }
 
@@ -1151,9 +1208,12 @@ export class ExcalidrawView {
     }
 
     if (this.excalidrawAPI) {
+      console.log('[ExcalidrawView] Updating Excalidraw scene with theme:', this.theme)
       this.excalidrawAPI.updateScene({
         appState: { theme: this.theme }
       })
+    } else {
+      console.warn('[ExcalidrawView] excalidrawAPI not available, cannot update theme')
     }
 
     const canvasEl = this.container.querySelector('.excalidraw-canvas-container')

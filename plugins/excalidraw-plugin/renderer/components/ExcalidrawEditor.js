@@ -49,7 +49,7 @@ class ExcalidrawEditor {
           onChange(elements, appState, files)
         }
       },
-      ref: (api) => {
+      excalidrawAPI: (api) => {
         if (api && onAPIReady) {
           onAPIReady(api)
         }

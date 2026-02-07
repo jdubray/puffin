@@ -607,6 +607,10 @@ function registerHandlers(ipcMain) {
   // the ephemeral sprint.risMap (which is lost on restart).
   ipcMain.handle('cre:list-ris-story-ids', async () => {
     try {
+      if (!ctx || !ctx.db) {
+        console.warn('[CRE] cre:list-ris-story-ids called before initialization');
+        return { success: false, storyIds: [] };
+      }
       const rows = ctx.db.prepare(
         'SELECT DISTINCT story_id FROM ris WHERE content IS NOT NULL AND content != \'\''
       ).all();

@@ -2,10 +2,11 @@
 
 /**
  * @module cre/assertion-generator
- * AssertionGenerator — creates and verifies inspection assertions for plan items.
+ * AssertionGenerator — creates and verifies inspection assertions.
  *
- * Generates InspectionAssertion[] from plan items using AI prompt templates,
- * then verifies them against the codebase returning pass/fail/pending results.
+ * Generates InspectionAssertion[] from RIS documents (preferred) or plan items
+ * (legacy fallback) using AI prompt templates, then verifies them against
+ * the codebase returning pass/fail/pending results.
  *
  * Supported assertion types:
  *   - file_exists: Check that a file or directory exists
@@ -81,36 +82,54 @@ class AssertionGenerator {
   }
 
   /**
-   * AC2: Generate InspectionAssertion[] for a plan item using AI prompt.
+   * AC2: Generate InspectionAssertion[] using AI prompt.
    *
-   * In production, the returned prompt would be sent to the AI and the
-   * response parsed. For now, this stores any provided assertions and
-   * returns the prompt for the caller to process.
+   * Prefers RIS-based generation (risMarkdown parameter or loaded from DB).
+   * Falls back to plan-based generation if no RIS is available.
    *
    * @param {Object} params
-   * @param {Object} params.planItem - Plan item with storyId, approach, files.
    * @param {Object} params.story - Story with id, title, description, acceptanceCriteria.
    * @param {string} params.planId - The plan ID (FK for DB storage).
+   * @param {string} [params.storyId] - Story ID (alternative to story.id).
+   * @param {string} [params.risMarkdown] - RIS markdown content (preferred context source).
+   * @param {Object} [params.planItem] - Legacy: plan item (fallback if no RIS).
    * @param {Object} [params.codeModelContext] - Code model context string.
    * @param {Array<Object>} [params.assertions] - Pre-computed assertions to store directly.
    * @returns {Promise<{ prompt: Object, assertions: Array<Object> }>}
    */
-  async generate({ planItem, story, planId, codeModelContext = '', assertions = null }) {
-    if (!planItem || !story || !planId) {
-      throw new Error('planItem, story, and planId are required');
+  async generate({ story, planId, storyId: explicitStoryId, risMarkdown, planItem, codeModelContext = '', assertions = null }) {
+    if (!story || !planId) {
+      throw new Error('story and planId are required');
     }
 
-    const storyId = story.id || planItem.storyId;
+    const storyId = explicitStoryId || story.id || (planItem && planItem.storyId);
     if (!storyId) {
-      throw new Error('story.id or planItem.storyId is required');
+      throw new Error('storyId, story.id, or planItem.storyId is required');
+    }
+
+    // Try to load RIS from DB if not provided directly
+    let ris = risMarkdown || '';
+    if (!ris) {
+      try {
+        const risRecord = this._db.prepare(
+          'SELECT content FROM ris WHERE story_id = ? AND plan_id = ? ORDER BY created_at DESC LIMIT 1'
+        ).get(storyId, planId);
+        if (risRecord && risRecord.content) {
+          ris = risRecord.content;
+          console.log(`[CRE-ASSERT] Loaded RIS from DB for story ${storyId} (${ris.length} chars)`);
+        }
+      } catch (err) {
+        console.warn(`[CRE-ASSERT] Could not load RIS from DB: ${err.message}`);
+      }
     }
 
     // Build prompt for AI (AC2)
     // Disable tool guidance — sendPrompt runs a one-shot CLI process without
     // MCP server connections, so hdsl_* tools are not available.
     const prompt = this._promptBuilders.generateAssertions.buildPrompt({
-      planItem,
       story,
+      risMarkdown: ris,
+      planItem: planItem || null,
       codeModelContext,
       includeToolGuidance: false
     });

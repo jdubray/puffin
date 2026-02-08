@@ -4780,10 +4780,10 @@ Keep it concise but informative. Use markdown formatting.`
       { id: 'approve', label: 'Approving plan' }
     ]
     for (let i = 0; i < stories.length; i++) {
-      progressSteps.push({ id: `assert-${i}`, label: `Assertions: ${stories[i].title}` })
+      progressSteps.push({ id: `ris-${i}`, label: `RIS: ${stories[i].title}` })
     }
     for (let i = 0; i < stories.length; i++) {
-      progressSteps.push({ id: `ris-${i}`, label: `RIS: ${stories[i].title}` })
+      progressSteps.push({ id: `assert-${i}`, label: `Assertions: ${stories[i].title}` })
     }
     progressSteps.push({ id: 'complete', label: 'Finalizing' })
 
@@ -4798,30 +4798,55 @@ Keep it concise but informative. Use markdown formatting.`
       }
       this.updateCreProgressStep('approve', 'completed')
 
-      // Step 2: Generate inspection assertions for each story (before RIS so they get included)
+      // Step 2: Generate RIS for each story (RIS first — assertions derive from RIS content)
+      const risMap = {}
+
+      // Get the plan synthetic prompt ID to thread RIS entries under it
+      const planPromptId = this.state?.history?.activePromptId || null
+
+      for (let i = 0; i < stories.length; i++) {
+        const story = stories[i]
+        const stepId = `ris-${i}`
+        this.updateCreProgressStep(stepId, 'active', `Generating RIS for "${story.title}"...`)
+
+        const risResult = await window.puffin.cre.generateRis({ planId, storyId: story.id })
+        if (risResult.success) {
+          risMap[story.id] = risResult.data
+          this.updateCreProgressStep(stepId, 'completed')
+        } else {
+          console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
+          risMap[story.id] = { error: risResult.error }
+          this.updateCreProgressStep(stepId, 'error', 'Failed')
+        }
+      }
+
+      // Step 3: Generate inspection assertions for each story (from RIS content)
+      // Track which stories had successful RIS generation — skip assertions for failed RIS
+      const risSuccessIds = new Set(
+        Object.entries(risMap)
+          .filter(([, data]) => data && !data.error)
+          .map(([id]) => id)
+      )
+      console.log(`[CRE] RIS generation succeeded for ${risSuccessIds.size}/${stories.length} stories`)
+
       for (let i = 0; i < stories.length; i++) {
         const story = stories[i]
         const stepId = `assert-${i}`
-        this.updateCreProgressStep(stepId, 'active', `Generating assertions for "${story.title}"...`)
 
-        const planItem = planItems.find(p => p.storyId === story.id) || {
-          storyId: story.id,
-          approach: '',
-          filesCreated: [],
-          filesModified: [],
-          dependencies: []
+        // AC6: Skip assertion generation if RIS failed for this story
+        if (!risSuccessIds.has(story.id)) {
+          console.warn(`[CRE] Skipping assertion generation for story ${story.id} — RIS generation failed`)
+          this.updateCreProgressStep(stepId, 'error', 'Skipped (no RIS)')
+          continue
         }
 
+        this.updateCreProgressStep(stepId, 'active', `Generating assertions for "${story.title}"...`)
+
+        // Assertions load RIS from DB automatically via the CRE handler.
+        // Only storyId + planId are needed — handler loads story and RIS from DB.
         const assertResult = await window.puffin.cre.generateAssertions({
           planId,
-          storyId: story.id,
-          planItem,
-          story: {
-            id: story.id,
-            title: story.title,
-            description: story.description || '',
-            acceptanceCriteria: story.acceptanceCriteria || []
-          }
+          storyId: story.id
         })
 
         if (assertResult.success) {
@@ -4849,9 +4874,6 @@ Keep it concise but informative. Use markdown formatting.`
           this.intents.loadUserStories(storiesResult.stories)
 
           // Also sync assertions from fresh DB data to sprint stories.
-          // The SAM updateSprintStoryAssertionsAcceptor sets them in-memory during the loop
-          // above, but if anything went wrong (story not found, race condition), the sprint
-          // stories could still have stale empty arrays. Belt-and-suspenders: copy from DB.
           const currentSprint = this.state?.activeSprint
           if (currentSprint?.stories) {
             for (const sprintStory of currentSprint.stories) {
@@ -4869,30 +4891,6 @@ Keep it concise but informative. Use markdown formatting.`
         console.warn('[CRE] Failed to refresh stories from DB:', refreshError)
       }
 
-      // Step 3: Generate RIS for each story (assertions are now in DB and will be included)
-      const risMap = {}
-
-      // Get the plan synthetic prompt ID to thread RIS entries under it
-      const planPromptId = this.state?.history?.activePromptId || null
-
-      for (let i = 0; i < stories.length; i++) {
-        const story = stories[i]
-        const stepId = `ris-${i}`
-        this.updateCreProgressStep(stepId, 'active', `Generating RIS for "${story.title}"...`)
-
-        const risResult = await window.puffin.cre.generateRis({ planId, storyId: story.id })
-        if (risResult.success) {
-          risMap[story.id] = risResult.data
-          this.updateCreProgressStep(stepId, 'completed')
-
-          // RIS is stored in DB via cre:generate-ris and viewable from the story card
-        } else {
-          console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
-          risMap[story.id] = { error: risResult.error }
-          this.updateCreProgressStep(stepId, 'error', 'Failed')
-        }
-      }
-
       // Finalize
       this.updateCreProgressStep('complete', 'completed')
 
@@ -4900,7 +4898,7 @@ Keep it concise but informative. Use markdown formatting.`
       this.intents.crePlanningComplete(sprint.crePlan, risMap, storyOrder)
       this.intents.approvePlan()
       this.hideCreProgressModal()
-      this.showToast('CRE: Plan approved, assertions generated, and RIS ready', 'success')
+      this.showToast('CRE: Plan approved, RIS generated, and assertions ready', 'success')
     } catch (err) {
       console.error('[CRE] Plan approval failed:', err.message)
       this.hideCreProgressModal()

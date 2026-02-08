@@ -4,12 +4,11 @@
  * @module ris-formatter
  * Formats RIS (Refined Implementation Specification) data into markdown.
  *
- * A RIS document has five sections:
+ * A RIS document has four sections:
  *   1. Context — branch, dependencies, code model version
  *   2. Objective — what the implementation achieves
  *   3. Instructions — step-by-step implementation guide
  *   4. Conventions — coding standards and patterns
- *   5. Assertions — inspection assertion checklist
  */
 
 /**
@@ -23,10 +22,6 @@
  * @param {string} risData.objective - What this implementation achieves.
  * @param {Array<string>} risData.instructions - Ordered implementation steps.
  * @param {Array<string>} [risData.conventions] - Coding conventions to follow.
- * @param {Array<Object>} [risData.assertions] - Inspection assertions.
- * @param {string} risData.assertions[].message - Assertion description.
- * @param {string} [risData.assertions[].type] - Assertion type.
- * @param {string} [risData.assertions[].target] - Target file path.
  * @returns {string} Formatted markdown string.
  */
 function formatRis(risData) {
@@ -34,8 +29,7 @@ function formatRis(risData) {
     formatContext(risData.context || {}),
     formatObjective(risData.objective || ''),
     formatInstructions(risData.instructions || []),
-    formatConventions(risData.conventions || []),
-    formatAssertions(risData.assertions || [])
+    formatConventions(risData.conventions || [])
   ];
 
   return sections.join('\n\n');
@@ -92,26 +86,10 @@ function formatConventions(conventions) {
   return `## Conventions\n\n${items}`;
 }
 
-/**
- * @param {Array<Object>} assertions
- * @returns {string}
- */
-function formatAssertions(assertions) {
-  if (assertions.length === 0) {
-    return '## Assertions\n\nNo assertions defined.';
-  }
-  const checks = assertions.map(a => {
-    const suffix = a.target ? ` (\`${a.target}\`)` : '';
-    return `- [ ] ${a.message}${suffix}`;
-  }).join('\n');
-  return `## Assertions\n\n${checks}`;
-}
-
 module.exports = {
   formatRis,
   formatContext,
   formatObjective,
   formatInstructions,
-  formatConventions,
-  formatAssertions
+  formatConventions
 };

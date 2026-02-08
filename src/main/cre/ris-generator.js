@@ -4,7 +4,7 @@
  * @module cre/ris-generator
  * RISGenerator — produces Ready-to-Implement Specifications for user stories.
  *
- * Orchestrates code model queries, branch memory reads, assertion loading,
+ * Orchestrates code model queries, branch memory reads,
  * and AI prompt generation to produce context-rich RIS markdown documents.
  */
 
@@ -86,16 +86,12 @@ class RISGenerator {
     // 4. AC3: Query code model for relevant artifacts
     const codeContext = this.consultModel(userStoryId, planItem);
 
-    // 5. Load assertions for this story
-    const assertions = this._loadAssertions(userStoryId);
-
-    // 6. Build prompt
+    // 5. Build prompt
     // Disable tool guidance — sendPrompt runs a one-shot CLI process without
     // MCP server connections, so hdsl_* tools are not available.
     const prompt = generateRisPrompt.buildPrompt({
       planItem,
       story: parsedStory,
-      assertions,
       codeModelContext: codeContext.formatted,
       projectConfig: { branch },
       includeToolGuidance: false
@@ -118,8 +114,7 @@ class RISGenerator {
           context: { branch, dependencies: planItem.dependencies || [], codeModelVersion: this._codeModel.schemaVersion },
           objective: aiResult.data.sections.objective || `Implement "${parsedStory.title}"`,
           instructions: [aiResult.data.sections.instructions || ''],
-          conventions: [aiResult.data.sections.conventions || ''],
-          assertions: assertions.map(a => ({ message: a.message || a.description || '', type: a.type, target: a.target }))
+          conventions: [aiResult.data.sections.conventions || '']
         });
       }
       console.log(`[CRE-RIS] AI generated RIS for story ${userStoryId} (${markdown.length} chars)`);
@@ -134,12 +129,7 @@ class RISGenerator {
         },
         objective: `Implement "${parsedStory.title}": ${parsedStory.description}`,
         instructions: this._buildInstructions(planItem),
-        conventions: ['Follow camelCase naming', 'Use JSDoc for public interfaces', 'Follow existing patterns in the codebase'],
-        assertions: assertions.map(a => ({
-          message: a.message || a.description || '',
-          type: a.type,
-          target: a.target
-        }))
+        conventions: ['Follow camelCase naming', 'Use JSDoc for public interfaces', 'Follow existing patterns in the codebase']
       };
       markdown = formatRis(risData);
     }
@@ -223,21 +213,6 @@ class RISGenerator {
       return await fs.readFile(memoryPath, 'utf-8');
     } catch {
       return '';
-    }
-  }
-
-  /**
-   * Load inspection assertions for a story from DB.
-   * @param {string} storyId
-   * @returns {Array<Object>}
-   */
-  _loadAssertions(storyId) {
-    try {
-      return this._db.prepare(
-        'SELECT * FROM inspection_assertions WHERE story_id = ? ORDER BY created_at'
-      ).all(storyId);
-    } catch {
-      return [];
     }
   }
 

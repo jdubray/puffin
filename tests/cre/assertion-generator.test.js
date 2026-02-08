@@ -137,8 +137,8 @@ describe('AssertionGenerator - generate (AC2)', () => {
   });
 
   it('should throw on missing required params', async () => {
-    await assert.rejects(() => gen.generate({}), { message: /planItem, story, and planId are required/ });
-    await assert.rejects(() => gen.generate({ planItem: { approach: 'test' }, story: {}, planId: 'p1' }), { message: /storyId is required/ });
+    await assert.rejects(() => gen.generate({}), { message: /story and planId are required/ });
+    await assert.rejects(() => gen.generate({ story: {}, planId: 'p1' }), { message: /storyId is required/ });
   });
 
   it('should reject unsupported assertion type (AC3)', async () => {

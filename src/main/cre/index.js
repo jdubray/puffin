@@ -313,15 +313,34 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:generate-assertions', async (_event, args) => {
     try {
-      const { planId, storyId, planItem, story, assertions: providedAssertions } = args || {};
-      if (!planId || !storyId || !planItem || !story) {
-        return { success: false, error: 'planId, storyId, planItem, and story are required' };
+      const { planId, storyId, planItem, story: providedStory, assertions: providedAssertions } = args || {};
+      if (!planId || !storyId) {
+        return { success: false, error: 'planId and storyId are required' };
       }
+
+      // Load story from DB if not provided by the caller
+      let story = providedStory;
+      if (!story) {
+        const row = ctx.db.prepare('SELECT * FROM user_stories WHERE id = ?').get(storyId);
+        if (!row) {
+          return { success: false, error: `Story ${storyId} not found` };
+        }
+        story = {
+          id: row.id,
+          title: row.title,
+          description: row.description || '',
+          acceptanceCriteria: JSON.parse(row.acceptance_criteria || '[]')
+        };
+      } else {
+        story = { ...story, id: storyId };
+      }
+
       return await withProcessLock(async () => {
         const result = await assertionGenerator.generate({
-          planItem,
-          story: { ...story, id: storyId },
+          story,
           planId,
+          storyId,
+          planItem: planItem || null,
           assertions: providedAssertions || null
         });
 

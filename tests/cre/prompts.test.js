@@ -145,7 +145,7 @@ describe('generate-assertions (DERIVE)', () => {
 describe('generate-ris (FOLLOW)', () => {
   it('references RIS markdown sections', () => {
     const { constraints } = buildFor('generate-ris');
-    for (const section of ['Context', 'Objective', 'Instructions', 'Conventions', 'Assertions']) {
+    for (const section of ['Context', 'Objective', 'Instructions', 'Conventions']) {
       assert.ok(constraints.includes(section), `should reference ${section} section`);
     }
   });

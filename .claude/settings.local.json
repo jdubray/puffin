@@ -65,7 +65,8 @@
       "Bash(npm ls:*)",
       "Bash(npx esbuild:*)",
       "Bash(npm install:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(gh pr create --base main --head release/3.0.0 --title \"Release 3.0.0\" --body \"$\\(cat <<''EOF''\n## Summary\n- **Excalidraw Plugin**: AI-powered diagram generation with full sketcher integration\n- **CRE \\(Central Reasoning Engine\\)**: Plan generation, assertion generation, RIS generation with h-DSL code model integration\n- **RLM Document Plugin**: Recursive Language Model plugin with chunk-based document analysis, REPL integration, and export capabilities\n- **Memory Plugin**: Branch memory management with extraction, evolution, and maintenance\n- **Outcome Lifecycle Plugin**: DAG-based outcome tracking with synthesis engine\n- **h-DSL Engine**: Independent code metamodel engine with MCP tool server, pattern discovery, and impact analysis\n- **h-DSL Viewer Plugin**: Visual code model explorer\n- **Sprint Orchestration**: Enhanced story implementation flow with completion summaries, assertion evaluation, and code review\n- **Documentation**: Complete reorganization into structured subdirectories \\(design/, plans/, reference/, research/, specifications/, summaries/\\)\n- **Bug Fixes**: Assertion persistence, process cancellation on Windows, CLI JSON arg handling, tool exploration prevention, and many more\n\n## Test plan\n- [ ] Verify Excalidraw plugin loads and generates diagrams\n- [ ] Verify CRE plan/assertion/RIS generation pipeline\n- [ ] Verify RLM document plugin chunk analysis\n- [ ] Verify sprint orchestration end-to-end flow\n- [ ] Run existing test suites: `npm test`\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\")"
     ]
   },
   "enableAllProjectMcpServers": true,

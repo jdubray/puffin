@@ -424,6 +424,34 @@ export class UserStoriesComponent {
       // Track active sprint state for single-sprint enforcement
       this.hasActiveSprint = !!state.activeSprint
       this.activeSprintTitle = state.activeSprint?.title || null
+      // Populate risAvailable from in-memory risMap first (covers current session),
+      // then asynchronously refresh from DB (covers restarts where risMap is lost).
+      this.risAvailable = new Set(Object.keys(state.activeSprint?.risMap || {}).filter(id => {
+        const ris = state.activeSprint.risMap[id]
+        return ris && !ris.error
+      }))
+      // Async DB refresh: load RIS story IDs from the ris table (persisted across restarts)
+      if (window.puffin?.cre?.listRisStoryIds) {
+        window.puffin.cre.listRisStoryIds().then(result => {
+          if (result.success && result.storyIds?.length > 0) {
+            let changed = false
+            for (const id of result.storyIds) {
+              if (!this.risAvailable.has(id)) {
+                this.risAvailable.add(id)
+                changed = true
+              }
+            }
+            if (changed) this.render()
+          }
+        }).catch(() => { /* non-critical */ })
+      }
+      const sprintStories = state.activeSprint?.stories || []
+      const backlogStories = state.userStories || []
+      this.summaryAvailable = new Set(
+        [...sprintStories, ...backlogStories]
+          .filter(s => s.status === 'completed' && s.completionSummary)
+          .map(s => s.id)
+      )
 
       // Reload sprint history after state is loaded (database is now ready)
       if (actionType === 'LOAD_STATE' && this.sprintHistory.length === 0) {
@@ -490,6 +518,7 @@ export class UserStoriesComponent {
         </div>
         <div class="sprint-card-footer">
           <span class="sprint-card-count">${storyCount} ${storyCount === 1 ? 'story' : 'stories'}</span>
+          <a href="#" class="sprint-plan-link" data-sprint-id="${sprint.id}" title="View sprint plan">Plan</a>
           <span class="sprint-card-status" aria-label="${this.getStatusLabel(statusClass)}">${this.getStatusLabel(statusClass)}</span>
         </div>
       </div>
@@ -594,6 +623,33 @@ export class UserStoriesComponent {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           tile.click()
+        }
+      })
+    })
+
+    // Plan link handler
+    this.sprintTilesList.querySelectorAll('.sprint-plan-link').forEach(link => {
+      link.addEventListener('click', async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const sprintId = link.dataset.sprintId
+        try {
+          const result = await window.puffin.cre.getPlan({ sprintId })
+          if (result.success && result.data) {
+            this.intents.showModal('plan-review', {
+              plan: result.data,
+              stories: result.data.stories || [],
+              sprintId,
+              readOnly: true
+            })
+          } else {
+            this.intents.showModal('alert', {
+              title: 'No Plan Found',
+              message: 'No CRE plan was generated for this sprint.'
+            })
+          }
+        } catch (err) {
+          console.error('[USER-STORIES] Failed to load plan:', err)
         }
       })
     })
@@ -720,6 +776,7 @@ export class UserStoriesComponent {
     const archivedStories = filtered.filter(s => s.status === 'archived')
 
     this.listContainer.innerHTML = `
+      <div class="kanban-action-bar-anchor"></div>
       <div class="kanban-container">
         <div class="kanban-swimlane pending">
           <div class="kanban-swimlane-header">
@@ -915,7 +972,7 @@ export class UserStoriesComponent {
     const canImplement = story.status === 'pending' // Only pending stories can be started
     const canComplete = story.status === 'in-progress' // Only in-progress stories can be completed
     const canReopen = story.status === 'completed' || story.status === 'archived' // Completed/archived stories can be reopened
-    const canArchive = story.status === 'completed' // Completed stories can be archived manually
+    const canArchive = story.status !== 'archived' // Any non-archived story can be archived
     const isArchived = story.status === 'archived'
     const isKanban = this.currentView === VIEW_MODES.KANBAN
     const isDraggable = isKanban && !isArchived && this.isDragDropSupported()
@@ -963,6 +1020,8 @@ export class UserStoriesComponent {
           <span class="story-date">${this.formatDate(story.createdAt)}</span>
           ${story.branchId ? `<span class="story-branch">${this.formatBranchName(story.branchId)}</span>` : ''}
           ${story.sourcePromptId ? '<span class="story-source">Auto-extracted</span>' : ''}
+          ${this.risAvailable?.has(story.id) ? `<a href="#" class="story-ris-link" data-story-id="${story.id}" title="View Refined Implementation Specification">RIS</a>` : ''}
+          ${this.summaryAvailable?.has(story.id) ? `<a href="#" class="story-summary-link" data-story-id="${story.id}" title="View Completion Summary">Summary</a>` : ''}
         </div>
       </div>
     `
@@ -1059,6 +1118,35 @@ export class UserStoriesComponent {
         const card = e.target.closest('.story-card')
         const storyId = card.dataset.storyId
         this.archiveStory(storyId)
+      })
+    })
+
+    // View RIS link
+    this.listContainer.querySelectorAll('.story-ris-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const storyId = link.dataset.storyId
+        const story = this.stories.find(s => s.id === storyId)
+        this.intents.showModal('ris-view', {
+          storyId,
+          storyTitle: story?.title || 'Unknown'
+        })
+      })
+    })
+
+    // View completion summary link
+    this.listContainer.querySelectorAll('.story-summary-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const storyId = link.dataset.storyId
+        const story = this.stories.find(s => s.id === storyId)
+        this.intents.showModal('completion-summary-view', {
+          storyId,
+          storyTitle: story?.title || 'Unknown',
+          completionSummary: story?.completionSummary || null
+        })
       })
     })
 
@@ -1299,8 +1387,16 @@ export class UserStoriesComponent {
     if (!actionBar) {
       actionBar = document.createElement('div')
       actionBar.className = 'backlog-action-bar'
-      const toolbar = this.container.querySelector('.user-stories-toolbar')
-      toolbar.parentNode.insertBefore(actionBar, toolbar.nextSibling)
+
+      // In kanban view, insert inside the kanban container before the pending swimlane
+      const kanbanAnchor = this.container.querySelector('.kanban-action-bar-anchor')
+      if (kanbanAnchor) {
+        kanbanAnchor.parentNode.insertBefore(actionBar, kanbanAnchor)
+      } else {
+        // In list view, insert after the toolbar
+        const toolbar = this.container.querySelector('.user-stories-toolbar')
+        toolbar.parentNode.insertBefore(actionBar, toolbar.nextSibling)
+      }
     }
 
     // Determine if Create Sprint button should be disabled
@@ -1309,16 +1405,29 @@ export class UserStoriesComponent {
       ? `Cannot create: "${this.activeSprintTitle || 'Active sprint'}" is in progress. Close it first.`
       : 'Create a new sprint from selected stories'
 
+    // Count pending stories for "Select All" button
+    const pendingStories = this.getFilteredStories().filter(s => s.status === 'pending')
+    const allSelected = pendingStories.length > 0 && pendingStories.every(s => this.selectedStoryIds.has(s.id))
+
     actionBar.innerHTML = `
-      <span class="selection-count">${this.selectedStoryIds.size} ${this.selectedStoryIds.size === 1 ? 'story' : 'stories'} selected</span>
-      <div class="action-buttons">
-        <button class="btn secondary clear-selection-btn">Clear Selection</button>
-        <button class="btn primary create-sprint-btn" ${sprintBtnDisabled ? 'disabled' : ''} title="${sprintBtnTitle}">Create Sprint</button>
+      <div class="action-bar-content">
+        <div class="action-buttons">
+          <button class="btn secondary select-all-btn" ${allSelected ? 'disabled' : ''} title="${allSelected ? 'All pending stories already selected' : 'Select all pending stories'}">Select All</button>
+          <button class="btn secondary clear-selection-btn">Clear All</button>
+          <button class="btn primary create-sprint-btn" ${sprintBtnDisabled ? 'disabled' : ''} title="${sprintBtnTitle}">Create Sprint</button>
+        </div>
+        <span class="selection-count">${this.selectedStoryIds.size} ${this.selectedStoryIds.size === 1 ? 'user story' : 'user stories'} selected</span>
       </div>
-      ${sprintBtnDisabled ? `<span class="sprint-warning">Close active sprint to create a new one</span>` : ''}
+      ${sprintBtnDisabled ? `<div class="sprint-warning">Close active sprint to create a new one</div>` : ''}
     `
 
     // Bind action bar events
+    actionBar.querySelector('.select-all-btn').addEventListener('click', () => {
+      if (!allSelected) {
+        this.selectAllPending()
+      }
+    })
+
     actionBar.querySelector('.clear-selection-btn').addEventListener('click', () => {
       this.clearSelection()
     })
@@ -1329,6 +1438,15 @@ export class UserStoriesComponent {
         this.createSprint()
       }
     })
+  }
+
+  /**
+   * Select all pending stories
+   */
+  selectAllPending() {
+    const pendingStories = this.getFilteredStories().filter(s => s.status === 'pending')
+    pendingStories.forEach(s => this.selectedStoryIds.add(s.id))
+    this.render()
   }
 
   /**
@@ -1464,7 +1582,7 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Archive a completed story
+   * Archive a story (moves to archived status)
    */
   archiveStory(storyId) {
     this.intents.updateUserStory(storyId, { status: 'archived' })
@@ -1474,8 +1592,12 @@ export class UserStoriesComponent {
    * Delete a story
    */
   deleteStory(storyId) {
+    console.log('[DELETE-DEBUG] deleteStory called for storyId:', storyId)
     if (confirm('Are you sure you want to delete this story?')) {
+      console.log('[DELETE-DEBUG] Confirmation accepted, dispatching DELETE_USER_STORY action')
       this.intents.deleteUserStory(storyId)
+    } else {
+      console.log('[DELETE-DEBUG] Confirmation cancelled, no action dispatched')
     }
   }
 

@@ -706,6 +706,51 @@ class GitService {
       return { success: false, error: error.message }
     }
   }
+
+  /**
+   * Check for active (executable) Git hooks in the repository
+   * @returns {Promise<{hasActiveHooks: boolean, hooks: Array<string>}>}
+   */
+  async checkForActiveGitHooks() {
+    if (!this.projectPath) {
+      return { hasActiveHooks: false, hooks: [] }
+    }
+
+    const hooksDir = path.join(this.projectPath, '.git', 'hooks')
+
+    try {
+      const entries = await fs.readdir(hooksDir, { withFileTypes: true })
+      const activeHooks = []
+
+      for (const entry of entries) {
+        // Skip .sample files (these are inactive templates)
+        if (entry.name.endsWith('.sample')) continue
+
+        // Check if it's a file (not a directory)
+        if (!entry.isFile()) continue
+
+        const hookPath = path.join(hooksDir, entry.name)
+        try {
+          const stats = await fs.stat(hookPath)
+          // On Unix-like systems, check if executable bit is set
+          // On Windows, just check if it's a non-sample file in hooks/
+          if (process.platform === 'win32' || (stats.mode & 0o111) !== 0) {
+            activeHooks.push(entry.name)
+          }
+        } catch {
+          // Skip files we can't stat
+        }
+      }
+
+      return {
+        hasActiveHooks: activeHooks.length > 0,
+        hooks: activeHooks
+      }
+    } catch (error) {
+      // .git/hooks doesn't exist or isn't readable
+      return { hasActiveHooks: false, hooks: [] }
+    }
+  }
 }
 
 module.exports = { GitService, DEFAULT_GIT_SETTINGS }

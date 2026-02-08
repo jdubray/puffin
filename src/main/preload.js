@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('puffin', {
     // Inspection assertion evaluation
     evaluateStoryAssertions: (storyId) => ipcRenderer.invoke('state:evaluateStoryAssertions', storyId),
     getAssertionResults: (storyId) => ipcRenderer.invoke('state:getAssertionResults', storyId),
+    syncAssertionsFromCreTable: (storyIds) => ipcRenderer.invoke('state:syncAssertionsFromCreTable', storyIds),
     evaluateSingleAssertion: (storyId, assertionId) =>
       ipcRenderer.invoke('state:evaluateSingleAssertion', { storyId, assertionId }),
 
@@ -93,8 +94,8 @@ contextBridge.exposeInMainWorld('puffin', {
     getAssertionPatterns: () => ipcRenderer.invoke('state:getAssertionPatterns'),
 
     // Generate assertions for sprint stories using Claude (called after plan approval)
-    generateSprintAssertions: (stories, plan) =>
-      ipcRenderer.invoke('state:generateSprintAssertions', { stories, plan }),
+    generateSprintAssertions: (stories, plan, model) =>
+      ipcRenderer.invoke('state:generateSprintAssertions', { stories, plan, model }),
 
     // Event listener for sprint assertion generation progress
     onAssertionGenerationProgress: (callback) => {
@@ -114,6 +115,12 @@ contextBridge.exposeInMainWorld('puffin', {
       ipcRenderer.on('assertion-evaluation-complete', handler)
       return () => ipcRenderer.removeListener('assertion-evaluation-complete', handler)
     },
+
+    // Completion summary operations
+    storeCompletionSummary: (storyId, summary) =>
+      ipcRenderer.invoke('state:storeCompletionSummary', { storyId, summary }),
+    getCompletionSummary: (storyId) =>
+      ipcRenderer.invoke('state:getCompletionSummary', storyId),
 
     // Design document operations
     getDesignDocuments: () => ipcRenderer.invoke('state:getDesignDocuments'),
@@ -265,6 +272,16 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('claude:error', handler)
     },
 
+    // Subscribe to question events (AskUserQuestion from Claude)
+    onQuestion: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('claude:question', handler)
+      return () => ipcRenderer.removeListener('claude:question', handler)
+    },
+
+    // Send answer to a pending question
+    answerQuestion: (data) => ipcRenderer.invoke('claude:answer', data),
+
     // Subscribe to raw JSON messages (for CLI Output view)
     onRawMessage: (callback) => {
       const handler = (event, jsonLine) => callback(jsonLine)
@@ -320,7 +337,8 @@ contextBridge.exposeInMainWorld('puffin', {
   file: {
     export: (data) => ipcRenderer.invoke('file:export', data),
     import: (type) => ipcRenderer.invoke('file:import', type),
-    saveMarkdown: (content) => ipcRenderer.invoke('file:saveMarkdown', content)
+    saveMarkdown: (content) => ipcRenderer.invoke('file:saveMarkdown', content),
+    selectMarkdown: (options) => ipcRenderer.invoke('file:selectMarkdown', options)
   },
 
   /**
@@ -427,7 +445,10 @@ contextBridge.exposeInMainWorld('puffin', {
 
     // Get Git user identity
     getUserIdentity: (global = false) =>
-      ipcRenderer.invoke('git:getUserIdentity', global)
+      ipcRenderer.invoke('git:getUserIdentity', global),
+
+    // Check for active Git hooks (security check)
+    checkActiveHooks: () => ipcRenderer.invoke('git:checkActiveHooks')
   },
 
   /**
@@ -755,5 +776,24 @@ contextBridge.exposeInMainWorld('puffin', {
       }
       throw new Error(result.error || 'Markdown parsing failed')
     }
+  },
+
+  /**
+   * CRE (Central Reasoning Engine) operations
+   */
+  cre: {
+    generatePlan: (args) => ipcRenderer.invoke('cre:generate-plan', args),
+    submitAnswers: (args) => ipcRenderer.invoke('cre:submit-answers', args),
+    refinePlan: (args) => ipcRenderer.invoke('cre:refine-plan', args),
+    approvePlan: (args) => ipcRenderer.invoke('cre:approve-plan', args),
+    generateRis: (args) => ipcRenderer.invoke('cre:generate-ris', args),
+    generateAssertions: (args) => ipcRenderer.invoke('cre:generate-assertions', args),
+    verifyAssertions: (args) => ipcRenderer.invoke('cre:verify-assertions', args),
+    updateModel: (args) => ipcRenderer.invoke('cre:update-model', args),
+    refreshModel: (args) => ipcRenderer.invoke('cre:refresh-model', args),
+    queryModel: (args) => ipcRenderer.invoke('cre:query-model', args),
+    getPlan: (args) => ipcRenderer.invoke('cre:get-plan', args),
+    getRis: (args) => ipcRenderer.invoke('cre:get-ris', args),
+    listRisStoryIds: () => ipcRenderer.invoke('cre:list-ris-story-ids')
   }
 })

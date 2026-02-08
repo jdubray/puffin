@@ -283,6 +283,69 @@ class PuffinApp {
   }
 
   /**
+   * Show the CRE progress modal with step-by-step status.
+   * @param {string} title - Modal title (e.g. "CRE: Planning Sprint")
+   * @param {Array<{id: string, label: string}>} steps - Steps to display
+   */
+  showCreProgressModal(title, steps) {
+    this.hideCreProgressModal()
+    this._creProgressSteps = steps.map(s => ({ ...s, status: 'pending' }))
+    this._creBusy = true
+
+    const modal = document.createElement('div')
+    modal.id = 'cre-progress-modal'
+    modal.className = 'cre-progress-modal'
+    modal.innerHTML = `
+      <div class="cre-progress-content">
+        <div class="cre-progress-header">
+          <div class="cre-progress-spinner"></div>
+          <h3>${this.escapeHtml(title)}</h3>
+        </div>
+        <ul class="cre-progress-steps">
+          ${steps.map(s => `
+            <li class="cre-progress-step pending" data-step-id="${this.escapeHtml(s.id)}">
+              <span class="cre-progress-step-icon"></span>
+              <span>${this.escapeHtml(s.label)}</span>
+            </li>
+          `).join('')}
+        </ul>
+        <div class="cre-progress-detail"></div>
+      </div>
+    `
+    document.body.appendChild(modal)
+  }
+
+  /**
+   * Update a step in the CRE progress modal.
+   * @param {string} stepId - Step identifier
+   * @param {'active'|'completed'|'error'} status
+   * @param {string} [detail] - Optional detail text shown at the bottom
+   */
+  updateCreProgressStep(stepId, status, detail) {
+    const modal = document.getElementById('cre-progress-modal')
+    if (!modal) return
+
+    const stepEl = modal.querySelector(`[data-step-id="${stepId}"]`)
+    if (stepEl) {
+      stepEl.className = `cre-progress-step ${status}`
+    }
+
+    if (detail) {
+      const detailEl = modal.querySelector('.cre-progress-detail')
+      if (detailEl) detailEl.textContent = detail
+    }
+  }
+
+  /**
+   * Hide the CRE progress modal.
+   */
+  hideCreProgressModal() {
+    this._creBusy = false
+    const modal = document.getElementById('cre-progress-modal')
+    if (modal) modal.remove()
+  }
+
+  /**
    * Extract questions from a plan text
    * @param {string} planText - The plan text to extract questions from
    * @returns {string[]} Array of questions found in the plan
@@ -391,9 +454,9 @@ class PuffinApp {
         return
       }
 
-      // Close modal and trigger plan iteration
+      // Close modal and trigger plan iteration via CRE
       closeModal()
-      this.intents.iterateSprintPlan(clarifications)
+      this.intents.iterateSprintPlan(clarifications, sprint.crePlanId)
       this.showToast('Resubmitting plan with your clarifications...', 'info')
     })
 
@@ -415,10 +478,49 @@ class PuffinApp {
    * Show confirmation dialog asking if user wants to start a code review
    * @param {Object} sprint - The approved sprint with stories and plan
    */
-  showCodeReviewConfirmation(sprint) {
+  async showCodeReviewConfirmation(sprint) {
+    console.log('[CODE-REVIEW] showCodeReviewConfirmation called, sprint stories:', sprint?.stories?.length || 0)
+    console.log('[CODE-REVIEW] Sprint story IDs:', sprint?.stories?.map(s => s.id))
+
+    // Reconcile assertions: the CRE generator writes to both the inspection_assertions
+    // table and user_stories.inspection_assertions column, but the column write can fail
+    // silently. Sync from table → column before reading, so the stats are accurate.
+    const sprintStoryIds = (sprint?.stories || []).map(s => s.id)
+    if (sprintStoryIds.length > 0 && window.puffin?.state?.syncAssertionsFromCreTable) {
+      try {
+        const syncResult = await window.puffin.state.syncAssertionsFromCreTable(sprintStoryIds)
+        if (syncResult.synced > 0) {
+          console.log('[CODE-REVIEW] Synced assertions from CRE table for', syncResult.synced, 'stories')
+        }
+      } catch (e) {
+        console.warn('[CODE-REVIEW] Assertion sync failed (non-fatal):', e)
+      }
+    }
+
+    // Fetch fresh story data from DB — the in-memory sprint/backlog story objects
+    // can be stale (e.g. assertions generated during plan approval may not have
+    // propagated through all SAM state transitions by the time the sprint is closed).
+    let freshStories = null
+    try {
+      const result = await window.puffin.state.getUserStories()
+      if (result.success && Array.isArray(result.stories)) {
+        freshStories = result.stories
+        console.log('[CODE-REVIEW] Fetched', freshStories.length, 'fresh stories from DB')
+        // Log assertion counts per story for debugging
+        for (const s of freshStories) {
+          if (sprint?.stories?.some(ss => ss.id === s.id)) {
+            console.log('[CODE-REVIEW] DB story', s.id.substring(0, 8), '| assertions:', s.inspectionAssertions?.length || 0, '| results:', s.assertionResults ? 'present' : 'null')
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[CODE-REVIEW] Failed to fetch fresh stories from DB:', e)
+    }
+
     // Calculate assertion statistics across all sprint stories
-    const assertionStats = this.calculateSprintAssertionStats(sprint)
+    const assertionStats = this.calculateSprintAssertionStats(sprint, freshStories)
     const { total, passed, failed, pending, notEvaluated } = assertionStats
+    console.log('[CODE-REVIEW] Assertion stats:', { total, passed, failed, pending, notEvaluated })
 
     // Determine recommendation based on assertion results
     let recommendationClass = 'neutral'
@@ -490,11 +592,13 @@ class PuffinApp {
   /**
    * Calculate assertion statistics across all stories in a sprint
    * @param {Object} sprint - The sprint with stories
+   * @param {Array|null} freshStories - Optional fresh stories from DB (preferred over in-memory backlog)
    * @returns {Object} Stats: { total, passed, failed, pending, notEvaluated }
    */
-  calculateSprintAssertionStats(sprint) {
+  calculateSprintAssertionStats(sprint, freshStories = null) {
     const stories = sprint.stories || []
-    const backlogStories = this.state?.userStories || []
+    // Prefer fresh DB stories over potentially stale in-memory backlog
+    const backlogStories = freshStories || this.state?.userStories || []
 
     let total = 0
     let passed = 0
@@ -503,10 +607,12 @@ class PuffinApp {
     let notEvaluated = 0
 
     stories.forEach(story => {
-      // Get assertions from sprint story or backlog
+      // Get assertions — prefer whichever source has actual data (empty [] is truthy)
       const backlogStory = backlogStories.find(s => s.id === story.id)
-      const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
-      const results = story.assertionResults || backlogStory?.assertionResults
+      const bAssert = backlogStory?.inspectionAssertions || []
+      const sAssert = story.inspectionAssertions || []
+      const assertions = bAssert.length > 0 ? bAssert : sAssert.length > 0 ? sAssert : []
+      const results = backlogStory?.assertionResults || story.assertionResults
 
       total += assertions.length
 
@@ -680,6 +786,9 @@ Please provide specific file locations and line numbers where issues are found, 
         const projectName = this.projectPath ? this.projectPath.split(/[/\\]/).pop() : 'Unknown'
         this.intents.initializeApp(this.projectPath, projectName)
 
+        // Security: Check for active Git hooks and warn user
+        await this.checkGitHooksSecurity()
+
         // Load state from .puffin/ directory
         await this.loadState()
 
@@ -722,6 +831,32 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Initialize style injector
     this.styleInjector.init()
+  }
+
+  /**
+   * Check for active Git hooks and warn user (security measure)
+   * Based on IDEsaster vulnerability research recommendations
+   */
+  async checkGitHooksSecurity() {
+    if (!window.puffin?.git) return
+
+    try {
+      const result = await window.puffin.git.checkActiveHooks()
+      if (result.success && result.hasActiveHooks && result.hooks.length > 0) {
+        const hookList = result.hooks.join(', ')
+        console.warn('[Security] Active Git hooks detected:', hookList)
+
+        this.showToast({
+          type: 'warning',
+          title: `Active Git hooks detected: ${hookList}`,
+          message: 'These scripts run automatically during Git operations. Review .git/hooks/ if you did not create them.',
+          duration: 15000
+        })
+      }
+    } catch (error) {
+      console.error('[Security] Error checking Git hooks:', error)
+      // Silent fail - this is a non-critical security check
+    }
   }
 
   /**
@@ -866,8 +1001,9 @@ Please provide specific file locations and line numbers where issues are found, 
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'approvePlan', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan',
-      'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'deleteSprint',
+      'createSprint', 'startSprintPlanning', 'crePlanReady', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
+      'approvePlan', 'approvePlanWithCre', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan', 'submitPlanAnswers',
+      'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'clearPendingCrePlanning', 'clearPendingCreAnswers', 'clearPendingCreIteration', 'deleteSprint',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
       'updateSprintStoryStatus', 'updateSprintStoryAssertions', 'clearSprintError', 'updateStoryAssertionResults', 'toggleCriteriaCompletion',
       // Acceptance criteria validation actions
@@ -886,7 +1022,9 @@ Please provide specific file locations and line numbers where issues are found, 
       // Debug actions
       'storeDebugPrompt', 'clearDebugPrompt', 'setDebugMode',
       // Active implementation story
-      'clearActiveImplementationStory'
+      'clearActiveImplementationStory',
+      // Synthetic CRE prompt entries
+      'addSyntheticPrompt'
     ]
 
     const samResult = SAM({
@@ -994,15 +1132,24 @@ Please provide specific file locations and line numbers where issues are found, 
           // Sprint actions
           ['CREATE_SPRINT', actions.createSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
+          ['CRE_PLAN_READY', actions.crePlanReady],
+          ['CRE_PLANNING_COMPLETE', actions.crePlanningComplete],
+          ['CRE_PLANNING_ERROR', actions.crePlanningError],
+          ['CRE_INTROSPECTION_COMPLETE', actions.creIntrospectionComplete],
           ['APPROVE_PLAN', actions.approvePlan],
+          ['APPROVE_PLAN_WITH_CRE', actions.approvePlanWithCre],
           ['SELECT_IMPLEMENTATION_MODE', actions.selectImplementationMode],
           ['START_AUTOMATED_IMPLEMENTATION', actions.startAutomatedImplementation],
           ['SET_SPRINT_PLAN', actions.setSprintPlan],
           ['ITERATE_SPRINT_PLAN', actions.iterateSprintPlan],
+          ['SUBMIT_PLAN_ANSWERS', actions.submitPlanAnswers],
           ['CLEAR_SPRINT', actions.clearSprint],
           ['CLEAR_SPRINT_WITH_DETAILS', actions.clearSprintWithDetails],
           ['SHOW_SPRINT_CLOSE_MODAL', actions.showSprintCloseModal],
           ['CLEAR_PENDING_SPRINT_PLANNING', actions.clearPendingSprintPlanning],
+          ['CLEAR_PENDING_CRE_PLANNING', actions.clearPendingCrePlanning],
+          ['CLEAR_PENDING_CRE_ANSWERS', actions.clearPendingCreAnswers],
+          ['CLEAR_PENDING_CRE_ITERATION', actions.clearPendingCreIteration],
           ['DELETE_SPRINT', actions.deleteSprint],
           ['START_SPRINT_STORY_IMPLEMENTATION', actions.startSprintStoryImplementation],
           ['CLEAR_PENDING_STORY_IMPLEMENTATION', actions.clearPendingStoryImplementation],
@@ -1047,7 +1194,9 @@ Please provide specific file locations and line numbers where issues are found, 
           ['CLEAR_DEBUG_PROMPT', actions.clearDebugPrompt],
           ['SET_DEBUG_MODE', actions.setDebugMode],
           // Active implementation story
-          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory]
+          ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory],
+          // Synthetic CRE prompt entries
+          ['ADD_SYNTHETIC_PROMPT', actions.addSyntheticPrompt]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -1065,7 +1214,14 @@ Please provide specific file locations and line numbers where issues are found, 
 
         const actionType = model?.__actionName || proposal?.__actionName || proposal?.type || this.lastAction?.type || 'UNKNOWN'
         const actionInfo = proposal || this.lastAction || { type: actionType }
-        samDebugger.recordAction(actionType, actionInfo, model, this.state)
+
+        // Skip debugger recording for high-frequency streaming actions to avoid
+        // deep-cloning the entire model (including growing streamingResponse) on every chunk.
+        // This prevents OOM crashes during long CLI sessions.
+        const skipDebuggerActions = new Set(['RECEIVE_RESPONSE_CHUNK', 'RECEIVE_RAW_MESSAGE'])
+        if (!skipDebuggerActions.has(actionType)) {
+          samDebugger.recordAction(actionType, actionInfo, model, this.state)
+        }
 
         console.log('[SAM-RENDER] actionType:', actionType, 'model.__actionName:', model?.__actionName)
 
@@ -1559,7 +1715,7 @@ Please provide specific file locations and line numbers where issues are found, 
     this.claudeListeners.push(unsubResponse)
 
     // Response complete
-    const unsubComplete = window.puffin.claude.onComplete((response) => {
+    const unsubComplete = window.puffin.claude.onComplete(async (response) => {
       console.log('[SAM-DEBUG] app.js onComplete received:', {
         contentLength: response?.content?.length || 0,
         turns: response?.turns,
@@ -1616,7 +1772,7 @@ Please provide specific file locations and line numbers where issues are found, 
           currentStoryId: orchState?.currentStoryId,
           implementationMode: this.state?.activeSprint?.implementationMode
         })
-        this.handleOrchestrationCompletion(response)
+        await this.handleOrchestrationCompletion(response)
       } catch (err) {
         console.error('[SAM-ERROR] handleOrchestrationCompletion failed:', err)
       }
@@ -1642,6 +1798,16 @@ Please provide specific file locations and line numbers where issues are found, 
       })
     })
     this.claudeListeners.push(unsubError)
+
+    // Claude asking a question (AskUserQuestion tool)
+    const unsubQuestion = window.puffin.claude.onQuestion((data) => {
+      console.log('[CLAUDE-QUESTION] Question received:', data.toolUseId, data.questions?.length, 'questions')
+      this.intents.showModal('claude-question', {
+        toolUseId: data.toolUseId,
+        questions: data.questions
+      })
+    })
+    this.claudeListeners.push(unsubQuestion)
 
     // Story derivation - stories derived
     const unsubStoriesDerived = window.puffin.claude.onStoriesDerived((data) => {
@@ -1734,6 +1900,14 @@ Please provide specific file locations and line numbers where issues are found, 
       if (this.sidebarViewManager.hasActivePluginView()) {
         this.sidebarViewManager.showBuiltInView()
       }
+
+      // Reinitialize project form when switching to config view
+      // This ensures form fields are repopulated with latest config values
+      if (currentView === 'config' && this.components.projectForm) {
+        this.components.projectForm.reinitialize()
+        this.components.projectForm.init()
+      }
+
       this._lastCurrentView = currentView
     }
 
@@ -1773,6 +1947,42 @@ Please provide specific file locations and line numbers where issues are found, 
       this.handleSprintPlanning(state._pendingSprintPlanning, state)
         .finally(() => {
           this._handlingSprintPlanning = false
+        })
+    }
+
+    // Handle pending CRE planning - run CRE planning workflow (AC1, AC2)
+    if (state._pendingCrePlanning && !this._handlingCrePlanning) {
+      this._handlingCrePlanning = true
+      this.handleCrePlanning(state._pendingCrePlanning)
+        .finally(() => {
+          this._handlingCrePlanning = false
+        })
+    }
+
+    // Handle pending CRE answer submission
+    if (state._pendingCreAnswers && !this._handlingCreAnswers) {
+      this._handlingCreAnswers = true
+      this.handleCreAnswerSubmission(state._pendingCreAnswers)
+        .finally(() => {
+          this._handlingCreAnswers = false
+        })
+    }
+
+    // Handle pending CRE iteration (refine-plan)
+    if (state._pendingCreIteration && !this._handlingCreIteration) {
+      this._handlingCreIteration = true
+      this.handleCreIteration(state._pendingCreIteration)
+        .finally(() => {
+          this._handlingCreIteration = false
+        })
+    }
+
+    // Handle pending CRE approval (user-initiated approve + RIS)
+    if (state._pendingCreApproval && !this._handlingCreApproval) {
+      this._handlingCreApproval = true
+      this.handleCreApproval(state._pendingCreApproval)
+        .finally(() => {
+          this._handlingCreApproval = false
         })
     }
   }
@@ -2089,8 +2299,12 @@ Please provide specific file locations and line numbers where issues are found, 
         const passedCriteria = criteriaList.filter((c, idx) => criteriaProgress[idx]?.validationStatus === 'passed').length
         const failedCriteria = criteriaList.filter((c, idx) => criteriaProgress[idx]?.validationStatus === 'failed').length
 
-        // Get inspection assertions (from sprint story or backlog story)
-        const assertions = story.inspectionAssertions || backlogStory?.inspectionAssertions || []
+        // Get inspection assertions — prefer whichever source has actual data.
+        // Empty arrays are truthy so we must check .length, not just truthiness.
+        const sprintAssertions = story.inspectionAssertions || []
+        const backlogAssertions = backlogStory?.inspectionAssertions || []
+        const assertions = sprintAssertions.length > 0 ? sprintAssertions
+          : backlogAssertions.length > 0 ? backlogAssertions : []
         const assertionResults = story.assertionResults || backlogStory?.assertionResults
         const hasAssertions = assertions.length > 0
 
@@ -2284,14 +2498,15 @@ Please provide specific file locations and line numbers where issues are found, 
     // Iterate/Approve buttons: visible only when sprint status is 'planned' AND plan not yet approved
     // Once planApprovedAt is set, implementation mode was selected - don't show approve again
     const hasStories = sprint.stories && sprint.stories.length > 0
-    const canPlan = sprint.status === 'created'
-    const canApprove = hasStories && sprint.status === 'planned' && !sprint.planApprovedAt
+    const creBusy = this._creBusy || this._handlingCrePlanning || this._handlingCreAnswers || this._handlingCreApproval || this._handlingCreIteration
+    const canPlan = sprint.status === 'created' && !creBusy
+    const canApprove = hasStories && sprint.status === 'planned' && !sprint.planApprovedAt && !creBusy
     // Show start implementation button when plan is approved but sprint not yet in-progress
     // This handles cases where:
     // - App was closed after approving but before selecting mode
     // - Sprint status is stuck at 'planning' but planApprovedAt was set
     const isNotStarted = sprint.status !== 'in-progress' && sprint.status !== 'completed' && sprint.status !== 'closed'
-    const canStartImplementation = sprint.planApprovedAt && !sprint.implementationMode && isNotStarted
+    const canStartImplementation = sprint.planApprovedAt && !sprint.implementationMode && isNotStarted && !creBusy
 
     console.log('[SPRINT-BUTTONS] status:', sprint.status, 'hasStories:', hasStories, 'canPlan:', canPlan, 'canApprove:', canApprove, 'planApprovedAt:', sprint.planApprovedAt, 'canStartImplementation:', canStartImplementation)
 
@@ -2373,6 +2588,13 @@ Please provide specific file locations and line numbers where issues are found, 
             console.log('[SPRINT] No plan captured - assertions will be generated without implementation context')
           }
 
+          // If CRE plan exists and not yet approved, trigger CRE approval flow
+          if (sprint.crePlanId && !sprint.planApprovedAt) {
+            console.log('[SPRINT] Triggering CRE approval flow for plan:', sprint.crePlanId)
+            this.intents.approvePlanWithCre(sprint.crePlanId)
+            return
+          }
+
           // Approve the plan (updates status to in-progress)
           this.intents.approvePlan()
 
@@ -2381,9 +2603,11 @@ Please provide specific file locations and line numbers where issues are found, 
 
           try {
             // Generate assertions for all stories (plan is optional)
+            const selectedModel = document.getElementById('thread-model')?.value || 'sonnet'
             const result = await window.puffin.state.generateSprintAssertions(
               sprint.stories,
-              sprint.plan || ''  // Pass empty string if plan is null
+              sprint.plan || '',  // Pass empty string if plan is null
+              selectedModel
             )
 
             this.hideAssertionGenerationModal()
@@ -4238,6 +4462,524 @@ Keep it concise but informative. Use markdown formatting.`
   }
 
   /**
+   * Handle CRE planning workflow Phase 1 (AC1, FR-02).
+   * Calls generate-plan (analyze only), then pauses for Q&A if questions exist.
+   * If no questions, auto-submits empty answers to proceed to plan generation.
+   */
+  async handleCrePlanning(planningData) {
+    console.log('[CRE] Starting CRE planning workflow:', planningData.sprintId)
+
+    // Clear pending flag on the MODEL to prevent re-entry on next render cycle
+    this.intents.clearPendingCrePlanning()
+
+    const { sprintId, stories } = planningData
+
+    this.showCreProgressModal('CRE: Planning Sprint', [
+      { id: 'analyze', label: 'Analyzing sprint stories' },
+      { id: 'questions', label: 'Generating clarifying questions' }
+    ])
+
+    try {
+      this.updateCreProgressStep('analyze', 'active', 'Sending stories to CRE for analysis...')
+
+      // Phase 1: Analyze sprint — returns questions for Q&A
+      const analyzeResult = await window.puffin.cre.generatePlan({ sprintId, stories })
+      if (!analyzeResult.success) {
+        throw new Error(analyzeResult.error)
+      }
+      console.log('[CRE] Analysis complete:', analyzeResult.data)
+      this.updateCreProgressStep('analyze', 'completed')
+
+      const { planId, questions } = analyzeResult.data
+
+      if (questions && questions.length > 0) {
+        this.updateCreProgressStep('questions', 'completed', `${questions.length} questions generated`)
+        this.hideCreProgressModal()
+        // Pause: store context for Q&A, show iteration modal with CRE questions
+        this._pendingCreQA = { planId, sprintId, stories, questions }
+        this.showCreQuestionsModal(questions, planId, sprintId, stories)
+      } else {
+        this.updateCreProgressStep('questions', 'completed', 'No questions needed')
+        this.hideCreProgressModal()
+        // No questions — proceed directly to plan generation
+        this.intents.submitPlanAnswers(planId, sprintId, stories, [])
+      }
+    } catch (err) {
+      console.error('[CRE] Planning workflow failed:', err.message)
+      this.hideCreProgressModal()
+      this.intents.crePlanningError(err)
+      this.showToast({
+        type: 'error',
+        title: 'CRE Planning Failed',
+        message: err.message,
+        duration: 8000
+      })
+    }
+  }
+
+  /**
+   * Show modal with CRE-generated clarifying questions.
+   * @param {string[]} questions - Questions from CRE analysis
+   * @param {string} planId - The plan ID
+   * @param {string} sprintId - The sprint ID
+   * @param {Array<Object>} stories - Sprint stories
+   */
+  showCreQuestionsModal(questions, planId, sprintId, stories) {
+    this.hidePlanIterationModal()
+
+    const prepopulatedText = questions.map((q, i) => {
+      const text = typeof q === 'string' ? q : (q.question || JSON.stringify(q))
+      const context = (typeof q === 'object' && q.reason) ? `\n   (Context: ${q.reason})` : ''
+      return `${i + 1}. ${text}${context}\n   Answer: `
+    }).join('\n\n')
+
+    const modal = document.createElement('div')
+    modal.id = 'plan-iteration-modal'
+    modal.className = 'plan-iteration-modal modal-overlay'
+    modal.innerHTML = `
+      <div class="plan-iteration-content modal-content">
+        <div class="modal-header">
+          <h3>CRE: Clarifying Questions</h3>
+          <button class="modal-close-btn" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="plan-iteration-hint">
+            The CRE has ${questions.length} question${questions.length > 1 ? 's' : ''} about the sprint stories. Fill in your answers below to generate the plan.
+          </p>
+          <div class="form-group">
+            <label for="plan-clarifications">Your answers:</label>
+            <textarea
+              id="plan-clarifications"
+              class="plan-clarifications-input"
+              rows="8"
+              placeholder="Answer the questions above...">${this.escapeHtml(prepopulatedText)}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn secondary plan-iteration-cancel">Skip Questions</button>
+          <button class="btn primary plan-iteration-submit">Submit Answers</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    const closeBtn = modal.querySelector('.modal-close-btn')
+    const cancelBtn = modal.querySelector('.plan-iteration-cancel')
+    const submitBtn = modal.querySelector('.plan-iteration-submit')
+    const textarea = modal.querySelector('#plan-clarifications')
+
+    // Guard against double submission — once answers are submitted (or skipped),
+    // no other handler should fire submitPlanAnswers again.
+    let submitted = false
+
+    const closeModal = () => this.hidePlanIterationModal()
+
+    const skipAndClose = () => {
+      if (submitted) return
+      submitted = true
+      closeModal()
+      // Skip — submit empty answers to proceed without user input
+      this.intents.submitPlanAnswers(planId, sprintId, stories, [])
+    }
+
+    closeBtn.addEventListener('click', skipAndClose)
+    cancelBtn.addEventListener('click', skipAndClose)
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) skipAndClose()
+    })
+
+    submitBtn.addEventListener('click', () => {
+      if (submitted) return
+      submitted = true
+      const answerText = textarea.value.trim()
+      closeModal()
+      // Parse answers as array of {question, answer} objects
+      const answers = questions.map((q, i) => ({
+        question: q,
+        answer: this.extractAnswerForQuestion(answerText, i + 1) || ''
+      }))
+      this.intents.submitPlanAnswers(planId, sprintId, stories, answers)
+      this.showToast('CRE: Generating plan with your answers...', 'info')
+    })
+
+    setTimeout(() => textarea.focus(), 100)
+  }
+
+  /**
+   * Extract an answer for a numbered question from the user's text.
+   * @param {string} text - Full answer text
+   * @param {number} num - Question number (1-based)
+   * @returns {string} The extracted answer
+   */
+  extractAnswerForQuestion(text, num) {
+    // Look for "N. ... Answer: <text>" pattern
+    const regex = new RegExp(`${num}\\..*?Answer:\\s*(.+?)(?=\\n\\s*\\d+\\.|$)`, 's')
+    const match = text.match(regex)
+    return match ? match[1].trim() : text
+  }
+
+  /**
+   * Handle CRE answer submission — generates the plan, then approves + generates RIS.
+   * Triggered by SUBMIT_PLAN_ANSWERS action via _pendingCreAnswers state flag.
+   */
+  async handleCreAnswerSubmission(answerData) {
+    console.log('[CRE] Submitting answers for plan:', answerData.planId)
+
+    // Clear pending flag on the MODEL to prevent re-entry on next render cycle
+    this.intents.clearPendingCreAnswers()
+
+    const { planId, sprintId, stories, answers } = answerData
+
+    this.showCreProgressModal('CRE: Generating Plan', [
+      { id: 'submit', label: 'Submitting answers to CRE' },
+      { id: 'generate', label: 'Generating implementation plan' }
+    ])
+
+    try {
+      this.updateCreProgressStep('submit', 'active')
+
+      // Submit answers → generate plan
+      const planResult = await window.puffin.cre.submitAnswers({ planId, sprintId, stories, answers })
+      if (!planResult.success) {
+        throw new Error(planResult.error)
+      }
+      console.log('[CRE] Plan generated:', planResult.data)
+      this.updateCreProgressStep('submit', 'completed')
+      this.updateCreProgressStep('generate', 'completed', 'Plan generated successfully')
+
+      // Store plan for user review — do NOT auto-approve or generate RIS
+      this.intents.crePlanReady(planResult.data)
+
+      this.hideCreProgressModal()
+
+      // Show plan review modal so user can read the plan before approving
+      // planResult.data is { planId, plan: {...}, sprintId } — extract the actual plan object
+      this.intents.showModal('plan-review', {
+        plan: planResult.data.plan || planResult.data,
+        stories,
+        sprintId
+      })
+    } catch (err) {
+      console.error('[CRE] Answer submission failed:', err.message)
+      this.hideCreProgressModal()
+
+      // Preserve Q&A context: re-show the questions modal so the user can retry
+      // instead of resetting sprint to 'created' and losing all context.
+      const cachedQA = this._pendingCreQA
+      if (cachedQA && cachedQA.questions && cachedQA.questions.length > 0) {
+        this.showToast({
+          type: 'warning',
+          title: 'Plan Generation Failed',
+          message: `${err.message}. You can retry submitting your answers.`,
+          duration: 6000
+        })
+        // Re-show the questions modal with the same context
+        this.showCreQuestionsModal(cachedQA.questions, planId, sprintId, stories)
+      } else {
+        // No cached questions — fall back to error reset
+        this.intents.crePlanningError(err)
+        this.showToast({
+          type: 'error',
+          title: 'CRE Planning Failed',
+          message: err.message,
+          duration: 8000
+        })
+      }
+    }
+  }
+
+  /**
+   * Handle CRE plan iteration (refine-plan).
+   * Triggered by ITERATE_SPRINT_PLAN action via _pendingCreIteration state flag.
+   */
+  async handleCreIteration(iterationData) {
+    console.log('[CRE] Refining plan:', iterationData.planId)
+
+    // Clear pending flag on the MODEL to prevent re-entry on next render cycle
+    this.intents.clearPendingCreIteration()
+
+    const { planId, feedback } = iterationData
+
+    this.showCreProgressModal('CRE: Refining Plan', [
+      { id: 'refine', label: 'Refining plan with feedback' },
+      { id: 'result', label: 'Processing refined plan' }
+    ])
+
+    try {
+      this.updateCreProgressStep('refine', 'active', 'Sending feedback to CRE...')
+
+      const refineResult = await window.puffin.cre.refinePlan({ planId, feedback })
+      if (!refineResult.success) {
+        throw new Error(refineResult.error)
+      }
+      console.log('[CRE] Plan refined:', refineResult.data)
+      this.updateCreProgressStep('refine', 'completed')
+
+      const resultPlanId = refineResult.data?.planId || planId
+
+      // Check if CRE has new questions after refinement
+      const newQuestions = refineResult.data?.questions || []
+      if (newQuestions.length > 0) {
+        this.updateCreProgressStep('result', 'completed', `${newQuestions.length} follow-up questions`)
+        this.hideCreProgressModal()
+        // Pause again for more Q&A
+        const sprint = this.state.activeSprint
+        const stories = sprint?.stories?.map(s => ({
+          id: s.id, title: s.title,
+          description: s.description || '',
+          acceptanceCriteria: s.acceptanceCriteria || [],
+          dependsOn: s.dependsOn || []
+        })) || []
+        this.showCreQuestionsModal(newQuestions, resultPlanId, sprint?.id, stories)
+        return
+      }
+
+      // No new questions — store refined plan for user review (do NOT auto-approve)
+      this.updateCreProgressStep('result', 'completed')
+      this.hideCreProgressModal()
+      this.intents.crePlanReady(refineResult.data)
+
+      // Show plan review modal so user can read the refined plan
+      // refineResult.data is { planId, plan: {...}, sprintId } — extract the actual plan object
+      this.intents.showModal('plan-review', {
+        plan: refineResult.data.plan || refineResult.data,
+        stories: stories,
+        sprintId: sprint?.id
+      })
+    } catch (err) {
+      console.error('[CRE] Plan iteration failed:', err.message)
+      this.hideCreProgressModal()
+      this.intents.crePlanningError(err)
+      this.showToast({
+        type: 'error',
+        title: 'CRE Plan Iteration Failed',
+        message: err.message,
+        duration: 8000
+      })
+    }
+  }
+
+  /**
+   * Handle user-initiated CRE plan approval.
+   * Calls cre:approve-plan → cre:generate-ris per story → dispatches crePlanningComplete.
+   * Triggered by APPROVE_PLAN_WITH_CRE action via _pendingCreApproval state flag.
+   */
+  async handleCreApproval(approvalData) {
+    console.log('[CRE] User-initiated approval for plan:', approvalData.planId)
+
+    const { planId } = approvalData
+
+    // Build steps dynamically based on story count
+    const sprint = this.state.activeSprint
+    const stories = sprint?.stories || []
+    const planItems = sprint?.crePlan?.planItems || sprint?.crePlan?.plan?.planItems || []
+    const storyOrder = sprint?.implementationOrder || stories.map(s => s.id)
+
+    const progressSteps = [
+      { id: 'approve', label: 'Approving plan' }
+    ]
+    for (let i = 0; i < stories.length; i++) {
+      progressSteps.push({ id: `assert-${i}`, label: `Assertions: ${stories[i].title}` })
+    }
+    for (let i = 0; i < stories.length; i++) {
+      progressSteps.push({ id: `ris-${i}`, label: `RIS: ${stories[i].title}` })
+    }
+    progressSteps.push({ id: 'complete', label: 'Finalizing' })
+
+    this.showCreProgressModal('CRE: Approving Plan', progressSteps)
+
+    try {
+      // Step 1: Approve plan via CRE
+      this.updateCreProgressStep('approve', 'active', 'Sending approval to CRE...')
+      const approveResult = await window.puffin.cre.approvePlan({ planId })
+      if (!approveResult.success) {
+        throw new Error(approveResult.error)
+      }
+      this.updateCreProgressStep('approve', 'completed')
+
+      // Step 2: Generate inspection assertions for each story (before RIS so they get included)
+      for (let i = 0; i < stories.length; i++) {
+        const story = stories[i]
+        const stepId = `assert-${i}`
+        this.updateCreProgressStep(stepId, 'active', `Generating assertions for "${story.title}"...`)
+
+        const planItem = planItems.find(p => p.storyId === story.id) || {
+          storyId: story.id,
+          approach: '',
+          filesCreated: [],
+          filesModified: [],
+          dependencies: []
+        }
+
+        const assertResult = await window.puffin.cre.generateAssertions({
+          planId,
+          storyId: story.id,
+          planItem,
+          story: {
+            id: story.id,
+            title: story.title,
+            description: story.description || '',
+            acceptanceCriteria: story.acceptanceCriteria || []
+          }
+        })
+
+        if (assertResult.success) {
+          const assertions = assertResult.data?.assertions || []
+          console.log(`[CRE] Generated ${assertions.length} assertions for story:`, story.id)
+          this.updateCreProgressStep(stepId, 'completed', `${assertions.length} assertions`)
+
+          // Always update sprint and user story state with assertions (even if empty).
+          // The CRE IPC handler persists to user_stories DB directly, but we also
+          // update the in-memory model so the UI reflects the change immediately.
+          this.intents.updateSprintStoryAssertions(story.id, assertions)
+          this.intents.updateUserStory(story.id, { inspectionAssertions: assertions })
+        } else {
+          console.warn('[CRE] Assertion generation failed for story:', story.id, assertResult.error)
+          this.updateCreProgressStep(stepId, 'error', 'Failed')
+        }
+      }
+
+      // Refresh backlog stories from DB to ensure in-memory model has assertions
+      // (CRE handler persists directly to user_stories table)
+      try {
+        const storiesResult = await window.puffin.state.getUserStories()
+        if (storiesResult.success && Array.isArray(storiesResult.stories) && storiesResult.stories.length > 0) {
+          console.log('[CRE] Refreshing stories from DB after assertion generation:', storiesResult.stories.length, 'stories')
+          this.intents.loadUserStories(storiesResult.stories)
+
+          // Also sync assertions from fresh DB data to sprint stories.
+          // The SAM updateSprintStoryAssertionsAcceptor sets them in-memory during the loop
+          // above, but if anything went wrong (story not found, race condition), the sprint
+          // stories could still have stale empty arrays. Belt-and-suspenders: copy from DB.
+          const currentSprint = this.state?.activeSprint
+          if (currentSprint?.stories) {
+            for (const sprintStory of currentSprint.stories) {
+              const freshStory = storiesResult.stories.find(s => s.id === sprintStory.id)
+              if (freshStory?.inspectionAssertions?.length > 0 &&
+                  (!sprintStory.inspectionAssertions || sprintStory.inspectionAssertions.length === 0)) {
+                sprintStory.inspectionAssertions = freshStory.inspectionAssertions
+                console.log('[CRE] Synced assertions from DB to sprint story:', sprintStory.id,
+                  freshStory.inspectionAssertions.length, 'assertions')
+              }
+            }
+          }
+        }
+      } catch (refreshError) {
+        console.warn('[CRE] Failed to refresh stories from DB:', refreshError)
+      }
+
+      // Step 3: Generate RIS for each story (assertions are now in DB and will be included)
+      const risMap = {}
+
+      // Get the plan synthetic prompt ID to thread RIS entries under it
+      const planPromptId = this.state?.history?.activePromptId || null
+
+      for (let i = 0; i < stories.length; i++) {
+        const story = stories[i]
+        const stepId = `ris-${i}`
+        this.updateCreProgressStep(stepId, 'active', `Generating RIS for "${story.title}"...`)
+
+        const risResult = await window.puffin.cre.generateRis({ planId, storyId: story.id })
+        if (risResult.success) {
+          risMap[story.id] = risResult.data
+          this.updateCreProgressStep(stepId, 'completed')
+
+          // RIS is stored in DB via cre:generate-ris and viewable from the story card
+        } else {
+          console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
+          risMap[story.id] = { error: risResult.error }
+          this.updateCreProgressStep(stepId, 'error', 'Failed')
+        }
+      }
+
+      // Finalize
+      this.updateCreProgressStep('complete', 'completed')
+
+      // Dispatch completion — this stores risMap and triggers approvePlan UI flow
+      this.intents.crePlanningComplete(sprint.crePlan, risMap, storyOrder)
+      this.intents.approvePlan()
+      this.hideCreProgressModal()
+      this.showToast('CRE: Plan approved, assertions generated, and RIS ready', 'success')
+    } catch (err) {
+      console.error('[CRE] Plan approval failed:', err.message)
+      this.hideCreProgressModal()
+      this.intents.crePlanningError(err)
+      this.showToast({
+        type: 'error',
+        title: 'CRE Plan Approval Failed',
+        message: err.message,
+        duration: 8000
+      })
+    }
+  }
+
+  /**
+   * Format CRE plan data as readable markdown for display in the prompt view.
+   * @param {Object} planData - The plan data from CRE
+   * @param {Array} stories - Sprint stories
+   * @returns {string} Formatted markdown
+   */
+  _formatPlanAsMarkdown(planData, stories) {
+    const plan = planData?.plan || planData
+    const planItems = plan?.planItems || planData?.planItems || []
+    const risks = plan?.risks || planData?.risks || []
+    const sharedComponents = plan?.sharedComponents || planData?.sharedComponents || []
+
+    let md = '# CRE Implementation Plan\n\n'
+
+    if (planItems.length > 0) {
+      md += '## Implementation Order\n\n'
+      md += '| # | Story | Branch | Approach |\n'
+      md += '|---|-------|--------|----------|\n'
+      planItems.forEach((item, i) => {
+        const story = stories.find(s => s.id === item.storyId)
+        const title = story?.title || item.storyId
+        const branch = item.branchType || 'fullstack'
+        const approach = (item.approach || '').replace(/\n/g, ' ').slice(0, 80)
+        md += `| ${i + 1} | ${title} | ${branch} | ${approach}${approach.length >= 80 ? '…' : ''} |\n`
+      })
+      md += '\n'
+
+      // Detailed approach per story
+      md += '## Story Details\n\n'
+      planItems.forEach((item, i) => {
+        const story = stories.find(s => s.id === item.storyId)
+        const title = story?.title || item.storyId
+        md += `### ${i + 1}. ${title}\n\n`
+        if (item.approach) md += `**Approach:** ${item.approach}\n\n`
+        if (item.filesCreated?.length > 0) md += `**Files to create:** ${item.filesCreated.join(', ')}\n\n`
+        if (item.filesModified?.length > 0) md += `**Files to modify:** ${item.filesModified.join(', ')}\n\n`
+        if (item.dependencies?.length > 0) md += `**Dependencies:** ${item.dependencies.join(', ')}\n\n`
+      })
+    }
+
+    if (sharedComponents.length > 0) {
+      md += '## Shared Components\n\n'
+      sharedComponents.forEach(c => {
+        md += `- **${c.name || c}**${c.description ? ': ' + c.description : ''}\n`
+      })
+      md += '\n'
+    }
+
+    if (risks.length > 0) {
+      md += '## Risks\n\n'
+      risks.forEach(r => {
+        const risk = typeof r === 'string' ? r : `${r.description || r.risk}${r.mitigation ? ' — Mitigation: ' + r.mitigation : ''}`
+        md += `- ${risk}\n`
+      })
+      md += '\n'
+    }
+
+    // Fallback: if planItems is empty, show raw plan data
+    if (planItems.length === 0) {
+      md += '```json\n' + JSON.stringify(planData, null, 2) + '\n```\n'
+    }
+
+    return md
+  }
+
+  /**
    * Handle rerun request from state
    */
   async handleRerunRequest(rerunRequest, state) {
@@ -4583,15 +5325,21 @@ Keep it concise but informative. Use markdown formatting.`
 
 ---
 
-### User Story: ${story.title}
+### User Story
 
+--- BEGIN USER STORY ---
+Title: ${story.title}
 ${story.description || ''}
+--- END USER STORY ---
 `
 
     if (story.acceptanceCriteria?.length > 0) {
       prompt += `
 ### Acceptance Criteria
+
+--- BEGIN ACCEPTANCE CRITERIA ---
 ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+--- END ACCEPTANCE CRITERIA ---
 `
     }
 
@@ -4602,9 +5350,9 @@ ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 The following plan was approved. Please follow this guidance:
 
+--- BEGIN PLAN ---
 ${sprint.plan.substring(0, 8000)}
-
----
+--- END PLAN ---
 
 `
     }
@@ -4623,7 +5371,7 @@ Please proceed with the implementation.`
    * Called when a Claude response completes during orchestration
    * Automatically continues if max turns was reached
    */
-  handleOrchestrationCompletion(response) {
+  async handleOrchestrationCompletion(response) {
     console.log('[ORCHESTRATION] handleOrchestrationCompletion called with response:', {
       hasResponse: !!response,
       sessionId: response?.sessionId,
@@ -4701,11 +5449,21 @@ Please proceed with the implementation.`
       if (this.orchestrationContinuationCount > maxContinuations) {
         console.warn('[ORCHESTRATION] Max continuations reached, marking story as complete')
         this.orchestrationContinuationCount = 0
-        // Use the same completion flow as normal completion
-        this.intents.orchestrationStoryCompleted(currentStoryId, sessionId)
+
+        // Build fallback summary since we hit max continuations
+        const fallbackSummary = this.buildFallbackSummary(currentStoryId, response, 'Max continuations reached')
+        this.intents.orchestrationStoryCompleted(currentStoryId, sessionId, fallbackSummary)
         this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
+        this.intents.clearActiveImplementationStory()
         this.autoCompleteAcceptanceCriteria(currentStoryId)
         this.evaluateStoryAssertions(currentStoryId)
+        if (fallbackSummary) {
+          this.intents.updateUserStory(currentStoryId, { completionSummary: fallbackSummary })
+          window.puffin.state.storeCompletionSummary(currentStoryId, {
+            ...fallbackSummary,
+            sessionId
+          }).catch(err => console.warn('[ORCH] Failed to persist fallback summary:', err.message))
+        }
         setTimeout(() => this.checkOrchestrationProgress(), 1000)
         return
       }
@@ -4747,17 +5505,21 @@ Please proceed with the implementation.`
     console.log('[ORCH-TRACE-1] Timestamp:', new Date().toISOString())
     console.log('='.repeat(80))
 
+    // STEP 0: Generate completion summary from session context before closing
+    const completionSummary = await this.generateCompletionSummary(currentStoryId, sessionId, response)
+
     // STEP 1: Mark orchestration story as completed (for internal tracking)
     console.log('[ORCH-TRACE-2] STEP 1: Calling orchestrationStoryCompleted intent')
-    console.log('[ORCH-TRACE-2] Pre-state completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
-    this.intents.orchestrationStoryCompleted(currentStoryId, sessionId)
-    console.log('[ORCH-TRACE-2] Post-call completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
+    this.intents.orchestrationStoryCompleted(currentStoryId, sessionId, completionSummary)
 
     // STEP 2: Mark the story status as 'completed' via proper intent (triggers persistence)
     console.log('[ORCH-TRACE-3] STEP 2: Calling updateSprintStoryStatus intent')
-    console.log('[ORCH-TRACE-3] Pre-state storyProgress:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
     this.intents.updateSprintStoryStatus(currentStoryId, 'completed')
-    console.log('[ORCH-TRACE-3] Post-call storyProgress:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
+
+    // STEP 2b: Clear the active implementation story so the "Implementing..." badge disappears.
+    // The acceptor also clears this, but we do it explicitly here as defense-in-depth.
+    console.log('[ORCH-TRACE-3b] STEP 2b: Clearing activeImplementationStory')
+    this.intents.clearActiveImplementationStory()
 
     // STEP 3: Auto-complete all acceptance criteria for this story
     console.log('[ORCH-TRACE-4] STEP 3: Calling autoCompleteAcceptanceCriteria')
@@ -4767,18 +5529,153 @@ Please proceed with the implementation.`
     console.log('[ORCH-TRACE-5] STEP 4: Calling evaluateStoryAssertions')
     this.evaluateStoryAssertions(currentStoryId)
 
+    // Store summary on the user story for backlog visibility AND persist to completion_summaries table
+    if (completionSummary) {
+      this.intents.updateUserStory(currentStoryId, { completionSummary })
+      window.puffin.state.storeCompletionSummary(currentStoryId, {
+        ...completionSummary,
+        sessionId
+      }).then(result => {
+        if (result.success) {
+          console.log('[ORCH-TRACE] Completion summary persisted to DB, id:', result.completionSummary?.id)
+        } else {
+          console.warn('[ORCH-TRACE] Failed to persist completion summary:', result.error)
+        }
+      }).catch(err => {
+        console.warn('[ORCH-TRACE] Error persisting completion summary:', err.message)
+      })
+    }
+
     console.log('='.repeat(80))
     console.log('[ORCH-TRACE-6] ====== STORY COMPLETION FLOW END ======')
-    console.log('[ORCH-TRACE-6] Final state check:')
-    console.log('[ORCH-TRACE-6] - orchestration.completedStories:', this.state?.activeSprint?.orchestration?.completedStories)
-    console.log('[ORCH-TRACE-6] - storyProgress[storyId]:', JSON.stringify(this.state?.activeSprint?.storyProgress?.[currentStoryId]))
-    console.log('[ORCH-TRACE-6] - Will call checkOrchestrationProgress in 1000ms')
     console.log('='.repeat(80))
 
-    // Check for next story after a small delay
-    setTimeout(() => {
-      this.checkOrchestrationProgress()
-    }, 1000)
+    // AC5: Run CRE introspection (cre:update-model) after story completes, blocking next story
+    this.runCreIntrospection(currentStoryId).finally(() => {
+      // Check for next story after introspection completes
+      setTimeout(() => {
+        this.checkOrchestrationProgress()
+      }, 1000)
+    })
+  }
+
+  /**
+   * Run CRE introspection after a story completes (AC5).
+   * Blocks the next story from starting until complete.
+   * @param {string} storyId - The completed story ID
+   */
+  async runCreIntrospection(storyId) {
+    if (!window.puffin?.cre) {
+      console.log('[CRE] CRE API not available, skipping introspection')
+      return
+    }
+
+    try {
+      console.log('[CRE] Running introspection for completed story:', storyId)
+      const result = await window.puffin.cre.updateModel({})
+      if (result.success) {
+        console.log('[CRE] Introspection complete for story:', storyId, result.data)
+      } else {
+        console.warn('[CRE] Introspection returned error:', result.error)
+      }
+      this.intents.creIntrospectionComplete(storyId)
+    } catch (err) {
+      console.error('[CRE] Introspection failed for story:', storyId, err.message)
+      // Don't block orchestration on introspection failure — log and proceed
+      this.intents.creIntrospectionComplete(storyId)
+    }
+  }
+
+  /**
+   * Generate a completion summary for a story using Claude.
+   * Falls back to a basic summary if the Claude call fails.
+   * @param {string} storyId - The completed story ID
+   * @param {string} sessionId - The Claude session ID
+   * @param {Object} response - The CLI response object
+   * @returns {Object} Completion summary
+   */
+  async generateCompletionSummary(storyId, sessionId, response) {
+    const story = this.state?.activeSprint?.stories?.find(s => s.id === storyId)
+    const filesModified = this.activityTracker?.getFilesModified() || []
+    const ac = story?.acceptanceCriteria || []
+
+    try {
+      console.log('[ORCH-SUMMARY] Generating completion summary for story:', storyId)
+
+      const summaryPrompt = `You just finished implementing a user story. Provide a brief JSON completion summary.
+
+Story: "${story?.title || 'Unknown'}"
+Description: ${story?.description || 'N/A'}
+
+Acceptance Criteria:
+${ac.map((c, i) => `${i + 1}. ${c}`).join('\n') || 'None'}
+
+Files modified during this session:
+${filesModified.length > 0 ? filesModified.join('\n') : 'Unknown'}
+
+Your response (the implementation output) ended with:
+${(response?.content || '').slice(-500)}
+
+Respond with ONLY a JSON object (no markdown, no code fences):
+{
+  "summary": "1-2 sentence summary of what was accomplished",
+  "testStatus": "passing|failing|not_run|unknown",
+  "criteriaStatus": [{"criterion": "short AC text", "met": true/false}]
+}`
+
+      const result = await window.puffin.claude.sendPrompt(summaryPrompt, {
+        model: 'haiku',
+        maxTurns: 1,
+        timeout: 30000
+      })
+
+      // sendPrompt() returns { success, response } — not "content"
+      const responseText = result.response || result.content || ''
+      if (result.success && responseText) {
+        // Parse JSON from the response — handle potential markdown wrapping
+        let jsonStr = responseText.trim()
+        const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (fenceMatch) jsonStr = fenceMatch[1].trim()
+
+        const parsed = JSON.parse(jsonStr)
+        console.log('[ORCH-SUMMARY] Generated summary:', parsed.summary)
+
+        return {
+          summary: parsed.summary || '',
+          testStatus: parsed.testStatus || 'unknown',
+          criteriaStatus: parsed.criteriaStatus || [],
+          filesModified,
+          turns: response?.turns || 0,
+          cost: response?.cost || 0,
+          duration: response?.duration || 0
+        }
+      }
+    } catch (err) {
+      console.warn('[ORCH-SUMMARY] Summary generation failed, using fallback:', err.message)
+    }
+
+    // Fallback summary
+    return this.buildFallbackSummary(storyId, response, 'Completed normally')
+  }
+
+  /**
+   * Build a basic fallback summary when Claude summary generation fails.
+   * @param {string} storyId - The story ID
+   * @param {Object} response - The CLI response object
+   * @param {string} reason - Completion reason
+   * @returns {Object} Basic completion summary
+   */
+  buildFallbackSummary(storyId, response, reason) {
+    const filesModified = this.activityTracker?.getFilesModified() || []
+    return {
+      summary: reason,
+      testStatus: 'unknown',
+      criteriaStatus: [],
+      filesModified,
+      turns: response?.turns || 0,
+      cost: response?.cost || 0,
+      duration: response?.duration || 0
+    }
   }
 
   /**
@@ -5027,6 +5924,8 @@ You just completed implementing the following user stories for this sprint:
 
 `
 
+    prompt += `--- BEGIN STORIES ---
+`
     stories.forEach((story, idx) => {
       const isCompleted = completedStories.includes(story.id)
       prompt += `## ${idx + 1}. ${story.title}${isCompleted ? ' ✓' : ''}
@@ -5040,6 +5939,9 @@ ${story.acceptanceCriteria.map(ac => `- ${ac.description}`).join('\n')}
 `
       }
     })
+    prompt += `--- END STORIES ---
+
+`
 
     prompt += `## Review Instructions
 

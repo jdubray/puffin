@@ -1,0 +1,791 @@
+/**
+ * RLM Document Plugin - Main Layout Styles
+ *
+ * Layout Structure (Fixed Flexbox):
+ * ┌──────────────────────────────────────────────────────────────────────┐
+ * │ [Session Status Display]                                              │
+ * ├────────────────────────┬─────────────────────────────────────────────┤
+ * │ Document Picker        │              Results Tree                    │
+ * │ ──────────────────     │                                              │
+ * │ Query Panel            │                                              │
+ * │ [Export Controls]      │                                              │
+ * ├────────────────────────┴─────────────────────────────────────────────┤
+ * │                    Chunk Inspector                                    │
+ * └──────────────────────────────────────────────────────────────────────┘
+ *
+ * CSS Custom Properties (Theme Variables):
+ * --bg-primary: Main background color
+ * --bg-secondary: Panel background color
+ * --bg-tertiary: Darker background for inputs
+ * --bg-hover: Hover state background
+ * --text-primary: Primary text color
+ * --text-secondary: Secondary/muted text color
+ * --text-tertiary: Tertiary/disabled text color
+ * --border-color: Default border color
+ * --border-hover: Hover state border color
+ * --accent-color: Primary accent color
+ * --accent-hover: Accent hover state
+ * --color-success: Success indicator color
+ * --color-error: Error indicator color
+ * --color-warning: Warning indicator color
+ */
+
+/* ==========================================================================
+   CSS Custom Properties (Fallbacks)
+   ========================================================================== */
+
+.rlm-document-view {
+  --rlm-bg-primary: var(--bg-primary, #1e1e1e);
+  --rlm-bg-secondary: var(--bg-secondary, #252526);
+  --rlm-bg-tertiary: var(--bg-tertiary, #2d2d2d);
+  --rlm-bg-hover: var(--bg-hover, #3a3a3a);
+  --rlm-text-primary: var(--text-primary, #e0e0e0);
+  --rlm-text-secondary: var(--text-secondary, #a0a0a0);
+  --rlm-text-tertiary: var(--text-tertiary, #666);
+  --rlm-border-color: var(--border-color, #3c3c3c);
+  --rlm-border-hover: var(--border-hover, #4a4a4a);
+  --rlm-accent-color: var(--accent-color, #3b82f6);
+  --rlm-accent-hover: var(--accent-hover, #2563eb);
+  --rlm-color-success: var(--color-success, #22c55e);
+  --rlm-color-error: var(--color-error, #ef4444);
+  --rlm-color-warning: var(--color-warning, #f59e0b);
+
+  /* Layout sizing */
+  --rlm-left-panel-width: 320px;
+  --rlm-left-panel-min-width: 260px;
+  --rlm-left-panel-max-width: 450px;
+  --rlm-inspector-height: 250px;
+  --rlm-inspector-min-height: 150px;
+  --rlm-section-heading-height: 32px;
+}
+
+/* ==========================================================================
+   Main Container
+   ========================================================================== */
+
+.rlm-document-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--rlm-bg-primary);
+  color: var(--rlm-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.rlm-document-view-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   Session Status Container (Top Bar)
+   ========================================================================== */
+
+.rlm-session-status-container {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--rlm-border-color);
+}
+
+/* ==========================================================================
+   Main Content Area (Middle Section)
+   ========================================================================== */
+
+.rlm-main-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   Left Panel (Document Picker + Query Panel + Export Controls)
+   ========================================================================== */
+
+.rlm-left-panel {
+  display: flex;
+  flex-direction: column;
+  width: var(--rlm-left-panel-width);
+  min-width: var(--rlm-left-panel-min-width);
+  max-width: var(--rlm-left-panel-max-width);
+  flex-shrink: 0;
+  border-right: 1px solid var(--rlm-border-color);
+  background: var(--rlm-bg-secondary);
+  overflow: hidden;
+}
+
+/* Section styles within left panel */
+.rlm-document-picker-section,
+.rlm-query-section,
+.rlm-export-section {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--rlm-border-color);
+}
+
+.rlm-document-picker-section {
+  flex-shrink: 0;
+}
+
+.rlm-query-section {
+  flex: 1;
+  min-height: 320px;
+  overflow: hidden;
+}
+
+.rlm-export-section {
+  flex-shrink: 0;
+  border-bottom: none;
+}
+
+/* Section headings */
+.rlm-section-heading {
+  display: flex;
+  align-items: center;
+  height: var(--rlm-section-heading-height);
+  margin: 0;
+  padding: 0 12px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--rlm-text-secondary);
+  background: var(--rlm-bg-tertiary);
+  border-bottom: 1px solid var(--rlm-border-color);
+  user-select: none;
+}
+
+/* Container placeholders and component containers */
+.rlm-document-picker-container,
+.rlm-document-picker-placeholder,
+.rlm-query-panel-container,
+.rlm-export-controls-container {
+  padding: 12px;
+}
+
+.rlm-query-panel-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Placeholder styling */
+.rlm-placeholder-text {
+  margin: 0 0 12px 0;
+  font-size: 0.8125rem;
+  color: var(--rlm-text-tertiary);
+}
+
+.rlm-select-document-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--rlm-text-primary);
+  background: var(--rlm-bg-tertiary);
+  border: 1px solid var(--rlm-border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rlm-select-document-btn:hover {
+  background: var(--rlm-bg-hover);
+  border-color: var(--rlm-border-hover);
+}
+
+.rlm-select-document-btn:focus {
+  outline: none;
+  border-color: var(--rlm-accent-color);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* ==========================================================================
+   Right Panel (Results Tree)
+   ========================================================================== */
+
+.rlm-right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--rlm-bg-primary);
+}
+
+.rlm-right-panel .rlm-section-heading {
+  background: var(--rlm-bg-secondary);
+}
+
+.rlm-results-tree-container {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+}
+
+/* ==========================================================================
+   Synthesis Panel
+   ========================================================================== */
+
+.rlm-synthesis-container {
+  flex-shrink: 0;
+  padding: 12px;
+  border-bottom: 1px solid var(--rlm-border-color);
+}
+
+.rlm-synthesis-panel {
+  background: var(--rlm-bg-tertiary);
+  border: 1px solid var(--rlm-border-color);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.synthesis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.synthesis-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rlm-text-primary);
+}
+
+.synthesis-confidence {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: capitalize;
+}
+
+.synthesis-confidence.high {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--rlm-color-success);
+}
+
+.synthesis-confidence.medium {
+  background: rgba(234, 179, 8, 0.2);
+  color: var(--rlm-color-warning);
+}
+
+.synthesis-confidence.low {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--rlm-color-error);
+}
+
+.synthesis-answer {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--rlm-text-primary);
+  white-space: pre-wrap;
+  margin-bottom: 12px;
+}
+
+.synthesis-key-points-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rlm-border-color);
+}
+
+.key-points-title {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rlm-text-secondary);
+}
+
+.synthesis-key-points {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--rlm-text-primary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.synthesis-key-points li {
+  margin-bottom: 4px;
+}
+
+/* ==========================================================================
+   Chunk Inspector Section (Bottom)
+   ========================================================================== */
+
+.rlm-chunk-inspector-section {
+  flex-shrink: 0;
+  height: var(--rlm-inspector-height);
+  min-height: var(--rlm-inspector-min-height);
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--rlm-border-color);
+  background: var(--rlm-bg-secondary);
+  overflow: hidden;
+}
+
+.rlm-chunk-inspector-section .rlm-section-heading {
+  flex-shrink: 0;
+}
+
+.rlm-chunk-inspector-container {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Empty inspector placeholder */
+.rlm-empty-inspector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--rlm-text-tertiary);
+}
+
+/* ==========================================================================
+   Loading State
+   ========================================================================== */
+
+.rlm-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--rlm-text-secondary);
+}
+
+.rlm-loading-state p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.rlm-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--rlm-border-color);
+  border-top-color: var(--rlm-accent-color);
+  border-radius: 50%;
+  animation: rlmSpin 0.8s linear infinite;
+}
+
+@keyframes rlmSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==========================================================================
+   Error State
+   ========================================================================== */
+
+.rlm-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+}
+
+.rlm-error-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.rlm-error-state h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--rlm-color-error);
+}
+
+.rlm-error-state p {
+  margin: 0 0 20px 0;
+  font-size: 0.875rem;
+  color: var(--rlm-text-secondary);
+  max-width: 400px;
+}
+
+.rlm-retry-btn {
+  padding: 8px 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: white;
+  background: var(--rlm-accent-color);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.rlm-retry-btn:hover {
+  background: var(--rlm-accent-hover);
+}
+
+.rlm-retry-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+/* ==========================================================================
+   Empty State (No Session/No Results)
+   ========================================================================== */
+
+.rlm-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+  color: var(--rlm-text-secondary);
+}
+
+.rlm-empty-state .icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.rlm-empty-state h3 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--rlm-text-primary);
+}
+
+.rlm-empty-state p {
+  margin: 0;
+  font-size: 0.875rem;
+  max-width: 300px;
+}
+
+/* ==========================================================================
+   Common Button Styles
+   ========================================================================== */
+
+.rlm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.rlm-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.rlm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rlm-btn-primary {
+  color: white;
+  background: var(--rlm-accent-color);
+}
+
+.rlm-btn-primary:hover:not(:disabled) {
+  background: var(--rlm-accent-hover);
+}
+
+.rlm-btn-secondary {
+  color: var(--rlm-text-primary);
+  background: var(--rlm-bg-tertiary);
+  border: 1px solid var(--rlm-border-color);
+}
+
+.rlm-btn-secondary:hover:not(:disabled) {
+  background: var(--rlm-bg-hover);
+  border-color: var(--rlm-border-hover);
+}
+
+.rlm-btn-danger {
+  color: white;
+  background: var(--rlm-color-error);
+}
+
+.rlm-btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+/* ==========================================================================
+   Common Input Styles
+   ========================================================================== */
+
+.rlm-input,
+.rlm-select,
+.rlm-textarea {
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: var(--rlm-text-primary);
+  background: var(--rlm-bg-tertiary);
+  border: 1px solid var(--rlm-border-color);
+  border-radius: 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rlm-input:focus,
+.rlm-select:focus,
+.rlm-textarea:focus {
+  outline: none;
+  border-color: var(--rlm-accent-color);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.rlm-input:disabled,
+.rlm-select:disabled,
+.rlm-textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--rlm-bg-secondary);
+}
+
+.rlm-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* ==========================================================================
+   Scrollbar Styling
+   ========================================================================== */
+
+.rlm-document-view ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.rlm-document-view ::-webkit-scrollbar-track {
+  background: var(--rlm-bg-tertiary);
+}
+
+.rlm-document-view ::-webkit-scrollbar-thumb {
+  background: var(--rlm-border-color);
+  border-radius: 5px;
+  border: 2px solid var(--rlm-bg-tertiary);
+}
+
+.rlm-document-view ::-webkit-scrollbar-thumb:hover {
+  background: var(--rlm-border-hover);
+}
+
+/* ==========================================================================
+   Responsive Layout - Medium Screens (< 900px)
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .rlm-document-view {
+    --rlm-left-panel-width: 280px;
+    --rlm-inspector-height: 200px;
+  }
+
+  .rlm-section-heading {
+    font-size: 0.625rem;
+    height: 28px;
+    padding: 0 10px;
+  }
+
+  .rlm-document-picker-container,
+  .rlm-document-picker-placeholder,
+  .rlm-query-panel-container,
+  .rlm-export-controls-container,
+  .rlm-results-tree-container {
+    padding: 10px;
+  }
+}
+
+/* ==========================================================================
+   Responsive Layout - Small Screens (< 700px)
+   Switch to stacked layout
+   ========================================================================== */
+
+@media (max-width: 700px) {
+  .rlm-main-content {
+    flex-direction: column;
+  }
+
+  .rlm-left-panel {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--rlm-border-color);
+    max-height: 40vh;
+    overflow: auto;
+  }
+
+  .rlm-query-section {
+    min-height: 150px;
+  }
+
+  .rlm-right-panel {
+    flex: 1;
+    min-height: 200px;
+  }
+
+  .rlm-chunk-inspector-section {
+    height: auto;
+    min-height: 180px;
+    max-height: 30vh;
+  }
+}
+
+/* ==========================================================================
+   Responsive Layout - Very Small Screens (< 480px)
+   ========================================================================== */
+
+@media (max-width: 480px) {
+  .rlm-document-view {
+    font-size: 13px;
+  }
+
+  .rlm-section-heading {
+    font-size: 0.5625rem;
+    height: 26px;
+  }
+
+  .rlm-document-picker-container,
+  .rlm-document-picker-placeholder,
+  .rlm-query-panel-container,
+  .rlm-export-controls-container,
+  .rlm-results-tree-container {
+    padding: 8px;
+  }
+
+  .rlm-btn {
+    padding: 6px 12px;
+    font-size: 0.8125rem;
+  }
+
+  .rlm-select-document-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .rlm-left-panel {
+    max-height: 50vh;
+  }
+
+  .rlm-chunk-inspector-section {
+    max-height: 40vh;
+  }
+}
+
+/* ==========================================================================
+   Accessibility - Reduced Motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .rlm-spinner {
+    animation: none;
+  }
+
+  .rlm-btn,
+  .rlm-input,
+  .rlm-select,
+  .rlm-textarea,
+  .rlm-select-document-btn {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   Accessibility - High Contrast Mode
+   ========================================================================== */
+
+@media (prefers-contrast: high) {
+  .rlm-document-view {
+    --rlm-border-color: #666;
+    --rlm-border-hover: #888;
+  }
+
+  .rlm-btn:focus,
+  .rlm-input:focus,
+  .rlm-select:focus,
+  .rlm-textarea:focus,
+  .rlm-select-document-btn:focus {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5);
+  }
+
+  .rlm-section-heading {
+    border-bottom-width: 2px;
+  }
+}
+
+/* ==========================================================================
+   Focus Visible (Keyboard Navigation)
+   ========================================================================== */
+
+.rlm-document-view button:focus:not(:focus-visible),
+.rlm-document-view input:focus:not(:focus-visible),
+.rlm-document-view select:focus:not(:focus-visible),
+.rlm-document-view textarea:focus:not(:focus-visible) {
+  box-shadow: none;
+}
+
+.rlm-document-view button:focus-visible,
+.rlm-document-view input:focus-visible,
+.rlm-document-view select:focus-visible,
+.rlm-document-view textarea:focus-visible {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+/* ==========================================================================
+   Print Styles
+   ========================================================================== */
+
+@media print {
+  .rlm-document-view {
+    height: auto;
+    overflow: visible;
+    background: white;
+    color: black;
+  }
+
+  .rlm-main-content {
+    flex-direction: column;
+  }
+
+  .rlm-left-panel {
+    width: 100%;
+    max-width: none;
+    border: none;
+  }
+
+  .rlm-chunk-inspector-section {
+    height: auto;
+    page-break-before: always;
+  }
+
+  .rlm-btn,
+  .rlm-select-document-btn {
+    display: none;
+  }
+}

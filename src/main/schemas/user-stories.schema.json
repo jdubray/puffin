@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "puffin://schemas/user-stories",
+  "title": "Derived User Stories",
+  "description": "Array of user stories derived from conversation context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stories"],
+  "properties": {
+    "stories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["title"],
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Brief descriptive title of the user story"
+          },
+          "description": {
+            "type": "string",
+            "description": "User story in 'As a [role], I want [goal] so that [benefit]' format"
+          },
+          "acceptanceCriteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of testable acceptance criteria"
+          }
+        }
+      }
+    }
+  }
+}

@@ -796,10 +796,10 @@ Rules:
     this.isLoading = true
     this.render()
 
-    try {
-      // If target is not the current branch, we need to switch first
-      const needsCheckout = targetBranch !== this.currentBranch
+    const originalBranch = this.currentBranch
+    const needsCheckout = targetBranch !== this.currentBranch
 
+    try {
       if (needsCheckout) {
         const checkoutResult = await window.puffin.git.checkout(targetBranch)
         if (!checkoutResult.success) {
@@ -812,12 +812,14 @@ Rules:
         // After checkout, refresh status and check for uncommitted changes on target branch
         const statusResult = await window.puffin.git.getStatus()
         if (statusResult.success && statusResult.status.hasUncommittedChanges) {
-          // Update local status for the warning dialog
           this.status = statusResult.status
           this.currentBranch = statusResult.status.branch
           this.isLoading = false
           this.render()
           this.showUncommittedChangesWarning()
+          // Switch back to original branch since we can't merge
+          await window.puffin.git.checkout(originalBranch)
+          await this.refreshGitState()
           return
         }
       }
@@ -827,19 +829,37 @@ Rules:
       if (result.success) {
         this.showToast(`Successfully merged ${sourceBranch} into ${targetBranch}`, 'success')
 
+        // Switch back to original branch before showing post-merge dialog
+        if (needsCheckout) {
+          await window.puffin.git.checkout(originalBranch)
+        }
+
         // Offer post-merge workflow
         this.showPostMergeDialog(sourceBranch)
 
         await this.refreshGitState()
       } else if (result.conflicts) {
+        // Abort the conflicted merge and switch back
+        if (needsCheckout) {
+          await window.puffin.git.abortMerge()
+          await window.puffin.git.checkout(originalBranch)
+        }
         this.showMergeConflictDialog(result.conflicts, result.guidance)
         await this.refreshGitState()
       } else {
         this.showToast(result.error, 'error')
-        // If we switched branches and merge failed, consider switching back
+        if (needsCheckout) {
+          await window.puffin.git.checkout(originalBranch)
+          await this.refreshGitState()
+        }
       }
     } catch (err) {
       this.showToast(err.message, 'error')
+      // Best-effort switch back on unexpected error
+      if (needsCheckout) {
+        try { await window.puffin.git.checkout(originalBranch) } catch (_) { /* ignore */ }
+        await this.refreshGitState()
+      }
     }
 
     this.isLoading = false

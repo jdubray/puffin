@@ -2,19 +2,25 @@
 
 ## Table of Contents
 1. [Overview](#overview)
-2. [Getting Started](#getting-started)
-3. [Core Features](#core-features)
+2. [What's New in v3.0](#whats-new-in-v30)
+3. [Getting Started](#getting-started)
+4. [Core Features](#core-features)
+   - [Central Reasoning Engine (CRE)](#central-reasoning-engine-cre)
+   - [Excalidraw AI Diagrams](#excalidraw-ai-diagrams)
+   - [Memory Plugin](#memory-plugin)
    - [Project Configuration](#project-configuration)
    - [Branched Conversation Management](#branched-conversation-management)
    - [Prompt Editor & Submission](#prompt-editor--submission)
    - [Real-Time Response Viewing](#real-time-response-viewing)
-   - [GUI Designer](#gui-designer)
    - [Backlog Management](#backlog-management)
    - [AI-Powered Story Derivation](#ai-powered-story-derivation)
+   - [Sprint Planning with CRE](#sprint-planning-with-cre)
    - [Automated Sprint Implementation](#automated-sprint-implementation)
    - [Architecture Documentation](#architecture-documentation)
    - [Puffin Plugins](#puffin-plugins)
    - [Claude Code Plugins and Skills](#claude-code-plugins-and-skills)
+   - [h-DSL Viewer Plugin](#h-dsl-viewer-plugin)
+   - [Outcome Lifecycle Plugin](#outcome-lifecycle-plugin)
    - [Calendar Plugin](#calendar-plugin)
    - [Toast History Plugin](#toast-history-plugin)
    - [Prompt Template Plugin](#prompt-template-plugin)
@@ -24,11 +30,11 @@
    - [Sprint Close with Git Commit](#sprint-close-with-git-commit)
    - [Sprint Management Enhancements](#sprint-management-enhancements)
    - [CLI Output Monitoring](#cli-output-monitoring)
-4. [User Interface](#user-interface)
-5. [Workflows](#workflows)
-6. [Advanced Features](#advanced-features)
-7. [Troubleshooting](#troubleshooting)
-8. [Appendix](#appendix)
+5. [User Interface](#user-interface)
+6. [Workflows](#workflows)
+7. [Advanced Features](#advanced-features)
+8. [Troubleshooting](#troubleshooting)
+9. [Appendix](#appendix)
 
 ---
 
@@ -49,6 +55,61 @@ Puffin wraps the Claude Code CLI, providing structure and persistence while lett
 
 ![Puffin Overview](screenshots/overview.png)
 *Screenshot placeholder: Main application interface showing all key components*
+
+---
+
+## What's New in v3.0
+
+**Puffin v3.0** introduces the Central Reasoning Engine (CRE), transforming Puffin from a conversation tracker into a deterministic implementation system.
+
+### 🧠 Central Reasoning Engine (CRE)
+
+The CRE is the cornerstone of v3.0, replacing ad-hoc planning with structured, deterministic implementation:
+
+**What It Does:**
+- **Two-Stage Planning**: Generates implementation plans (sequence & dependencies) then Ready-to-Implement Specifications (RIS) for execution
+- **Code Model (h-DSL)**: Maintains a living representation of your codebase structure
+- **Inspection Assertions**: Creates testable criteria to verify each implementation
+- **Plan Iteration**: Supports review, questions, and refinement before approval
+- **CRE Introspector**: Automatically updates the Code Model after each sprint
+
+**Why It Matters:**
+- Same RIS produces equivalent results across different runs (deterministic implementation)
+- Full traceability from requirements → plan → RIS → implementation → verification
+- Architectural context automatically injected into every implementation
+
+### 📐 Excalidraw AI Diagrams
+
+Generate professional diagrams directly from your documentation:
+
+- **Doc-to-Diagram Pipeline**: Select markdown file → choose diagram type → Claude generates elements
+- **Diagram Types**: Architecture, sequence, flowchart, component diagrams
+- **Hand-Drawn Aesthetic**: Professional yet approachable via Rough.js rendering
+- **Multiple Formats**: Export to PNG, SVG, or JSON
+- **Fully Editable**: Generated diagrams can be modified in Excalidraw
+
+### 🧩 Memory Plugin
+
+Stop repeating context—let Puffin remember:
+
+- **Auto-Extraction**: Background analysis extracts domain knowledge from conversations
+- **Categorized Storage**: Facts, Architectural Decisions, Conventions, Bug Patterns
+- **Auto-Injection**: Branch memory automatically included in CLAUDE.md context
+- **Memory Evolution**: New knowledge merges with existing, deduplicates, resolves conflicts
+
+### 🎯 Other Major Features
+
+- **h-DSL Viewer Plugin**: Visualize Code Model structure, dependencies, and h-M3 primitive mappings
+- **Outcome Lifecycle Plugin**: Track development outcomes across sprint phases
+- **Bidirectional Streaming**: Enhanced Claude CLI integration with tool suppression and session resume
+- **Branch Memory System**: Project-specific knowledge extraction and context preservation
+- **JSON Schema Integration**: Structured output support for CRE operations
+
+### 🔄 Breaking Changes
+
+- **GUI Designer Deprecated**: Replaced by Excalidraw plugin (no migration path from old JSON format)
+- **Two-Stage Planning**: Plan → RIS workflow replaces single planning phase
+- **Claude Context Structure**: CLAUDE.md now includes Code Model snippets and branch memory
 
 ---
 
@@ -102,6 +163,687 @@ The `postinstall` script will automatically run `electron-rebuild` to compile na
 ---
 
 ## Core Features
+
+### Central Reasoning Engine (CRE)
+
+The Central Reasoning Engine is Puffin's core intelligence layer that transforms user stories into deterministic, executable implementation specifications.
+
+![CRE Overview](screenshots/cre-overview.png)
+*Screenshot placeholder: CRE workflow diagram showing Plan → RIS → Implementation flow*
+
+#### What is the CRE?
+
+The CRE sits between sprint planning and implementation, producing two key deliverables:
+
+1. **Implementation Plans**: Ordered specifications showing how stories will be implemented (sequence, branch strategy, dependencies)
+2. **Ready-to-Implement Specifications (RIS)**: Concise, directive specifications telling Claude exactly what to implement
+
+Additionally, the CRE maintains an internal **Code Model (h-DSL)** that evolves with your codebase.
+
+#### Two-Stage Planning Workflow
+
+**Stage 1: Plan Generation**
+
+After creating a sprint from backlog stories:
+
+1. Click **"Generate Plan"** in the Sprint panel
+2. CRE analyzes user stories, dependencies, and current Code Model
+3. CRE generates an **Implementation Plan** showing:
+   - Story implementation sequence
+   - Branch assignments (UI, Backend, Fullstack, Plugin)
+   - Inter-story dependencies
+   - Estimated complexity
+
+4. **Review the Plan**:
+   - Ask clarifying questions
+   - Request changes to sequencing or branch assignments
+   - Iterate until satisfied
+
+5. **Approve the Plan**: Click "Approve Plan" to proceed to Stage 2
+
+**Stage 2: RIS Generation**
+
+After plan approval, CRE generates inspection assertions:
+
+1. CRE produces **Inspection Assertions** for each story:
+   - `FILE_EXISTS`: Verify expected files were created
+   - `PATTERN_MATCH`: Confirm code patterns exist
+   - `FUNCTION_SIGNATURE`: Validate function definitions
+   - Custom assertions based on acceptance criteria
+
+2. **Before Each Story Implementation**:
+   - CRE consults the Code Model to understand current codebase state
+   - CRE generates a **RIS** (Ready-to-Implement Specification):
+     - Files to create/modify
+     - Functions to implement
+     - Patterns to follow
+     - Specific implementation steps
+
+3. **RIS is Sent to Claude** for execution with full architectural context
+
+#### Inspection Assertions
+
+Assertions provide automated verification that implementations match specifications:
+
+**Assertion Types:**
+| Type | Purpose | Example |
+|------|---------|---------|
+| `FILE_EXISTS` | Verify file creation | `src/components/LoginForm.js` exists |
+| `PATTERN_MATCH` | Confirm code patterns | `async function login(` appears in file |
+| `FUNCTION_SIGNATURE` | Validate function definitions | `export function validateEmail(email)` |
+| `CONTENT_PRESENT` | Check for specific content | Error handling code present |
+
+**Assertion Lifecycle:**
+1. **Generated**: CRE creates assertions during plan approval
+2. **Stored**: Saved in `inspection_assertions` table and `user_stories.inspection_assertions` column
+3. **Evaluated**: After implementation, assertions are tested
+4. **Reported**: Results shown in code review phase (Pass/Fail/Partial)
+
+#### Code Model (h-DSL)
+
+The Code Model is a living representation of your codebase structure:
+
+**What It Tracks:**
+- **Modules**: Files, exports, imports
+- **Dependencies**: Import/call relationships
+- **Flows**: Multi-step processes
+- **Intent**: Purpose and rationale (via prose)
+- **State**: State machines and transitions
+- **Architecture**: Component relationships
+
+**h-DSL Schema:**
+Every element in the Code Model maps to an h-M3 primitive:
+- `TERM`: Concrete artifact (module, function, class)
+- `PROSE`: Free-text descriptions of intent
+- `SLOT`: Properties and attributes
+- `RELATION`: Dependencies and connections
+- `STATE`: State machine states
+- `TRANSITION`: State changes
+- `OUTCOME`: Results and effects
+- `ALIGNMENT`: Correctness criteria
+
+**Code Model Lifecycle:**
+1. **Initial Bootstrap**: h-DSL engine scans codebase (optional, can start empty)
+2. **Plan Consultation**: CRE reads Code Model when generating RIS
+3. **Post-Implementation Update**: CRE Introspector examines code changes
+4. **Schema Evolution**: New concepts extend the schema dynamically
+
+**Viewing the Code Model:**
+Use the h-DSL Viewer plugin to visualize:
+- Module structure and dependencies
+- Import chains and call relationships
+- h-M3 primitive mappings
+- Architectural patterns
+
+#### CRE Benefits
+
+**Deterministic Implementation:**
+- Same RIS produces functionally equivalent results across runs
+- Reduces ambiguity and interpretation errors
+- Enables predictable outcomes
+
+**Full Traceability:**
+- Track from requirements → plan → RIS → implementation → verification
+- Understand why decisions were made
+- Audit implementation against specifications
+
+**Architectural Context:**
+- Code Model provides current codebase understanding
+- Branch memory auto-injects past decisions
+- Patterns and conventions automatically applied
+
+**Iterative Refinement:**
+- Plan iteration before implementation starts
+- Questions surface ambiguities early
+- User maintains final approval authority
+
+---
+
+### Excalidraw AI Diagrams
+
+Generate professional, hand-drawn style diagrams directly from your markdown documentation using AI.
+
+![Excalidraw Plugin](screenshots/excalidraw-plugin.png)
+*Screenshot placeholder: Excalidraw editor with generated diagram*
+
+#### What is Excalidraw?
+
+Excalidraw is a professional diagramming tool with a distinctive hand-drawn aesthetic. Puffin's Excalidraw plugin adds AI-powered diagram generation, allowing Claude to create visual diagrams from your documentation.
+
+#### Accessing Excalidraw
+
+Click the **"Excalidraw"** tab in the navigation bar to open the plugin.
+
+#### Creating Diagrams Manually
+
+**Element Palette:**
+The left toolbar provides 10+ element types:
+- **Shapes**: Rectangles, ellipses, diamonds
+- **Connectors**: Arrows, lines
+- **Content**: Text labels, images
+- **Organization**: Frames for grouping
+- **Freehand**: Hand-drawn elements
+
+**Canvas:**
+- Drag elements from palette to canvas
+- Click and drag to resize elements
+- Use arrow tool to connect shapes
+- Double-click text elements to edit content
+
+**Toolbar:**
+- **Selection**: Move and select elements
+- **Shapes**: Add geometric shapes
+- **Draw**: Freehand drawing mode
+- **Text**: Add text labels
+- **Arrow**: Connect elements with arrows
+- **Line**: Draw straight lines
+- **Image**: Insert images
+- **Eraser**: Remove elements
+
+#### AI-Powered Diagram Generation
+
+Generate diagrams from your markdown documentation:
+
+**Step 1: Select Document**
+
+1. Click **"New from Doc"** button in Excalidraw toolbar
+2. File picker shows all `.md` files in `docs/**` directory
+3. Select the document you want to visualize
+4. Click **"Select"**
+
+**Step 2: Choose Diagram Type**
+
+![Diagram Type Modal](screenshots/diagram-type-modal.png)
+
+Select the diagram type that best fits your content:
+
+| Type | Best For | Elements Generated |
+|------|----------|-------------------|
+| **Architecture** | System components, layers | Boxes, arrows, labels for components |
+| **Sequence** | Process flows, interactions | Lifelines, messages, activation boxes |
+| **Flowchart** | Decision trees, algorithms | Decision nodes, flow arrows, processes |
+| **Component** | Module relationships | Components, interfaces, dependencies |
+
+**Step 3: Add Custom Instructions** (Optional)
+
+Provide additional context for diagram generation:
+- Specific layout preferences (vertical, horizontal, circular)
+- Which sections to emphasize
+- Color coding requests
+- Level of detail
+
+Example custom prompt:
+```
+Draw an architecture diagram showing the main components.
+Use vertical layout with database at bottom.
+Highlight the API Gateway in a different color.
+```
+
+**Step 4: Generate**
+
+1. Click **"Generate"** button
+2. Loading indicator appears while Claude processes
+3. Claude reads the documentation
+4. Claude generates Excalidraw element definitions
+5. Elements are converted and added to canvas
+6. Viewport centers on generated diagram
+
+**What Claude Generates:**
+
+Based on diagram type and document content:
+
+- **Architecture Diagrams**:
+  - Rectangular boxes for components
+  - Arrows showing data flow
+  - Labels for component names and descriptions
+  - Grouping frames for subsystems
+
+- **Sequence Diagrams**:
+  - Vertical lifelines for actors/systems
+  - Horizontal arrows for messages
+  - Activation boxes for processing
+  - Return arrows for responses
+
+- **Flowcharts**:
+  - Diamond nodes for decisions
+  - Rectangular nodes for processes
+  - Arrows showing flow direction
+  - Labels for conditions and actions
+
+- **Component Diagrams**:
+  - Boxes for modules/classes
+  - Connecting lines for dependencies
+  - Interface symbols for public APIs
+  - Grouping for packages/namespaces
+
+#### Editing Generated Diagrams
+
+Generated diagrams are fully editable:
+
+1. **Select Elements**: Click any element to select
+2. **Move**: Drag selected elements to reposition
+3. **Resize**: Drag corner handles to resize
+4. **Edit Text**: Double-click text to edit content
+5. **Add Elements**: Use palette to add more shapes
+6. **Delete**: Select element and press Delete key
+7. **Undo/Redo**: Standard undo/redo shortcuts
+
+#### Saving and Exporting
+
+**Save to Puffin:**
+1. Click **"Save"** button in toolbar (or Ctrl+S)
+2. Enter design name and description
+3. Design saved to `.puffin/excalidraw-designs/`
+4. Thumbnail generated (128×128px preview)
+
+**Load Saved Design:**
+1. Designs list appears in left sidebar
+2. Click thumbnail to load design
+3. Recent designs shown at top
+
+**Export Formats:**
+
+Click **"Export"** button (or Ctrl+E) and choose format:
+
+| Format | Use Case | Quality |
+|--------|----------|---------|
+| **PNG** | Documentation, presentations | Raster, configurable DPI |
+| **SVG** | Scalable graphics, print | Vector, infinite scaling |
+| **JSON** | Backup, sharing | Excalidraw native format |
+
+**Export to .excalidraw:**
+- Industry-standard format
+- Compatible with excalidraw.com web app
+- Can be opened in other Excalidraw tools
+- Full fidelity preservation
+
+#### Design Management
+
+**Rename Design:**
+1. Click design name in sidebar
+2. Enter new name
+3. Press Enter to save
+
+**Delete Design:**
+1. Click 🗑 icon on design card
+2. Confirm deletion
+3. Design and thumbnail removed
+
+**Design Metadata:**
+Each saved design includes:
+- Name and description
+- Creation and modification timestamps
+- Thumbnail preview
+- Full element data (positions, styles, content)
+
+#### Theme Support
+
+Toggle between light and dark themes:
+- Click theme toggle button
+- Canvas background and UI adapt
+- Elements remain visible in both themes
+- Preference saved per session
+
+#### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+S` / `Cmd+S` | Save design |
+| `Ctrl+N` / `Cmd+N` | New design |
+| `Ctrl+E` / `Cmd+E` | Export dialog |
+| `Ctrl+Z` / `Cmd+Z` | Undo |
+| `Ctrl+Shift+Z` / `Cmd+Shift+Z` | Redo |
+| `Delete` / `Backspace` | Delete selected |
+| `Ctrl+A` / `Cmd+A` | Select all |
+| `Ctrl+D` / `Cmd+D` | Duplicate selected |
+
+#### Diagram Generation Tips
+
+**For Best Results:**
+
+1. **Document Structure**:
+   - Use clear headings to denote components/sections
+   - Include component descriptions
+   - Specify relationships between parts
+
+2. **Architecture Diagrams**:
+   - List all major components
+   - Describe data flow between components
+   - Mention layers or tiers
+
+3. **Sequence Diagrams**:
+   - Describe step-by-step interactions
+   - Identify actors/systems
+   - Specify message order
+
+4. **Flowcharts**:
+   - Outline decision points
+   - Describe conditional logic
+   - Specify process steps
+
+5. **Custom Prompts**:
+   - Request specific layouts
+   - Ask for color coding
+   - Specify level of detail
+
+---
+
+### Memory Plugin
+
+The Memory Plugin automatically extracts and preserves domain knowledge from your conversations, eliminating repetitive context sharing.
+
+![Memory Plugin](screenshots/memory-plugin.png)
+*Screenshot placeholder: Memory extraction and injection flow*
+
+#### What is Branch Memory?
+
+Branch memory captures cross-cutting technical knowledge from conversations and stores it in categorized markdown files. This knowledge is automatically injected into future Claude sessions.
+
+#### Four Memory Categories
+
+Memory is organized into four sections:
+
+**1. Facts** 📊
+Cross-cutting technical facts about the project:
+- Technology stack details
+- External dependencies and versions
+- API contracts and interfaces
+- Data schemas and structures
+
+Example:
+```markdown
+## Facts
+- Electron app using vanilla JS (ES6+ modules), no framework
+- State management via SAM pattern (sam-pattern + sam-fsm npm packages)
+- SQLite via better-sqlite3 for persistent storage
+- Claude Code CLI spawned as subprocess with JSON streaming
+```
+
+**2. Architectural Decisions** 🏗️
+Design choices and trade-offs:
+- Why certain patterns were chosen
+- Rejected alternatives and rationale
+- Architectural constraints
+- Design patterns in use
+
+Example:
+```markdown
+## Architectural Decisions
+- SAM pattern chosen for predictable state management over Redux
+- IPC uses `ipcMain.handle` for request-response, `ipcMain.on`/`send` for events
+- Plugin system uses dynamic loading with manifest validation
+- State persistence via interceptor pattern on SAM actions
+```
+
+**3. Conventions** 📋
+Coding standards and naming patterns:
+- File naming conventions
+- Function/variable naming patterns
+- Code organization rules
+- Style guidelines
+
+Example:
+```markdown
+## Conventions
+- camelCase for variables and functions
+- PascalCase for class names
+- kebab-case for file names
+- JSDoc for function documentation
+- IPC channels prefixed with domain: `plugin:name:action`
+```
+
+**4. Bug Patterns** 🐛
+Known issues and solutions:
+- Common pitfalls and how to avoid them
+- Gotchas and edge cases
+- Debugging strategies
+- Workarounds for platform issues
+
+Example:
+```markdown
+## Bug Patterns
+- Windows `process.kill` with shell:true only kills shell, not child processes. Use `taskkill /pid /T /F` for process tree termination
+- Empty arrays `[]` are truthy in JS. Use `.length > 0` checks for assertion lookups
+- SAM render callback receives `(model)` only, `proposal` is undefined. Extract action info from `this.lastAction`
+```
+
+#### Memory File Locations
+
+Memory files are stored in `.puffin/memory/branches/`:
+
+```
+.puffin/memory/branches/
+├── ui.md
+├── backend.md
+├── architecture.md
+├── specifications.md
+├── deployment.md
+└── custom-branch-name.md
+```
+
+Each branch gets its own memory file with sanitized filenames (special characters replaced with hyphens).
+
+#### Memory File Format
+
+Memory files follow a strict markdown structure:
+
+```markdown
+# Branch Memory: ui
+
+> Auto-generated by Memory Plugin | Last updated: 2026-02-08T14:30:00.000Z
+
+## Facts
+
+- Technology fact 1
+- Technology fact 2
+
+## Architectural Decisions
+
+- Design choice 1 and trade-off explanation
+- Design choice 2 with alternatives considered
+
+## Conventions
+
+- Coding standard 1
+- Naming pattern 2
+
+## Bug Patterns
+
+- Known issue 1 and workaround
+- Gotcha 2 with solution
+```
+
+#### How Memory is Created
+
+**Automatic Memorization:**
+
+On every Puffin startup, the Memory Plugin runs background maintenance:
+
+1. **Discover Branches**: Queries history service for all known branches
+2. **Find Unmemoized Branches**: Compares against existing `.md` files
+3. **Memorize Up to 20 Branches**: Processes unmemoized branches (limit per startup)
+4. **Deferred Processing**: Remaining branches handled on next startup
+
+**Manual Memorization:**
+
+Trigger memorization for specific branches via IPC:
+```javascript
+window.puffin.memory.memorize(branchId)
+```
+
+#### Memorization Pipeline
+
+The Memory Plugin uses a 6-step pipeline to extract and store knowledge:
+
+**Step 1: READ HISTORY**
+- Fetches all prompts and responses for the branch
+- Retrieves `{ content, response: { content } }` turns
+
+**Step 2: CHECK FALLBACKS**
+- Skips if no prompts exist
+- Skips if all responses are empty
+- Skips if fewer than 1 substantive turn (<50 chars combined)
+
+**Step 3: EXTRACT**
+- Builds extraction prompt with conversation history
+- Calls Claude CLI (haiku model, `--print`, maxTurns: 1)
+- Validates JSON response structure
+- Retries up to 2 times on failure
+
+**Step 4: READ EXISTING**
+- Checks for existing memory file
+- Returns `{ exists, parsed, raw }` or `exists: false`
+
+**Step 5: EVOLVE or CREATE**
+- **If existing memory exists**:
+  - LLM evolution merge (new knowledge + existing)
+  - Deduplicates similar entries
+  - Resolves conflicts (keeps most specific)
+- **If no existing memory**:
+  - Simple extraction-to-sections grouping
+  - No LLM needed for first pass
+
+**Step 6: WRITE TO DISK**
+- Generates markdown via branch-template
+- Atomic write to `.puffin/memory/branches/{branch}.md`
+
+**Return Statuses:**
+- `success`: Memory extracted and saved
+- `skipped`: Fallback condition triggered
+- `empty`: Nothing extracted from conversation
+- `error`: Failure during process
+
+#### Memory Injection into CLAUDE.md
+
+Branch memory is automatically included in branch-specific CLAUDE.md files:
+
+**Injection Process:**
+1. Branch-specific CLAUDE.md file is generated
+2. Memory template reads `.puffin/memory/branches/{branch}.md`
+3. Memory content is parsed and formatted
+4. Memory section inserted into CLAUDE.md
+
+**CLAUDE.md Structure:**
+```markdown
+# Project Context
+
+... project description, assumptions, coding preferences ...
+
+## Branch Focus: UI
+
+... branch-specific guidance ...
+
+## Branch Memory
+
+### Facts
+- [Memory facts from ui.md]
+
+### Architectural Decisions
+- [Memory decisions from ui.md]
+
+### Conventions
+- [Memory conventions from ui.md]
+
+### Bug Patterns
+- [Memory bug patterns from ui.md]
+
+... user stories, acceptance criteria ...
+```
+
+**Result:**
+Claude receives full context without you repeatedly explaining decisions.
+
+#### Memory Evolution
+
+When new knowledge is extracted from conversations:
+
+**Merge Strategy:**
+1. **Categorize New Knowledge**: Sort into Facts, Decisions, Conventions, Bugs
+2. **Compare with Existing**: Check for duplicates or conflicts
+3. **Deduplicate**: Remove near-identical entries
+4. **Resolve Conflicts**:
+   - Keep more specific over generic
+   - Keep recent over outdated
+   - Preserve both if genuinely different
+5. **Append New**: Add unique knowledge to appropriate section
+
+**Conflict Resolution Examples:**
+
+- "Uses SQLite" vs "Uses SQLite 3.45 via better-sqlite3" → Keep second (more specific)
+- "camelCase for variables" appears twice → Keep one (duplicate)
+- "Windows process.kill broken" + detailed workaround → Merge into single Bug Pattern entry
+
+#### Manual Memory Management
+
+While memory is auto-generated, you can manually edit memory files:
+
+**Editing Memory:**
+1. Open `.puffin/memory/branches/{branch}.md` in text editor
+2. Add/remove/modify entries in each section
+3. Save file
+4. Next Claude session will include your changes
+
+**When to Manually Edit:**
+- Correcting inaccurate extractions
+- Adding critical context not yet in conversations
+- Removing outdated information
+- Reorganizing for clarity
+
+**Best Practices:**
+- Keep entries concise (1-2 sentences)
+- Use bullet points for readability
+- Group related entries together
+- Remove obsolete information periodically
+
+#### Memory Plugin Settings
+
+Configure memory behavior in plugin settings:
+
+**Max Branches Per Run:**
+- Default: 20 branches per startup
+- Prevents long startup delays
+- Defers remaining branches to next run
+
+**Retry Logic:**
+- Default: 2 retries for LLM extraction
+- Exponential backoff: 2s, 4s, 8s
+
+**Fallback Thresholds:**
+- Minimum substantive content: 50 chars combined
+- Prevents empty memory files
+
+#### Viewing Memory Status
+
+Check memory status for branches:
+
+**IPC Handler:**
+```javascript
+const status = await window.puffin.memory.getStatus(branchId)
+// Returns: { exists: boolean, lastUpdated: timestamp, entryCount: number }
+```
+
+**Memory File Metadata:**
+Each file header includes:
+- Last updated timestamp
+- Auto-generation notice
+
+#### Troubleshooting Memory
+
+**Memory Not Appearing in CLAUDE.md:**
+- Check `.puffin/memory/branches/{branch}.md` exists
+- Verify file is not empty
+- Ensure branch name matches (check filename sanitization)
+
+**Extraction Failed:**
+- Check CLI Output for LLM errors
+- Verify conversation has substantive content
+- Try manual memorization via IPC
+
+**Duplicate Entries:**
+- Memory evolution should deduplicate automatically
+- If persists, manually edit memory file
+
+---
 
 ### Project Configuration
 
@@ -448,6 +1190,177 @@ If stories need changes:
 
 ---
 
+### Sprint Planning with CRE
+
+Create structured implementation plans with the Central Reasoning Engine before starting implementation.
+
+![Sprint Planning](screenshots/sprint-planning-cre.png)
+*Screenshot placeholder: CRE plan generation and review interface*
+
+#### Creating a Sprint
+
+Before CRE planning can begin, create a sprint from backlog stories:
+
+1. Go to **Backlog View**
+2. Select pending stories using checkboxes
+3. Click **"Create Sprint"** button
+4. Enter sprint name and description
+5. Click **"Create"**
+6. Sprint created with status: `created`
+
+#### Starting CRE Planning
+
+Once a sprint is created:
+
+1. Open Sprint panel (right sidebar or modal)
+2. Click **"Start Planning"** button
+3. Sprint status changes to: `planning`
+4. CRE begins plan generation process
+
+#### CRE Plan Generation
+
+The CRE analyzes your sprint and generates a comprehensive implementation plan:
+
+**Analysis Steps:**
+1. **Read User Stories**: CRE reviews all assigned stories, acceptance criteria
+2. **Consult Code Model**: CRE checks current codebase structure via h-DSL
+3. **Read Branch Memory**: CRE includes architectural decisions, conventions
+4. **Analyze Dependencies**: CRE identifies inter-story dependencies
+5. **Determine Sequence**: CRE orders stories for optimal implementation
+6. **Assign Branches**: CRE assigns stories to appropriate branches (UI, Backend, Fullstack, Plugin)
+
+**Plan Contents:**
+
+The generated plan includes:
+
+- **Implementation Sequence**: Ordered list of stories with rationale
+- **Branch Assignments**: Which branch each story belongs to
+- **Dependency Graph**: Visual representation of story dependencies
+- **Complexity Estimates**: Rough sizing for each story
+- **Risk Assessment**: Potential challenges or blockers
+
+#### Reviewing the Plan
+
+After plan generation completes, review the plan:
+
+**Plan Review Interface:**
+- **Sequence View**: Stories listed in implementation order
+- **Dependency View**: Graph showing story relationships
+- **Branch View**: Stories grouped by assigned branch
+- **Rationale**: Explanation for sequencing and branch decisions
+
+**Review Actions:**
+
+1. **Ask Questions**: Click "Ask CRE" to request clarifications
+   - "Why is Story A before Story B?"
+   - "Can we implement Story C on a different branch?"
+   - "What if we skip Story D?"
+
+2. **Request Changes**: Click "Request Changes" with specific modifications
+   - "Swap order of Story 2 and Story 3"
+   - "Assign Story 5 to Fullstack instead of UI"
+   - "Split Story 6 into two stories"
+
+3. **Iterate**: CRE regenerates plan based on your feedback
+   - Previous plan context preserved
+   - Changes explained in updated plan
+   - Dependency impacts highlighted
+
+#### Plan Iteration
+
+You can iterate on the plan as many times as needed:
+
+**Iteration Flow:**
+1. CRE generates initial plan
+2. You review and provide feedback
+3. CRE revises plan incorporating feedback
+4. You review updated plan
+5. Repeat until satisfied
+
+**Iteration History:**
+- All plan versions saved
+- Diff view shows changes between versions
+- Revert to previous version if needed
+
+#### Approving the Plan
+
+Once satisfied with the plan:
+
+1. Click **"Approve Plan"** button
+2. Confirmation dialog shows plan summary
+3. Click **"Confirm"** to approve
+4. Sprint status changes to: `planned`
+5. Plan ID stored with sprint for reference
+
+**After Approval:**
+- CRE generates inspection assertions for each story
+- Assertions stored in database and linked to stories
+- Ready-to-Implement Specifications (RIS) prepared
+- Implementation mode selection appears
+
+#### Inspection Assertion Generation
+
+After plan approval, CRE automatically generates assertions:
+
+**Assertion Generation Process:**
+1. For each user story in the plan
+2. CRE reads acceptance criteria
+3. CRE determines what artifacts should exist
+4. CRE creates testable assertions
+
+**Example Assertions for "Implement Login Form" story:**
+```json
+[
+  {
+    "id": "uuid-1",
+    "type": "FILE_EXISTS",
+    "file": "src/components/LoginForm.js",
+    "description": "Login form component file created"
+  },
+  {
+    "id": "uuid-2",
+    "type": "PATTERN_MATCH",
+    "file": "src/components/LoginForm.js",
+    "pattern": "async function handleLogin\\(",
+    "description": "Async login handler function exists"
+  },
+  {
+    "id": "uuid-3",
+    "type": "FUNCTION_SIGNATURE",
+    "file": "src/components/LoginForm.js",
+    "signature": "export default LoginForm",
+    "description": "LoginForm exported as default"
+  }
+]
+```
+
+**Assertion Storage:**
+- Saved to `inspection_assertions` table (per assertion)
+- Copied to `user_stories.inspection_assertions` JSON column (for UI)
+- Linked to story via `story_id` foreign key
+
+**Viewing Assertions:**
+- Click "View Assertions" in story card
+- See list of generated assertions
+- Each assertion shows type, target, and description
+
+#### Planning Without CRE (Manual Mode)
+
+You can still plan sprints manually without CRE:
+
+1. Create sprint from backlog
+2. Click **"Skip Planning"** instead of "Start Planning"
+3. Sprint status changes to: `ready`
+4. Proceed to manual implementation (human-controlled mode)
+5. No plan, no RIS, no automatic assertions
+
+**When to Skip CRE:**
+- Exploratory work with unclear requirements
+- Quick prototypes or experiments
+- Single-story sprints that don't warrant planning
+
+---
+
 ### Automated Sprint Implementation
 
 Let Claude orchestrate entire sprints autonomously, implementing all stories in sequence with built-in code review and bug fixing.
@@ -723,6 +1636,26 @@ Puffin ships with four built-in plugins that are automatically loaded on startup
   - Recent files tracking
 - **Access**: Click "Editor" in the navigation bar
 
+**9. RLM Document Analysis** 🔍
+- **Purpose**: Analyze large documents using the Recursive Language Model (RLM) approach
+- **Credits**: Based on the RLM concept by [John Adeojo](https://github.com/brainqub3). Original Claude Code RLM skill: [brainqub3/claude_code_RLM](https://github.com/brainqub3/claude_code_RLM)
+- **Features**:
+  - Large document support through intelligent chunking
+  - AI-powered iterative analysis using Claude Code CLI as sub-LLM
+  - Automatic query refinement across multiple iterations
+  - Synthesis of findings into coherent, well-structured answers
+  - Interactive results tree with chunk inspection
+  - Multiple query types: RLM Query (full analysis), Quick Query, Peek, Grep
+  - Export results to JSON or Markdown
+  - Session management with automatic cleanup
+- **How RLM Works**:
+  1. **Keyword Search**: Find chunks containing relevant keywords
+  2. **Chunk Analysis**: Claude Code analyzes each chunk, extracting findings
+  3. **Aggregation**: Deduplicate and rank findings by confidence
+  4. **Synthesis**: Combine findings into a coherent answer
+- **Requirements**: Python 3.7+ and Claude Code CLI must be installed
+- **Access**: Click "RLM Documents" in the navigation bar
+
 #### Plugin Architecture
 
 Plugins in Puffin follow a consistent structure:
@@ -734,6 +1667,420 @@ Plugins can contribute:
 - **Views**: New tabs in the navigation bar
 - **Commands**: Actions accessible via menus or keyboard shortcuts
 - **IPC Handlers**: Backend communication channels
+
+---
+
+### h-DSL Viewer Plugin
+
+Visualize and explore your Code Model structure, dependencies, and architectural patterns.
+
+![h-DSL Viewer](screenshots/hdsl-viewer.png)
+*Screenshot placeholder: Graph viewport showing code model visualization*
+
+#### What is the h-DSL Viewer?
+
+The h-DSL Viewer provides an interactive visualization of your project's Code Model (h-DSL instance). It helps you understand codebase structure, navigate dependencies, and explore architectural patterns.
+
+#### Accessing the Viewer
+
+Click the **"h-DSL Viewer"** tab in the navigation bar to open the plugin.
+
+#### Code Model Overview
+
+The Code Model represents your codebase as a structured graph:
+
+**Nodes**: Artifacts (modules, functions, classes, components)
+**Edges**: Relationships (imports, calls, extends, implements)
+**Metadata**: h-M3 primitive mappings, intent descriptions, properties
+
+#### Interactive Graph Viewport
+
+**Navigation:**
+- **Pan**: Click and drag background to move around
+- **Zoom**: Mouse wheel or pinch gesture to zoom in/out
+- **Center**: Double-click background to center on content
+- **Select**: Click node to view details
+
+**Node Types:**
+
+| Node | Shape | Color | Represents |
+|------|-------|-------|------------|
+| **Module** | Rectangle | Blue | File or module |
+| **Function** | Circle | Green | Function definition |
+| **Class** | Diamond | Purple | Class definition |
+| **Component** | Hexagon | Orange | UI component |
+
+**Edge Types:**
+
+| Edge | Style | Color | Represents |
+|------|-------|-------|------------|
+| **Import** | Solid | Gray | Module imports |
+| **Call** | Dashed | Blue | Function calls |
+| **Extends** | Thick | Green | Class inheritance |
+| **Implements** | Dotted | Purple | Interface implementation |
+
+#### Node Details Panel
+
+Click any node to view detailed information:
+
+**Basic Info:**
+- **Name**: Artifact name
+- **Type**: Module, function, class, etc.
+- **h-M3 Primitive**: Which primitive it maps to (TERM, RELATION, STATE, etc.)
+- **File Path**: Location in codebase
+- **Description**: Intent or purpose (prose)
+
+**Properties:**
+- Exported symbols
+- Function signatures
+- Class methods
+- Component props
+
+**Dependencies:**
+- **Outgoing**: What this artifact depends on
+- **Incoming**: What depends on this artifact
+- **Count**: Number of each dependency type
+
+#### Exploring Dependencies
+
+**Dependency Tracing:**
+
+1. Select a node in the graph
+2. Click **"Trace Dependencies"** in details panel
+3. Choose direction:
+   - **Outgoing**: Follow imports, calls, extends
+   - **Incoming**: See what uses this artifact
+   - **Both**: Show full dependency network
+
+4. Choose relationship type:
+   - **Import**: Module dependencies
+   - **Call**: Function call chains
+   - **Extends**: Inheritance hierarchies
+   - **All**: All relationship types
+
+5. Set depth limit (1-5 levels)
+6. Click **"Trace"** to visualize
+
+**Result:**
+- Highlighted path shows dependency chain
+- Intermediate nodes displayed in sequence
+- Circular dependencies flagged with warning
+
+#### Filtering and Search
+
+**Filter by Type:**
+- Show only modules, functions, classes, or components
+- Reduces visual clutter for large codebases
+
+**Search:**
+- Text search for artifact names
+- Filter by file path pattern
+- Filter by h-M3 primitive type
+
+**Tag Filtering:**
+- Filter by custom tags (if Code Model includes tagging)
+- Examples: `public-api`, `deprecated`, `critical-path`
+
+#### h-M3 Primitive Annotations
+
+Each Code Model element maps to exactly one h-M3 primitive:
+
+| Primitive | Purpose | Visual Indicator |
+|-----------|---------|-----------------|
+| **TERM** | Concrete artifact | 🔷 Diamond badge |
+| **PROSE** | Free-text description | 📝 Document badge |
+| **SLOT** | Property/attribute | 📌 Pin badge |
+| **RELATION** | Dependency/connection | 🔗 Link badge |
+| **STATE** | State machine state | ⚡ Bolt badge |
+| **TRANSITION** | State change | ➡️ Arrow badge |
+| **OUTCOME** | Result/effect | 🎯 Target badge |
+| **ALIGNMENT** | Correctness criteria | ✓ Check badge |
+
+**Viewing Annotations:**
+- Hover over node to see h-M3 badge
+- Details panel shows full primitive description
+- Filter graph by primitive type
+
+#### Architecture Navigation
+
+**Module Structure View:**
+- Hierarchical view of directory structure
+- Click folder to expand modules
+- Click module to highlight in graph
+
+**Component Hierarchy:**
+- Tree view of component parent/child relationships
+- Useful for UI architecture understanding
+
+**API Surface:**
+- List of all exported symbols
+- Filter by public/private
+- Highlight in graph to see usage
+
+#### Code Model Freshness
+
+The Code Model may be stale if code has changed since last introspection:
+
+**Freshness Indicator:**
+- **Green**: Up-to-date (last introspection within 24 hours)
+- **Yellow**: Potentially stale (24-72 hours)
+- **Red**: Definitely stale (>72 hours)
+
+**Refresh Code Model:**
+1. Click **"Refresh"** button in toolbar
+2. CRE Introspector scans codebase for changes
+3. Code Model updated with new artifacts and relationships
+4. Graph viewport reloads with fresh data
+
+**Note:** Large codebases may take several minutes to introspect.
+
+#### Exporting Visualizations
+
+**Export Graph:**
+- **PNG**: Raster image for documentation
+- **SVG**: Vector image for presentations
+- **JSON**: Code Model data for analysis
+
+**Use Cases:**
+- Include diagrams in architecture docs
+- Share dependency visualizations with team
+- Analyze Code Model programmatically
+
+#### Performance Tips
+
+**Large Codebases (500+ modules):**
+- Use filters to show subsets
+- Limit dependency tracing depth
+- Collapse module folders in hierarchy view
+- Disable edge rendering for faster navigation
+
+**Graph Rendering:**
+- Automatic layout optimization for <200 nodes
+- Manual layout control for larger graphs
+- Option to freeze layout for consistent positioning
+
+---
+
+### Outcome Lifecycle Plugin
+
+Track and manage development outcomes across sprint phases with full lifecycle management.
+
+![Outcome Lifecycle](screenshots/outcome-lifecycle.png)
+*Screenshot placeholder: Outcome tracking panel showing states and progress*
+
+#### What are Outcomes?
+
+Outcomes represent the results of development activities across sprint phases:
+- Planning decisions
+- Implementation completions
+- Code review findings
+- Bug fix resolutions
+
+#### Outcome States
+
+Outcomes progress through five states:
+
+| State | Icon | Description |
+|-------|------|-------------|
+| **Planned** | 📋 | Outcome expected but not started |
+| **In-Progress** | ⏳ | Currently being worked on |
+| **Completed** | ✅ | Successfully finished |
+| **Failed** | ❌ | Could not be completed |
+| **Cancelled** | 🚫 | Intentionally skipped |
+
+#### Sprint Phase Integration
+
+Outcomes are linked to specific sprint phases:
+
+**1. Planning Phase**
+- **Outcome**: Approved implementation plan
+- **Tracked**: Plan generation, iterations, approval
+- **Result**: Plan ID and approval timestamp
+
+**2. Implementation Phase**
+- **Outcome**: Completed user stories
+- **Tracked**: Story progress, assertions, cost
+- **Result**: Story completion status, criteria validation
+
+**3. Code Review Phase**
+- **Outcome**: Code review findings
+- **Tracked**: Issues identified, severity, location
+- **Result**: Finding count and categories
+
+**4. Bug Fix Phase**
+- **Outcome**: Fixed code review findings
+- **Tracked**: Fix progress, validation, status
+- **Result**: Fixed/Won't Fix counts
+
+#### Creating Outcomes
+
+**Automatic Creation:**
+
+Puffin automatically creates outcomes during sprint execution:
+
+- **Plan Approval**: Creates "Implementation Plan Approved" outcome
+- **Story Implementation**: Creates outcome per story
+- **Code Review**: Creates outcomes for each finding
+- **Bug Fixes**: Creates outcome per fix session
+
+**Manual Creation:**
+
+Create custom outcomes via IPC:
+```javascript
+window.puffin.outcomes.create({
+  sprintId: 'sprint-123',
+  phase: 'implementation',
+  type: 'story_completion',
+  description: 'Implement user authentication',
+  state: 'planned'
+})
+```
+
+#### Viewing Outcomes
+
+**Sprint Panel:**
+- Outcomes displayed in sprint details modal
+- Grouped by phase (Planning, Implementation, Review, Bug Fix)
+- Color-coded by state
+- Progress bars show phase completion
+
+**Outcome List View:**
+1. Click **"Outcomes"** tab in Sprint panel
+2. See all outcomes for the sprint
+3. Filter by phase, state, or type
+4. Sort by creation date or priority
+
+**Individual Outcome:**
+- Click outcome to view details
+- Shows description, state, timestamps
+- Links to related stories, findings, or commits
+
+#### Updating Outcome State
+
+**Automatic State Transitions:**
+
+Puffin updates outcome states as sprint progresses:
+
+- Story starts implementing → Outcome state: `in-progress`
+- Story marked complete → Outcome state: `completed`
+- Story fails validation → Outcome state: `failed`
+- Finding fixed → Outcome state: `completed`
+
+**Manual State Updates:**
+
+Update outcome state manually:
+```javascript
+window.puffin.outcomes.updateState(outcomeId, 'completed', {
+  completedAt: new Date().toISOString(),
+  notes: 'Fixed via commit abc123'
+})
+```
+
+#### Outcome Metadata
+
+Each outcome includes:
+
+**Core Fields:**
+- `id`: Unique identifier
+- `sprintId`: Associated sprint
+- `phase`: Sprint phase (planning, implementation, review, bugfix)
+- `type`: Outcome type (plan_approval, story_completion, finding_fix)
+- `state`: Current state (planned, in-progress, completed, failed, cancelled)
+- `description`: Human-readable description
+
+**Timestamps:**
+- `createdAt`: When outcome was created
+- `startedAt`: When work began (state → in-progress)
+- `completedAt`: When finished (state → completed)
+- `updatedAt`: Last state change
+
+**Cost & Duration:**
+- `cost`: API costs associated with outcome
+- `duration`: Time spent (in milliseconds)
+- `turnCount`: Number of Claude turns (for implementation outcomes)
+
+**Relationships:**
+- `storyId`: Related user story (for story outcomes)
+- `findingId`: Related code review finding (for bug fix outcomes)
+- `planId`: Related implementation plan (for plan outcomes)
+
+#### Outcome Statistics
+
+View aggregate statistics across outcomes:
+
+**Sprint Completion Summary:**
+- Total outcomes by phase
+- Completion rates (completed / total)
+- Average cost per outcome
+- Average duration per outcome
+
+**Phase Breakdown:**
+| Phase | Planned | In-Progress | Completed | Failed | Cancelled |
+|-------|---------|-------------|-----------|--------|-----------|
+| Planning | 1 | 0 | 1 | 0 | 0 |
+| Implementation | 8 | 2 | 5 | 1 | 0 |
+| Review | 12 | 3 | 8 | 0 | 1 |
+| Bug Fix | 12 | 0 | 11 | 0 | 1 |
+
+**Cost Tracking:**
+- Total cost by phase
+- Most expensive outcomes
+- Cost per story completion
+- Cost trends over time
+
+#### Outcome Persistence
+
+Outcomes are stored in the `outcomes` SQLite table:
+
+```sql
+CREATE TABLE outcomes (
+  id TEXT PRIMARY KEY,
+  sprint_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  type TEXT NOT NULL,
+  state TEXT NOT NULL,
+  description TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT,
+  updated_at TEXT,
+  cost REAL,
+  duration INTEGER,
+  turn_count INTEGER,
+  story_id TEXT,
+  finding_id TEXT,
+  plan_id TEXT,
+  metadata TEXT
+)
+```
+
+**Database Operations:**
+- **Create**: `INSERT` new outcome
+- **Update State**: `UPDATE` state and timestamps
+- **Fetch**: `SELECT` by sprint, phase, or state
+- **Statistics**: Aggregate queries for summaries
+
+#### Use Cases
+
+**Sprint Progress Tracking:**
+- Monitor which outcomes are in-progress
+- Identify blocked outcomes
+- Estimate time to sprint completion
+
+**Cost Analysis:**
+- Break down costs by phase
+- Identify expensive outcomes
+- Optimize future sprints based on cost data
+
+**Historical Review:**
+- Review past sprint outcomes
+- Compare completion rates over time
+- Learn from failed outcomes
+
+**Reporting:**
+- Export outcome data for stakeholders
+- Generate sprint completion reports
+- Track team velocity via outcome metrics
 
 ---
 
@@ -2014,4 +3361,17 @@ Puffin uses Electron with modern web technologies:
 
 ---
 
-*This manual covers Puffin version 2.12.4. For the latest updates and features, check the GitHub repository and release notes.*
+*This manual covers Puffin version 3.0.0. For the latest updates and features, check the [GitHub repository](https://github.com/jdubray/puffin) and [changelog](../CHANGELOG.md).*
+
+---
+
+## Additional Resources
+
+- **[Central Reasoning Engine Specification](CENTRAL_REASONING_ENGINE.md)** - Complete CRE technical specification
+- **[CRE Detailed Design](CRE_DETAILED_DESIGN.md)** - Implementation architecture and design decisions
+- **[h-DSL & h-M3 Research](h-DSL.md)** - Theoretical foundations of the Code Model
+- **[Excalidraw Plugin Summary](excalidraw-plugin-summary.md)** - AI diagram generation workflow
+- **[Memory Plugin Lifecycle](memory-summary.md)** - How branch memory extraction works
+- **[Outcome Lifecycle](outcomes-summary.md)** - Sprint outcome tracking details
+- **[Architecture Report](ARCHITECTURE_REPORT.md)** - System architecture analysis
+- **[Changelog](../CHANGELOG.md)** - Full version history and release notes

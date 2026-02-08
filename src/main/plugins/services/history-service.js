@@ -91,7 +91,8 @@ class HistoryService {
    */
   isAvailable() {
     const puffinState = this._getPuffinStateInstance()
-    return puffinState !== null && puffinState.history !== null
+    const available = puffinState != null && puffinState.history != null
+    return available
   }
 
   /**

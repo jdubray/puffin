@@ -383,6 +383,16 @@ select {
   background: var(--bg-hover);
 }
 
+.btn.outline {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn.outline:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
 .btn.danger {
   background: var(--color-error);
   color: white;

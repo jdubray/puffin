@@ -338,6 +338,17 @@ export class ChangeTracker {
   }
 
   /**
+   * Clear all state (changes, baseline, and highlights)
+   * Used when opening a new file
+   */
+  clear() {
+    this.previousContent = null
+    this.previousLines = []
+    this.changes = []
+    this.lineChangeMap.clear()
+  }
+
+  /**
    * Toggle highlighting visibility
    * @param {boolean} enabled - Whether highlighting should be visible
    */

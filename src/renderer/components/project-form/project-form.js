@@ -239,6 +239,14 @@ export class ProjectFormComponent {
       })
     }
 
+    // CRE Manual Refresh button
+    const creRefreshBtn = document.getElementById('cre-manual-refresh-btn')
+    if (creRefreshBtn) {
+      creRefreshBtn.addEventListener('click', () => {
+        this.handleCreManualRefresh()
+      })
+    }
+
     // Color input synchronization (color picker <-> text input)
     this.bindColorInputs()
 
@@ -340,6 +348,16 @@ export class ProjectFormComponent {
   }
 
   /**
+   * Re-initialize the form (called when view is re-activated)
+   */
+  reinitialize() {
+    // Reset initialization flag so form repopulates on next render
+    this._initialized = false
+    // Clear form reference to force rebinding on next init()
+    this.form = null
+  }
+
+  /**
    * Populate form with config data
    */
   populateForm(config) {
@@ -413,6 +431,14 @@ export class ProjectFormComponent {
     // Debug Mode
     const debugCheckbox = document.getElementById('debug-mode-checkbox')
     if (debugCheckbox) debugCheckbox.checked = config.debugMode || false
+
+    // CRE Settings
+    const creConfig = config.cre || {}
+    const sprintEndConfig = creConfig.sprintEnd || {}
+    const creAutoRefresh = document.getElementById('cre-sprint-auto-refresh')
+    const creFullRebuild = document.getElementById('cre-sprint-full-rebuild')
+    if (creAutoRefresh) creAutoRefresh.checked = sprintEndConfig.autoRefresh || false
+    if (creFullRebuild) creFullRebuild.checked = sprintEndConfig.fullRebuild || false
   }
 
   /**
@@ -503,7 +529,13 @@ export class ProjectFormComponent {
         language: this.getElementValue('coding-standard-language', 'none'),
         content: this.getElementValue('coding-standard-content', '')
       },
-      debugMode: this.getCheckboxValue('debug-mode-checkbox')
+      debugMode: this.getCheckboxValue('debug-mode-checkbox'),
+      cre: {
+        sprintEnd: {
+          autoRefresh: this.getCheckboxValue('cre-sprint-auto-refresh'),
+          fullRebuild: this.getCheckboxValue('cre-sprint-full-rebuild')
+        }
+      }
     }
   }
 
@@ -534,6 +566,55 @@ export class ProjectFormComponent {
       }
     } catch (error) {
       this.showError(`Error generating Claude.md: ${error.message}`)
+    }
+  }
+
+  /**
+   * Handle CRE Manual Refresh button click
+   * Triggers Code Model refresh via cre:refresh-model IPC
+   */
+  async handleCreManualRefresh() {
+    const btn = document.getElementById('cre-manual-refresh-btn')
+    const originalText = btn?.textContent
+
+    try {
+      // Update button to show progress
+      if (btn) {
+        btn.disabled = true
+        btn.textContent = 'Refreshing...'
+      }
+
+      // Check if CRE API is available
+      if (!window.puffin?.cre?.refreshModel) {
+        this.showError('CRE API not available. Make sure the project is loaded.')
+        return
+      }
+
+      // Get current setting for full rebuild
+      const fullRebuild = this.getCheckboxValue('cre-sprint-full-rebuild')
+
+      // Call the refresh API
+      const result = await window.puffin.cre.refreshModel({ forceRebuild: fullRebuild })
+
+      if (result.success) {
+        const source = result.data?.source || 'unknown'
+        const updated = result.data?.updated
+        if (updated) {
+          this.showSuccess(`Code Model refreshed (${source})`)
+        } else {
+          this.showSuccess('Code Model is already up-to-date')
+        }
+      } else {
+        this.showError(result.error || 'Failed to refresh Code Model')
+      }
+    } catch (error) {
+      this.showError(`Error refreshing Code Model: ${error.message}`)
+    } finally {
+      // Restore button
+      if (btn) {
+        btn.disabled = false
+        btn.textContent = originalText
+      }
     }
   }
 

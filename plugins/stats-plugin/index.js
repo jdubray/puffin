@@ -12,7 +12,9 @@ const StatsPlugin = {
     this.historyService = context.getService('history')
 
     if (!this.historyService) {
-      context.log.warn('History service not available - stats will be limited')
+      context.log.warn('History service not available at activation time - stats will be limited')
+    } else {
+      context.log.info('History service acquired, isAvailable:', this.historyService.isAvailable())
     }
 
     // Register IPC handlers for renderer communication
@@ -44,11 +46,14 @@ const StatsPlugin = {
 
     // Use real history data if available
     if (this.historyService && this.historyService.isAvailable()) {
-      return this.computeWeeklyStatsFromHistory(weeks)
+      const stats = await this.computeWeeklyStatsFromHistory(weeks)
+      const totals = this.computeTotals(stats)
+      this.context.log.info(`Weekly stats computed from history: ${stats.length} weeks, ${totals.turns} turns, $${totals.cost.toFixed(2)} cost`)
+      return stats
     }
 
     // Fallback to mock data if history is unavailable
-    this.context.log.debug('Using mock data - history service unavailable')
+    this.context.log.warn('Using mock data - history service unavailable (historyService:', !!this.historyService, ', isAvailable:', this.historyService?.isAvailable?.(), ')')
     return this.generateMockData(weeks)
   },
 
@@ -59,6 +64,12 @@ const StatsPlugin = {
    */
   async computeWeeklyStatsFromHistory(weeks) {
     const allPrompts = await this.historyService.getAllPrompts()
+
+    // Log prompt data quality for debugging
+    const withResponse = allPrompts.filter(p => p.response)
+    const withCost = withResponse.filter(p => p.response.cost > 0)
+    const withTurns = withResponse.filter(p => p.response.turns > 0)
+    this.context.log.info(`History: ${allPrompts.length} prompts, ${withResponse.length} with response, ${withCost.length} with cost, ${withTurns.length} with turns`)
 
     // Group prompts by week
     const weeklyData = new Map()
@@ -83,6 +94,8 @@ const StatsPlugin = {
     }
 
     // Aggregate prompt data into weeks
+    let matched = 0
+    let unmatched = 0
     for (const prompt of allPrompts) {
       if (!prompt.response) continue
 
@@ -93,11 +106,15 @@ const StatsPlugin = {
 
       const weekStats = weeklyData.get(weekKey)
       if (weekStats) {
+        matched++
         weekStats.turns += prompt.response.turns || 1
         weekStats.cost += prompt.response.cost || 0
         weekStats.duration += prompt.response.duration || 0
+      } else {
+        unmatched++
       }
     }
+    this.context.log.info(`Week matching: ${matched} matched, ${unmatched} outside window`)
 
     // Convert to array and sort by week
     return Array.from(weeklyData.values())
@@ -117,9 +134,12 @@ const StatsPlugin = {
       branches = await this.computeBranchStats()
     }
 
+    const totals = this.computeTotals(weeklyStats)
+    this.context.log.info(`getStats: ${branches.length} branches, totals: turns=${totals.turns}, cost=$${totals.cost.toFixed(2)}, duration=${totals.duration}ms`)
+
     return {
       weeklyStats,
-      totals: this.computeTotals(weeklyStats),
+      totals,
       branches
     }
   },

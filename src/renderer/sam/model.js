@@ -283,12 +283,24 @@ export const loadStateAcceptor = model => proposal => {
     model.storyGenerations = state.storyGenerations || model.storyGenerations
     model.uiGuidelines = state.uiGuidelines || model.uiGuidelines
 
+    // Reset sprint to 'created' if it was mid-planning when the app closed.
+    // The CRE workflow is transient (process lock, state machine) and cannot
+    // resume across restarts, so the user must re-trigger "Plan Sprint".
+    if (model.activeSprint && model.activeSprint.status === 'planning') {
+      console.log('[INIT] Sprint was in planning state on restart — resetting to created')
+      model.activeSprint.status = 'created'
+    }
+
     // Clear any in-progress state from previous session
     // This ensures the prompt textarea is enabled on startup
     model.pendingPromptId = null
     model.streamingResponse = ''
     model._pendingStoryImplementation = null
     model._pendingSprintPlanning = null
+    model._pendingCrePlanning = null
+    model._pendingCreAnswers = null
+    model._pendingCreIteration = null
+    model._pendingCreApproval = null
     model.storyDerivation = {
       status: 'idle',
       pendingStories: [],
@@ -965,7 +977,9 @@ export const updateUserStoryAcceptor = model => proposal => {
 
 export const deleteUserStoryAcceptor = model => proposal => {
   if (proposal?.type === 'DELETE_USER_STORY') {
+    console.log('[DELETE-DEBUG] deleteUserStoryAcceptor called with storyId:', proposal.payload.id, 'current story count:', model.userStories.length)
     model.userStories = model.userStories.filter(s => s.id !== proposal.payload.id)
+    console.log('[DELETE-DEBUG] After filter, story count:', model.userStories.length)
   }
 }
 
@@ -1965,94 +1979,143 @@ export const createSprintAcceptor = model => proposal => {
   }
 }
 
-// Start sprint planning - builds and submits planning prompt
+// Start sprint planning - triggers CRE planning workflow (AC1)
 export const startSprintPlanningAcceptor = model => proposal => {
   if (proposal?.type === 'START_SPRINT_PLANNING') {
     if (!model.activeSprint) return
 
     const sprint = model.activeSprint
-    const stories = sprint.stories
 
     // Update sprint status to planning
     sprint.status = 'planning'
 
-    // Build planning prompt with all story context (including IDs for order tracking)
-    const storyDescriptions = stories.map((story, i) => {
-      let desc = `### Story ${i + 1}: ${story.title}\n`
-      desc += `**Story ID:** \`${story.id}\`\n`
-      if (story.description) {
-        desc += `${story.description}\n`
+    // Clear any previous CRE iteration/answers state
+    model._pendingCreIteration = null
+    model._pendingCreAnswers = null
+
+    // Signal CRE planning phase — the renderer app.js will pick this up
+    // and call window.puffin.cre.generatePlan() → submitAnswers → approve → generateRis per story
+    model._pendingCrePlanning = {
+      sprintId: sprint.id,
+      stories: sprint.stories.map(s => ({
+        id: s.id,
+        title: s.title,
+        description: s.description || '',
+        acceptanceCriteria: s.acceptanceCriteria || [],
+        dependsOn: s.dependsOn || []
+      }))
+    }
+  }
+}
+
+// CRE plan ready for user review — stores plan but does NOT approve or generate RIS
+export const crePlanReadyAcceptor = model => proposal => {
+  if (proposal?.type === 'CRE_PLAN_READY') {
+    if (!model.activeSprint) return
+
+    const { planData } = proposal.payload
+    const sprint = model.activeSprint
+
+    // Store plan in sprint for user review
+    sprint.plan = typeof planData === 'string' ? planData : JSON.stringify(planData, null, 2)
+    sprint.crePlan = planData
+    sprint.crePlanId = planData?.planId || planData?.id || null
+    sprint.status = 'planned'
+
+    // Store story order from plan if available
+    const storyOrder = planData?.plan?.planItems?.map(p => p.storyId) || planData?.planItems?.map(p => p.storyId)
+    if (storyOrder && storyOrder.length > 0) {
+      sprint.implementationOrder = storyOrder
+    } else {
+      sprint.implementationOrder = sprint.stories.map(s => s.id)
+    }
+
+    // Default all to fullstack
+    if (!sprint.branchAssignments) {
+      sprint.branchAssignments = {}
+      for (const s of sprint.stories) {
+        const planItem = planData?.planItems?.find(p => p.storyId === s.id)
+        sprint.branchAssignments[s.id] = planItem?.branchType || 'fullstack'
       }
-      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
-        desc += `\n**Acceptance Criteria:**\n`
-        desc += story.acceptanceCriteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n')
-      }
-      return desc
-    }).join('\n\n')
+    }
 
-    // Build story ID reference list for the order/assignment outputs
-    const storyIdList = stories.map(s => `- \`${s.id}\`: ${s.title}`).join('\n')
+    // Clear pending CRE flags
+    model._pendingCrePlanning = null
+    model._pendingCreIteration = null
+    model._pendingCreAnswers = null
 
-    const planningPrompt = `## Sprint Planning Request
+    console.log('[CRE] Plan ready for review. User must approve before RIS generation.')
+  }
+}
 
-**IMPORTANT: This is a PLANNING ONLY request. Do NOT make any code changes, create files, or modify the codebase. Only analyze and produce a written plan.**
+// User-initiated CRE approval — sets pending flag to trigger approve + RIS flow
+export const approvePlanWithCreAcceptor = model => proposal => {
+  if (proposal?.type === 'APPROVE_PLAN_WITH_CRE') {
+    if (!model.activeSprint) return
 
-Please create a detailed implementation plan for the following user stories:
+    model._pendingCreApproval = {
+      planId: proposal.payload.planId,
+      timestamp: proposal.payload.timestamp
+    }
+  }
+}
 
-${storyDescriptions}
+// CRE planning phase completed — stores RIS map after user-approved plan (AC2)
+export const crePlanningCompleteAcceptor = model => proposal => {
+  if (proposal?.type === 'CRE_PLANNING_COMPLETE') {
+    if (!model.activeSprint) return
 
----
+    const { plan, risMap, storyOrder } = proposal.payload
+    const sprint = model.activeSprint
 
-**Planning Requirements:**
+    // Update plan if provided (may have changed during approval)
+    if (plan) {
+      sprint.plan = typeof plan === 'string' ? plan : JSON.stringify(plan, null, 2)
+      sprint.crePlan = plan
+      sprint.crePlanId = plan?.id || null
+    }
+    sprint.risMap = risMap || {}
+    sprint.planApprovedAt = Date.now()
 
-1. **Architecture Analysis**: Analyze how these stories fit together and identify shared components or dependencies
-2. **Implementation Order**: Recommend the optimal order to implement these stories
-3. **Technical Approach**: For each story, outline the key technical decisions and approach
-4. **File Changes**: Identify the main files that will need to be created or modified
-5. **Risk Assessment**: Note any potential challenges or risks
-6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
-7. **Open Questions**: List any clarifications needed before implementation
+    // Use CRE-determined story order if available, fallback to original
+    if (storyOrder && storyOrder.length > 0) {
+      sprint.implementationOrder = storyOrder
+    } else if (!sprint.implementationOrder) {
+      sprint.implementationOrder = sprint.stories.map(s => s.id)
+    }
 
----
+    // Clear pending CRE flags
+    model._pendingCrePlanning = null
+    model._pendingCreIteration = null
+    model._pendingCreAnswers = null
+    model._pendingCreApproval = null
 
-## Implementation Order & Branch Assignment Analysis
+    console.log('[CRE] Planning complete (user-approved). Story order:', sprint.implementationOrder)
+  }
+}
 
-After completing the implementation plans above, provide the following structured outputs for automated orchestration:
+// CRE planning error — revert sprint to created status
+export const crePlanningErrorAcceptor = model => proposal => {
+  if (proposal?.type === 'CRE_PLANNING_ERROR') {
+    if (!model.activeSprint) return
 
-### Story Reference (for your convenience):
-${storyIdList}
+    model.activeSprint.status = 'created'
+    model._pendingCrePlanning = null
+    model._pendingCreIteration = null
+    model._pendingCreAnswers = null
+    model.sprintError = {
+      type: 'CRE_PLANNING_FAILED',
+      message: proposal.payload.error,
+      timestamp: proposal.payload.timestamp
+    }
+    console.error('[CRE] Planning failed:', proposal.payload.error)
+  }
+}
 
-### Required Outputs:
-
-**1. Implementation Order** - Analyze dependencies between stories and determine the optimal implementation sequence. Consider:
-- Dependencies (implement prerequisites first)
-- Complexity progression (simpler stories first when no dependencies)
-- Branch grouping (cluster UI stories together, Backend stories together)
-
-Output the recommended order as a single line:
-\`\`\`
-IMPLEMENTATION_ORDER: id1, id2, id3, ...
-\`\`\`
-
-**2. Branch Assignments** - For each story, determine the appropriate implementation branch:
-- **UI**: Visual components, styling, user interactions, frontend-only changes
-- **Backend**: Data processing, APIs, business logic, database changes
-- **Fullstack**: Stories requiring both UI and backend changes
-- **Plugin**: Extensions to the plugin system
-
-Output assignments as a single line:
-\`\`\`
-BRANCH_ASSIGNMENTS: id1=ui, id2=backend, id3=fullstack, ...
-\`\`\`
-
----
-
-**Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
-
-Please provide a comprehensive plan that I can review before starting implementation.`
-
-    // Get the current branch
-    const branchId = model.history.activeBranch || 'specifications'
+// Add a synthetic prompt entry to branch history (for CRE plan/RIS/assertion visibility)
+export const addSyntheticPromptAcceptor = model => proposal => {
+  if (proposal?.type === 'ADD_SYNTHETIC_PROMPT') {
+    const { id, branchId, content, responseContent, title, parentId, timestamp } = proposal.payload
 
     // Ensure branch exists
     if (!model.history.branches[branchId]) {
@@ -2063,37 +2126,53 @@ Please provide a comprehensive plan that I can review before starting implementa
       }
     }
 
-    // Create prompt entry
-    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
     const prompt = {
-      id: promptId,
-      content: planningPrompt,
-      parentId: null,
-      timestamp: Date.now(),
-      response: null,
-      storyIds: stories.map(s => s.id)
+      id,
+      parentId: parentId || null,
+      content,
+      title: title || null,
+      timestamp,
+      response: {
+        content: responseContent,
+        timestamp
+      },
+      children: []
     }
 
-    // Add to branch
+    // If parentId, add to parent's children array
+    if (parentId) {
+      const parent = model.history.branches[branchId].prompts.find(p => p.id === parentId)
+      if (parent) {
+        if (!parent.children) parent.children = []
+        parent.children.push(id)
+      }
+    }
+
     model.history.branches[branchId].prompts.push(prompt)
+    model.history.activeBranch = branchId
+    model.history.activePromptId = id
 
-    // Set as active prompt
-    model.history.activePromptId = promptId
+    // Navigate to prompt view so the user sees the entry
+    model.currentView = 'prompt'
 
-    // Set pending prompt for streaming
-    model.pendingPromptId = promptId
-    model.streamingResponse = ''
+    console.log(`[CRE] Synthetic prompt added to ${branchId}:`, title || id)
+  }
+}
 
-    // Update sprint with prompt reference
-    sprint.promptId = promptId
+// CRE introspection completed — unblocks next story (AC5)
+export const creIntrospectionCompleteAcceptor = model => proposal => {
+  if (proposal?.type === 'CRE_INTROSPECTION_COMPLETE') {
+    const sprint = model.activeSprint
+    if (!sprint?.orchestration) return
 
-    // Store for IPC submission
-    model._pendingSprintPlanning = {
-      promptId,
-      promptContent: planningPrompt,
-      branchId,
-      storyIds: stories.map(s => s.id)
+    const { storyId } = proposal.payload
+    // Mark introspection done so orchestration can proceed to next story
+    if (!sprint.orchestration.introspectionCompleted) {
+      sprint.orchestration.introspectionCompleted = []
     }
+    sprint.orchestration.introspectionCompleted.push(storyId)
+
+    console.log('[CRE] Introspection complete for story:', storyId)
   }
 }
 
@@ -2431,7 +2510,7 @@ export const orchestrationStoryCompletedAcceptor = model => proposal => {
     console.log('[MODEL-TRACE-C1] Has orchestration:', !!model.activeSprint?.orchestration)
 
     if (model.activeSprint?.orchestration) {
-      const { storyId, sessionId, timestamp } = proposal.payload
+      const { storyId, sessionId, timestamp, completionSummary } = proposal.payload
 
       console.log('[MODEL-TRACE-C2] Before update completedStories:', model.activeSprint.orchestration.completedStories)
 
@@ -2449,7 +2528,7 @@ export const orchestrationStoryCompletedAcceptor = model => proposal => {
 
       console.log('[MODEL-TRACE-C3] After update completedStories:', model.activeSprint.orchestration.completedStories)
 
-      // Update session tracking
+      // Update session tracking with completion summary
       if (!model.activeSprint.orchestration.storySessions) {
         model.activeSprint.orchestration.storySessions = {}
       }
@@ -2457,7 +2536,8 @@ export const orchestrationStoryCompletedAcceptor = model => proposal => {
         status: 'completed',
         startedAt: model.activeSprint.orchestration.storySessions[storyId]?.startedAt,
         completedAt: timestamp,
-        sessionId: sessionId
+        sessionId: sessionId,
+        completionSummary: completionSummary || null
       }
 
       // Clear current story if it matches
@@ -2890,6 +2970,27 @@ export const clearPendingSprintPlanningAcceptor = model => proposal => {
   }
 }
 
+// Clear pending CRE planning flag (after generate-plan IPC call starts)
+export const clearPendingCrePlanningAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PENDING_CRE_PLANNING') {
+    model._pendingCrePlanning = null
+  }
+}
+
+// Clear pending CRE answers flag (after submit-answers IPC call starts)
+export const clearPendingCreAnswersAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PENDING_CRE_ANSWERS') {
+    model._pendingCreAnswers = null
+  }
+}
+
+// Clear pending CRE iteration flag (after refine-plan IPC call starts)
+export const clearPendingCreIterationAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_PENDING_CRE_ITERATION') {
+    model._pendingCreIteration = null
+  }
+}
+
 // Iterate on the sprint plan with clarifying answers
 export const iterateSprintPlanAcceptor = model => proposal => {
   if (proposal?.type === 'ITERATE_SPRINT_PLAN') {
@@ -2899,155 +3000,38 @@ export const iterateSprintPlanAcceptor = model => proposal => {
     }
 
     const sprint = model.activeSprint
-    const { clarifications } = proposal.payload
+    const { clarifications, planId } = proposal.payload
 
     // Track iteration count for context
     const iterationCount = (sprint.iterationCount || 0) + 1
     sprint.iterationCount = iterationCount
 
-    // Build iteration prompt with previous plan and clarifications
-    const stories = sprint.stories
-    const storyDescriptions = stories.map((story, i) => {
-      let desc = `### Story ${i + 1}: ${story.title}\n`
-      desc += `**Story ID:** \`${story.id}\`\n`
-      if (story.description) {
-        desc += `${story.description}\n`
-      }
-      if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
-        desc += `\n**Acceptance Criteria:**\n`
-        desc += story.acceptanceCriteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n')
-      }
-      return desc
-    }).join('\n\n')
-
-    // Create story reference list for structured output
-    const storyReferenceList = stories.map(s => `- \`${s.id}\`: ${s.title}`).join('\n')
-
-    // Include previous plan context if available
-    const previousPlanSection = sprint.plan
-      ? `### Previous Implementation Plan (Iteration ${iterationCount - 1}):
-
-${sprint.plan}
-
----
-
-`
-      : ''
-
-    // Include previous clarifications history if available
-    const previousClarificationsSection = sprint.clarificationHistory?.length > 0
-      ? `### Previous Clarifications:
-
-${sprint.clarificationHistory.map((c, i) => `**Iteration ${i + 1}:**\n${c}`).join('\n\n')}
-
----
-
-`
-      : ''
-
-    // Store current clarifications in history
-    if (!sprint.clarificationHistory) {
-      sprint.clarificationHistory = []
-    }
-    sprint.clarificationHistory.push(clarifications)
-
-    const iterationPrompt = `## Sprint Plan Iteration Request (Iteration ${iterationCount})
-
-**IMPORTANT: This is a PLANNING ONLY request. Do NOT make any code changes, create files, or modify the codebase. Only analyze and produce a written plan.**
-
-${previousPlanSection}${previousClarificationsSection}### Current Developer Clarifications:
-${clarifications}
-
----
-
-### User Stories Being Planned:
-
-${storyDescriptions}
-
----
-
-### Story Reference (for structured output):
-${storyReferenceList}
-
----
-
-**Planning Requirements:**
-
-1. **Architecture Analysis**: Analyze how these stories fit together and identify shared components or dependencies
-2. **Implementation Order**: Recommend the optimal order to implement these stories based on dependencies
-3. **Technical Approach**: For each story, outline the key technical decisions and approach
-4. **File Changes**: Identify the main files that will need to be created or modified
-5. **Risk Assessment**: Note any potential challenges or risks
-6. **Estimated Complexity**: Rate each story as Low/Medium/High complexity
-7. **Open Questions**: List any remaining clarifications needed
-
----
-
-**REQUIRED STRUCTURED OUTPUT:**
-
-At the end of your plan, include these machine-parseable lines using ONLY the story IDs listed above:
-
-\`\`\`
-IMPLEMENTATION_ORDER: <story_id_1>, <story_id_2>, <story_id_3>, ...
-BRANCH_ASSIGNMENTS: <story_id_1>=<branch>, <story_id_2>=<branch>, ...
-\`\`\`
-
-Where \`<branch>\` is one of: \`ui\`, \`backend\`, \`fullstack\`, \`plugin\`
-
-**Remember: Do NOT execute any tools that modify files. This is analysis and planning only.**
-
-Please incorporate all previous context and the latest clarifications to provide a comprehensive revised plan.`
-
     // Update sprint status back to planning
     sprint.status = 'planning'
 
-    // Get the current branch
-    const branchId = model.history.activeBranch || 'specifications'
-
-    // Ensure branch exists
-    if (!model.history.branches[branchId]) {
-      model.history.branches[branchId] = {
-        id: branchId,
-        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
-        prompts: []
-      }
+    // Signal CRE refinement — app.js will call cre:refine-plan
+    model._pendingCreIteration = {
+      planId: planId || sprint.crePlanId,
+      feedback: clarifications
     }
 
-    // Create prompt entry for the iteration
-    const promptId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
-    const prompt = {
-      id: promptId,
-      content: iterationPrompt,
-      parentId: sprint.promptId || null,  // Link to previous plan prompt
-      timestamp: Date.now(),
-      response: null,
-      storyIds: stories.map(s => s.id),
-      isIteration: true
+    console.log('[SPRINT] Plan iteration', iterationCount, 'started via CRE refinement, planId:', planId || sprint.crePlanId)
+  }
+}
+
+export const submitPlanAnswersAcceptor = model => proposal => {
+  if (proposal?.type === 'SUBMIT_PLAN_ANSWERS') {
+    if (!model.activeSprint) return
+
+    const { planId, sprintId, stories, answers } = proposal.payload
+
+    // Signal CRE answer submission — app.js will call cre:submit-answers
+    model._pendingCreAnswers = {
+      planId,
+      sprintId,
+      stories,
+      answers
     }
-
-    // Add to branch
-    model.history.branches[branchId].prompts.push(prompt)
-
-    // Set as active prompt
-    model.history.activePromptId = promptId
-
-    // Set pending prompt for streaming
-    model.pendingPromptId = promptId
-    model.streamingResponse = ''
-
-    // Update sprint with prompt reference
-    sprint.promptId = promptId
-
-    // Store for IPC submission
-    model._pendingSprintPlanning = {
-      promptId,
-      promptContent: iterationPrompt,
-      branchId,
-      storyIds: stories.map(s => s.id),
-      isIteration: true
-    }
-
-    console.log('[SPRINT] Plan iteration', iterationCount, 'started with clarifications, promptId:', promptId, 'hasPreviousPlan:', !!sprint.plan)
   }
 }
 
@@ -3263,6 +3247,14 @@ export const updateSprintStoryStatusAcceptor = model => proposal => {
       sprintStory.updatedAt = timestamp
       if (status === 'completed') {
         sprintStory.completedAt = timestamp
+        // Clear activeImplementationStory if this story was being implemented.
+        // The orchestration flow sets activeImplementationStory when starting a story
+        // but never clears it on completion, causing the "Implementing..." badge
+        // to persist through code review and bugfix phases.
+        if (model.activeImplementationStory?.id === storyId) {
+          console.log('[MODEL-TRACE-A3] Clearing activeImplementationStory (was:', storyId, ')')
+          model.activeImplementationStory = null
+        }
       }
       console.log('[MODEL-TRACE-A3] Updated sprint story:', {
         storyId,
@@ -3826,9 +3818,27 @@ ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 `
   }
 
-  // Include the approved plan if available
+  // AC4: Include CRE-generated RIS if available, otherwise fall back to raw plan
   let planIncluded = false
-  if (sprint?.promptId && model) {
+  const ris = sprint?.risMap?.[story.id]
+  if (ris && !ris.error) {
+    planIncluded = true
+    const risMarkdown = ris.markdown || ris.sections
+      ? [ris.sections?.context, ris.sections?.objective, ris.sections?.instructions,
+         ris.sections?.conventions, ris.sections?.assertions].filter(Boolean).join('\n\n')
+      : JSON.stringify(ris, null, 2)
+    prompt += `
+### Refined Implementation Specification (RIS)
+
+The following RIS was generated by the CRE for this story. Follow it precisely:
+
+${risMarkdown}
+
+---
+
+`
+  } else if (sprint?.promptId && model) {
+    // Fallback: include raw plan from Claude response
     const planPrompt = findPromptById(model, sprint.promptId)
     if (planPrompt?.response?.content) {
       planIncluded = true
@@ -4171,6 +4181,12 @@ export const acceptors = [
   // Sprint
   createSprintAcceptor,
   startSprintPlanningAcceptor,
+  crePlanReadyAcceptor,
+  approvePlanWithCreAcceptor,
+  crePlanningCompleteAcceptor,
+  crePlanningErrorAcceptor,
+  addSyntheticPromptAcceptor,
+  creIntrospectionCompleteAcceptor,
   clearSprintAcceptor,
   clearSprintWithDetailsAcceptor,
   deleteSprintAcceptor,
@@ -4199,7 +4215,11 @@ export const acceptors = [
   toggleSprintSummaryAcceptor,
   setSprintPlanAcceptor,
   iterateSprintPlanAcceptor,
+  submitPlanAnswersAcceptor,
   clearPendingSprintPlanningAcceptor,
+  clearPendingCrePlanningAcceptor,
+  clearPendingCreAnswersAcceptor,
+  clearPendingCreIterationAcceptor,
   startSprintStoryImplementationAcceptor,
   clearPendingStoryImplementationAcceptor,
   completeStoryBranchAcceptor,

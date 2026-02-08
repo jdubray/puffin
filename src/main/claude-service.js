@@ -14,6 +14,8 @@
 
 const { spawn } = require('child_process')
 const path = require('path')
+const fs = require('fs')
+const os = require('os')
 
 /**
  * Tool emoji mapping for different tool types
@@ -75,6 +77,7 @@ class ClaudeService {
     this.currentProcess = null
     this.projectPath = null
     this._processLock = false // Prevents multiple CLI spawns
+    this._cancelRequested = false // Track explicit cancel to distinguish from errors
     this._pluginManager = null // Reference to plugin manager for branch focus retrieval
     this._pendingContextUpdate = null // Queued branch focus update to include in next prompt
     this._currentBranchId = null // Track current branch for context updates
@@ -86,6 +89,75 @@ class ClaudeService {
    */
   isProcessRunning() {
     return this._processLock || this.currentProcess !== null
+  }
+
+  /**
+   * Kill a spawned process, handling Windows process tree correctly.
+   * On Windows with shell: true, process.kill() only kills the shell (cmd.exe),
+   * leaving child processes orphaned. This method uses taskkill /T /F to kill
+   * the entire process tree.
+   * @param {ChildProcess} proc - The process to kill
+   * @private
+   */
+  _killProcess(proc) {
+    if (!proc) return
+    if (process.platform === 'win32' && proc.pid) {
+      const { exec } = require('child_process')
+      exec(`taskkill /pid ${proc.pid} /T /F`, (err) => {
+        if (err) {
+          try { proc.kill('SIGTERM') } catch { /* already dead */ }
+        }
+      })
+    } else {
+      try { proc.kill('SIGTERM') } catch { /* already dead */ }
+    }
+  }
+
+  /**
+   * Get path to an empty MCP config file. Used by sendPrompt with
+   * --strict-mcp-config to prevent the model from accessing MCP tools
+   * (e.g. hdsl_*) which cause it to explore the codebase instead of
+   * producing structured output.
+   * @returns {string} Absolute path to empty MCP config JSON file
+   * @private
+   */
+  _getEmptyMcpConfigPath() {
+    if (!this._emptyMcpConfigPath) {
+      this._emptyMcpConfigPath = path.join(os.tmpdir(), 'puffin-empty-mcp.json')
+      if (!fs.existsSync(this._emptyMcpConfigPath)) {
+        fs.writeFileSync(this._emptyMcpConfigPath, '{"mcpServers": {}}', 'utf8')
+      }
+    }
+    return this._emptyMcpConfigPath
+  }
+
+  /**
+   * Acquire the process lock for an external caller (e.g. CRE).
+   * Retries briefly to handle transient lock states, then throws if still held.
+   * @param {number} [retries=3] - Number of retry attempts
+   * @param {number} [delayMs=500] - Delay between retries in ms
+   * @returns {Promise<boolean>} true if lock was acquired
+   */
+  async acquireLock(retries = 3, delayMs = 500) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      if (!this.isProcessRunning()) {
+        this._processLock = true
+        console.log(`[acquireLock] Lock acquired on attempt ${attempt + 1}`)
+        return true
+      }
+      if (attempt < retries) {
+        console.log(`[acquireLock] Lock busy (attempt ${attempt + 1}/${retries + 1}), retrying in ${delayMs}ms...`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    }
+    throw new Error('Claude CLI process is busy. Wait for the current operation to complete.')
+  }
+
+  /**
+   * Release the process lock held by an external caller.
+   */
+  releaseLock() {
+    this._processLock = false
   }
 
   /**
@@ -142,7 +214,7 @@ class ClaudeService {
    * @param {Function} onRaw - Callback for raw JSON lines (optional)
    * @param {Function} onFullPrompt - Callback with the full built prompt (optional)
    */
-  async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null) {
+  async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null, onQuestion = null) {
     // CRITICAL: Prevent multiple CLI instances from being spawned
     if (this.isProcessRunning()) {
       console.error('[CLAUDE-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
@@ -151,6 +223,7 @@ class ClaudeService {
 
     // Acquire the process lock immediately
     this._processLock = true
+    this._cancelRequested = false
     console.log('[CLAUDE-GUARD] Process lock acquired')
 
     // Build the prompt with project context (async for plugin-based branch context)
@@ -189,9 +262,12 @@ class ClaudeService {
 
       console.log('Claude CLI process started, PID:', this.currentProcess.pid)
 
-      // Write prompt to stdin and close it
-      this.currentProcess.stdin.write(prompt)
-      this.currentProcess.stdin.end()
+      // Write prompt as stream-json message to stdin (keep stdin open for answers)
+      const promptMessage = JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'text', text: prompt }] }
+      })
+      this.currentProcess.stdin.write(promptMessage + '\n')
 
       // Handle stdout (streaming JSON response)
       this.currentProcess.stdout.on('data', (chunk) => {
@@ -227,6 +303,18 @@ class ClaudeService {
                   }
                   messageText += block.text
                   streamedContent += block.text
+                } else if (block.type === 'tool_use' && block.name === 'AskUserQuestion') {
+                  // Claude is asking the user a question — emit for UI handling
+                  console.log('[CLAUDE-QUESTION] AskUserQuestion detected, tool_use_id:', block.id)
+                  if (onQuestion) {
+                    onQuestion({
+                      toolUseId: block.id,
+                      questions: block.input?.questions || [],
+                      // Store process reference for answer delivery
+                      _processRef: this.currentProcess
+                    })
+                  }
+                  streamedContent += '\n❓'
                 } else if (block.type === 'tool_use') {
                   // Add tool emoji indicator to content with line break
                   const toolEmoji = getToolEmoji(block.name)
@@ -248,6 +336,11 @@ class ClaudeService {
             if (json.type === 'result') {
               resultData = json
               console.log('[CLAUDE-DEBUG] Captured result, result field length:', json.result?.length || 0)
+
+              // Close stdin now that the session is complete
+              if (this.currentProcess?.stdin && !this.currentProcess.stdin.destroyed) {
+                this.currentProcess.stdin.end()
+              }
 
               // Call onComplete immediately when we get the result message
               // Don't wait for process close - the CLI may hang
@@ -309,9 +402,11 @@ class ClaudeService {
 
       // Handle process completion
       this.currentProcess.on('close', (code) => {
+        const wasCancelled = this._cancelRequested
         this.currentProcess = null
         this._processLock = false
-        console.log('[CLAUDE-GUARD] Process lock released (close)')
+        this._cancelRequested = false
+        console.log('[CLAUDE-GUARD] Process lock released (close)', wasCancelled ? '(cancelled)' : '')
 
         console.log('[CLAUDE-DEBUG] Process closed with code:', code)
         console.log('[CLAUDE-DEBUG] buffer remaining:', buffer?.length || 0, 'chars')
@@ -400,6 +495,19 @@ class ClaudeService {
           })
           onComplete(response)
           resolve(response)
+        } else if (wasCancelled) {
+          // User cancelled — treat as normal completion with partial content
+          console.log('[CLAUDE-DEBUG] Process was cancelled by user')
+          if (!completionCalled) {
+            completionCalled = true
+            const response = {
+              content: streamedContent || fullOutput || '',
+              cancelled: true,
+              exitCode: code
+            }
+            onComplete(response)
+          }
+          resolve({ content: '', cancelled: true, exitCode: code })
         } else {
           const error = new Error(`Claude CLI exited with code ${code}: ${errorOutput}`)
           console.error('[CLAUDE-DEBUG] Process failed:', error.message)
@@ -419,6 +527,40 @@ class ClaudeService {
   }
 
   /**
+   * Send an answer to a pending AskUserQuestion from the CLI process.
+   * Writes a tool_result message to the process stdin.
+   * @param {string} toolUseId - The tool_use_id from the AskUserQuestion block
+   * @param {object} answers - Answer data keyed by question index
+   */
+  sendAnswer(toolUseId, answers) {
+    if (!this.currentProcess || !this.currentProcess.stdin || this.currentProcess.stdin.destroyed) {
+      console.error('[CLAUDE-ANSWER] No active process or stdin closed')
+      return false
+    }
+
+    // Format answers as the tool result content string
+    const answerText = Object.entries(answers)
+      .map(([, value]) => value)
+      .join('\n')
+
+    const resultMessage = JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content: answerText
+        }]
+      }
+    })
+
+    console.log('[CLAUDE-ANSWER] Sending answer for tool_use_id:', toolUseId)
+    this.currentProcess.stdin.write(resultMessage + '\n')
+    return true
+  }
+
+  /**
    * Build CLI arguments
    * @private
    */
@@ -431,6 +573,9 @@ class ClaudeService {
     // Use streaming JSON for structured output (requires --verbose with --print)
     args.push('--output-format', 'stream-json')
     args.push('--verbose')
+
+    // Enable bidirectional streaming for interactive question support
+    args.push('--input-format', 'stream-json')
 
     // Limit turns to prevent runaway processes
     args.push('--max-turns', String(data.maxTurns || '40'))
@@ -453,8 +598,12 @@ class ClaudeService {
       args.push('--system-prompt', data.systemPrompt)
     }
 
-    // Prompt will be passed via stdin (using pipe operator)
-    // This is handled by the caller writing to stdin
+    // Disallow specific tools (e.g., suppress AskUserQuestion in automated flows)
+    if (data.disallowedTools?.length > 0) {
+      args.push('--disallowedTools', ...data.disallowedTools)
+    }
+
+    // Prompt will be passed via stdin as stream-json
     args.push('-')
 
     return args
@@ -641,6 +790,7 @@ ${updatedContext}
     lines.push('')
     lines.push('The following user stories are relevant to this conversation:')
     lines.push('')
+    lines.push('--- BEGIN USER STORIES ---')
 
     stories.forEach((story, i) => {
       lines.push(`### ${i + 1}. ${story.title}`)
@@ -659,6 +809,7 @@ ${updatedContext}
       lines.push('')
     })
 
+    lines.push('--- END USER STORIES ---')
     return lines.join('\n')
   }
 
@@ -676,9 +827,9 @@ ${updatedContext}
     lines.push(`**Source Thread:** ${handoffContext.sourceThreadName || 'Unknown'}`)
     lines.push(`**Source Branch:** ${handoffContext.sourceBranch || 'Unknown'}`)
     lines.push('')
-    lines.push('### Handoff Summary')
-    lines.push('')
+    lines.push('--- BEGIN HANDOFF SUMMARY ---')
     lines.push(handoffContext.summary)
+    lines.push('--- END HANDOFF SUMMARY ---')
     lines.push('')
 
     return lines.join('\n')
@@ -806,29 +957,35 @@ ${updatedContext}
    * Cancel the current request
    */
   cancel() {
-    if (this.currentProcess) {
-      console.log('[CLAUDE-GUARD] Cancelling CLI process')
-      this.currentProcess.kill('SIGTERM')
+    this._cancelRequested = true
 
-      // Force kill after 2 seconds if still running
+    if (this.currentProcess) {
+      console.log('[CLAUDE-GUARD] Cancelling CLI process, PID:', this.currentProcess.pid)
+      this._killProcess(this.currentProcess)
+
+      // Force kill after 3 seconds if still running
       setTimeout(() => {
         if (this.currentProcess) {
           console.log('[CLAUDE-GUARD] Force killing CLI process')
-          this.currentProcess.kill('SIGKILL')
+          try { this.currentProcess.kill('SIGKILL') } catch { /* already dead */ }
           this.currentProcess = null
           this._processLock = false
+          this._cancelRequested = false
           console.log('[CLAUDE-GUARD] Process lock released (force kill)')
         }
-      }, 2000)
+      }, 3000)
     } else {
       // Ensure lock is released even if no process
       this._processLock = false
+      this._cancelRequested = false
     }
   }
 
   /**
-   * Get spawn options based on platform
-   * Windows requires shell: true for .cmd files
+   * Get spawn options based on platform.
+   * On Windows, shell: true is needed for .cmd files but breaks arguments
+   * containing JSON (double quotes get mangled by cmd.exe). We detect at
+   * first call whether `claude` is a native .exe and skip the shell if so.
    * @private
    */
   getSpawnOptions(cwd = null) {
@@ -851,9 +1008,27 @@ ${updatedContext}
       }
     }
 
+    // On Windows, detect whether `claude` is a native .exe (no shell needed)
+    // or a .cmd wrapper (shell required). Cache the result.
+    let useShell = false
+    if (process.platform === 'win32') {
+      if (this._claudeIsExe === undefined) {
+        try {
+          const { execSync } = require('child_process')
+          const claudePath = execSync('where claude', { encoding: 'utf8', timeout: 5000 }).trim().split('\n')[0].trim()
+          this._claudeIsExe = claudePath.endsWith('.exe')
+          console.log('[CLAUDE-SPAWN] claude resolved to:', claudePath, '(isExe:', this._claudeIsExe, ')')
+        } catch {
+          this._claudeIsExe = false
+          console.log('[CLAUDE-SPAWN] Could not resolve claude path, using shell: true')
+        }
+      }
+      useShell = !this._claudeIsExe
+    }
+
     const options = {
       env,
-      shell: process.platform === 'win32'
+      shell: useShell
     }
     if (cwd) {
       options.cwd = cwd
@@ -1100,7 +1275,7 @@ ${updatedContext}
    * @param {Object} project - Project context
    * @returns {Promise<{success: boolean, stories?: Array, error?: string, rawResponse?: string}>}
    */
-  async deriveStories(prompt, projectPath, project = null, progressCallback = null, conversationContext = null) {
+  async deriveStories(prompt, projectPath, project = null, progressCallback = null, conversationContext = null, model = null) {
     console.log('[STORY-DERIVATION] Starting story derivation for prompt:', prompt.substring(0, 100) + '...')
     console.log('[STORY-DERIVATION] Conversation context length:', conversationContext?.length || 0)
 
@@ -1108,6 +1283,19 @@ ${updatedContext}
       console.log('[STORY-DERIVATION]', msg)
       if (progressCallback) progressCallback(msg)
     }
+
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    if (this.isProcessRunning()) {
+      console.error('[STORY-DERIVATION-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
+      return {
+        success: false,
+        error: 'A Claude CLI process is already running. Please wait for it to complete or cancel it first.'
+      }
+    }
+
+    // Acquire the process lock immediately
+    this._processLock = true
+    console.log('[STORY-DERIVATION-GUARD] Process lock acquired')
 
     progress('Initializing...')
 
@@ -1145,22 +1333,26 @@ Guidelines:
     let fullPrompt = systemPrompt + '\n\n'
 
     if (project?.description) {
-      fullPrompt += `Project Context: ${project.description}\n\n`
+      fullPrompt += `--- BEGIN PROJECT CONTEXT ---\n${project.description}\n--- END PROJECT CONTEXT ---\n\n`
     }
 
     if (conversationContext) {
-      fullPrompt += `Recent Conversation Context (use this to understand what the user is referring to):\n${conversationContext}\n\n`
+      fullPrompt += `--- BEGIN CONVERSATION CONTEXT ---\n${conversationContext}\n--- END CONVERSATION CONTEXT ---\n\n`
     }
 
-    fullPrompt += `Current Request to derive user stories from:\n${prompt}`
+    fullPrompt += `--- BEGIN USER REQUEST ---\n${prompt}\n--- END USER REQUEST ---`
 
     return new Promise((resolve, reject) => {
       const cwd = projectPath || this.projectPath || process.cwd()
+      const selectedModel = model || 'sonnet'
       const args = [
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
         '--max-turns', '1',  // Single turn - no tool use, just output JSON
+        '--model', selectedModel,
+        '--tools', '',
+        '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
         '-'
       ]
 
@@ -1264,6 +1456,10 @@ Guidelines:
       })
 
       proc.on('close', (code) => {
+        // Release the process lock
+        this._processLock = false
+        console.log('[STORY-DERIVATION-GUARD] Process lock released (close)')
+
         progress(`Process closed with exit code: ${code}`)
         progress(`Total JSON messages received: ${allMessages.length}`)
         progress(`Message types: ${allMessages.map(m => m.type).join(', ') || '(none)'}`)
@@ -1314,6 +1510,10 @@ Guidelines:
       })
 
       proc.on('error', (error) => {
+        // Release the process lock
+        this._processLock = false
+        console.log('[STORY-DERIVATION-GUARD] Process lock released (error)')
+
         if (resolved) return
         resolved = true
         progress(`Process error: ${error.message}`)
@@ -1331,7 +1531,10 @@ Guidelines:
         progress(`Data received before timeout: ${dataReceived}`)
         progress(`Messages received before timeout: ${allMessages.length}`)
         progress(`Result text length before timeout: ${resultText.length}`)
-        proc.kill()
+        this._killProcess(proc)
+        // Release the process lock
+        this._processLock = false
+        console.log('[STORY-DERIVATION-GUARD] Process lock released (timeout)')
         resolve({
           success: false,
           error: 'Story derivation timed out',
@@ -1349,14 +1552,15 @@ Guidelines:
    * @param {Object} project - Project context
    * @returns {Promise<{success: boolean, stories?: Array, error?: string}>}
    */
-  async modifyStories(currentStories, feedback, projectPath, project = null) {
+  async modifyStories(currentStories, feedback, projectPath, project = null, model = null) {
     const storiesJson = JSON.stringify(currentStories, null, 2)
 
     const systemPrompt = `You are a requirements analyst. You have previously derived user stories from a request.
 Now the user wants to modify these stories based on their feedback.
 
-Current stories:
+--- BEGIN CURRENT STORIES ---
 ${storiesJson}
+--- END CURRENT STORIES ---
 
 Output ONLY a valid JSON array with the modified user stories in this exact format:
 [
@@ -1372,10 +1576,11 @@ Output ONLY the JSON array, no other text or markdown.`
 
     const fullPrompt = `${systemPrompt}
 
-User's feedback:
-${feedback}`
+--- BEGIN USER FEEDBACK ---
+${feedback}
+--- END USER FEEDBACK ---`
 
-    return this.deriveStories(fullPrompt, projectPath, project)
+    return this.deriveStories(fullPrompt, projectPath, project, null, null, model)
   }
 
   /**
@@ -1384,14 +1589,39 @@ ${feedback}`
    * @returns {Promise<string>} - Generated title
    */
   async generateTitle(content) {
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    if (this.isProcessRunning()) {
+      console.warn('[TITLE-GEN-GUARD] CLI process already running, using fallback title')
+      return this.generateFallbackTitle(content)
+    }
+
+    // Acquire the process lock immediately
+    this._processLock = true
+    console.log('[TITLE-GEN-GUARD] Process lock acquired')
+
     return new Promise((resolve, reject) => {
+      let resolved = false
+
+      const releaseAndResolve = (value) => {
+        if (resolved) return
+        resolved = true
+        this._processLock = false
+        console.log('[TITLE-GEN-GUARD] Process lock released')
+        resolve(value)
+      }
+
       // Create a simple prompt for title generation
       const titlePrompt = `Generate a concise 2-5 word title for this user request. Respond with ONLY the title, no quotes or additional text:
 
 ${content}`
 
-      // Use minimal options for title generation
-      const args = ['--print', '--max-turns', '1', '--model', 'haiku', '-']
+      // Use minimal options for title generation — disable all tools since we just need text output
+      const args = [
+        '--print', '--output-format', 'text', '--max-turns', '1', '--model', 'haiku',
+        '--tools', '',
+        '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
+        '-'
+      ]
 
       const cwd = this.projectPath || process.cwd()
       const spawnOptions = this.getSpawnOptions(cwd)
@@ -1429,23 +1659,23 @@ ${content}`
             .trim()
             .substring(0, 50)
 
-          resolve(cleanTitle || 'New Request')
+          releaseAndResolve(cleanTitle || 'New Request')
         } else {
           console.warn('Title generation failed, using fallback')
-          resolve(this.generateFallbackTitle(content))
+          releaseAndResolve(this.generateFallbackTitle(content))
         }
       })
 
       titleProcess.on('error', (error) => {
         console.warn('Title generation process error:', error)
-        resolve(this.generateFallbackTitle(content))
+        releaseAndResolve(this.generateFallbackTitle(content))
       })
 
       // Timeout after 10 seconds
       setTimeout(() => {
-        if (titleProcess) {
-          titleProcess.kill()
-          resolve(this.generateFallbackTitle(content))
+        if (!resolved && titleProcess) {
+          this._killProcess(titleProcess)
+          releaseAndResolve(this.generateFallbackTitle(content))
         }
       }, 10000)
     })
@@ -1463,9 +1693,33 @@ ${content}`
    * @returns {Promise<{success: boolean, response?: string, error?: string}>}
    */
   async sendPrompt(prompt, options = {}) {
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    // Check currentProcess (actual running process), not _processLock alone.
+    // _processLock may be held by an external caller (e.g. CRE) that is
+    // invoking sendPrompt as part of its locked session — that is allowed.
+    if (this.currentProcess !== null) {
+      console.error('[sendPrompt-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
+      return { success: false, error: 'A Claude CLI process is already running. Please wait for it to complete.' }
+    }
+
+    // Track whether we own the lock or an external caller (CRE) already holds it.
+    // If the lock is already held, we must NOT release it when the process finishes —
+    // the external caller's withProcessLock.finally will handle that.
+    const lockAlreadyHeld = this._processLock
+    this._processLock = true
+    if (!lockAlreadyHeld) {
+      console.log('[sendPrompt-GUARD] Process lock acquired')
+    } else {
+      console.log('[sendPrompt-GUARD] Lock already held by external caller, proceeding')
+    }
+
     return new Promise((resolve) => {
       const model = options.model || 'haiku'
-      const maxTurns = options.maxTurns || 1
+      const jsonSchema = options.jsonSchema || null
+      // When using --json-schema, the StructuredOutput tool-use cycle needs
+      // multiple turns: text + tool_use call, tool_result, final text.
+      // Use caller's maxTurns when provided, otherwise default to 4 minimum for jsonSchema.
+      const maxTurns = options.maxTurns || (jsonSchema ? 4 : 1)
       const timeout = options.timeout || 60000 // Default 60 seconds
 
       const args = [
@@ -1473,10 +1727,36 @@ ${content}`
         '--output-format', 'stream-json',
         '--verbose',
         '--max-turns', String(maxTurns),
-        '--model', model,
-        '--permission-mode', 'acceptEdits',
-        '-'
+        '--model', model
       ]
+
+      // Optional: disable tools for methods that should answer from prompt context
+      // only (e.g., assertion generation). Plan generation, RIS, and refinement
+      // NEED tools to explore the codebase. Caller can pass { disableTools: true }.
+      // CRITICAL: If jsonSchema is provided, we MUST allow StructuredOutput tool,
+      // so don't use --tools '' which disables ALL tools. Instead, just disable MCP.
+      if (options.disableTools && !jsonSchema) {
+        args.push('--tools', '')
+        // --strict-mcp-config with an empty config disables MCP tools (e.g. hdsl_*)
+        args.push('--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config')
+      } else if (options.disableTools && jsonSchema) {
+        // When jsonSchema is used, we need StructuredOutput tool enabled,
+        // but we can still disable MCP tools (Read, Grep, hdsl_*, etc.)
+        args.push('--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config')
+        console.log('[sendPrompt] jsonSchema requires StructuredOutput tool, only disabling MCP tools')
+        console.log('[sendPrompt] Claude args:', args.join(' '))
+      }
+
+      // Append --json-schema when a schema is provided
+      if (jsonSchema) {
+        const schemaStr = typeof jsonSchema === 'string'
+          ? jsonSchema
+          : JSON.stringify(jsonSchema)
+        args.push('--json-schema', schemaStr)
+        console.log('[sendPrompt] Using --json-schema, maxTurns bumped to:', maxTurns)
+      }
+
+      args.push('-') // stdin prompt (must be last)
 
       const cwd = this.projectPath || process.cwd()
       const spawnOptions = this.getSpawnOptions(cwd)
@@ -1489,6 +1769,8 @@ ${content}`
 
       if (!proc.pid) {
         console.error('[sendPrompt] Failed to spawn process - no PID')
+        if (!lockAlreadyHeld) { this._processLock = false }
+        console.log('[sendPrompt-GUARD] Process lock released (no PID)')
         resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
         return
       }
@@ -1497,6 +1779,7 @@ ${content}`
 
       let buffer = ''
       let resultText = ''
+      let structuredData = null // Extracted from StructuredOutput tool_use block
       let errorOutput = ''
       let resolved = false
       let dataReceived = false
@@ -1521,10 +1804,14 @@ ${content}`
             const json = JSON.parse(line)
             console.log('[sendPrompt] Received JSON type:', json.type)
 
-            // Extract text from assistant messages
+            // Extract content from assistant messages
             if (json.type === 'assistant' && json.message?.content) {
               for (const block of json.message.content) {
-                if (block.type === 'text') {
+                // Detect StructuredOutput tool_use blocks (from --json-schema)
+                if (block.type === 'tool_use' && block.name === 'StructuredOutput') {
+                  structuredData = block.input
+                  console.log('[sendPrompt] StructuredOutput tool_use detected, keys:', Object.keys(block.input || {}).join(', '))
+                } else if (block.type === 'text') {
                   resultText += block.text
                   console.log('[sendPrompt] Accumulated text, total length:', resultText.length)
                 }
@@ -1553,9 +1840,14 @@ ${content}`
       })
 
       proc.on('close', (code) => {
+        // Release the process lock only if we own it (not held by external caller)
+        if (!lockAlreadyHeld) { this._processLock = false }
+        console.log('[sendPrompt-GUARD] Process lock released (close), external:', lockAlreadyHeld)
+
         console.log('[sendPrompt] Process closed with code:', code)
         console.log('[sendPrompt] Data received:', dataReceived)
         console.log('[sendPrompt] Result text length:', resultText.length)
+        console.log('[sendPrompt] StructuredOutput found:', structuredData !== null)
 
         if (resolved) {
           console.log('[sendPrompt] Already resolved, skipping close handler')
@@ -1575,12 +1867,21 @@ ${content}`
           }
         }
 
-        if (code === 0 || resultText.length > 0) {
+        // When --json-schema was used, prefer the StructuredOutput tool_use data.
+        // Serialize back to JSON string for backward compatibility with callers
+        // that call JSON.parse() on the response.
+        if (jsonSchema && structuredData !== null) {
+          const responseStr = JSON.stringify(structuredData)
+          console.log('[sendPrompt] Using StructuredOutput data, length:', responseStr.length)
+          resolve({ success: true, response: responseStr })
+        } else if (jsonSchema && structuredData === null && resultText.length > 0) {
+          // Schema was provided but no StructuredOutput block found — fall back
+          // to raw text so parseJsonResponse() heuristics can attempt extraction
+          console.warn('[sendPrompt] --json-schema was used but no StructuredOutput tool_use found, falling back to text')
+          resolve({ success: true, response: resultText.trim() })
+        } else if (code === 0 || resultText.length > 0) {
           console.log('[sendPrompt] Success, response length:', resultText.trim().length)
-          resolve({
-            success: true,
-            response: resultText.trim()
-          })
+          resolve({ success: true, response: resultText.trim() })
         } else {
           console.log('[sendPrompt] Failed, error:', errorOutput || `exit code ${code}`)
           resolve({
@@ -1591,6 +1892,10 @@ ${content}`
       })
 
       proc.on('error', (error) => {
+        // Release the process lock only if we own it
+        if (!lockAlreadyHeld) { this._processLock = false }
+        console.log('[sendPrompt-GUARD] Process lock released (error), external:', lockAlreadyHeld)
+
         console.error('[sendPrompt] Process error:', error.message)
         if (resolved) return
         resolved = true
@@ -1603,9 +1908,14 @@ ${content}`
         console.log('[sendPrompt] Timeout after', timeout, 'ms')
         console.log('[sendPrompt] Data received before timeout:', dataReceived)
         console.log('[sendPrompt] Result text length before timeout:', resultText.length)
-        proc.kill()
+        this._killProcess(proc)
         resolved = true
-        if (resultText.length > 0) {
+        // Release the process lock only if we own it
+        if (!lockAlreadyHeld) { this._processLock = false }
+        console.log('[sendPrompt-GUARD] Process lock released (timeout), external:', lockAlreadyHeld)
+        if (structuredData !== null) {
+          resolve({ success: true, response: JSON.stringify(structuredData) })
+        } else if (resultText.length > 0) {
           resolve({ success: true, response: resultText.trim() })
         } else {
           resolve({ success: false, error: 'Request timed out' })
@@ -1669,11 +1979,24 @@ ${content}`
    * @returns {Promise<{success: boolean, assertions?: Object, error?: string}>}
    *          assertions is a map of storyId -> array of assertions
    */
-  async generateInspectionAssertions(stories, plan, codingStandard = '', progressCallback = null) {
+  async generateInspectionAssertions(stories, plan, codingStandard = '', progressCallback = null, model = null) {
     const progress = (msg) => {
       console.log('[ASSERTION-GEN]', msg)
       if (progressCallback) progressCallback(msg)
     }
+
+    // CRITICAL: Prevent multiple CLI instances from being spawned
+    if (this.isProcessRunning()) {
+      console.error('[ASSERTION-GEN-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
+      return {
+        success: false,
+        error: 'A Claude CLI process is already running. Please wait for it to complete or cancel it first.'
+      }
+    }
+
+    // Acquire the process lock immediately
+    this._processLock = true
+    console.log('[ASSERTION-GEN-GUARD] Process lock acquired')
 
     // Build coding standard context if provided
     const codingStandardContext = codingStandard
@@ -1743,11 +2066,15 @@ ${storiesContext}
 Generate inspection assertions for each story. Output ONLY the JSON object.`
 
     return new Promise((resolve) => {
+      const selectedModel = model || 'sonnet'
       const args = [
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
-        '--max-turns', '40',  // Allow multiple turns for tool use
+        '--max-turns', '1',
+        '--model', selectedModel,
+        '--tools', '',
+        '--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config',
         '-'
       ]
 
@@ -1755,12 +2082,14 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
       const spawnOptions = this.getSpawnOptions(cwd)
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
 
-      progress(`Generating assertions for ${stories.length} stories...`)
+      progress(`Generating assertions for ${stories.length} stories with model ${selectedModel}...`)
 
       const proc = spawn('claude', args, spawnOptions)
 
       if (!proc.pid) {
         progress('ERROR: Failed to spawn process')
+        this._processLock = false
+        console.log('[ASSERTION-GEN-GUARD] Process lock released (no PID)')
         resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
         return
       }
@@ -1775,7 +2104,9 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true
-          proc.kill()
+          this._killProcess(proc)
+          this._processLock = false
+          console.log('[ASSERTION-GEN-GUARD] Process lock released (timeout)')
           progress('ERROR: Timeout')
           resolve({ success: false, error: 'Assertion generation timed out' })
         }
@@ -1829,6 +2160,10 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
 
       proc.on('close', (code) => {
         clearTimeout(timeout)
+        // Release the process lock
+        this._processLock = false
+        console.log('[ASSERTION-GEN-GUARD] Process lock released (close)')
+
         if (resolved) return
         resolved = true
 
@@ -1904,6 +2239,10 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
 
       proc.on('error', (err) => {
         clearTimeout(timeout)
+        // Release the process lock
+        this._processLock = false
+        console.log('[ASSERTION-GEN-GUARD] Process lock released (error)')
+
         if (resolved) return
         resolved = true
         progress(`ERROR: ${err.message}`)

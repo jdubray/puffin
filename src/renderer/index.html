@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; font-src 'self' https://unpkg.com; img-src 'self' file: data:">
   <title>Puffin</title>
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/components.css">
@@ -328,6 +328,34 @@
                 </div>
               </fieldset>
 
+              <fieldset class="options-fieldset">
+                <legend>Central Reasoning Engine (CRE)</legend>
+                <p class="fieldset-description">Configure the h-DSL Code Model update behavior during sprint execution.</p>
+
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="cre-sprint-auto-refresh">
+                    <span>Auto-refresh Code Model at Sprint End</span>
+                  </label>
+                  <small class="form-hint">Automatically refresh the Code Model when all stories complete. If disabled, use manual refresh before committing.</small>
+                </div>
+
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="cre-sprint-full-rebuild">
+                    <span>Full Rebuild (instead of incremental)</span>
+                  </label>
+                  <small class="form-hint">Perform a complete Code Model rebuild at sprint end. More thorough but slower than incremental update.</small>
+                </div>
+
+                <div class="form-group">
+                  <button type="button" id="cre-manual-refresh-btn" class="btn secondary">
+                    Refresh Code Model Now
+                  </button>
+                  <small class="form-hint">Manually trigger Code Model refresh. Use after debugging or before committing changes.</small>
+                </div>
+              </fieldset>
+
               <fieldset class="options-fieldset plugins-fieldset">
                 <legend>Claude Code Plugins</legend>
                 <p class="fieldset-description">Manage skill plugins that extend Claude's capabilities. Plugins provide specialized context and instructions for specific tasks.</p>
@@ -434,12 +462,8 @@
                       <option value="haiku">Haiku</option>
                     </select>
                   </div>
-                  <label class="prompt-checkbox" title="Derive user stories from this prompt before implementation">
-                    <input type="checkbox" id="derive-stories-checkbox">
-                    <span>Derive User Stories</span>
-                  </label>
                   <div class="prompt-option-group" id="thinking-budget-group">
-                    <label for="thinking-budget" class="prompt-select-label">Thinking:</label>
+                    <label for="thinking-budget" class="prompt-select-label">Thinking Budget:</label>
                     <select id="thinking-budget" class="prompt-model-select" title="Set thinking budget for extended reasoning">
                       <option value="none" selected>None</option>
                       <option value="think">Think (25%)</option>
@@ -450,6 +474,9 @@
                   </div>
                 </div>
                 <div class="prompt-actions">
+                  <button id="derive-stories-btn" class="btn outline" title="Derive user stories from conversation context" disabled>
+                    Derive Stories
+                  </button>
                   <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread">
                     Create New Thread
                   </button>

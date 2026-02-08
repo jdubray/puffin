@@ -350,6 +350,15 @@ export class ModalManager {
       case 'assertion-failures':
         this.renderAssertionFailures(modalTitle, modalContent, modalActions, modal.data)
         break
+      case 'ris-view':
+        this.renderRisView(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'completion-summary-view':
+        this.renderCompletionSummaryView(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'plan-review':
+        this.renderPlanReview(modalTitle, modalContent, modalActions, modal.data)
+        break
       case 'alert':
         this.renderAlert(modalTitle, modalContent, modalActions, modal.data)
         break
@@ -358,6 +367,9 @@ export class ModalManager {
         break
       case 'orchestration-plan':
         this.renderOrchestrationPlan(modalTitle, modalContent, modalActions, modal.data, state)
+        break
+      case 'claude-question':
+        this.renderClaudeQuestion(modalTitle, modalContent, modalActions, modal.data)
         break
       default:
         console.warn('Unknown modal type:', modal.type)
@@ -2027,6 +2039,9 @@ export class ModalManager {
 
     content.innerHTML = `
       <form id="story-detail-form" class="story-detail-form">
+        <div class="story-detail-ris-bar">
+          <a href="#" class="story-ris-link story-detail-ris-link" data-story-id="${story.id}" title="View Refined Implementation Specification">View RIS</a>
+        </div>
         <div class="form-group">
           <label for="story-title">Title <span class="required">*</span></label>
           <input type="text" id="story-title" class="form-input" value="${this.escapeHtml(story.title)}" required maxlength="200">
@@ -2070,6 +2085,33 @@ export class ModalManager {
           <button type="button" id="add-assertion-btn" class="btn small secondary">+ Add Assertion</button>
         </div>
 
+        ${story.completionSummary ? `
+        <div class="form-group completion-summary-section">
+          <label>Completion Summary</label>
+          <div class="completion-summary">
+            <p class="completion-summary-text">${this.escapeHtml(story.completionSummary.summary || '')}</p>
+            ${story.completionSummary.filesModified?.length > 0 ? `
+              <details class="completion-detail">
+                <summary>Files modified (${story.completionSummary.filesModified.length})</summary>
+                <ul class="completion-files">${story.completionSummary.filesModified.map(f => `<li>${this.escapeHtml(f)}</li>`).join('')}</ul>
+              </details>
+            ` : ''}
+            ${story.completionSummary.criteriaStatus?.length > 0 ? `
+              <details class="completion-detail">
+                <summary>Acceptance criteria status</summary>
+                <ul class="completion-criteria">${story.completionSummary.criteriaStatus.map(c => `<li class="${c.met ? 'met' : 'unmet'}">${c.met ? '&#10003;' : '&#10007;'} ${this.escapeHtml(c.criterion || '')}</li>`).join('')}</ul>
+              </details>
+            ` : ''}
+            <div class="completion-stats">
+              ${story.completionSummary.testStatus ? `<span class="completion-stat">Tests: ${this.escapeHtml(story.completionSummary.testStatus)}</span>` : ''}
+              ${story.completionSummary.turns ? `<span class="completion-stat">Turns: ${story.completionSummary.turns}</span>` : ''}
+              ${story.completionSummary.cost ? `<span class="completion-stat">Cost: $${story.completionSummary.cost.toFixed(4)}</span>` : ''}
+              ${story.completionSummary.duration ? `<span class="completion-stat">Duration: ${Math.round(story.completionSummary.duration / 1000)}s</span>` : ''}
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
         <div class="story-meta">
           <span class="meta-item">Created: ${this.formatDate(story.createdAt)}</span>
           ${story.branchId ? `<span class="meta-item">Branch: ${this.escapeHtml(story.branchId)}</span>` : ''}
@@ -2102,6 +2144,14 @@ export class ModalManager {
     // Save button
     document.getElementById('story-save-btn')?.addEventListener('click', () => {
       this.saveStoryDetail(data)
+    })
+
+    // RIS link
+    document.querySelector('.story-detail-ris-link')?.addEventListener('click', (e) => {
+      e.preventDefault()
+      const storyId = e.target.dataset.storyId
+      this.intents.hideModal()
+      this.intents.showModal('ris-view', { storyId, storyTitle: story.title })
     })
 
     // Add criterion button
@@ -2978,6 +3028,415 @@ export class ModalManager {
       } else if (e.key === 'Escape') {
         prompt.querySelector('.cancel-waive-btn').click()
       }
+    })
+  }
+
+  /**
+   * Render the RIS viewer modal
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - { storyId, storyTitle }
+   */
+  /**
+   * Render the plan review modal with split-pane layout.
+   * Left: plan content. Right: Q&A history.
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - { plan, stories, sprintId, readOnly }
+   */
+  renderPlanReview(title, content, actions, data) {
+    const { plan: planData, stories, sprintId, readOnly } = data || {}
+
+    // Normalise plan structure (may be nested under .plan)
+    const plan = planData?.plan || planData || {}
+    const planItems = plan.planItems || planData?.planItems || []
+    const risks = plan.risks || planData?.risks || []
+    const sharedComponents = plan.sharedComponents || planData?.sharedComponents || []
+    const clarificationHistory = plan.clarificationHistory || planData?.clarificationHistory || []
+    const planId = plan.id || planData?.id || ''
+
+    title.textContent = readOnly ? 'Sprint Plan' : 'CRE Plan Review'
+
+    // Build plan HTML (left pane)
+    let planHtml = ''
+
+    if (planItems.length > 0) {
+      planHtml += '<h4 class="plan-review-heading">Implementation Order</h4>'
+      planHtml += '<table class="plan-review-table"><thead><tr><th>#</th><th>Story</th><th>Branch</th><th>Approach</th></tr></thead><tbody>'
+      planItems.forEach((item, i) => {
+        const story = (stories || []).find(s => s.id === item.storyId)
+        const storyTitle = story?.title || item.storyId || `Story ${i + 1}`
+        const branch = item.branchType || 'fullstack'
+        const approach = (item.approach || '').replace(/\n/g, ' ').slice(0, 100)
+        planHtml += `<tr><td>${i + 1}</td><td>${this.escapeHtml(storyTitle)}</td><td>${this.escapeHtml(branch)}</td><td>${this.escapeHtml(approach)}${approach.length >= 100 ? '...' : ''}</td></tr>`
+      })
+      planHtml += '</tbody></table>'
+
+      planHtml += '<h4 class="plan-review-heading">Story Details</h4>'
+      planItems.forEach((item, i) => {
+        const story = (stories || []).find(s => s.id === item.storyId)
+        const storyTitle = story?.title || item.storyId || `Story ${i + 1}`
+        planHtml += `<div class="plan-review-story">`
+        planHtml += `<h5>${i + 1}. ${this.escapeHtml(storyTitle)}</h5>`
+        if (item.approach) planHtml += `<p><strong>Approach:</strong> ${this.escapeHtml(item.approach)}</p>`
+        if (item.filesCreated?.length > 0) planHtml += `<p><strong>Files to create:</strong> ${item.filesCreated.map(f => this.escapeHtml(f)).join(', ')}</p>`
+        if (item.filesModified?.length > 0) planHtml += `<p><strong>Files to modify:</strong> ${item.filesModified.map(f => this.escapeHtml(f)).join(', ')}</p>`
+        if (item.dependencies?.length > 0) planHtml += `<p><strong>Dependencies:</strong> ${item.dependencies.map(d => this.escapeHtml(d)).join(', ')}</p>`
+        planHtml += '</div>'
+      })
+    } else {
+      // Show a clear message when plan generation produced no items
+      // (can happen if AI plan generation failed or returned empty result)
+      planHtml += '<p class="plan-review-empty">Plan generation did not produce implementation items.</p>'
+      const errorReason = plan.aiError || planData?.aiError
+      if (errorReason) {
+        planHtml += `<p class="plan-review-empty" style="opacity:0.7;font-size:0.85em;"><strong>Reason:</strong> ${this.escapeHtml(errorReason)}</p>`
+      }
+      planHtml += '<p class="plan-review-empty" style="opacity:0.7;font-size:0.85em;">Try requesting changes with more specific instructions, or re-run planning.</p>'
+
+      // Show stories list if available so the user knows what was requested
+      const planStories = plan.stories || []
+      if (planStories.length > 0) {
+        planHtml += '<h4 class="plan-review-heading">Stories in this sprint</h4><ul>'
+        planStories.forEach(s => {
+          planHtml += `<li>${this.escapeHtml(s.title || s.id)}</li>`
+        })
+        planHtml += '</ul>'
+      }
+    }
+
+    if (sharedComponents.length > 0) {
+      planHtml += '<h4 class="plan-review-heading">Shared Components</h4><ul>'
+      sharedComponents.forEach(c => {
+        const name = typeof c === 'string' ? c : c.name || JSON.stringify(c)
+        const desc = typeof c === 'object' && c.description ? `: ${c.description}` : ''
+        planHtml += `<li><strong>${this.escapeHtml(name)}</strong>${this.escapeHtml(desc)}</li>`
+      })
+      planHtml += '</ul>'
+    }
+
+    if (risks.length > 0) {
+      planHtml += '<h4 class="plan-review-heading">Risks</h4><ul>'
+      risks.forEach(r => {
+        const text = typeof r === 'string' ? r : `${r.description || r.risk || ''}${r.mitigation ? ' — Mitigation: ' + r.mitigation : ''}`
+        planHtml += `<li>${this.escapeHtml(text)}</li>`
+      })
+      planHtml += '</ul>'
+    }
+
+    // Build Q&A HTML (right pane)
+    let qaHtml = ''
+    if (clarificationHistory.length > 0) {
+      clarificationHistory.forEach((exchange, ei) => {
+        const questions = exchange.questions || []
+        const answers = exchange.answers || []
+        if (ei > 0) qaHtml += '<hr class="plan-qa-divider">'
+        if (clarificationHistory.length > 1) qaHtml += `<h5 class="plan-qa-round">Round ${ei + 1}</h5>`
+        questions.forEach((q, qi) => {
+          const qText = typeof q === 'string' ? q : (q.question || JSON.stringify(q))
+          const aText = answers[qi] ? (typeof answers[qi] === 'string' ? answers[qi] : (answers[qi].answer || JSON.stringify(answers[qi]))) : '<em>No answer</em>'
+          qaHtml += `<div class="plan-qa-item">`
+          qaHtml += `<div class="plan-qa-question"><strong>Q${qi + 1}:</strong> ${this.escapeHtml(qText)}</div>`
+          qaHtml += `<div class="plan-qa-answer"><strong>A:</strong> ${this.escapeHtml(aText)}</div>`
+          qaHtml += `</div>`
+        })
+        if (exchange.feedback) {
+          qaHtml += `<div class="plan-qa-feedback"><strong>Feedback:</strong> ${this.escapeHtml(exchange.feedback)}</div>`
+        }
+      })
+    } else {
+      qaHtml = '<p class="plan-qa-none">No clarifying questions were needed.</p>'
+    }
+
+    content.innerHTML = `
+      <div class="plan-review-container">
+        <div class="plan-review-left">
+          ${planHtml}
+        </div>
+        <div class="plan-review-right">
+          <h4 class="plan-review-heading">Questions & Answers</h4>
+          ${qaHtml}
+        </div>
+      </div>
+    `
+
+    if (readOnly) {
+      actions.innerHTML = '<button class="btn secondary" id="plan-review-close-btn">Close</button>'
+      document.getElementById('plan-review-close-btn')?.addEventListener('click', () => this.intents.hideModal())
+    } else {
+      actions.innerHTML = `
+        <button class="btn secondary" id="plan-review-changes-btn">Request Changes</button>
+        <button class="btn primary" id="plan-review-approve-btn">Approve Plan</button>
+      `
+      document.getElementById('plan-review-approve-btn')?.addEventListener('click', () => {
+        this.intents.hideModal()
+        this.intents.approvePlanWithCre(planId)
+      })
+
+      document.getElementById('plan-review-changes-btn')?.addEventListener('click', () => {
+        // Replace actions with feedback input
+        actions.innerHTML = `
+          <div class="plan-review-feedback-row">
+            <input type="text" id="plan-review-feedback" class="form-input" placeholder="Describe what should change..." autofocus>
+            <button class="btn primary" id="plan-review-send-btn">Send</button>
+            <button class="btn secondary" id="plan-review-cancel-btn">Cancel</button>
+          </div>
+        `
+        document.getElementById('plan-review-feedback')?.focus()
+        document.getElementById('plan-review-send-btn')?.addEventListener('click', () => {
+          const feedback = document.getElementById('plan-review-feedback')?.value?.trim()
+          if (feedback) {
+            this.intents.hideModal()
+            this.intents.iterateSprintPlan(planId, feedback)
+          }
+        })
+        document.getElementById('plan-review-feedback')?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            document.getElementById('plan-review-send-btn')?.click()
+          }
+        })
+        document.getElementById('plan-review-cancel-btn')?.addEventListener('click', () => {
+          // Restore original actions
+          this.renderPlanReview(title, content, actions, data)
+        })
+      })
+    }
+  }
+
+  renderRisView(title, content, actions, data) {
+    const { storyId, storyTitle } = data || {}
+
+    title.textContent = `RIS: ${storyTitle || 'Unknown Story'}`
+
+    content.innerHTML = '<div class="ris-loading">Loading RIS...</div>'
+    actions.innerHTML = '<button class="btn secondary" id="ris-close-btn">Close</button>'
+
+    document.getElementById('ris-close-btn')?.addEventListener('click', () => this.intents.hideModal())
+
+    // Fetch the RIS asynchronously
+    window.puffin.cre.getRis({ storyId }).then(result => {
+      if (!result.success || !result.data) {
+        content.innerHTML = '<p class="ris-empty">No RIS found for this story.</p>'
+        return
+      }
+
+      const ris = result.data
+      const risContent = ris.content || ris.markdown || ''
+
+      if (!risContent) {
+        content.innerHTML = '<p class="ris-empty">RIS exists but has no content.</p>'
+        return
+      }
+
+      // Render the RIS as formatted markdown
+      content.innerHTML = `
+        <div class="ris-viewer">
+          <div class="ris-content-markdown">${this.renderMarkdown(risContent)}</div>
+        </div>
+      `
+    }).catch(err => {
+      console.error('[ModalManager] Failed to fetch RIS:', err)
+      content.innerHTML = `<p class="ris-error">Failed to load RIS: ${this.escapeHtml(err.message)}</p>`
+    })
+  }
+
+  /**
+   * Render a completion summary viewer modal
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - { storyId, storyTitle }
+   */
+  renderCompletionSummaryView(title, content, actions, data) {
+    const { storyId, storyTitle, completionSummary } = data || {}
+
+    title.textContent = `Completion Summary: ${storyTitle || 'Unknown Story'}`
+    actions.innerHTML = '<button class="btn secondary" id="summary-close-btn">Close</button>'
+    document.getElementById('summary-close-btn')?.addEventListener('click', () => this.intents.hideModal())
+
+    // Use in-memory data if available, otherwise fetch from DB
+    if (completionSummary) {
+      this._renderCompletionSummaryContent(content, completionSummary)
+    } else {
+      content.innerHTML = '<div class="summary-loading">Loading completion summary...</div>'
+      window.puffin.state.getCompletionSummary(storyId).then(result => {
+        if (!result.success || !result.completionSummary) {
+          content.innerHTML = '<p class="summary-empty">No completion summary found for this story.</p>'
+          return
+        }
+        this._renderCompletionSummaryContent(content, result.completionSummary)
+      }).catch(err => {
+        console.error('[ModalManager] Failed to fetch completion summary:', err)
+        content.innerHTML = `<p class="summary-error">Failed to load summary: ${this.escapeHtml(err.message)}</p>`
+      })
+    }
+  }
+
+  /**
+   * Render completion summary content into the modal content element.
+   * @private
+   * @param {HTMLElement} content - Modal content element
+   * @param {Object} s - Completion summary data
+   */
+  _renderCompletionSummaryContent(content, s) {
+    // Normalize field names (renderer uses criteriaStatus, DB uses criteriaMatched)
+    const criteria = s.criteriaMatched || s.criteriaStatus || []
+    const testStatus = s.testsStatus || s.testStatus || ''
+
+    // Build markdown content for rendering
+    const mdParts = []
+
+    if (s.summary) {
+      mdParts.push(this.escapeHtml(s.summary))
+    }
+
+    if (s.filesModified?.length > 0) {
+      mdParts.push(`\n## Files Modified (${s.filesModified.length})`)
+      mdParts.push(s.filesModified.map(f => `- \`${this.escapeHtml(f)}\``).join('\n'))
+    }
+
+    if (testStatus) {
+      mdParts.push(`\n## Test Results`)
+      mdParts.push(`Status: **${this.escapeHtml(testStatus)}**`)
+    }
+
+    const stats = []
+    if (s.turns) stats.push(`**Turns:** ${s.turns}`)
+    if (s.cost) stats.push(`**Cost:** $${Number(s.cost).toFixed(4)}`)
+    if (s.duration) stats.push(`**Duration:** ${Math.round(s.duration / 1000)}s`)
+    if (stats.length > 0) {
+      mdParts.push(`\n## Session Stats`)
+      mdParts.push(stats.join(' | '))
+    }
+
+    if (s.sessionId) {
+      mdParts.push(`\n---\nSession: \`${this.escapeHtml(s.sessionId)}\``)
+    }
+
+    const markdownContent = mdParts.join('\n\n')
+
+    const criteriaHtml = (criteria.length > 0) ? `
+      <div class="completion-criteria-section">
+        <h3>Acceptance Criteria</h3>
+        <ul class="completion-criteria">${criteria.map(c => {
+          const status = c.met === true ? 'met' : c.met === false ? 'unmet' : 'unknown'
+          const icon = c.met === true ? '&#10003;' : c.met === false ? '&#10007;' : '&#63;'
+          return `<li class="${status}"><span class="criteria-indicator">${icon}</span> ${this.escapeHtml(c.criterion || '')}</li>`
+        }).join('')}</ul>
+      </div>
+    ` : ''
+
+    content.innerHTML = `
+      <div class="completion-summary-viewer">
+        <div class="ris-content-markdown">${this.renderMarkdown(markdownContent)}</div>
+        ${criteriaHtml}
+      </div>
+    `
+  }
+
+  /**
+   * Render a Claude question modal (AskUserQuestion tool response)
+   * @param {HTMLElement} title - Modal title element
+   * @param {HTMLElement} content - Modal content element
+   * @param {HTMLElement} actions - Modal actions element
+   * @param {Object} data - { toolUseId, questions }
+   */
+  renderClaudeQuestion(title, content, actions, data) {
+    const { toolUseId, questions } = data || {}
+
+    title.textContent = 'Claude has a question'
+
+    if (!questions || questions.length === 0) {
+      content.innerHTML = '<p>No questions received.</p>'
+      actions.innerHTML = '<button class="btn secondary" id="cq-close-btn">Dismiss</button>'
+      document.getElementById('cq-close-btn')?.addEventListener('click', () => this.intents.hideModal())
+      return
+    }
+
+    // Render each question with its options
+    const questionsHtml = questions.map((q, qi) => {
+      const optionsHtml = (q.options || []).map((opt, oi) => `
+        <label class="cq-option">
+          <input type="${q.multiSelect ? 'checkbox' : 'radio'}" name="cq-${qi}" value="${oi}" />
+          <div class="cq-option-content">
+            <span class="cq-option-label">${this.escapeHtml(opt.label)}</span>
+            ${opt.description ? `<span class="cq-option-desc">${this.escapeHtml(opt.description)}</span>` : ''}
+          </div>
+        </label>
+      `).join('')
+
+      return `
+        <div class="cq-question" data-index="${qi}">
+          ${q.header ? `<span class="cq-header">${this.escapeHtml(q.header)}</span>` : ''}
+          <p class="cq-text">${this.escapeHtml(q.question)}</p>
+          <div class="cq-options">${optionsHtml}</div>
+          <div class="cq-other">
+            <label class="cq-option">
+              <input type="${q.multiSelect ? 'checkbox' : 'radio'}" name="cq-${qi}" value="other" />
+              <div class="cq-option-content">
+                <span class="cq-option-label">Other</span>
+              </div>
+            </label>
+            <input type="text" class="cq-other-input form-input" placeholder="Type your answer..." style="display:none" />
+          </div>
+        </div>
+      `
+    }).join('')
+
+    content.innerHTML = `<div class="claude-question-modal">${questionsHtml}</div>`
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="cq-skip-btn">Skip</button>
+      <button class="btn primary" id="cq-submit-btn">Submit Answer</button>
+    `
+
+    // Show/hide "Other" text input when radio/checkbox selected
+    content.querySelectorAll('.cq-other input[type="radio"], .cq-other input[type="checkbox"]').forEach(radio => {
+      const otherInput = radio.closest('.cq-other').querySelector('.cq-other-input')
+      const questionDiv = radio.closest('.cq-question')
+      const name = radio.name
+
+      // Listen on all inputs in this question group for the radio case
+      questionDiv.querySelectorAll(`input[name="${name}"]`).forEach(input => {
+        input.addEventListener('change', () => {
+          otherInput.style.display = radio.checked ? 'block' : 'none'
+          if (radio.checked) otherInput.focus()
+        })
+      })
+    })
+
+    // Submit handler
+    document.getElementById('cq-submit-btn')?.addEventListener('click', () => {
+      const answers = {}
+      questions.forEach((q, qi) => {
+        const selected = content.querySelectorAll(`input[name="cq-${qi}"]:checked`)
+        const values = []
+        selected.forEach(input => {
+          if (input.value === 'other') {
+            const otherInput = input.closest('.cq-other').querySelector('.cq-other-input')
+            values.push(otherInput?.value || 'Other')
+          } else {
+            const optIndex = parseInt(input.value)
+            values.push(q.options[optIndex]?.label || input.value)
+          }
+        })
+        answers[qi] = values.join(', ') || 'No answer provided'
+      })
+
+      window.puffin.claude.answerQuestion({ toolUseId, answers })
+      this.intents.hideModal()
+    })
+
+    // Skip handler — send empty answer so CLI continues with defaults
+    document.getElementById('cq-skip-btn')?.addEventListener('click', () => {
+      const answers = {}
+      questions.forEach((q, qi) => {
+        answers[qi] = 'Please proceed with your best judgment.'
+      })
+      window.puffin.claude.answerQuestion({ toolUseId, answers })
+      this.intents.hideModal()
     })
   }
 

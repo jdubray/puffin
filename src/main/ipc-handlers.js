@@ -102,6 +102,25 @@ function setupStateHandlers(ipcMain) {
     try {
       const state = await puffinState.open(projectPath)
 
+      // Initialize CRE (Central Reasoning Engine)
+      try {
+        const cre = require('./cre')
+        await cre.initialize({
+          ipcMain,
+          app: require('electron').app,
+          db: puffinState.database.connection.getConnection(),
+          config: state.config || {},
+          projectRoot: projectPath,
+          claudeService
+        })
+        // Persist CRE defaults into config.json on first init
+        if (state.config?.cre) {
+          await puffinState.saveConfig()
+        }
+      } catch (creErr) {
+        console.error('[CRE] Initialization failed (non-fatal):', creErr.message)
+      }
+
       // Initialize CLAUDE.md generator and generate initial files
       await claudeMdGenerator.initialize(projectPath)
       const activeBranch = state.history?.activeBranch || 'specifications'
@@ -300,7 +319,9 @@ function setupStateHandlers(ipcMain) {
 
   ipcMain.handle('state:deleteUserStory', async (event, storyId) => {
     try {
+      console.log('[IPC] deleteUserStory called with storyId:', storyId)
       const deleted = await puffinState.deleteUserStory(storyId)
+      console.log('[IPC] deleteUserStory result:', deleted ? 'deleted successfully' : 'story not found')
 
       // Regenerate CLAUDE.md base (stories are in base context)
       const state = puffinState.getState()
@@ -309,6 +330,7 @@ function setupStateHandlers(ipcMain) {
 
       return { success: true, deleted }
     } catch (error) {
+      console.error('[IPC] deleteUserStory error:', error.message)
       return { success: false, error: error.message }
     }
   })
@@ -475,8 +497,11 @@ function setupStateHandlers(ipcMain) {
         return { success: false, error: 'Story not found' }
       }
 
-      // Get inspection assertions for the story
+      // Get inspection assertions for the story.
+      // getStoryInspectionAssertions checks user_stories.inspection_assertions first,
+      // then falls back to the CRE inspection_assertions table if the column is empty.
       const assertions = puffinState.getStoryInspectionAssertions(storyId)
+      console.log('[IPC] evaluateStoryAssertions:', storyId, 'assertions:', assertions?.length || 0)
       if (!assertions || assertions.length === 0) {
         return {
           success: true,
@@ -516,6 +541,48 @@ function setupStateHandlers(ipcMain) {
     } catch (error) {
       console.error('[IPC] evaluateStoryAssertions error:', error)
       return { success: false, error: error.message }
+    }
+  })
+
+  // Sync assertions from the CRE inspection_assertions table to user_stories column.
+  // The CRE generator writes to both, but the user_stories write can fail silently.
+  // This handler reconciles the two stores for a list of story IDs.
+  ipcMain.handle('state:syncAssertionsFromCreTable', async (_event, storyIds) => {
+    if (!Array.isArray(storyIds) || storyIds.length === 0) {
+      return { success: true, synced: 0 }
+    }
+    let synced = 0
+    try {
+      const db = puffinState.database.connection.getConnection()
+      for (const storyId of storyIds) {
+        // Check if user_stories already has assertions
+        const row = db.prepare('SELECT inspection_assertions FROM user_stories WHERE id = ?').get(storyId)
+        if (!row) continue
+        const existing = JSON.parse(row.inspection_assertions || '[]')
+        if (existing.length > 0) continue // already has assertions
+
+        // Check CRE inspection_assertions table
+        const creRows = db.prepare(
+          'SELECT id, type, target, message, assertion_data FROM inspection_assertions WHERE story_id = ? ORDER BY created_at'
+        ).all(storyId)
+        if (creRows.length === 0) continue
+
+        const assertions = creRows.map(r => ({
+          id: r.id,
+          type: r.type,
+          target: r.target,
+          message: r.message,
+          assertion: JSON.parse(r.assertion_data || '{}')
+        }))
+        db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
+          .run(JSON.stringify(assertions), new Date().toISOString(), storyId)
+        synced++
+        console.log(`[IPC] syncAssertionsFromCreTable: synced ${assertions.length} assertions for story ${storyId}`)
+      }
+      return { success: true, synced }
+    } catch (error) {
+      console.error('[IPC] syncAssertionsFromCreTable error:', error)
+      return { success: false, error: error.message, synced }
     }
   })
 
@@ -583,7 +650,7 @@ function setupStateHandlers(ipcMain) {
   })
 
   // Generate inspection assertions for sprint stories using Claude
-  ipcMain.handle('state:generateSprintAssertions', async (event, { stories, plan }) => {
+  ipcMain.handle('state:generateSprintAssertions', async (event, { stories, plan, model }) => {
     try {
       console.log('[IPC] generateSprintAssertions called with', stories.length, 'stories')
 
@@ -599,7 +666,7 @@ function setupStateHandlers(ipcMain) {
       const result = await claudeService.generateInspectionAssertions(stories, plan, codingStandard, (msg) => {
         // Send progress updates to renderer
         event.sender.send('assertion-generation-progress', { message: msg })
-      })
+      }, model)
 
       if (!result.success) {
         console.error('[IPC] generateSprintAssertions failed:', result.error)
@@ -632,6 +699,50 @@ function setupStateHandlers(ipcMain) {
       }
     } catch (error) {
       console.error('[IPC] generateSprintAssertions error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ============ Completion Summary Operations ============
+
+  // Store a completion summary linked to a user story
+  ipcMain.handle('state:storeCompletionSummary', async (event, { storyId, summary }) => {
+    try {
+      if (!puffinState.database?.completionSummaries) {
+        return { success: false, error: 'Completion summary repository not available' }
+      }
+
+      const created = puffinState.database.completionSummaries.create({
+        storyId,
+        sessionId: summary.sessionId || null,
+        summary: summary.summary || '',
+        filesModified: summary.filesModified || [],
+        testsStatus: summary.testStatus || summary.testsStatus || 'unknown',
+        criteriaMatched: summary.criteriaStatus || summary.criteriaMatched || [],
+        turns: summary.turns || 0,
+        cost: summary.cost || 0,
+        duration: summary.duration || 0
+      })
+
+      console.log('[IPC] storeCompletionSummary: stored for story', storyId, 'id:', created.id)
+      return { success: true, completionSummary: created }
+    } catch (error) {
+      console.error('[IPC] storeCompletionSummary error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get completion summary for a story (most recent)
+  ipcMain.handle('state:getCompletionSummary', async (event, storyId) => {
+    try {
+      if (!puffinState.database?.completionSummaries) {
+        return { success: false, error: 'Completion summary repository not available' }
+      }
+
+      const summary = puffinState.database.completionSummaries.findByStoryId(storyId)
+      return { success: true, completionSummary: summary }
+    } catch (error) {
+      console.error('[IPC] getCompletionSummary error:', error)
       return { success: false, error: error.message }
     }
   })
@@ -1223,35 +1334,63 @@ function setupClaudeHandlers(ipcMain) {
         codeModificationAllowed
       }
 
+      // Safe send helper — renderer frame may be disposed during long CLI sessions
+      const safeSend = (channel, data) => {
+        try {
+          event.sender.send(channel, data)
+        } catch (err) {
+          // Frame disposed — renderer crashed or reloaded. Log once and carry on.
+          if (!safeSend._warned) {
+            safeSend._warned = true
+            console.warn('[IPC-GUARD] Renderer frame disposed, suppressing further send errors')
+          }
+        }
+      }
+
       await claudeService.submit(
         submitData,
         // On chunk received (streaming output)
         (chunk) => {
-          event.sender.send('claude:response', chunk)
+          safeSend('claude:response', chunk)
         },
         // On complete
         (response) => {
-          event.sender.send('claude:complete', response)
+          safeSend('claude:complete', response)
         },
         // On raw JSON line (for CLI Output view)
         (jsonLine) => {
-          event.sender.send('claude:raw', jsonLine)
+          safeSend('claude:raw', jsonLine)
         },
         // On full prompt built (for debug view)
         (fullPrompt) => {
-          event.sender.send('claude:fullPrompt', fullPrompt)
+          safeSend('claude:fullPrompt', fullPrompt)
+        },
+        // On question from Claude (AskUserQuestion tool)
+        (questionData) => {
+          safeSend('claude:question', {
+            toolUseId: questionData.toolUseId,
+            questions: questionData.questions
+          })
         }
       )
     } catch (error) {
       console.error('[IPC-ERROR] claude:submit failed:', error)
       console.error('[IPC-ERROR] Error stack:', error.stack)
-      event.sender.send('claude:error', { message: error.message })
+      try {
+        event.sender.send('claude:error', { message: error.message })
+      } catch { /* frame already gone */ }
     }
   })
 
   // Cancel current request
   ipcMain.on('claude:cancel', () => {
     claudeService.cancel()
+  })
+
+  // Answer a question from Claude (AskUserQuestion tool response)
+  ipcMain.handle('claude:answer', async (event, { toolUseId, answers }) => {
+    console.log('[IPC] claude:answer received, toolUseId:', toolUseId)
+    return claudeService.sendAnswer(toolUseId, answers)
   })
 
   // Derive user stories from a prompt
@@ -1287,7 +1426,8 @@ function setupClaudeHandlers(ipcMain) {
         projectPath,
         data.project,
         sendProgress,  // Pass progress callback
-        data.conversationContext  // Pass conversation context
+        data.conversationContext,  // Pass conversation context
+        data.model  // Pass selected model
       )
 
       console.log('[IPC] deriveStories result:', result?.success, 'stories:', result?.stories?.length || 0)
@@ -1323,7 +1463,8 @@ function setupClaudeHandlers(ipcMain) {
         data.stories,
         data.feedback,
         projectPath,
-        data.project
+        data.project,
+        data.model
       )
 
       if (result.success) {
@@ -1440,6 +1581,60 @@ function setupFileHandlers(ipcMain) {
       const fs = require('fs').promises
       await fs.writeFile(filePath, content, 'utf-8')
       return { success: true, filePath }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Select a markdown file from the project's docs directory
+  ipcMain.handle('file:selectMarkdown', async (event, options = {}) => {
+    try {
+      if (!projectPath) {
+        return { success: false, error: 'No project is open' }
+      }
+
+      // Default to project root; prefer docs/ subdirectory if it exists
+      let defaultDir = projectPath
+      const docsDir = path.join(projectPath, 'docs')
+      try {
+        const stat = await fs.promises.stat(docsDir)
+        if (stat.isDirectory()) {
+          defaultDir = docsDir
+        }
+      } catch {
+        // docs/ doesn't exist — fall back to project root
+      }
+
+      const result = await dialog.showOpenDialog({
+        title: options.title || 'Select Markdown Document',
+        defaultPath: defaultDir,
+        filters: [
+          { name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }
+        ],
+        properties: ['openFile']
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: true, filePath: null, relativePath: null }
+      }
+
+      const selectedPath = result.filePaths[0]
+
+      // Validate the selected file is within the project directory
+      const normalizedSelected = path.resolve(selectedPath)
+      const normalizedRoot = path.resolve(projectPath)
+      if (!normalizedSelected.startsWith(normalizedRoot)) {
+        return { success: false, error: 'Selected file must be within the project directory' }
+      }
+
+      // Return both absolute and relative paths
+      const relativePath = path.relative(projectPath, normalizedSelected).replace(/\\/g, '/')
+
+      return {
+        success: true,
+        filePath: normalizedSelected,
+        relativePath
+      }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -1999,6 +2194,16 @@ function setupGitHandlers(ipcMain) {
     try {
       const result = await gitService.getUserIdentity(global)
       return result
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Check for active Git hooks (security warning)
+  ipcMain.handle('git:checkActiveHooks', async () => {
+    try {
+      const result = await gitService.checkForActiveGitHooks()
+      return { success: true, ...result }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -2664,6 +2869,14 @@ function setClaudeServicePluginManager(pluginManager) {
   }
 }
 
+/**
+ * Get the Claude service instance
+ * @returns {ClaudeService|null}
+ */
+function getClaudeService() {
+  return claudeService
+}
+
 module.exports = {
   setupIpcHandlers,
   setupPluginHandlers,
@@ -2671,5 +2884,6 @@ module.exports = {
   setupViewRegistryHandlers,
   setupPluginStyleHandlers,
   getPuffinState,
+  getClaudeService,
   setClaudeServicePluginManager
 }

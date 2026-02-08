@@ -20,8 +20,7 @@ export class PromptEditorComponent {
     this.includeGui = false
     this.selectedGuiDefinitions = [] // Array of selected GUI definitions (multi-select)
     this.useCurrentDesign = false // Track if current design is selected
-    this.deriveStoriesCheckbox = null
-    this.deriveUserStories = false
+    this.deriveStoriesBtn = null
     this.modelSelect = null
     this.defaultModel = 'optus' // Will be updated from project config
     // Thinking budget selector
@@ -42,6 +41,8 @@ export class PromptEditorComponent {
     this.dropZoneIndicator = null // Visual feedback for drag-drop
     this.imagePreviewModal = null // Modal for viewing full-size images
     this.supportedImageExtensions = ['.png', '.jpg', '.jpeg', '.webp']
+    // Track whether the current prompt session has written/edited files
+    this._writtenFileCount = 0
   }
 
   /**
@@ -55,7 +56,7 @@ export class PromptEditorComponent {
     this.includeGuiBtn = document.getElementById('include-gui-btn')
     this.includeGuiDropdown = document.getElementById('include-gui-dropdown')
     this.includeGuiMenu = document.getElementById('include-gui-menu')
-    this.deriveStoriesCheckbox = document.getElementById('derive-stories-checkbox')
+    this.deriveStoriesBtn = document.getElementById('derive-stories-btn')
     this.modelSelect = document.getElementById('thread-model')
     // Thinking budget selector
     this.thinkingBudgetSelect = document.getElementById('thinking-budget')
@@ -257,10 +258,30 @@ export class PromptEditorComponent {
       })
     }
 
-    // Derive user stories checkbox
-    this.deriveStoriesCheckbox.addEventListener('change', () => {
-      this.deriveUserStories = this.deriveStoriesCheckbox.checked
-    })
+    // Derive user stories button - directly triggers derivation
+    if (this.deriveStoriesBtn) {
+      this.deriveStoriesBtn.addEventListener('click', async () => {
+        const state = window.puffinApp?.state
+        if (!state) return
+
+        // Check if a CLI process is already running
+        if (window.puffin?.claude?.isRunning) {
+          const isRunning = await window.puffin.claude.isRunning()
+          if (isRunning) {
+            window.puffinApp?.showToast?.({
+              type: 'error',
+              title: 'Process Already Running',
+              message: 'A Claude process is already running. Please wait for it to complete.',
+              duration: 5000
+            })
+            return
+          }
+        }
+
+        const content = this.textarea.value.trim()
+        this.deriveStories(content, state)
+      })
+    }
 
     // Model selector - track when user manually changes it
     if (this.modelSelect) {
@@ -676,10 +697,15 @@ export class PromptEditorComponent {
         }
       }
 
+      // Track file write count from activity state for cancel confirmation
+      const writtenFiles = (state.activity?.filesModified || []).filter(f => f.action === 'write')
+      this._writtenFileCount = writtenFiles.length
+
       // Clear textarea when processing completes (response received)
       if (this.wasProcessing && !state.prompt.isProcessing) {
         this.textarea.value = ''
         this.submitBtn.disabled = true
+        this._writtenFileCount = 0
 
         // Cleanup attached images from temp storage
         if (this._pendingImageCleanup && this._pendingImageCleanup.length > 0) {
@@ -710,9 +736,18 @@ export class PromptEditorComponent {
     const isDerivingStories = storyDerivation?.status === 'deriving'
     const isProcessing = promptState.isProcessing || isDerivingStories
 
-    // Update button states - canSubmit is based on local textarea content
+    // Update button states
     const hasContent = this.textarea.value.trim().length > 0
     this.submitBtn.disabled = isProcessing || !hasContent
+
+    // Enable/disable Derive Stories button based on conversation context
+    // Use raw.branches prompts (same source deriveStories() reads from) rather than
+    // promptTree which is a filtered/tree-resolved view and can diverge
+    if (this.deriveStoriesBtn) {
+      const rawPrompts = historyState?.raw?.branches?.[historyState.activeBranch]?.prompts
+      const hasConversation = rawPrompts?.length > 0
+      this.deriveStoriesBtn.disabled = isProcessing || !hasConversation
+    }
     this.cancelBtn.classList.toggle('hidden', !promptState.canCancel)
 
     // Show loading state
@@ -725,10 +760,6 @@ export class PromptEditorComponent {
       btnText.classList.remove('hidden')
       btnLoading.classList.add('hidden')
     }
-
-    // Note: Derivation status is now shown in the modal with a prominent loading state
-    // The inline status bar is no longer needed since the modal opens immediately
-    // this.updateDerivationStatus(isDerivingStories)
 
     // Disable textarea during processing
     this.textarea.disabled = isProcessing
@@ -1015,11 +1046,13 @@ export class PromptEditorComponent {
    */
   async submit() {
     const content = this.textarea.value.trim()
-    if (!content) return
 
     // Get current state from window
     const state = window.puffinApp?.state
     if (!state) return
+
+    // For normal submissions, require content
+    if (!content) return
 
     // CRITICAL: Check if a CLI process is already running
     if (window.puffin?.claude?.isRunning) {
@@ -1034,12 +1067,6 @@ export class PromptEditorComponent {
         })
         return
       }
-    }
-
-    // Check if we should derive user stories first
-    if (this.deriveUserStories) {
-      this.deriveStories(content, state)
-      return
     }
 
     // If branch is empty, behave the same as "Send as New Thread"
@@ -1235,12 +1262,6 @@ export class PromptEditorComponent {
       }
     }
 
-    // Check if we should derive user stories first
-    if (this.deriveUserStories) {
-      this.deriveStories(content, state)
-      return
-    }
-
     // Build submission data with no parent (new thread)
     const data = {
       branchId: state.history.activeBranch,
@@ -1308,9 +1329,21 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Cancel the current request
+   * Cancel the current request.
+   * If files have been written/edited, prompts the user for confirmation
+   * since cancelling mid-edit could leave the codebase in an inconsistent state.
    */
   cancel() {
+    if (this._writtenFileCount > 0) {
+      const fileWord = this._writtenFileCount === 1 ? 'file has' : 'files have'
+      const confirmed = confirm(
+        `${this._writtenFileCount} ${fileWord} been created or edited during this session.\n\n` +
+        'Cancelling now may leave your code in an incomplete state.\n\n' +
+        'Are you sure you want to cancel?'
+      )
+      if (!confirmed) return
+    }
+
     this.intents.cancelPrompt()
     if (window.puffin) {
       window.puffin.claude.cancel()
@@ -1903,128 +1936,107 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Derive user stories from the prompt before implementation
+   * Derive user stories from the current context.
+   * Auto-assembles a comprehensive payload from the conversation thread,
+   * included documents, and GUI designs.
+   *
+   * @param {string} content - Optional user-typed prompt text (may be empty)
+   * @param {Object} state - Current application state
    */
   async deriveStories(content, state) {
     console.log('[DERIVE-STORIES] Starting story derivation')
-    console.log('[DERIVE-STORIES] Content:', content?.substring(0, 100))
-    console.log('[DERIVE-STORIES] window.puffin:', !!window.puffin)
-    console.log('[DERIVE-STORIES] window.puffin.claude.deriveStories:', !!window.puffin?.claude?.deriveStories)
+    console.log('[DERIVE-STORIES] User prompt:', content ? content.substring(0, 100) : '(none)')
 
-    // Guard: Check if a CLI process is already running
-    if (window.puffin?.claude?.isRunning) {
-      const isRunning = await window.puffin.claude.isRunning()
-      if (isRunning) {
-        console.error('[DERIVE-STORIES] Cannot derive: CLI process already running')
-        window.puffinApp?.showToast?.({
-          type: 'error',
-          title: 'Process Already Running',
-          message: 'A Claude process is already running. Please wait for it to complete.',
-          duration: 5000
-        })
-        return
-      }
+    if (!window.puffin?.claude?.deriveStories) {
+      console.error('[DERIVE-STORIES] IPC not available!')
+      return
     }
 
     // Dispatch action to show derivation is in progress
     this.intents.deriveUserStories({
       branchId: state.history.activeBranch,
-      content: content
+      content: content || '(auto-derived from context)'
     })
 
-    // Reset the checkbox
-    this.deriveUserStories = false
-    this.deriveStoriesCheckbox.checked = false
-
-    // Call the IPC to derive stories
-    if (window.puffin && window.puffin.claude.deriveStories) {
-      console.log('[DERIVE-STORIES] Calling IPC deriveStories...')
-
-      // Include recent conversation context so Claude understands references like "Phase 1"
-      let conversationContext = ''
-      const activeBranch = state.history.activeBranch
-      const branchData = state.history.raw?.branches?.[activeBranch]
-      if (branchData?.prompts?.length > 0) {
-        // Get the last few prompts/responses for context (limit to avoid token overflow)
-        const recentPrompts = branchData.prompts.slice(-3)
-        const contextParts = []
-        for (const p of recentPrompts) {
-          if (p.content) {
-            contextParts.push(`User: ${p.content.substring(0, 500)}${p.content.length > 500 ? '...' : ''}`)
-          }
-          if (p.response?.content) {
-            // Limit response content to avoid token overflow
-            const responsePreview = p.response.content.substring(0, 2000)
-            contextParts.push(`Assistant: ${responsePreview}${p.response.content.length > 2000 ? '...' : ''}`)
-          }
-        }
-        if (contextParts.length > 0) {
-          conversationContext = contextParts.join('\n\n')
-          console.log('[DERIVE-STORIES] Including conversation context:', conversationContext.length, 'chars')
-        }
-      }
-
-      window.puffin.claude.deriveStories({
-        prompt: content,
-        branchId: state.history.activeBranch,
-        conversationContext: conversationContext,
-        project: state.config ? {
-          name: state.config.name,
-          description: state.config.description
-        } : null
-      })
-      console.log('[DERIVE-STORIES] IPC call sent')
-    } else {
-      console.error('[DERIVE-STORIES] IPC not available!')
+    // Disable derive button during derivation
+    if (this.deriveStoriesBtn) {
+      this.deriveStoriesBtn.disabled = true
     }
-  }
 
-  /**
-   * Update the derivation status indicator
-   */
-  updateDerivationStatus(isDerivingStories) {
-    let statusEl = document.getElementById('derivation-status')
+    // === AC1: Gather full conversation thread ===
+    // Budget cap prevents excessively large payloads for long conversations.
+    // Recent messages are prioritized (iterate newest-first) since they carry
+    // the most relevant context for story derivation.
+    const CONTEXT_BUDGET = 100_000 // ~100KB character budget for conversation
+    let conversationContext = ''
+    const activeBranch = state.history.activeBranch
+    const branchData = state.history.raw?.branches?.[activeBranch]
+    if (branchData?.prompts?.length > 0) {
+      const contextParts = []
+      let budgetRemaining = CONTEXT_BUDGET
 
-    if (isDerivingStories) {
-      // Create status element if it doesn't exist
-      if (!statusEl) {
-        statusEl = document.createElement('div')
-        statusEl.id = 'derivation-status'
-        statusEl.className = 'derivation-status'
-        statusEl.innerHTML = `
-          <div class="derivation-status-content">
-            <span class="spinner"></span>
-            <div class="status-text-container">
-              <span class="status-text-primary">Deriving user stories from your prompt...</span>
-              <span class="status-text-secondary">Claude is analyzing your requirements. This may take a moment.</span>
-            </div>
-          </div>
-        `
-        // Insert above the prompt area (the textarea container)
-        const promptArea = document.querySelector('.prompt-area')
-        if (promptArea) {
-          promptArea.parentNode.insertBefore(statusEl, promptArea)
-        } else {
-          // Fallback: insert at the top of the response area
-          const responseArea = document.querySelector('.response-area')
-          if (responseArea) {
-            responseArea.parentNode.insertBefore(statusEl, responseArea.nextSibling)
-          }
+      // Iterate newest-first so recent messages get priority
+      for (let i = branchData.prompts.length - 1; i >= 0 && budgetRemaining > 0; i--) {
+        const p = branchData.prompts[i]
+        const turnParts = []
+
+        if (p.content) {
+          const promptText = p.content.length > 2000
+            ? p.content.substring(0, 2000) + '...'
+            : p.content
+          turnParts.push(`User: ${promptText}`)
         }
+        if (p.response?.content) {
+          const responseText = p.response.content.length > 3000
+            ? p.response.content.substring(0, 3000) + '...'
+            : p.response.content
+          turnParts.push(`Assistant: ${responseText}`)
+        }
+
+        const turnText = turnParts.join('\n\n')
+        if (turnText.length > budgetRemaining) break
+        budgetRemaining -= turnText.length
+        contextParts.unshift(turnText) // prepend to maintain chronological order
       }
-      statusEl.classList.add('visible')
-    } else {
-      // Hide and remove the status element
-      if (statusEl) {
-        statusEl.classList.remove('visible')
-        // Remove after animation
-        setTimeout(() => {
-          if (statusEl && !statusEl.classList.contains('visible')) {
-            statusEl.remove()
-          }
-        }, 300)
+
+      if (contextParts.length > 0) {
+        conversationContext = contextParts.join('\n\n')
+        const totalPrompts = branchData.prompts.length
+        const included = contextParts.length
+        console.log(`[DERIVE-STORIES] Conversation context: ${included}/${totalPrompts} turns, ${conversationContext.length} chars`)
       }
     }
+
+    // === AC2: Include selected documents ===
+    const docsContent = await this.getSelectedDocumentsContent()
+    if (docsContent) {
+      conversationContext += `\n\n${docsContent}`
+      console.log('[DERIVE-STORIES] Included docs content:', docsContent.length, 'chars')
+    }
+
+    // === AC3: Include GUI design if available ===
+    const guiDescription = this.buildCombinedGuiDescription(state)
+    if (guiDescription) {
+      conversationContext += `\n\n# GUI Design Context\n\n${guiDescription}`
+      console.log('[DERIVE-STORIES] Included GUI description:', guiDescription.length, 'chars')
+    }
+
+    // === AC4 & AC5: Build the prompt (use default if user didn't type anything) ===
+    const derivationPrompt = content || 'Derive user stories from the conversation thread, documents, and designs provided in the context.'
+
+    console.log('[DERIVE-STORIES] Calling IPC deriveStories, total context:', conversationContext.length, 'chars')
+
+    window.puffin.claude.deriveStories({
+      prompt: derivationPrompt,
+      branchId: activeBranch,
+      conversationContext: conversationContext,
+      model: this.modelSelect?.value || this.defaultModel || 'sonnet',
+      project: state.config ? {
+        name: state.config.name,
+        description: state.config.description
+      } : null
+    })
+    console.log('[DERIVE-STORIES] IPC call sent')
   }
 
   /**

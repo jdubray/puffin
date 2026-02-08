@@ -1,0 +1,6 @@
+{
+  "include": ["*.js"],
+  "exclude": ["node_modules", "dist", ".git", "coverage", "test-dsl"],
+  "outputDir": ".puffin/cre",
+  "verbose": false
+}

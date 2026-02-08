@@ -113,6 +113,28 @@ Main call-to-action button with primary styling
 - Screen reader compatibility
 - Touch-friendly targets for mobile
 
+## Branch Memory (auto-extracted)
+
+### Conventions
+
+- Plugin architecture uses naming convention '*-plugin' for plugin directories. Plugins export module with 'name', 'initialize(context)', and 'cleanup()' methods. Main process plugins access ipcMain, app, mainWindow, config, pluginDir. Renderer plugins access ipcRenderer, document, window, config, pluginDir via preload.
+- IPC communication uses channel naming pattern 'featureName:methodName'. All IPC handlers in main process must validate input. Preload script exposes APIs via window.puffin namespace with nested structure like window.puffin.github, window.puffin.git, window.puffin.file.
+- SAM (State-Action-Model) pattern: actions defined in actions.js, acceptors in model.js, state computed in state.js, rendering in components. Actions must be registered in app.js both in actionNames array and component.actions array to be available as intents.
+- Modal system uses centralized ModalManager.show() for displaying modals. Modal types handled in modal-manager.js with dedicated render methods. Two-step modals implemented as state transitions within single modal showing different content based on step property.
+- CSS naming uses kebab-case for class names. Component-specific styles prefixed with component name (e.g., .git-panel-*, .handoff-*, .branch-select-*). Views managed via 'view' classes and display controlled via active/inactive states.
+- User stories workflow: stories persisted in .puffin/user-stories.json. Story updates should update individual stories rather than rewriting entire file to prevent data loss. State-persistence loops through stories and calls updateUserStory IPC handler for each.
+- Handoff context display: use banner component above prompt input with dismissible design, showing source branch/thread info and summary. Banner persists until dismissed or new thread created, signaling context will be injected into next prompt.
+- File operations modal UX: use native save/open dialogs via IPC handlers (dialog:showSaveDialog, dialog:showOpenDialog), return file paths or canceled status. Markdown file save defaults to 'response.md' with filters for .md, .txt, all files.
+- Toast notifications for async operations: use window.puffin.state.showToast() with message, type (success/error/info/warning), optional duration. Toast dismissed on navigation/view switch unless persistent flag set.
+- Modal component event flow: modal triggers action via button.click handler, action updates SAM model state, SAM render callback updates modal content, user confirms action which may trigger navigation or additional modal step.
+- Copy/paste markdown functionality: 'Copy MD' button uses navigator.clipboard.writeText() for client-side copy (works immediately), 'Save MD' button uses file:saveMarkdown IPC handler to show native save dialog and write to filesystem.
+- Tool emoji mapping: use single emoji per tool type (Read=📖, Edit=✏️, Write=📝, Grep/Glob=🔍, Bash=💻, WebFetch=🌐, WebSearch=🔎, Task=🤖, NotebookEdit=📓, TodoWrite=📋, default=⚙️). Display emoji-only in stream (no 'Tool:' text), with tooltip on hover and active animation state.
+- Component event delegation: add event listeners in bindEvents() method during init, remove in destroy() method. Use data attributes (data-action, data-id) for declarative event routing instead of direct element references to enable dynamic content.
+
+### Architectural Decisions
+- CLI output persistence implemented by storing CLI output state in SAM model and syncing to disk via state-persistence.js. Only the last CLI output session is retained on app restart, no history kept.
+- GitHub authentication uses OAuth Device Flow for browser-based auth and Personal Access Token (PAT) method. Tokens stored encrypted using Electron's safeStorage. App already has registered GitHub OAuth app with Client ID 'Ov23liUkVBHmYgqhqfnP'.
+
 # Assigned Skills
 
 ## frontend-design

@@ -9,8 +9,8 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, setClaudeServicePluginManager } = require('./ipc-handlers')
-const { PluginLoader, PluginManager, HistoryService } = require('./plugins')
+const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
+const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 
 // Keep a global reference of the window object
 let mainWindow = null
@@ -350,15 +350,21 @@ app.whenReady().then(async () => {
     getPuffinState: getPuffinState
   })
 
+  const storyService = new StoryService({
+    getPuffinState: getPuffinState
+  })
+
   pluginLoader.loadPlugins()
     .then(() => {
       // Initialize plugin manager after plugins are loaded
-      // Pass history service so plugins can access it
+      // Pass services so plugins can access them
       pluginManager = new PluginManager({
         loader: pluginLoader,
         ipcMain: ipcMain,
         services: {
-          history: historyService
+          history: historyService,
+          stories: storyService,
+          claudeService: getClaudeService()
         },
         projectPath: currentProjectPath
       })
@@ -395,6 +401,12 @@ app.whenReady().then(async () => {
 
       // Connect plugin manager to Claude service for branch focus retrieval
       setClaudeServicePluginManager(pluginManager)
+
+      // Connect plugin registry to PuffinState for story status events
+      const puffinState = getPuffinState()
+      if (puffinState && pluginManager.getRegistry()) {
+        puffinState.setPluginRegistry(pluginManager.getRegistry())
+      }
 
       // Initialize and activate enabled plugins
       return pluginManager.initialize()

@@ -10,6 +10,46 @@
 const fs = require('fs').promises
 const path = require('path')
 
+/**
+ * Sanitize a branch name for safe use in file paths.
+ * Mirrors sanitizeBranchId from memory-plugin/lib/file-system-layer.js.
+ * @param {string} branch
+ * @returns {string}
+ */
+function sanitizeBranch(branch) {
+  return branch.replace(/[^a-zA-Z0-9_-]/g, '_')
+}
+
+// Graceful import: memory plugin may be absent or restructured.
+// If unavailable, branch memory injection is silently disabled.
+let parseBranchMemory = null
+let SECTIONS = null
+try {
+  const branchTemplate = require('../../plugins/memory-plugin/lib/branch-template')
+  parseBranchMemory = branchTemplate.parse
+  SECTIONS = branchTemplate.SECTIONS
+} catch {
+  // Memory plugin not available — branch memory features disabled
+}
+
+/**
+ * Maximum total characters of branch memory content to inject into CLAUDE.md.
+ * Prevents excessively large memory files from bloating the context.
+ * @type {number}
+ */
+const BRANCH_MEMORY_MAX_CHARS = 4000
+
+/**
+ * Sections to extract from branch memory, in priority order.
+ * Higher-priority sections are included first when truncation is needed.
+ * @type {string[]}
+ */
+const INCLUDED_SECTIONS = SECTIONS ? [
+  SECTIONS.CONVENTIONS,
+  SECTIONS.ARCHITECTURAL_DECISIONS,
+  SECTIONS.BUG_PATTERNS
+] : []
+
 class ClaudeMdGenerator {
   constructor() {
     this.projectPath = null
@@ -194,6 +234,12 @@ class ClaudeMdGenerator {
         break
       default:
         content = this.generateGenericBranch(branch, state)
+    }
+
+    // Append filtered branch memory (Conventions, Architectural Decisions, Bug Patterns)
+    const memoryContent = await this.getBranchMemoryContent(branch)
+    if (memoryContent) {
+      content += memoryContent
     }
 
     // Append assigned plugin skills if any are provided
@@ -754,6 +800,80 @@ class ClaudeMdGenerator {
     if (branch === activeBranch) {
       await this.activateBranch(activeBranch)
     }
+  }
+
+  /**
+   * Read and filter branch memory for inclusion in CLAUDE_{branch}.md.
+   *
+   * Extracts only actionable sections (Conventions, Architectural Decisions,
+   * Bug Patterns) and applies a size limit to prevent token bloat.
+   * Empty sections and boilerplate ("_No entries yet._") are excluded.
+   *
+   * @param {string} branch - Branch name (e.g. 'fullstack', 'ui')
+   * @param {number} [maxChars=BRANCH_MEMORY_MAX_CHARS] - Max characters to include
+   * @returns {Promise<string>} Formatted markdown to append, or empty string
+   */
+  async getBranchMemoryContent(branch, maxChars = BRANCH_MEMORY_MAX_CHARS) {
+    if (!this.projectPath || !parseBranchMemory) return ''
+
+    const safeBranch = sanitizeBranch(branch)
+    const memoryPath = path.join(this.projectPath, '.puffin', 'memory', 'branches', `${safeBranch}.md`)
+
+    let raw
+    try {
+      raw = await fs.readFile(memoryPath, 'utf-8')
+    } catch (err) {
+      if (err.code === 'ENOENT') return ''
+      console.warn(`[CLAUDE.md] Failed to read branch memory for ${branch}:`, err.message)
+      return ''
+    }
+
+    const parsed = parseBranchMemory(raw)
+    if (!parsed || !parsed.sections) return ''
+
+    const sectionHeadings = {
+      [SECTIONS.CONVENTIONS]: 'Conventions',
+      [SECTIONS.ARCHITECTURAL_DECISIONS]: 'Architectural Decisions',
+      [SECTIONS.BUG_PATTERNS]: 'Bug Patterns'
+    }
+
+    const blocks = []
+    let totalLength = 0
+
+    for (const sectionId of INCLUDED_SECTIONS) {
+      const items = parsed.sections[sectionId]
+      if (!items || items.length === 0) continue
+
+      const heading = sectionHeadings[sectionId]
+      const body = items.map(item => `- ${item}`).join('\n')
+      const block = `### ${heading}\n\n${body}\n`
+
+      if (totalLength + block.length > maxChars) {
+        // Include a partial block if we have room for at least the heading + 1 item
+        const firstItem = `### ${heading}\n\n- ${items[0]}\n`
+        if (totalLength + firstItem.length <= maxChars) {
+          // Add as many items as fit
+          const lines = [`### ${heading}\n`]
+          let lineLength = lines[0].length
+          for (const item of items) {
+            const line = `- ${item}\n`
+            if (totalLength + lineLength + line.length > maxChars) break
+            lines.push(line)
+            lineLength += line.length
+          }
+          blocks.push(lines.join(''))
+          totalLength += lineLength
+        }
+        break
+      }
+
+      blocks.push(block)
+      totalLength += block.length
+    }
+
+    if (blocks.length === 0) return ''
+
+    return '\n## Branch Memory (auto-extracted)\n\n' + blocks.join('\n')
   }
 
   /**

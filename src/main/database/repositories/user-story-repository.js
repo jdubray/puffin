@@ -53,6 +53,7 @@ class UserStoryRepository extends BaseRepository {
       acceptanceCriteria: this.parseJson(row.acceptance_criteria, []),
       inspectionAssertions: this.parseJson(row.inspection_assertions, []),
       assertionResults: this.parseJson(row.assertion_results, null),
+      completionSummary: this.parseJson(row.completion_summary, null),
       status: row.status,
       implementedOn: this.parseJson(row.implemented_on, []),
       sourcePromptId: row.source_prompt_id,
@@ -78,6 +79,7 @@ class UserStoryRepository extends BaseRepository {
       acceptance_criteria: this.toJson(story.acceptanceCriteria || []),
       inspection_assertions: this.toJson(story.inspectionAssertions || []),
       assertion_results: story.assertionResults ? this.toJson(story.assertionResults) : null,
+      completion_summary: story.completionSummary ? this.toJson(story.completionSummary) : null,
       status: story.status || StoryStatus.PENDING,
       implemented_on: this.toJson(story.implementedOn || []),
       source_prompt_id: story.sourcePromptId || null,
@@ -102,9 +104,9 @@ class UserStoryRepository extends BaseRepository {
     const sql = `
       INSERT INTO user_stories (
         id, branch_id, title, description, acceptance_criteria,
-        inspection_assertions, assertion_results,
+        inspection_assertions, assertion_results, completion_summary,
         status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     const params = [
       row.id,
@@ -114,6 +116,7 @@ class UserStoryRepository extends BaseRepository {
       row.acceptance_criteria,
       row.inspection_assertions,
       row.assertion_results,
+      row.completion_summary,
       row.status,
       row.implemented_on,
       row.source_prompt_id,
@@ -344,6 +347,7 @@ class UserStoryRepository extends BaseRepository {
         acceptance_criteria = ?,
         inspection_assertions = ?,
         assertion_results = ?,
+        completion_summary = ?,
         status = ?,
         implemented_on = ?,
         source_prompt_id = ?,
@@ -358,6 +362,7 @@ class UserStoryRepository extends BaseRepository {
       row.acceptance_criteria,
       row.inspection_assertions,
       row.assertion_results,
+      row.completion_summary,
       row.status,
       row.implemented_on,
       row.source_prompt_id,
@@ -469,9 +474,9 @@ class UserStoryRepository extends BaseRepository {
       const insertSql = `
         INSERT OR REPLACE INTO archived_stories (
           id, branch_id, title, description, acceptance_criteria,
-          inspection_assertions, assertion_results,
+          inspection_assertions, assertion_results, completion_summary,
           status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
       const insertParams = [
         row.id,
@@ -481,6 +486,7 @@ class UserStoryRepository extends BaseRepository {
         row.acceptance_criteria,
         row.inspection_assertions,
         row.assertion_results,
+        row.completion_summary,
         row.status,
         row.implemented_on,
         row.source_prompt_id,
@@ -536,10 +542,15 @@ class UserStoryRepository extends BaseRepository {
   delete(id) {
     const db = this.getDb()
 
+    console.log(`[SQL-TRACE] DELETE REQUEST: story id=${id}`)
+
     return this.immediateTransaction(() => {
       // Always clean up sprint references to prevent orphaned data
       // Remove from sprint_stories junction table
-      db.prepare('DELETE FROM sprint_stories WHERE story_id = ?').run(id)
+      const junctionResult = db.prepare('DELETE FROM sprint_stories WHERE story_id = ?').run(id)
+      if (junctionResult.changes > 0) {
+        console.log(`[SQL-TRACE] Cleaned up ${junctionResult.changes} sprint_stories junction rows for story ${id}`)
+      }
 
       // Clean storyProgress JSON in active sprint
       const sprintRow = db.prepare(`
@@ -553,11 +564,13 @@ class UserStoryRepository extends BaseRepository {
           db.prepare(`
             UPDATE sprints SET story_progress = ? WHERE id = ?
           `).run(this.toJson(progress), sprintRow.id)
+          console.log(`[SQL-TRACE] Cleaned up storyProgress for story ${id} in active sprint`)
         }
       }
 
       // Delete the story
       const result = db.prepare('DELETE FROM user_stories WHERE id = ?').run(id)
+      console.log(`[SQL-TRACE] DELETE FROM user_stories WHERE id = ${id}, changes: ${result.changes}`)
       return result.changes > 0
     })
   }
@@ -626,9 +639,9 @@ class UserStoryRepository extends BaseRepository {
       db.prepare(`
         INSERT OR REPLACE INTO user_stories (
           id, branch_id, title, description, acceptance_criteria,
-          inspection_assertions, assertion_results,
+          inspection_assertions, assertion_results, completion_summary,
           status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         row.id,
         row.branch_id,
@@ -637,6 +650,7 @@ class UserStoryRepository extends BaseRepository {
         row.acceptance_criteria,
         row.inspection_assertions,
         row.assertion_results,
+        row.completion_summary,
         row.status,
         row.implemented_on,
         row.source_prompt_id,

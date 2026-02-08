@@ -1,0 +1,73 @@
+{
+  "name": "outcome-lifecycle-plugin",
+  "version": "1.0.0",
+  "displayName": "Outcome Lifecycle",
+  "description": "Track desired outcomes from user stories and visualize their lifecycle as a dependency DAG",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["outcome", "lifecycle", "dag", "dependencies", "stories"],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "styles": [
+      "renderer/styles/outcome-lifecycle.css",
+      "renderer/styles/dag-renderer.css"
+    ],
+    "components": [
+      {
+        "name": "OutcomeLifecycleView",
+        "export": "OutcomeLifecycleView",
+        "type": "class",
+        "description": "Outcome lifecycle browser with DAG visualization"
+      }
+    ]
+  },
+  "extensionPoints": {
+    "actions": [
+      "outcomeCreate",
+      "outcomeUpdate",
+      "outcomeDelete"
+    ],
+    "ipcHandlers": [
+      "outcome-lifecycle-plugin:createLifecycle",
+      "outcome-lifecycle-plugin:getLifecycle",
+      "outcome-lifecycle-plugin:updateLifecycle",
+      "outcome-lifecycle-plugin:deleteLifecycle",
+      "outcome-lifecycle-plugin:listLifecycles",
+      "outcome-lifecycle-plugin:mapStory",
+      "outcome-lifecycle-plugin:unmapStory",
+      "outcome-lifecycle-plugin:getStoriesForLifecycle",
+      "outcome-lifecycle-plugin:getLifecyclesForStory",
+      "outcome-lifecycle-plugin:getDag",
+      "outcome-lifecycle-plugin:addDependency",
+      "outcome-lifecycle-plugin:removeDependency",
+      "outcome-lifecycle-plugin:getSynthesizedDag",
+      "outcome-lifecycle-plugin:resynthesizeDag",
+      "outcome-lifecycle-plugin:resetAndReprocess"
+    ],
+    "components": [
+      "OutcomeLifecycleView"
+    ]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "outcome-lifecycle-view",
+        "name": "Outcomes",
+        "location": "nav",
+        "icon": "🎯",
+        "order": 80,
+        "component": "OutcomeLifecycleView"
+      }
+    ],
+    "commands": [],
+    "menus": {},
+    "configuration": {
+      "title": "Outcome Lifecycle Settings",
+      "properties": {}
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

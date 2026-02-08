@@ -308,6 +308,7 @@ export class UserStoryReviewModalComponent {
       })),
       feedback,
       originalPrompt,
+      model: document.getElementById('thread-model')?.value || 'sonnet',
       project
     })
   }

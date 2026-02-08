@@ -1,0 +1,217 @@
+/**
+ * DAG Renderer Styles
+ *
+ * SVG-based dependency graph visualization.
+ */
+
+/* ==========================================================================
+   Container
+   ========================================================================== */
+
+.olc-dag-container {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  background: var(--bg-primary, #1e1e1e);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 8px;
+  display: flex;
+  align-items: stretch;
+}
+
+.olc-dag-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ==========================================================================
+   Nodes
+   ========================================================================== */
+
+.olc-dag-node {
+  outline: none;
+}
+
+.olc-dag-node:hover rect,
+.olc-dag-node:focus rect {
+  stroke-width: 3;
+  filter: brightness(1.15);
+}
+
+.olc-dag-node:focus rect {
+  stroke: var(--accent-color, #3b82f6);
+  outline: none;
+}
+
+.olc-dag-node:focus-visible rect {
+  stroke: var(--accent-color, #3b82f6);
+  stroke-dasharray: 4 2;
+}
+
+/* ==========================================================================
+   Edges
+   ========================================================================== */
+
+.olc-dag-edge {
+  transition: stroke 0.15s ease;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   States
+   ========================================================================== */
+
+.olc-dag-loading,
+.olc-dag-error,
+.olc-dag-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--text-secondary, #888);
+  font-size: 0.875rem;
+}
+
+.olc-dag-error {
+  color: var(--color-error, #ef4444);
+}
+
+/* ==========================================================================
+   Toggle Button
+   ========================================================================== */
+
+.olc-dag-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  background: var(--bg-secondary, #2a2a2a);
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+}
+
+.olc-dag-toggle:hover {
+  background: var(--bg-hover, #3a3a3a);
+}
+
+.olc-dag-toggle:focus-visible {
+  outline: 2px solid var(--accent-color, #3b82f6);
+  outline-offset: 2px;
+}
+
+.olc-dag-toggle-icon {
+  font-size: 1rem;
+}
+
+.olc-dag-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.olc-dag-host {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.olc-dag-section.olc-hidden {
+  display: none;
+}
+
+.olc-dag-toggle-active {
+  background: var(--accent-color, #3b82f6) !important;
+  color: #fff !important;
+  border-color: var(--accent-color, #3b82f6) !important;
+}
+
+/* ==========================================================================
+   Synthesis Controls
+   ========================================================================== */
+
+.olc-dag-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.olc-dag-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.olc-dag-info {
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #888);
+}
+
+.olc-resynthesize-btn {
+  padding: 5px 14px;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  background: var(--bg-secondary, #2a2a2a);
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.olc-resynthesize-btn:hover {
+  background: var(--bg-hover, #3a3a3a);
+  border-color: var(--accent-color, #3b82f6);
+}
+
+.olc-dag-render-target {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==========================================================================
+   Flow Nodes (Synthesized)
+   ========================================================================== */
+
+.olc-dag-node-flow rect {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+}
+
+.olc-dag-node-flow:hover rect {
+  filter: brightness(1.2) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+/* ==========================================================================
+   Back-Edges
+   ========================================================================== */
+
+.olc-dag-edge-back {
+  opacity: 0.7;
+}
+
+/* ==========================================================================
+   Accessibility
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .olc-dag-edge {
+    transition: none;
+  }
+}

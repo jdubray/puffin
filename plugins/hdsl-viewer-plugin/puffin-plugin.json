@@ -1,0 +1,63 @@
+{
+  "name": "hdsl-viewer-plugin",
+  "version": "1.0.0",
+  "displayName": "h-DSL Code Model Viewer",
+  "description": "Visualizes h-DSL schemas, code model instances, and annotation files produced by the h-DSL Engine",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["hdsl", "code-model", "schema", "viewer", "annotations"],
+  "extensionPoints": {
+    "actions": ["getSchema", "getInstance", "getAnnotations"],
+    "ipcHandlers": [
+      "hdsl-viewer:getSchema",
+      "hdsl-viewer:getInstance",
+      "hdsl-viewer:getAnnotations",
+      "hdsl-viewer:getAnnotation"
+    ],
+    "components": ["HdslViewerView"]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "hdsl-viewer-view",
+        "name": "Code Model",
+        "location": "nav",
+        "icon": "🔬",
+        "order": 80,
+        "component": "HdslViewerView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "hdsl-viewer.showCodeModel",
+        "title": "Show Code Model Viewer",
+        "category": "h-DSL"
+      }
+    ],
+    "menus": {
+      "tools": [
+        {
+          "command": "hdsl-viewer.showCodeModel"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "HdslViewerView",
+        "export": "HdslViewerView",
+        "type": "class",
+        "description": "Main h-DSL code model viewer"
+      }
+    ],
+    "styles": [
+      "renderer/styles/hdsl-viewer.css"
+    ]
+  }
+}

@@ -184,7 +184,10 @@ export class DocumentEditorView {
       // Cached marker count (updated when content changes to avoid redundant regex parsing)
       cachedMarkerCount: 0,
       // Pending content that failed validation (for "Apply Anyway" feature)
-      pendingValidationContent: null  // { content, responseId } - content rejected due to validation errors
+      pendingValidationContent: null,  // { content, responseId } - content rejected due to validation errors
+      // Conversation turn tracking for Q&A loops
+      conversationTurn: 0,        // 0 = initial prompt, 1+ = follow-up after answering questions
+      skipQuestionExtraction: false  // User clicked "Just Proceed" - skip further question detection
     }
 
     // Auto-save timer
@@ -350,13 +353,16 @@ export class DocumentEditorView {
    * @param {string} filePath - Path to the file
    */
   async openFileByPath(filePath) {
+    console.log('[DocumentEditorView] openFileByPath called with:', filePath)
     try {
       // Read the file directly
+      console.log('[DocumentEditorView] Invoking readFile IPC...')
       const result = await window.puffin.plugins.invoke(
         'document-editor-plugin',
         'readFile',
         { path: filePath }
       )
+      console.log('[DocumentEditorView] readFile result:', result.error ? `ERROR: ${result.error}` : `OK, ${result.content?.length} chars`)
 
       if (result.error) {
         console.warn(`[DocumentEditorView] Failed to open last file ${filePath}: ${result.error}`)
@@ -390,6 +396,7 @@ export class DocumentEditorView {
       this.state.undoStack = []
 
       console.log(`[DocumentEditorView] Restored last file: ${filePath}`)
+      console.log('[DocumentEditorView] State after restore:', { currentFile: this.state.currentFile, contentLength: this.state.content?.length })
 
       // Watch for external changes
       await this.watchCurrentFile()
@@ -398,11 +405,13 @@ export class DocumentEditorView {
       await this.loadSessionForCurrentFile()
 
       // Re-render
+      console.log('[DocumentEditorView] Calling render() after file restore...')
       this.render()
+      console.log('[DocumentEditorView] render() complete after file restore')
 
       return true
     } catch (error) {
-      console.warn(`[DocumentEditorView] Failed to open file by path ${filePath}:`, error)
+      console.error(`[DocumentEditorView] Failed to open file by path ${filePath}:`, error)
       return false
     }
   }
@@ -469,6 +478,7 @@ export class DocumentEditorView {
     if (!this.container) return
 
     const hasFile = !!this.state.currentFile
+    console.log('[DocumentEditorView] render() called, hasFile:', hasFile, 'currentFile:', this.state.currentFile)
     const responseCollapsed = this.state.responseCollapsed
     // Count inline Puffin markers in the document content
     const markerCount = hasFile ? MarkerUtils.countMarkers(this.state.content) : 0
@@ -825,8 +835,12 @@ export class DocumentEditorView {
   renderChangeSummary(response) {
     if (!response.summary) return ''
 
+    // Check if this response has questions - if so, don't show the "not updated" warning
+    const hasQuestions = response.questions && response.questions.length > 0
+
     // Show warning and action buttons if Claude claims changes but document was NOT actually updated
-    const notAppliedSection = !response.documentApplied && response.summary && response.summary !== 'No changes'
+    // Don't show warning if Claude is asking clarifying questions (that's expected behavior)
+    const notAppliedSection = !response.documentApplied && response.summary && response.summary !== 'No changes' && !hasQuestions
       ? `<div class="document-editor-not-applied-warning">
           <span class="document-editor-warning-icon">⚠️</span>
           <span class="document-editor-warning-text">Document was NOT updated - Claude's response did not use the expected format</span>
@@ -845,13 +859,88 @@ export class DocumentEditorView {
 
     const label = response.documentApplied ? 'Changes Made:' : 'Claude\'s Response:'
 
+    // When no document changes, show the full response content (conversational reply)
+    // This handles cases where Claude answers a question without making document changes
+    let responseContent = ''
+    if (!response.documentApplied && response.fullResponse) {
+      // Extract readable content from the response, excluding any code blocks or structured formats
+      const cleanedResponse = this.extractReadableContent(response.fullResponse)
+      if (cleanedResponse && cleanedResponse.length > 0 && cleanedResponse !== response.summary) {
+        responseContent = `
+          <div class="document-editor-conversational-response">
+            <div class="document-editor-response-text">${this.formatResponseText(cleanedResponse)}</div>
+          </div>
+        `
+      }
+    }
+
     return `
       <div class="document-editor-change-summary ${!response.documentApplied ? 'not-applied' : ''}">
         ${notAppliedSection}
         <div class="document-editor-summary-label">${label}</div>
         <div class="document-editor-summary-content">${this.formatSummary(response.summary)}</div>
+        ${responseContent}
       </div>
     `
+  }
+
+  /**
+   * Extract readable content from Claude's response
+   * Removes code blocks, structured change formats, and other non-conversational content
+   * @param {string} response - Raw response text
+   * @returns {string} Cleaned readable content
+   */
+  extractReadableContent(response) {
+    if (!response) return ''
+
+    let content = response
+
+    // Remove structured change blocks (<<<CHANGE>>>...<<<END>>>)
+    content = content.replace(/<<<CHANGE>>>[\s\S]*?<<<END>>>/g, '')
+
+    // Remove code blocks (```...```)
+    content = content.replace(/```[\s\S]*?```/g, '')
+
+    // Remove "## Updated Document" sections
+    content = content.replace(/##\s*Updated\s*Document[\s\S]*$/i, '')
+
+    // Remove "## Summary" header but keep content
+    content = content.replace(/##\s*Summary\s*\n?/gi, '')
+
+    // Remove "## Questions" sections (already handled separately)
+    content = content.replace(/##\s*Questions?[\s\S]*?(?=##|$)/gi, '')
+
+    // Clean up extra whitespace
+    content = content.replace(/\n{3,}/g, '\n\n').trim()
+
+    return content
+  }
+
+  /**
+   * Format response text for display (convert markdown-like formatting)
+   * @param {string} text - Text to format
+   * @returns {string} Formatted HTML
+   */
+  formatResponseText(text) {
+    if (!text) return ''
+
+    // Escape HTML first
+    let html = this.escapeHtml(text)
+
+    // Convert markdown-style formatting
+    // Bold: **text** or __text__
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    html = html.replace(/__(.*?)__/g, '<strong>$1</strong>')
+
+    // Italic: *text* or _text_
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    html = html.replace(/_([^_]+)_/g, '<em>$1</em>')
+
+    // Convert line breaks to <br> or paragraphs
+    html = html.replace(/\n\n/g, '</p><p>')
+    html = html.replace(/\n/g, '<br>')
+
+    return `<p>${html}</p>`
   }
 
   /**
@@ -1077,6 +1166,11 @@ export class DocumentEditorView {
             ${errorsHtml}
           </div>
           <div class="document-editor-questions-modal-footer">
+            ${hasQuestions ? `
+              <button class="document-editor-btn document-editor-btn-secondary" data-action="just-proceed" title="Skip remaining questions and ask Claude to proceed with the task">
+                Just Proceed
+              </button>
+            ` : ''}
             <button class="document-editor-btn ${hasQuestions ? '' : 'document-editor-btn-primary'}" data-action="close-response-modal">
               ${hasQuestions ? 'Close (answer later)' : 'OK'}
             </button>
@@ -1491,8 +1585,15 @@ export class DocumentEditorView {
    * Extracts all /@puffin: ... @/ markers from the document and combines them
    * into a single prompt for Claude to process holistically.
    */
-  async handleAskAI() {
+  async handleAskAI(followUpContext) {
     if (!this.state.currentFile || this.state.isSubmitting) return
+
+    // Reset conversation turn for new prompts (not follow-ups from Q&A)
+    // Only reset on fresh submissions, not on follow-ups with Q&A answers
+    if (!followUpContext) {
+      this.state.conversationTurn = 0
+      this.state.skipQuestionExtraction = false
+    }
 
     // Find all inline markers in the document
     const markers = MarkerUtils.findAllMarkers(this.state.content)
@@ -1504,7 +1605,13 @@ export class DocumentEditorView {
     // Combine all marker prompts into a single request
     // The prompt harness in config/prompt-harness.json instructs Claude
     // to process all markers holistically and remove them when applying edits
-    const combinedPrompt = MarkerUtils.combinePrompts(this.state.content)
+    let combinedPrompt = MarkerUtils.combinePrompts(this.state.content)
+
+    // If follow-up context is provided (e.g. Q&A answers from a previous Claude response),
+    // append it so Claude receives both the original marker instructions and the answers
+    if (followUpContext) {
+      combinedPrompt += '\n\n---\n\n' + followUpContext
+    }
 
     console.log('[DocumentEditorView] Processing inline markers:', {
       markerCount: markers.length,
@@ -1598,9 +1705,11 @@ export class DocumentEditorView {
   async processAIResponse(result, prompt) {
     const rawResponse = result?.response || result?.text || result?.content || ''
     console.log('[DocumentEditorView] Processing AI response, length:', rawResponse.length)
+    console.log('[DocumentEditorView] Raw response preview:', rawResponse.substring(0, 500))
 
     // Parse response for questions and updated document
     const questions = this.extractQuestions(rawResponse)
+    console.log('[DocumentEditorView] Extracted questions:', questions.length, questions)
     const summary = this.extractSummary(rawResponse)
 
     let documentApplied = false
@@ -1610,8 +1719,10 @@ export class DocumentEditorView {
 
     // Response type: QUESTIONS - Claude needs clarification
     if (questions.length > 0) {
-      console.log('[DocumentEditorView] Claude asked', questions.length, 'question(s)')
+      console.log('[DocumentEditorView] Claude asked', questions.length, 'question(s)', 'on turn', this.state.conversationTurn)
       // Don't apply any document changes when there are questions
+      // Increment turn counter so next response uses restrictive question detection
+      this.state.conversationTurn++
     }
     // Response type: STRUCTURED CHANGES - preferred format using DocumentMerger
     else if (this.documentMerger.hasStructuredChanges(rawResponse)) {
@@ -1844,7 +1955,10 @@ export class DocumentEditorView {
       this.computeAndTrackChanges()
     }
 
-    // Render to show modal
+    // Clear submitting state BEFORE render so UI elements (inputs, buttons) are enabled
+    this.state.isSubmitting = false
+
+    // Render to show response
     this.render()
 
     // Auto-save if enabled
@@ -1855,14 +1969,65 @@ export class DocumentEditorView {
 
   /**
    * Extract questions from Claude's response
-   * Looks for ## Questions section with numbered items
+   * Looks for:
+   * 1. JSON format with "type": "questions" and "questions" array
+   * 2. ## Questions section with numbered items (structured format)
+   * 3. Clarifying question patterns in conversational responses
    * @param {string} response - Raw response text
    * @returns {Array} Array of question objects
    */
   extractQuestions(response) {
     if (!response) return []
 
+    // If user clicked "Just Proceed", skip all question extraction
+    if (this.state.skipQuestionExtraction) {
+      console.log('[DocumentEditorView] Skipping question extraction (user chose to proceed)')
+      return []
+    }
+
     const questions = []
+
+    // After the first turn, only detect explicit structured questions
+    // (JSON format or ## Questions section), not conversational patterns
+    const isFollowUpTurn = this.state.conversationTurn > 0
+    if (isFollowUpTurn) {
+      console.log('[DocumentEditorView] Follow-up turn', this.state.conversationTurn, '- using restrictive question detection')
+    }
+
+    // Pattern 0: JSON format - { "type": "questions", "questions": [...] }
+    // Look for JSON in code blocks or raw JSON
+    const jsonPatterns = [
+      /```json\s*\n?([\s\S]*?)\n?```/i,  // JSON in code block
+      /```\s*\n?(\{[\s\S]*?"type"\s*:\s*"questions"[\s\S]*?\})\n?```/i,  // Generic code block with questions JSON
+      /(\{[\s\S]*?"type"\s*:\s*"questions"[\s\S]*?\})/i  // Raw JSON
+    ]
+
+    for (const pattern of jsonPatterns) {
+      const jsonMatch = response.match(pattern)
+      if (jsonMatch) {
+        try {
+          const jsonStr = jsonMatch[1].trim()
+          const parsed = JSON.parse(jsonStr)
+          if (parsed.type === 'questions' && Array.isArray(parsed.questions)) {
+            parsed.questions.forEach((q, i) => {
+              const questionText = typeof q === 'string' ? q : q.question || q.text || String(q)
+              questions.push({
+                id: `q-${Date.now()}-${i}`,
+                question: questionText,
+                answered: false,
+                answer: null
+              })
+            })
+            console.log('[DocumentEditorView] Extracted questions from JSON format:', questions.length)
+            return questions
+          }
+        } catch (e) {
+          console.log('[DocumentEditorView] Failed to parse JSON questions:', e.message)
+        }
+      }
+    }
+
+    // Pattern 1: Look for structured ## Questions section
     const questionsMatch = response.match(/##\s*Questions?\s*\n([\s\S]*?)(?=##|$)/i)
 
     if (questionsMatch) {
@@ -1880,6 +2045,41 @@ export class DocumentEditorView {
           answer: null
         })
       })
+    }
+
+    // Pattern 2: Detect clarifying questions in conversational responses
+    // ONLY on first turn (turn 0) - after that, only structured questions are detected
+    // This prevents infinite Q&A loops where Claude's follow-up responses contain
+    // conversational questions that get detected as new clarification requests
+    if (questions.length === 0 && !isFollowUpTurn && !this.documentMerger.hasStructuredChanges(response)) {
+      const clarifyingPatterns = [
+        /(?:I (?:want to|need to|would like to) (?:make sure I understand|clarify|confirm|verify))[^.?]*\?/gi,
+        /(?:Could you (?:please )?(?:clarify|confirm|explain|tell me))[^.?]*\?/gi,
+        /(?:Before I (?:proceed|make changes|edit))[^.?]*\?/gi,
+        /(?:Do you (?:want|mean|prefer))[^.?]*\?/gi,
+        /(?:Should I)[^.?]*\?/gi,
+        /(?:Is (?:this|that|it) (?:correct|right|what you))[^.?]*\?/gi,
+        /(?:Are you (?:asking|referring|saying))[^.?]*\?/gi,
+        /(?:Would you like)[^.?]*\?/gi
+      ]
+
+      for (const pattern of clarifyingPatterns) {
+        const matches = response.match(pattern)
+        if (matches) {
+          matches.forEach((match, i) => {
+            const question = match.trim()
+            // Avoid duplicates
+            if (!questions.some(q => q.question === question)) {
+              questions.push({
+                id: `q-${Date.now()}-${questions.length}`,
+                question,
+                answered: false,
+                answer: null
+              })
+            }
+          })
+        }
+      }
     }
 
     return questions
@@ -1996,11 +2196,17 @@ export class DocumentEditorView {
    */
   attachQuestionListeners() {
     // Question inputs - store values in state for persistence
-    this.container.querySelectorAll('.document-editor-question-input').forEach(input => {
+    const questionInputs = this.container.querySelectorAll('.document-editor-question-input')
+    console.log('[DocumentEditorView] attachQuestionListeners - found', questionInputs.length, 'question inputs')
+
+    questionInputs.forEach((input, idx) => {
+      console.log('[DocumentEditorView] Question input', idx, '- disabled:', input.disabled, 'readonly:', input.readOnly)
+
       // Input handler to persist values
       const inputHandler = (e) => {
         const questionId = e.currentTarget.dataset.questionId
         this.state.pendingAnswers[questionId] = e.currentTarget.value
+        console.log('[DocumentEditorView] Question input value changed:', questionId, e.currentTarget.value)
       }
       this.addTrackedListener(input, 'input', inputHandler)
 
@@ -2091,6 +2297,12 @@ export class DocumentEditorView {
       this.addTrackedListener(btn, 'click', handler)
     })
 
+    // Just Proceed button (skip Q&A loop and ask Claude to proceed)
+    this.container.querySelectorAll('[data-action="just-proceed"]').forEach(btn => {
+      const handler = () => this.handleJustProceed()
+      this.addTrackedListener(btn, 'click', handler)
+    })
+
     // Append raw response button (when Claude doesn't use proper format)
     this.container.querySelectorAll('[data-action="append-raw-response"]').forEach(btn => {
       const responseId = btn.dataset.responseId
@@ -2166,6 +2378,104 @@ export class DocumentEditorView {
     this.render()
 
     console.log('[DocumentEditorView] Force applied content successfully')
+  }
+
+  /**
+   * Handle "Just Proceed" - skip Q&A loop and tell Claude to proceed
+   * This is used when Claude keeps asking similar questions in a loop
+   */
+  async handleJustProceed() {
+    if (!this.state.currentResponse) {
+      console.warn('[DocumentEditorView] No current response for Just Proceed')
+      return
+    }
+
+    console.log('[DocumentEditorView] User chose to skip Q&A and proceed')
+
+    // Set flag to skip question extraction on subsequent responses
+    this.state.skipQuestionExtraction = true
+
+    // Get any partial answers that were provided
+    const questions = this.state.currentResponse.questions || []
+    const answeredQuestions = questions.filter(q => q.answered || this.state.pendingAnswers[q.id])
+
+    // Build a prompt that includes any provided answers and asks to proceed
+    let followUpPrompt = 'Please proceed with the original request.'
+
+    if (answeredQuestions.length > 0) {
+      const answersText = answeredQuestions.map(q => {
+        const answer = q.answer || this.state.pendingAnswers[q.id] || ''
+        return `Q: ${q.question}\nA: ${answer}`
+      }).filter(text => text.includes('\nA: ') && !text.endsWith('\nA: ')).join('\n\n')
+
+      if (answersText) {
+        followUpPrompt = `Here are the answers I provided:\n\n${answersText}\n\nPlease proceed with the original request using your best judgment for any remaining questions.`
+      } else {
+        followUpPrompt = 'Please proceed with the original request using your best judgment. I don\'t need to answer more questions.'
+      }
+    } else {
+      followUpPrompt = 'Please proceed with the original request using your best judgment. I don\'t need to answer more questions.'
+    }
+
+    // Close modal and show loading state
+    this.state.showResponseModal = false
+    this.state.isSubmitting = true
+    this.state.contentBeforeSubmit = this.state.content
+
+    // Clear pending answers
+    this.state.pendingAnswers = {}
+
+    // Record baseline for change tracking
+    this.changeTracker.recordBaseline(this.state.content)
+
+    this.render()
+
+    try {
+      // Submit the follow-up to Claude
+      const result = await this.promptService.submit({
+        filename: this.getDisplayFilename(),
+        filePath: this.state.currentFile,
+        extension: this.state.extension,
+        content: this.state.content,
+        userPrompt: followUpPrompt,
+        model: this.state.selectedModel,
+        thinkingBudget: this.state.thinkingBudget,
+        contextFiles: this.state.contextFiles.map(f => ({
+          name: f.name,
+          path: f.path,
+          extension: f.extension,
+          content: f.content
+        })),
+        branchId: 'plugin',
+        sessionId: null
+      })
+
+      // Process the response (question extraction will be skipped)
+      await this.processAIResponse(result, followUpPrompt)
+
+    } catch (error) {
+      console.error('[DocumentEditorView] Error in Just Proceed:', error)
+
+      // Show error in modal
+      this.state.currentResponse = {
+        id: this.generateResponseId(),
+        timestamp: new Date().toISOString(),
+        prompt: followUpPrompt,
+        summary: `Error: ${error.message}`,
+        questions: [],
+        fullResponse: error.message,
+        diffStats: { added: 0, modified: 0, deleted: 0 },
+        validationErrors: [],
+        model: this.state.selectedModel,
+        collapsed: false,
+        documentApplied: false
+      }
+      this.state.showResponseModal = true
+      this.render()
+    } finally {
+      this.state.isSubmitting = false
+      this.updatePromptUI()
+    }
   }
 
   /**
@@ -2634,9 +2944,8 @@ export class DocumentEditorView {
     this.updateResponseContent()
     this.attachQuestionListeners()
 
-    // Submit follow-up prompt to Claude
-    this.state.promptText = followUpPrompt
-    await this.handleAskAI()
+    // Submit follow-up prompt to Claude with Q&A context
+    await this.handleAskAI(followUpPrompt)
   }
 
   /**

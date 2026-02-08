@@ -19,7 +19,10 @@ async function triggerAssertionEvaluation(storyId, showToast = null) {
 
   console.log('[ASSERTION] Triggering evaluation for story:', storyId)
 
-  // First check if this story has any assertions - skip evaluation if none
+  // Check story info for display purposes, but always proceed to evaluation.
+  // The evaluation handler reads assertions from the DB (user_stories.inspection_assertions),
+  // which may have been written directly by the CRE assertion generator even if
+  // the in-memory model hasn't been updated yet.
   let story = null
   let storyTitle = ''
   try {
@@ -29,15 +32,6 @@ async function triggerAssertionEvaluation(storyId, showToast = null) {
       storyTitle = story?.title?.substring(0, 30) || 'Story'
       console.log('[ASSERTION] Story found:', story?.title)
       console.log('[ASSERTION] Has inspectionAssertions:', story?.inspectionAssertions?.length || 0)
-
-      // Skip evaluation if no assertions defined
-      if (!story?.inspectionAssertions || story.inspectionAssertions.length === 0) {
-        console.log('[ASSERTION] Skipping evaluation - no assertions defined for this story')
-        if (showToast) {
-          showToast(`Story completed! No inspection assertions to verify.`, 'info')
-        }
-        return null
-      }
     }
   } catch (e) {
     console.error('[ASSERTION] Error checking story assertions:', e)
@@ -124,9 +118,11 @@ export class StatePersistence {
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
       'ADD_STORIES_TO_BACKLOG',
       // Sprint actions
-      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN', 'ITERATE_SPRINT_PLAN',
+      'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'CRE_PLANNING_COMPLETE', 'CRE_PLANNING_ERROR', 'CRE_INTROSPECTION_COMPLETE',
+      'APPROVE_PLAN', 'SET_SPRINT_PLAN', 'ITERATE_SPRINT_PLAN',
       'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS', 'DELETE_SPRINT',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
+      'UPDATE_SPRINT_STORY_ASSERTIONS',
       'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
       // Story generation tracking
       'RECEIVE_DERIVED_STORIES', 'CREATE_STORY_GENERATION', 'UPDATE_GENERATED_STORY_FEEDBACK',
@@ -207,21 +203,27 @@ export class StatePersistence {
 
       // Persist individual user story updates (status changes, edits)
       if (['ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY'].includes(normalizedType)) {
-        // Safety check: don't persist if stories array is empty (prevents accidental wipe)
-        if (!state.userStories || state.userStories.length === 0) {
+        console.log('[PERSIST-DEBUG] persist() called with action type:', normalizedType, 'payload:', action.payload)
+        // Safety check: don't persist ADD/UPDATE if stories array is empty (prevents accidental wipe).
+        // DELETE is exempt — deleting the last story legitimately leaves the array empty.
+        if ((!state.userStories || state.userStories.length === 0) && normalizedType !== 'DELETE_USER_STORY') {
           console.warn('[PERSIST-DEBUG] Skipping user story persist: stories array is empty')
         } else {
-          // Only persist the specific story that changed, not all stories
-          const storyId = state._lastUpdatedStoryId
+          // Only persist the specific story that changed, not all stories.
+          // NOTE: action comes from lastAction (set in wrapIntentsForDebugging) which has
+          // { type, args: [storyId, updates] } format, NOT SAM's { type, payload } format.
+          // We must extract IDs from action.args as fallback.
+          const storyId = action.payload?.id || action.args?.[0] || state._lastUpdatedStoryId
           if (storyId && normalizedType === 'UPDATE_USER_STORY') {
-            const story = state.userStories.find(s => s.id === storyId)
-            if (story) {
-              try {
-                await window.puffin.state.updateUserStory(story.id, story)
-                console.log('[PERSIST-DEBUG] User story updated:', story.id)
-              } catch (e) {
-                console.error('Failed to persist story:', story.id, e)
-              }
+            try {
+              // Extract updates from action.args[1] (the second arg to updateUserStory(id, updates))
+              // or fall back to action.payload if available.
+              const updates = action.payload || action.args?.[1] || {}
+              if (updates.id === undefined) updates.id = storyId
+              await window.puffin.state.updateUserStory(storyId, updates)
+              console.log('[PERSIST-DEBUG] User story updated:', storyId, 'status:', updates.status || '(unchanged)')
+            } catch (e) {
+              console.error('Failed to persist story:', storyId, e)
             }
           } else if (normalizedType === 'ADD_USER_STORY') {
             // For new stories, find and add the most recently created one
@@ -244,24 +246,26 @@ export class StatePersistence {
               }
             }
           } else if (normalizedType === 'DELETE_USER_STORY') {
-            // Get story ID from action payload
-            const storyId = action.payload?.id
-            if (storyId) {
+            // Get story ID from action.args[0] (lastAction format) or action.payload.id (SAM format)
+            const deleteStoryId = action.payload?.id || action.args?.[0]
+            console.log('[PERSIST-DEBUG] DELETE_USER_STORY persist triggered, storyId:', deleteStoryId, 'action.args:', action.args, 'action.payload:', action.payload)
+            if (deleteStoryId) {
               try {
-                await window.puffin.state.deleteUserStory(storyId)
-                console.log('[PERSIST-DEBUG] User story deleted:', storyId)
+                const result = await window.puffin.state.deleteUserStory(deleteStoryId)
+                console.log('[PERSIST-DEBUG] User story deleted:', deleteStoryId, 'result:', result)
               } catch (e) {
-                console.error('[PERSIST-DEBUG] Failed to delete user story:', storyId, e)
+                console.error('[PERSIST-DEBUG] Failed to delete user story:', deleteStoryId, e)
               }
             } else {
-              console.warn('[PERSIST-DEBUG] DELETE_USER_STORY missing story ID in payload')
+              console.warn('[PERSIST-DEBUG] DELETE_USER_STORY missing story ID in payload, action:', JSON.stringify(action))
             }
           }
         }
       }
 
       // Persist sprint state changes (including criteria progress, story status, assertions, and orchestration)
-      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
+      if (['CREATE_SPRINT', 'START_SPRINT_PLANNING', 'CRE_PLANNING_COMPLETE', 'CRE_PLANNING_ERROR',
+           'CRE_INTROSPECTION_COMPLETE', 'APPROVE_PLAN', 'SET_SPRINT_PLAN',
            'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS', 'DELETE_SPRINT',
            'UPDATE_SPRINT_STORY_STATUS', 'TOGGLE_CRITERIA_COMPLETION', 'COMPLETE_STORY_BRANCH',
            'UPDATE_SPRINT_STORY_ASSERTIONS',

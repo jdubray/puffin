@@ -1,0 +1,488 @@
+/**
+ * Query Panel Styles
+ * Styles for the RLM Query Panel component
+ */
+
+/* ========================================
+   Main Container
+   ======================================== */
+
+.query-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 300px;
+  position: relative;
+}
+
+.query-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* ========================================
+   Labels
+   ======================================== */
+
+.query-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #a0a0a0);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ========================================
+   Query Type Row
+   ======================================== */
+
+.query-type-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.query-type-select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--input-bg, #3c3c3c);
+  border: 1px solid var(--border-color, #555);
+  border-radius: 4px;
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a0a0a0' d='M2 4l4 4 4-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+.query-type-select:hover:not(:disabled) {
+  border-color: var(--text-secondary, #a0a0a0);
+}
+
+.query-type-select:focus {
+  outline: none;
+  border-color: var(--accent-color, #007acc);
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.25);
+}
+
+.query-type-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.query-type-description {
+  font-size: 11px;
+  color: var(--text-tertiary, #888);
+  font-style: italic;
+  padding-left: 2px;
+}
+
+/* ========================================
+   Model Selector Row
+   ======================================== */
+
+.query-model-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.query-model-row.hidden {
+  display: none;
+}
+
+.query-model-select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--input-bg, #3c3c3c);
+  border: 1px solid var(--border-color, #555);
+  border-radius: 4px;
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a0a0a0' d='M2 4l4 4 4-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+.query-model-select:hover:not(:disabled) {
+  border-color: var(--text-secondary, #a0a0a0);
+}
+
+.query-model-select:focus {
+  outline: none;
+  border-color: var(--accent-color, #007acc);
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.25);
+}
+
+.query-model-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.query-model-description {
+  font-size: 11px;
+  color: var(--text-tertiary, #888);
+  font-style: italic;
+  padding-left: 2px;
+}
+
+/* ========================================
+   Chunk Strategy Row
+   ======================================== */
+
+.chunk-strategy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary, #333);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.strategy-label {
+  color: var(--text-secondary, #a0a0a0);
+  flex-shrink: 0;
+}
+
+.strategy-value {
+  color: var(--text-primary, #e0e0e0);
+  font-family: var(--font-mono, 'Consolas', 'Monaco', monospace);
+}
+
+/* ========================================
+   Query Input Row
+   ======================================== */
+
+.query-input-row {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+}
+
+.query-input {
+  width: 100%;
+  flex: 1;
+  min-height: 100px;
+  max-height: 200px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  background: var(--input-bg, #3c3c3c);
+  border: 1px solid var(--border-color, #555);
+  border-radius: 4px;
+  color: var(--text-primary, #e0e0e0);
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.query-input::placeholder {
+  color: var(--text-tertiary, #888);
+}
+
+.query-input:hover:not(:disabled) {
+  border-color: var(--text-secondary, #a0a0a0);
+}
+
+.query-input:focus {
+  outline: none;
+  border-color: var(--accent-color, #007acc);
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.25);
+}
+
+.query-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  resize: none;
+}
+
+/* ========================================
+   Error Display
+   ======================================== */
+
+.query-error {
+  display: none;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid var(--status-error, #f44336);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--status-error, #f44336);
+}
+
+.query-error.visible {
+  display: flex;
+}
+
+.query-error .error-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.query-error .error-message {
+  flex: 1;
+  line-height: 1.4;
+}
+
+/* ========================================
+   Progress Bar Row
+   ======================================== */
+
+.query-progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary, #333);
+  border-radius: 4px;
+}
+
+.query-progress-row.hidden {
+  display: none;
+}
+
+.query-progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-secondary, #2d2d2d);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.query-progress-bar {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--accent-color, #007acc) 0%,
+    var(--accent-hover, #0098ff) 50%,
+    var(--accent-color, #007acc) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  animation: progress-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.query-progress-text {
+  font-size: 11px;
+  color: var(--text-secondary, #a0a0a0);
+  text-align: center;
+}
+
+/* ========================================
+   Query Actions Row
+   ======================================== */
+
+.query-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.query-submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: white;
+  background: var(--accent-color, #007acc);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  min-width: 120px;
+}
+
+.query-submit-btn:hover:not(:disabled) {
+  background: var(--accent-hover, #0098ff);
+}
+
+.query-submit-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.query-submit-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-primary, #1e1e1e), 0 0 0 4px var(--accent-color, #007acc);
+}
+
+.query-submit-btn:disabled {
+  background: var(--disabled-bg, #555);
+  color: var(--disabled-text, #888);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.query-submit-btn .btn-icon {
+  font-size: 14px;
+}
+
+.query-submit-btn .btn-text {
+  white-space: nowrap;
+}
+
+/* Loading state spinner */
+.query-submit-btn .spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: query-spin 0.8s linear infinite;
+}
+
+@keyframes query-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.query-submit-btn.loading {
+  background: var(--accent-color, #007acc);
+  opacity: 0.8;
+}
+
+/* ========================================
+   Disabled State Overlay
+   ======================================== */
+
+.query-panel-disabled-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 30, 30, 0.85);
+  border-radius: 4px;
+  z-index: 10;
+}
+
+.query-panel-disabled-overlay p {
+  font-size: 13px;
+  color: var(--text-secondary, #a0a0a0);
+  text-align: center;
+  padding: 20px;
+}
+
+/* ========================================
+   Responsive Adjustments
+   ======================================== */
+
+@media (max-width: 600px) {
+  .query-panel-content {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .query-type-select,
+  .query-input {
+    font-size: 14px; /* Larger for touch targets */
+  }
+
+  .query-submit-btn {
+    width: 100%;
+    padding: 12px 20px;
+  }
+}
+
+/* ========================================
+   High Contrast Mode Support
+   ======================================== */
+
+@media (prefers-contrast: high) {
+  .query-type-select,
+  .query-input {
+    border-width: 2px;
+  }
+
+  .query-type-select:focus,
+  .query-input:focus {
+    box-shadow: 0 0 0 3px var(--accent-color, #007acc);
+  }
+
+  .query-error {
+    border-width: 2px;
+  }
+
+  .query-submit-btn:focus {
+    box-shadow: 0 0 0 3px var(--accent-color, #007acc);
+  }
+}
+
+/* ========================================
+   Reduced Motion Support
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .query-type-select,
+  .query-input,
+  .query-submit-btn {
+    transition: none;
+  }
+
+  .query-submit-btn .spinner {
+    animation: none;
+    border-top-color: transparent;
+    border-right-color: white;
+  }
+}
+
+/* ========================================
+   Focus Visible for Keyboard Navigation
+   ======================================== */
+
+.query-type-select:focus-visible,
+.query-input:focus-visible,
+.query-submit-btn:focus-visible {
+  outline: 2px solid var(--accent-color, #007acc);
+  outline-offset: 2px;
+}

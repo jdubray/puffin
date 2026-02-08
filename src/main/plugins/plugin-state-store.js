@@ -27,12 +27,15 @@ class PluginStateStore {
    * @returns {Promise<Object>}
    */
   async load() {
+    console.log('[PluginStateStore] Loading state from:', this.statePath)
     try {
       const content = await fs.readFile(this.statePath, 'utf-8')
       this.state = JSON.parse(content)
+      console.log('[PluginStateStore] Loaded state successfully:', JSON.stringify(this.state, null, 2))
     } catch (error) {
       if (error.code === 'ENOENT') {
         // File doesn't exist, create default state
+        console.log('[PluginStateStore] State file not found, using default state')
         this.state = this._getDefaultState()
       } else {
         console.error('[PluginStateStore] Error loading state:', error.message)
@@ -130,7 +133,9 @@ class PluginStateStore {
    */
   async isEnabled(pluginName) {
     const state = await this.getPluginState(pluginName)
-    return state.enabled !== false // Default to true
+    const enabled = state.enabled !== false // Default to true
+    console.log(`[PluginStateStore] isEnabled("${pluginName}"):`, enabled, 'state:', JSON.stringify(state))
+    return enabled
   }
 
   /**

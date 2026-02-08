@@ -5,8 +5,9 @@
 This document provides a comprehensive review of all actions implemented in Puffin's SAM (State-Action-Model) architecture. Puffin uses pure functions to compute proposals based on user intent, which are then processed by acceptors to update the application state.
 
 **File**: `src/renderer/sam/actions.js`
-**Total Actions**: 46 exported action creators
-**Total Lines**: 604
+**Total Actions**: 145 exported action creators (as of v3.0.0)
+**Total Lines**: 1,497 (as of v3.0.0)
+**Latest Features**: Sprint orchestration, CRE integration, GitHub OAuth, automated implementation
 
 ## Action Categories
 
@@ -491,15 +492,79 @@ Track Claude CLI tool execution during prompts.
   - `architecture.md` - Architecture document
   - `gui-designer.json` - GUI designs
 
+## v3.0.0 Feature Additions
+
+Since the initial documentation, Puffin has added major features resulting in significant action growth:
+
+### Sprint Management Actions (35+ actions)
+- Sprint CRUD operations
+- Story assignment and status updates
+- Sprint planning and closure workflows
+- Sprint history archiving
+- Filtering and search
+
+### CRE (Code Review Engine) Actions (20+ actions)
+- Plan generation and approval workflows
+- Plan iteration and refinement
+- Assertion generation and evaluation
+- RIS (Refined Implementation Specification) creation
+- CRE configuration management
+
+### Orchestration Actions (25+ actions)
+- Automated sprint implementation
+- Story sequencing and dependencies
+- Progress tracking and status updates
+- Code review phase management
+- Bug fix workflow
+- Pause/resume/stop controls
+
+### GitHub Integration Actions (15+ actions)
+- OAuth authentication flow
+- Repository selection and management
+- Activity and contribution tracking
+- Rate limit monitoring
+- Profile synchronization
+
+### Handoff System Actions (8+ actions)
+- Cross-branch context transfer
+- Handoff summary creation and editing
+- Handoff review and acceptance
+- Clear and cancel operations
+
+### Implementation Journey Actions (8+ actions)
+- Journey creation and tracking
+- Human input recording
+- Iteration output tracking
+- Completion management
+
+### Story Generation Actions (10+ actions)
+- Generation workflow initiation
+- Feedback collection and application
+- Finalization and approval
+- Batch generation operations
+
+### Debug & Developer Actions (5+ actions)
+- Debug mode toggle
+- Prompt introspection
+- Activity trace capture
+- Performance metrics
+
 ## Summary
 
-Puffin implements a comprehensive SAM architecture with 46 action creators organized into 10 semantic categories. The actions support:
+Puffin implements a comprehensive SAM architecture with **145 action creators** organized into 18+ semantic categories. The actions support:
 
 - **Conversation Management**: Full prompt/response lifecycle with branching
+- **Sprint Orchestration**: End-to-end sprint planning, implementation, and review
+- **CRE Integration**: AI-assisted planning with human approval gates
+- **Automated Implementation**: Claude Code orchestration with progress tracking
+- **GitHub Integration**: Developer profiles, activity tracking, OAuth
+- **Handoff System**: Cross-branch context transfer for complex workflows
 - **Visual Design**: GUI designer with save/load capabilities
 - **Project Organization**: User stories with derive → iterate → implement workflow
 - **Architecture Documentation**: Markdown editor with Claude review
 - **Activity Monitoring**: Real-time tracking of Claude CLI tool usage
 - **Persistent State**: Automatic saving to structured .puffin/ directory
 
-Each action follows consistent patterns for payload structure, error handling, and integration with the broader SAM pattern, making the codebase maintainable and debuggable.
+Each action follows consistent patterns for payload structure, error handling, and integration with the broader SAM pattern, making the codebase maintainable and debuggable despite its significant growth.
+
+**Note**: This documentation reflects v3.0.0. For detailed information on specific actions in new categories, refer to the source code in `src/renderer/sam/actions.js` or use the codebase exploration tools.

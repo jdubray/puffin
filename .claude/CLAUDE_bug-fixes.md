@@ -35,6 +35,30 @@ Be thorough in testing and consider edge cases.
 | UI glitches | `src/renderer/app.js`, `src/renderer/components/` |
 | Plugin errors | `plugins/*-plugin/`, `src/main/plugin-loader.js` |
 
+## Branch Memory (auto-extracted)
+
+### Conventions
+
+- IPC handler naming: Renderer invokes window.puffin.state.* for core state operations and window.puffin.plugins.invoke(pluginName, action) for plugin operations. Main process uses ipcMain.handle(channel, handler) for request-response patterns.
+- State property naming inconsistency: Code uses both 'in_progress' (underscore) and 'in-progress' (hyphen) for story status values. Must standardize to 'in-progress' throughout codebase to avoid filtering failures.
+- Async handler re-entry protection: Async event handlers (handleSprintPlanning, handleRerunRequest) called from onStateChange need guard flags to prevent re-entry when handler calls state-changing intents. Pattern: _handlingSprintPlanning flag set during execution, cleared in finally().
+- Component managed modals list: Modal manager maintains whitelist of modal types it manages. New modal types must be added to componentManagedModals array or manager will clear content instead of letting component render.
+- SAM pending state flags (e.g., _pendingSprintPlanning) must be cleared via action dispatch, not mutated directly. Use guard flags (_handlingSprintPlanning) to prevent re-entry when async handlers trigger state changes.
+- Sprint history UI: tiles display sprint date as title, loaded on Backlog view focus and via refresh button. Each sprint filters backlog stories; sprint data includes title, closedAt/createdAt dates, and storyIds array.
+- Modal CSS width overrides use pattern .modal:has(.classname) for conditional styling. Avoids deep specificity chains and makes modal styling modular based on content type.
+- Plugin name consistency critical: designer-plugin vs 'designer' vs 'designer-plugin'. Must use exact plugin name everywhere: history-tree.js, project-form.js, modal-manager.js, prompt-editor.js. Wrong name causes plugin IPC invoke to fail silently.
+
+### Architectural Decisions
+
+- Plugin architecture uses file system (.puffin/gui-definitions/ and .puffin/claude-plugins/) as primary store; core SAM and plugins communicate via IPC and file I/O, not shared in-memory state. Plugin state is ephemeral and reloaded from disk on each interaction.
+- Auto-continuation of Claude CLI responses should be explicit by default, not automatic. Users must manually click Continue button to proceed with additional turns. Auto-continue feature is disabled (enabled: false) and stuck detection alerts are disabled to prevent UI blocking.
+- Component data refresh pattern: Instead of fetching once on init, components should refresh when they come into focus (onActivate) or respond to explicit refresh button clicks. This handles timing issues and stale data gracefully.
+- Designer plugin should be fully decoupled from core SAM model. Core contains no designer state, actions, or rendering code. Plugin manages all designer logic; core only provides .puffin/gui-definitions/ file directory as interface.
+- GUI definitions stored in .puffin/gui-definitions/ directory as JSON files (e.g., my-first-ui.json). Each GUI file contains name, description, element definitions. Core reads this directory on-demand (e.g., when Include GUI dropdown opens); plugin writes/deletes files in same directory.
+- Dropdown menu positioning: use left:0 to align left edge of menu with button, extending right. Ensures menu stays within view boundaries (right-aligned dropdowns clip when near right edge). Applies to Include GUI dropdown in prompt view.
+- State persistence flow: state-persistence.js intercepts SAM actions and triggers IPC. Persistence works ONLY if action type added to persistActions whitelist AND handler condition block exists. Missing from either = silent failure (no DB write).
+- Sprint story status automatic sync on creation: when sprint created, acceptor immediately updates backlog story status from 'pending' to 'in-progress' (lines 1953-1960). Persistence logic syncs these updates to DB. This must happen during sprint creation, not lazily.
+
 # Assigned Skills
 
 ## Code Architect

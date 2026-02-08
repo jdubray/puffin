@@ -818,10 +818,48 @@ export const createSprint = (stories) => ({
   }
 })
 
-// Start sprint planning - triggers planning prompt to Claude
+// Start sprint planning - triggers CRE planning workflow
 export const startSprintPlanning = () => ({
   type: 'START_SPRINT_PLANNING',
   payload: {
+    timestamp: Date.now()
+  }
+})
+
+// CRE plan generated and ready for user review (no auto-approve)
+export const crePlanReady = (planData) => ({
+  type: 'CRE_PLAN_READY',
+  payload: {
+    planData,
+    timestamp: Date.now()
+  }
+})
+
+// CRE planning phase completed — stores plan + RIS map (after user-initiated approval)
+export const crePlanningComplete = (plan, risMap, storyOrder) => ({
+  type: 'CRE_PLANNING_COMPLETE',
+  payload: {
+    plan,
+    risMap,
+    storyOrder,
+    timestamp: Date.now()
+  }
+})
+
+// CRE planning phase failed
+export const crePlanningError = (error) => ({
+  type: 'CRE_PLANNING_ERROR',
+  payload: {
+    error: error.message || error,
+    timestamp: Date.now()
+  }
+})
+
+// CRE introspection completed for a story
+export const creIntrospectionComplete = (storyId) => ({
+  type: 'CRE_INTROSPECTION_COMPLETE',
+  payload: {
+    storyId,
     timestamp: Date.now()
   }
 })
@@ -830,6 +868,38 @@ export const startSprintPlanning = () => ({
 export const approvePlan = () => ({
   type: 'APPROVE_PLAN',
   payload: {
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Add a synthetic (non-Claude) prompt entry to branch history.
+ * Used by CRE to make plans, RIS, and assertions visible in the prompt view.
+ * @param {string} branchId - Target branch (e.g. 'specifications')
+ * @param {string} content - The "prompt" text (what was requested)
+ * @param {string} responseContent - The "response" text (the result)
+ * @param {object} [metadata] - Optional metadata (title, storyId, sprintId)
+ */
+export const addSyntheticPrompt = (branchId, content, responseContent, metadata = {}) => ({
+  type: 'ADD_SYNTHETIC_PROMPT',
+  payload: {
+    id: generateId(),
+    branchId,
+    content,
+    responseContent,
+    title: metadata.title || null,
+    storyId: metadata.storyId || null,
+    sprintId: metadata.sprintId || null,
+    parentId: metadata.parentId || null,
+    timestamp: Date.now()
+  }
+})
+
+// Trigger CRE approval flow (approve-plan + generate-ris) then proceed
+export const approvePlanWithCre = (planId) => ({
+  type: 'APPROVE_PLAN_WITH_CRE',
+  payload: {
+    planId,
     timestamp: Date.now()
   }
 })
@@ -875,13 +945,22 @@ export const orchestrationStoryStarted = (storyId) => ({
  * Mark a story as completed in the orchestration queue
  * @param {string} storyId - The ID of the completed story
  * @param {string} sessionId - The Claude session ID used for implementation
+ * @param {Object} [completionSummary] - Summary of work done
+ * @param {string[]} [completionSummary.filesModified] - Files created/modified
+ * @param {string} [completionSummary.testStatus] - Test pass/fail summary
+ * @param {Object[]} [completionSummary.criteriaStatus] - AC match status
+ * @param {string} [completionSummary.summary] - Human-readable summary
+ * @param {number} [completionSummary.turns] - Number of CLI turns
+ * @param {number} [completionSummary.cost] - USD cost
+ * @param {number} [completionSummary.duration] - Duration in ms
  * @returns {Object} Action with type ORCHESTRATION_STORY_COMPLETED
  */
-export const orchestrationStoryCompleted = (storyId, sessionId) => ({
+export const orchestrationStoryCompleted = (storyId, sessionId, completionSummary = null) => ({
   type: 'ORCHESTRATION_STORY_COMPLETED',
   payload: {
     storyId,
     sessionId,
+    completionSummary,
     timestamp: Date.now()
   }
 })
@@ -1090,10 +1169,30 @@ export const setSprintPlan = (planContent) => ({
  * @param {string} clarifications - User's clarifying answers and requirements
  * @returns {Object} Action with type ITERATE_SPRINT_PLAN
  */
-export const iterateSprintPlan = (clarifications) => ({
+export const iterateSprintPlan = (clarifications, planId) => ({
   type: 'ITERATE_SPRINT_PLAN',
   payload: {
     clarifications,
+    planId,
+    timestamp: Date.now()
+  }
+})
+
+/**
+ * Submit answers to CRE clarifying questions
+ * @param {string} planId - The plan ID
+ * @param {string} sprintId - The sprint ID
+ * @param {Array<Object>} stories - Sprint stories
+ * @param {Array<Object>} answers - Answers to clarifying questions
+ * @returns {Object} Action with type SUBMIT_PLAN_ANSWERS
+ */
+export const submitPlanAnswers = (planId, sprintId, stories, answers) => ({
+  type: 'SUBMIT_PLAN_ANSWERS',
+  payload: {
+    planId,
+    sprintId,
+    stories,
+    answers,
     timestamp: Date.now()
   }
 })
@@ -1137,6 +1236,24 @@ export const showSprintCloseModal = () => ({
 // Clear pending sprint planning flag (after IPC submission)
 export const clearPendingSprintPlanning = () => ({
   type: 'CLEAR_PENDING_SPRINT_PLANNING',
+  payload: {}
+})
+
+// Clear pending CRE planning flag (after generate-plan IPC call starts)
+export const clearPendingCrePlanning = () => ({
+  type: 'CLEAR_PENDING_CRE_PLANNING',
+  payload: {}
+})
+
+// Clear pending CRE answers flag (after submit-answers IPC call starts)
+export const clearPendingCreAnswers = () => ({
+  type: 'CLEAR_PENDING_CRE_ANSWERS',
+  payload: {}
+})
+
+// Clear pending CRE iteration flag (after refine-plan IPC call starts)
+export const clearPendingCreIteration = () => ({
+  type: 'CLEAR_PENDING_CRE_ITERATION',
   payload: {}
 })
 

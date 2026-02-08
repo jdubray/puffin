@@ -5,7 +5,9 @@
  */
 
 const { HistoryService } = require('./history-service')
+const { StoryService } = require('./story-service')
 
 module.exports = {
-  HistoryService
+  HistoryService,
+  StoryService
 }

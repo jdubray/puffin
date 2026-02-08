@@ -56,6 +56,16 @@ class PuffinState {
     this.database = database // SQLite database manager
     this.useSqlite = true // Flag to enable/disable SQLite (for debugging)
     this.sprintService = null // Sprint service layer (initialized after database)
+    this._pluginRegistry = null // Plugin registry for emitting events
+  }
+
+  /**
+   * Set the plugin registry for emitting story lifecycle events.
+   * Called after PluginManager initializes (which happens after PuffinState).
+   * @param {Object} registry - PluginRegistry instance with emitPluginEvent()
+   */
+  setPluginRegistry(registry) {
+    this._pluginRegistry = registry
   }
 
   /**
@@ -120,10 +130,16 @@ class PuffinState {
               console.log(`[PUFFIN-STATE] SprintService: sprint archived ${sprint.id}`)
               this.invalidateCache(['activeSprint'])
             },
-            onStoryStatusChanged: ({ storyId, status, allStoriesCompleted }) => {
+            onStoryStatusChanged: ({ storyId, status, sprintId, allStoriesCompleted }) => {
               console.log(`[PUFFIN-STATE] SprintService: story ${storyId} -> ${status}`)
               if (allStoriesCompleted) {
                 console.log('[PUFFIN-STATE] SprintService: all stories completed!')
+              }
+              // Emit plugin event for story status changes (e.g., outcome-lifecycle-plugin)
+              if (this._pluginRegistry) {
+                this._pluginRegistry.emitPluginEvent('story:status-changed', 'puffin-state', {
+                  storyId, status, sprintId, allStoriesCompleted
+                })
               }
             }
           })
@@ -645,7 +661,43 @@ class PuffinState {
    */
   getStoryInspectionAssertions(storyId) {
     const story = this.getUserStoryById(storyId)
-    return story?.inspectionAssertions || []
+    const fromStory = story?.inspectionAssertions || []
+    if (fromStory.length > 0) return fromStory
+
+    // Fallback: check the CRE inspection_assertions table.
+    // The CRE assertion generator writes assertions to BOTH places, but
+    // if the user_stories column write failed, the table may still have data.
+    if (this.database.isInitialized()) {
+      try {
+        const db = this.database.connection.getConnection()
+        const rows = db.prepare(
+          'SELECT id, type, target, message, assertion_data FROM inspection_assertions WHERE story_id = ? ORDER BY created_at'
+        ).all(storyId)
+        if (rows.length > 0) {
+          console.log(`[PUFFIN-STATE] Fallback: found ${rows.length} assertions in inspection_assertions table for story ${storyId}`)
+          const assertions = rows.map(r => ({
+            id: r.id,
+            type: r.type,
+            target: r.target,
+            message: r.message,
+            assertion: JSON.parse(r.assertion_data || '{}')
+          }))
+          // Sync back to user_stories so future reads don't need fallback
+          try {
+            db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
+              .run(JSON.stringify(assertions), new Date().toISOString(), storyId)
+            console.log(`[PUFFIN-STATE] Synced ${assertions.length} assertions to user_stories for story ${storyId}`)
+          } catch (syncErr) {
+            console.warn(`[PUFFIN-STATE] Failed to sync assertions to user_stories: ${syncErr.message}`)
+          }
+          return assertions
+        }
+      } catch (err) {
+        console.warn(`[PUFFIN-STATE] inspection_assertions table fallback error: ${err.message}`)
+      }
+    }
+
+    return fromStory
   }
 
   /**
@@ -2070,6 +2122,9 @@ ${content}`
       if (!config.codingStandard) {
         config.codingStandard = { language: 'none', content: '' }
       }
+      // Ensure CRE config exists for older configs
+      const { ensureCreConfig } = require('./cre/lib/cre-config')
+      ensureCreConfig(config)
       return config
     } catch {
       // Create default config
@@ -2094,6 +2149,7 @@ ${content}`
           language: 'none',
           content: ''
         },
+        cre: require('./cre/lib/cre-config').getDefaultCreConfig(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -3475,8 +3531,9 @@ ${content}`
         // File doesn't exist yet, return empty history
         return { version: 1, toasts: [] }
       }
-      console.error('[PuffinState] Failed to read toast history:', error)
-      throw error
+      // Corrupt JSON — reset to empty history rather than crashing
+      console.warn('[PuffinState] Toast history corrupted, resetting:', error.message)
+      return { version: 1, toasts: [] }
     }
   }
 

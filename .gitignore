@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 out/
+plugins/excalidraw-plugin/renderer/excalidraw-bundle.js
 
 # Electron
 *.log
@@ -29,3 +30,6 @@ projects/*.json
 
 # Keep projects folder structure
 !projects/.gitkeep
+
+test-dsl/
+tmp/

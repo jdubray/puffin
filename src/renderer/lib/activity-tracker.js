@@ -23,10 +23,11 @@ export class ActivityTracker {
       if (msg.type === 'assistant' && msg.message?.content) {
         for (const block of msg.message.content) {
           if (block.type === 'tool_use') {
-            // Tool started
+            // Tool started — only pass minimal input to avoid storing large content in SAM model.
+            // We only need enough to extract the file path when the tool completes.
+            const liteInput = block.input ? this.extractMinimalInput(block.name, block.input) : null
             console.log('[ACTIVITY-DEBUG] Tool start:', block.name, 'id:', block.id)
-            console.log('[ACTIVITY-DEBUG] Tool input:', JSON.stringify(block.input)?.substring(0, 200))
-            this.intents.toolStart(block.id, block.name, block.input)
+            this.intents.toolStart(block.id, block.name, liteInput)
           }
         }
       } else if (msg.type === 'user' && msg.message?.content) {
@@ -48,6 +49,28 @@ export class ActivityTracker {
     } catch (e) {
       // Not valid JSON, ignore
     }
+  }
+
+  /**
+   * Extract only the fields needed from tool input to keep SAM model lightweight.
+   * Full tool inputs (especially Write/Edit content) can be very large.
+   * @param {string} toolName - Name of the tool
+   * @param {Object} input - Full tool input object
+   * @returns {Object|null} Minimal input with only path-related fields
+   */
+  extractMinimalInput(toolName, input) {
+    if (!input) return null
+    const result = {}
+    // Only keep path-like fields needed by extractFilePath
+    if (input.file_path) result.file_path = input.file_path
+    if (input.path) result.path = input.path
+    // Keep tool name for display (small string)
+    if (input.command && toolName === 'Bash') {
+      result.command = typeof input.command === 'string' && input.command.length > 200
+        ? input.command.slice(0, 200) + '...'
+        : input.command
+    }
+    return Object.keys(result).length > 0 ? result : null
   }
 
   /**

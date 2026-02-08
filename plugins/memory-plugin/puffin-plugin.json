@@ -1,0 +1,76 @@
+{
+  "name": "memory-plugin",
+  "version": "1.0.0",
+  "displayName": "Branch Memory",
+  "description": "Extracts and persists domain-level knowledge from branch conversations using LLM-powered analysis",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["memory", "knowledge-extraction", "domain-knowledge", "branch-memory"],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "MemoryView",
+        "export": "MemoryView",
+        "type": "class",
+        "description": "Branch memory viewer and management interface"
+      }
+    ]
+  },
+  "extensionPoints": {
+    "actions": [
+      "memoryMemorize",
+      "memoryGetBranch",
+      "memoryClearBranch"
+    ],
+    "ipcHandlers": [
+      "memory-plugin:memorize",
+      "memory-plugin:getBranchMemory",
+      "memory-plugin:clearBranchMemory",
+      "memory-plugin:listBranches",
+      "memory-plugin:runMaintenance"
+    ],
+    "components": [
+      "MemoryView"
+    ]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "memory-view",
+        "name": "Memory",
+        "location": "nav",
+        "icon": "🧠",
+        "order": 75,
+        "component": "MemoryView"
+      }
+    ],
+    "commands": [],
+    "menus": {},
+    "configuration": {
+      "title": "Memory Plugin Settings",
+      "properties": {
+        "memory.model": {
+          "type": "string",
+          "enum": ["haiku", "sonnet"],
+          "default": "haiku",
+          "description": "Model for LLM extraction (haiku is faster/cheaper)"
+        },
+        "memory.autoMemorize": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically memorize after each conversation"
+        },
+        "memory.maxPromptsPerExtraction": {
+          "type": "number",
+          "default": 50,
+          "description": "Maximum prompts to process per extraction"
+        }
+      }
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

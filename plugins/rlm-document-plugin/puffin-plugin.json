@@ -1,0 +1,135 @@
+{
+  "name": "rlm-document-plugin",
+  "version": "1.0.0",
+  "displayName": "RLM Document Analyzer",
+  "description": "Recursive Language Model analysis for large documents with iterative exploration and evidence extraction",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["rlm", "document-analysis", "chunking", "ai", "evidence-extraction"],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "RLMDocumentView",
+        "export": "RLMDocumentView",
+        "type": "class",
+        "description": "Main RLM document analysis view with session management"
+      }
+    ],
+    "styles": [
+      "renderer/styles/rlm-document.css",
+      "renderer/styles/session-status.css",
+      "renderer/styles/document-picker.css",
+      "renderer/styles/query-panel.css",
+      "renderer/styles/results-tree.css",
+      "renderer/styles/chunk-inspector.css",
+      "renderer/styles/export-controls.css",
+      "renderer/styles/toast.css"
+    ]
+  },
+  "extensionPoints": {
+    "actions": [
+      "rlmAnalyzeDocument",
+      "rlmQueryContext"
+    ],
+    "ipcHandlers": [
+      "rlm:initSession",
+      "rlm:closeSession",
+      "rlm:listSessions",
+      "rlm:getSession",
+      "rlm:deleteSession",
+      "rlm:getQueryResults",
+      "rlm:query",
+      "rlm:peek",
+      "rlm:grep",
+      "rlm:getChunks",
+      "rlm:getChunk",
+      "rlm:addBuffer",
+      "rlm:getBuffers",
+      "rlm:exportResults",
+      "rlm:getExportFormats",
+      "rlm:getConfig",
+      "rlm:getStorageStats",
+      "rlm:getReplStats",
+      "rlm:showFileDialog",
+      "rlm:getFileStat",
+      "rlm:executeRlmQuery",
+      "rlm:getOrchestratorStatus",
+      "rlm:configureOrchestrator"
+    ],
+    "components": [
+      "RLMDocumentView"
+    ]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "rlm-document-view",
+        "name": "Document Analysis",
+        "location": "nav",
+        "icon": "📑",
+        "order": 250,
+        "component": "RLMDocumentView"
+      }
+    ],
+    "commands": [],
+    "menus": {},
+    "configuration": {
+      "title": "RLM Document Settings",
+      "properties": {
+        "rlm.defaultChunkSize": {
+          "type": "number",
+          "default": 4000,
+          "description": "Default chunk size in characters"
+        },
+        "rlm.defaultOverlap": {
+          "type": "number",
+          "default": 200,
+          "description": "Default overlap between chunks in characters"
+        },
+        "rlm.maxConcurrentQueries": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximum number of parallel Claude Code subprocesses"
+        },
+        "rlm.subAgentModel": {
+          "type": "string",
+          "enum": ["haiku", "sonnet"],
+          "default": "haiku",
+          "description": "Model for sub-LLM chunk analysis (haiku is faster/cheaper, sonnet is higher quality)"
+        },
+        "rlm.maxIterations": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum refinement iterations for RLM queries"
+        },
+        "rlm.cacheEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Cache sub-LLM responses to reduce redundant API calls"
+        },
+        "rlm.sessionRetentionDays": {
+          "type": "number",
+          "default": 30,
+          "description": "Days to retain inactive sessions before auto-cleanup"
+        },
+        "rlm.maxSessionsPerProject": {
+          "type": "number",
+          "default": 50,
+          "description": "Maximum number of sessions per project"
+        },
+        "rlm.queryTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "description": "Timeout for individual chunk queries in milliseconds"
+        }
+      }
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

@@ -1,0 +1,278 @@
+/**
+ * Export Controls Styles - RLM Document Plugin
+ *
+ * Styling for export functionality including format selector and export button.
+ */
+
+/* ==========================================================================
+   Export Controls Container
+   ========================================================================== */
+
+.rlm-export-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+/* ==========================================================================
+   Format Selector Group
+   ========================================================================== */
+
+.rlm-export-format-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rlm-export-format-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rlm-export-format-select {
+  padding: 8px 32px 8px 12px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: var(--text-primary, #e0e0e0);
+  background-color: var(--bg-secondary, #2a2a2a);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  /* Custom dropdown arrow */
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.rlm-export-format-select:hover:not(:disabled) {
+  border-color: var(--border-hover, #4a4a4a);
+}
+
+.rlm-export-format-select:focus {
+  outline: none;
+  border-color: var(--accent-color, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.rlm-export-format-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--bg-tertiary, #252525);
+}
+
+.rlm-export-format-select option {
+  background-color: var(--bg-secondary, #2a2a2a);
+  color: var(--text-primary, #e0e0e0);
+  padding: 8px;
+}
+
+/* ==========================================================================
+   Export Button
+   ========================================================================== */
+
+.rlm-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-primary, #e0e0e0);
+  background-color: var(--accent-color, #3b82f6);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.rlm-export-btn:hover:not(:disabled) {
+  background-color: var(--accent-hover, #2563eb);
+}
+
+.rlm-export-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.rlm-export-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+.rlm-export-btn:focus:not(:focus-visible) {
+  box-shadow: none;
+}
+
+.rlm-export-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+.rlm-export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--bg-tertiary, #3a3a3a);
+}
+
+/* Button icon */
+.rlm-export-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rlm-export-btn-icon svg {
+  display: block;
+}
+
+/* Button text */
+.rlm-export-btn-text {
+  line-height: 1;
+}
+
+/* Loading state */
+.rlm-export-btn.rlm-export-btn-loading {
+  pointer-events: none;
+}
+
+/* Spinner animation */
+.rlm-export-spinner {
+  animation: rlmExportSpin 1s linear infinite;
+}
+
+@keyframes rlmExportSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==========================================================================
+   Export Hint
+   ========================================================================== */
+
+.rlm-export-hint {
+  width: 100%;
+  margin: 4px 0 0 0;
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #666);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Visually Hidden (Screen Reader Only)
+   ========================================================================== */
+
+.rlm-export-controls .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   Responsive Adjustments
+   ========================================================================== */
+
+@media (max-width: 400px) {
+  .rlm-export-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rlm-export-format-group {
+    width: 100%;
+  }
+
+  .rlm-export-format-select {
+    width: 100%;
+  }
+
+  .rlm-export-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ==========================================================================
+   Accessibility - Reduced Motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .rlm-export-btn {
+    transition: none;
+  }
+
+  .rlm-export-btn:active:not(:disabled) {
+    transform: none;
+  }
+
+  .rlm-export-spinner {
+    animation: none;
+  }
+
+  .rlm-export-format-select {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   High Contrast Mode
+   ========================================================================== */
+
+@media (prefers-contrast: high) {
+  .rlm-export-format-select {
+    border-width: 2px;
+  }
+
+  .rlm-export-btn {
+    border: 2px solid currentColor;
+  }
+
+  .rlm-export-btn:focus {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.6);
+  }
+}
+
+/* ==========================================================================
+   Compact Mode (When space is limited)
+   ========================================================================== */
+
+.rlm-export-controls.rlm-export-controls-compact {
+  gap: 8px;
+}
+
+.rlm-export-controls-compact .rlm-export-format-label {
+  display: none;
+}
+
+.rlm-export-controls-compact .rlm-export-format-select {
+  padding: 6px 28px 6px 10px;
+  font-size: 0.8125rem;
+}
+
+.rlm-export-controls-compact .rlm-export-btn {
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+}
+
+.rlm-export-controls-compact .rlm-export-btn-icon svg {
+  width: 14px;
+  height: 14px;
+}

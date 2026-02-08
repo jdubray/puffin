@@ -82,6 +82,7 @@ function validateFilePath(filePath, allowedBasePaths = []) {
 const DocumentEditorPlugin = {
   name: 'document-editor-plugin',
   context: null,
+  projectPath: null,  // Project root path for project-level storage
   recentFiles: [],
   fileWatchers: new Map(),
   recentFilesPath: null,
@@ -96,16 +97,17 @@ const DocumentEditorPlugin = {
   async activate(context) {
     this.context = context
 
-    // Initialize recent files storage path in plugin-specific subdirectory
-    const { app } = require('electron')
-    const userDataPath = app.getPath('userData')
-    const pluginDataPath = path.join(userDataPath, 'puffin-plugins', 'document-editor')
+    // Initialize storage paths in project-level .puffin directory
+    // This ensures data isolation: each project has its own recent files and editor state
+    const projectPath = context.projectPath || process.cwd()
+    const pluginDataPath = path.join(projectPath, '.puffin', 'document-editor')
 
     // Ensure plugin data directory exists
     await fs.mkdir(pluginDataPath, { recursive: true })
 
     this.recentFilesPath = path.join(pluginDataPath, 'recent-files.json')
     this.editorStatePath = path.join(pluginDataPath, 'editor-state.json')
+    this.projectPath = projectPath
 
     // Initialize allowed base paths for file operations
     // Allow user's home directory and the current working directory (project root)
@@ -114,9 +116,6 @@ const DocumentEditorPlugin = {
       os.homedir(),
       process.cwd()
     ]
-
-    // Also allow userData path for plugin's own files
-    this.allowedBasePaths.push(userDataPath)
 
     // Load recent files from storage
     await this.loadRecentFiles()
@@ -573,9 +572,9 @@ const DocumentEditorPlugin = {
    * @returns {Promise<string>} Path to sessions directory
    */
   async getSessionsDir() {
-    const { app } = require('electron')
-    const userDataPath = app.getPath('userData')
-    const sessionsDir = path.join(userDataPath, 'puffin-plugins', 'document-editor', 'sessions')
+    // Use project-level storage for sessions
+    // This ensures each project has its own session history
+    const sessionsDir = path.join(this.projectPath, '.puffin', 'document-editor', 'sessions')
 
     // Ensure directory exists
     await fs.mkdir(sessionsDir, { recursive: true })

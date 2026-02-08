@@ -44,19 +44,19 @@ Every element in this h-DSL maps to exactly one h-M3 primitive:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  STRATUM    │  FORMAL (TERM)     │  GENERATIVE (PROSE)         │
+│  STRATUM    │  FORMAL (TERM)     │  GENERATIVE (PROSE)          │
 ├─────────────────────────────────────────────────────────────────┤
-│  TELOS      │  Understanding     │  Relevance                  │
-│             │  (OUTCOME)         │  (ALIGNMENT)                │
+│  TELOS      │  Understanding     │  Relevance                   │
+│             │  (OUTCOME)         │  (ALIGNMENT)                 │
 ├─────────────────────────────────────────────────────────────────┤
-│  DYNAMICS   │  Context           │  Navigation                 │
-│             │  (STATE)           │  (TRANSITION)               │
+│  DYNAMICS   │  Context           │  Navigation                  │
+│             │  (STATE)           │  (TRANSITION)                │
 ├─────────────────────────────────────────────────────────────────┤
-│  STRUCTURE  │  Artifact          │  Dependency                 │
-│             │  (SLOT)            │  (RELATION)                 │
+│  STRUCTURE  │  Artifact          │  Dependency                  │
+│             │  (SLOT)            │  (RELATION)                  │
 ├─────────────────────────────────────────────────────────────────┤
-│  SUBSTANCE  │  Symbol            │  Intent                     │
-│             │  (TERM)            │  (PROSE)                    │
+│  SUBSTANCE  │  Symbol            │  Intent                      │
+│             │  (TERM)            │  (PROSE)                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

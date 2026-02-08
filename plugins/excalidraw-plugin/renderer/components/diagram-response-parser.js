@@ -312,13 +312,13 @@ function parseDiagramResponse(response) {
     if (el.type !== 'text' || !el.containerId) continue
     const container = byId.get(el.containerId)
     if (container && CONTAINER_BIND_TYPES.has(container.type)) {
-      // For bound text, set width to container width (with padding) so Excalidraw
-      // can properly wrap and center. Height based on line count at container width.
+      // For bound text, Excalidraw auto-sizes and centers.
+      // We set minimal dimensions and let Excalidraw handle the rest.
+      const fontSize = el.fontSize || 20
       const padding = 10
       el.width = container.width - padding * 2
-      const lines = el.text.split('\n')
-      el.height = lines.length * (el.fontSize || 20) * 1.25
-      // Center text inside the container
+      el.height = fontSize * 1.25 // Single-line height; Excalidraw will expand if needed
+      // Position at container center (Excalidraw adjusts after first render)
       el.x = container.x + padding
       el.y = container.y + container.height / 2 - el.height / 2
       el.textAlign = 'center'

@@ -50,15 +50,18 @@ ${toolsBlock}`;
 
   const task = `Generate inspection assertions for the following plan item.
 ${contextBlock}${standardBlock}
-STORY: ${story.title} [${story.id}]
+--- BEGIN STORY ---
+Title: ${story.title} [${story.id}]
 Description: ${story.description}
 Acceptance Criteria:
 ${ac}
+--- END STORY ---
 
-PLAN ITEM:
+--- BEGIN PLAN ITEM ---
 Approach: ${planItem.approach}
 Files to create: ${(planItem.filesCreated || []).join(', ') || 'none'}
 Files to modify: ${(planItem.filesModified || []).join(', ') || 'none'}
+--- END PLAN ITEM ---
 
 Generate 2-5 assertions that verify the most critical aspects of this implementation.`;
 

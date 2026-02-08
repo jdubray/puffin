@@ -3,17 +3,30 @@
 
 # Puffin Information Flow Diagram
 
-## Overview: Specification to Deployment Pipeline
+**Version**: 3.0.0
+**Last Updated**: 2026-02-08
+
+## Overview: Specification to Deployment Pipeline (v3.0.0)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           PUFFIN WORKFLOW OVERVIEW                              │
+│                      PUFFIN v3.0.0 WORKFLOW OVERVIEW                            │
 │                                                                                 │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐   │
-│  │ SPECIFY  │ ─► │  DERIVE  │ ─► │   PLAN   │ ─► │IMPLEMENT │ ─► │  DEPLOY  │   │
-│  │          │    │ STORIES  │    │          │    │          │    │          │   │
-│  └──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
+│  │ SPECIFY  │─►│  DERIVE  │─►│  CREATE  │─►│   CRE    │─►│ORCHESTRATE│─►│   CODE   │ │
+│  │          │  │ STORIES  │  │  SPRINT  │  │ PLAN+RIS │  │   IMPL   │  │  REVIEW  │ │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘ │
+│                                                                   │                 │
+│                                                                   ▼                 │
+│                                                           ┌──────────────┐           │
+│                                                           │   DEPLOY     │           │
+│                                                           └──────────────┘           │
 │                                                                                 │
+│  Key Changes in v3.0.0:                                                         │
+│  • CRE Two-Stage Planning: Plan (high-level) → RIS (directive specs)           │
+│  • Automated Orchestration: Multi-turn implementation with auto-continuation    │
+│  • Code Review Phase: Assertion evaluation and completion summary               │
+│  • SQLite Database: All state persisted to .puffin/puffin.db                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -101,18 +114,21 @@
 │                     │                                  │                        │
 │                     │  User Stories (Backlog):         │                        │
 │                     │  ┌────────────────────────────┐  │                        │
-│                     │  │ • id                       │  │                        │
+│                     │  │ • id (UUID)                │  │                        │
 │                     │  │ • branchId: specifications │  │                        │
 │                     │  │ • title                    │  │                        │
 │                     │  │ • description              │  │                        │
 │                     │  │ • acceptanceCriteria[]     │  │                        │
-│                     │  │ • status: 'pending'        │  │                        │
+│                     │  │ • inspectionAssertions[]   │  │ (generated when added │
+│                     │  │ • status: 'pending'        │  │  to sprint)           │
 │                     │  │ • implementedOn: []        │  │                        │
+│                     │  │ • completionSummary: null  │  │ (added on completion) │
 │                     │  └────────────────────────────┘  │                        │
 │                     │           │                      │                        │
 │                     │           ▼                      │                        │
 │                     │   Persisted to:                  │                        │
-│                     │   .puffin/user-stories.json      │                        │
+│                     │   .puffin/puffin.db              │                        │
+│                     │   (user_stories table)           │                        │
 │                     └──────────────────────────────────┘                        │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -120,11 +136,11 @@
 
 ---
 
-## Phase 3: Sprint Planning
+## Phase 3: Sprint Planning with CRE (v3.0.0)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           SPRINT CREATION & PLANNING                            │
+│                  SPRINT CREATION & CRE TWO-STAGE PLANNING                       │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
 │  ┌──────────────────────────────────────────────────────────────────────────┐   │
@@ -143,48 +159,101 @@
 │                     ┌──────────────────────────────────┐                        │
 │                     │  createSprint(stories)           │                        │
 │                     │                                  │                        │
-│                     │  activeSprint = {                │                        │
-│                     │    id: generated                 │                        │
-│                     │    stories: [selected]           │                        │
-│                     │    status: 'created'             │                        │
-│                     │    storyProgress: {}             │                        │
-│                     │  }                               │                        │
+│                     │  Sprint saved to database:       │                        │
+│                     │    • sprints table (id, status)  │                        │
+│                     │    • sprint_stories junction     │                        │
+│                     │    • UNIQUE active sprint        │                        │
+│                     │      constraint enforced         │                        │
 │                     └──────────────┬───────────────────┘                        │
 │                                    │                                            │
 │                                    ▼                                            │
-│                     ┌──────────────────────────────────┐                        │
-│                     │  User clicks [Plan] button       │                        │
-│                     └──────────────┬───────────────────┘                        │
+│  ╔═══════════════════════════════════════════════════════════════════════════╗  │
+│  ║                    CRE STAGE 1: PLAN GENERATION                           ║  │
+│  ╚═══════════════════════════════════════════════════════════════════════════╝  │
 │                                    │                                            │
 │                                    ▼                                            │
 │ ┌───────────────────┐   ┌─────────────────────────────────────────────────┐     │
-│ │startSprintPlanning│──►│         PLANNING PROMPT                         │     │
-│ │      ()           │   │                                                 │     │
-│ └───────────────────┘   │  Contains:                                      │     │
-│                         │  • All selected story details                   │     │
-│                         │  • Acceptance criteria for each                 │     │
-│                         │  • Project context & assumptions                │     │
-│                         │  • Architecture overview                        │     │
-│                         │  • Branch-specific guidance                     │     │
+│ │ cre:generate-plan │──►│      CRE analyzes using h-DSL Code Model        │     │
+│ │      IPC          │   │                                                 │     │
+│ └───────────────────┘   │  Inputs:                                        │     │
+│                         │  • Sprint stories with acceptance criteria      │     │
+│                         │  • h-DSL Code Model (codebase structure)        │     │
+│                         │  • Project context & architecture               │     │
+│                         │  • Branch memory                                │     │
 │                         └────────────────────┬────────────────────────────┘     │
 │                                              │                                  │
 │                                              ▼                                  │
 │                         ┌─────────────────────────────────────────────────┐     │
-│                         │            Claude generates PLAN                │     │
+│                         │         CRE generates HIGH-LEVEL PLAN           │     │
 │                         │                                                 │     │
-│                         │  • Implementation steps per story               │     │
-│                         │  • Technical approach                           │     │
-│                         │  • File changes required                        │     │
+│                         │  • Story implementation sequence                │     │
+│                         │  • Branch strategy (UI/Backend/Fullstack)       │     │
+│                         │  • File changes overview                        │     │
 │                         │  • Dependencies & risks                         │     │
+│                         │                                                 │     │
+│                         │  Saved to:                                      │     │
+│                         │  • plans table (id, sprint_id, status)          │     │
+│                         │  • .puffin/cre/plans/<sprint-id>.md             │     │
 │                         └────────────────────┬────────────────────────────┘     │
 │                                              │                                  │
 │                                              ▼                                  │
 │                     ┌────────────────────────────────────┐                      │
 │                     │  User reviews plan                 │                      │
 │                     │                                    │                      │
-│                     │  [Approve Plan] ◄─── approvePlan() |                      │
+│                     │  Options:                          │                      │
+│                     │  • [Approve Plan]                  │                      │
+│                     │  • [Refine Plan] (iteration++)     │                      │
+│                     │  • [Ask Questions]                 │                      │
+│                     └──────────────┬─────────────────────┘                      │
+│                                    │                                            │
+│                    ┌───────────────┼───────────────┐                            │
+│                    │               │               │                            │
+│                    ▼               ▼               ▼                            │
+│         ┌─────────────────┐  ┌─────────────┐  ┌─────────────┐                  │
+│         │ cre:refine-plan │  │cre:approve- │  │  Continue   │                  │
+│         │  with feedback  │  │    plan     │  │   review    │                  │
+│         │  (loop back)    │  │             │  │             │                  │
+│         └─────────────────┘  └──────┬──────┘  └─────────────┘                  │
+│                                     │                                           │
+│                                     ▼                                           │
+│  ╔═══════════════════════════════════════════════════════════════════════════╗  │
+│  ║                    CRE STAGE 2: RIS GENERATION                            ║  │
+│  ╚═══════════════════════════════════════════════════════════════════════════╝  │
+│                                     │                                           │
+│                                     ▼                                           │
+│ ┌───────────────────┐   ┌─────────────────────────────────────────────────┐     │
+│ │ cre:generate-ris  │──►│      CRE generates Ready-to-Implement Specs     │     │
+│ │      IPC          │   │                                                 │     │
+│ └───────────────────┘   │  One RIS per story:                             │     │
+│                         │  • Concise, directive specifications            │     │
+│                         │  • Exact implementation instructions            │     │
+│                         │  • File-level changes                           │     │
+│                         │  • Code examples/patterns                       │     │
+│                         │                                                 │     │
+│                         │  Saved to:                                      │     │
+│                         │  • ris table (id, plan_id, story_id, content)   │     │
+│                         └─────────────────────────────────────────────────┘     │
+│                                     │                                           │
+│                                     ▼                                           │
+│ ┌───────────────────────┐  ┌────────────────────────────────────────────────┐   │
+│ │cre:generate-assertions│─►│  CRE generates Inspection Assertions          │   │
+│ │         IPC           │  │                                               │   │
+│ └───────────────────────┘  │  Per story:                                   │   │
+│                            │  • FILE_EXISTS, PATTERN_MATCH                 │   │
+│                            │  • EXPORT_EXISTS, CLASS_STRUCTURE             │   │
+│                            │  • IPC_HANDLER_REGISTERED, etc.               │   │
+│                            │                                               │   │
+│                            │  Saved to:                                    │   │
+│                            │  • inspection_assertions table (normalized)   │   │
+│                            │  • user_stories.inspection_assertions (JSON)  │   │
+│                            └───────────────────────────────────────────────┘   │
+│                                     │                                           │
+│                                     ▼                                           │
+│                     ┌────────────────────────────────────┐                      │
+│                     │  Sprint ready for implementation   │                      │
 │                     │                                    │                      │
-│                     │  activeSprint.status = 'planned'   │                      │
+│                     │  activeSprint.status = 'in-progress│                      │
+│                     │  Plan, RIS, Assertions all ready   │                      │
 │                     └────────────────────────────────────┘                      │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -192,11 +261,11 @@
 
 ---
 
-## Phase 4: Implementation
+## Phase 4: Orchestrated Implementation (v3.0.0)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         IMPLEMENTATION WORKFLOW                                 │
+│                    AUTOMATED ORCHESTRATION WORKFLOW                             │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
 │  ┌──────────────────────────────────────────────────────────────────────────┐   │
@@ -233,19 +302,31 @@
 │                                   │                                             │
 │                                   ▼                                             │
 │  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │                    IMPLEMENTATION PROMPT                                │    │
+│  │               ORCHESTRATION PROMPT (buildOrchestrationPrompt)          │    │
 │  │                                                                         │    │
-│  │  Story: User authentication login flow                                  │    │
+│  │  RIS (Ready-to-Implement Specification):                                │    │
+│  │  [Loaded from ris table for this story]                                 │    │
+│  │  - Directive instructions on what to implement                          │    │
+│  │  - File-level changes                                                   │    │
+│  │  - Code patterns/examples                                               │    │
+│  │                                                                         │    │
+│  │  Inspection Assertions:                                                 │    │
+│  │  [Loaded from inspection_assertions table]                              │    │
+│  │  - FILE_EXISTS: src/auth/login.js                                       │    │
+│  │  - EXPORT_EXISTS: LoginForm (class)                                     │    │
+│  │  - PATTERN_MATCH: validation logic                                      │    │
 │  │                                                                         │    │
 │  │  Acceptance Criteria:                                                   │    │
 │  │  1. Users can log in with email/password                                │    │
 │  │  2. Invalid credentials show error message                              │    │
 │  │  3. Session persists across page refresh                                │    │
 │  │                                                                         │    │
-│  │  Branch Context (UI):                                                   │    │
-│  │  • Design tokens (colors, spacing, typography)                          │    │
-│  │  • Component patterns (Button, Input, Form)                             │    │
-│  │  • Interaction guidelines                                               │    │
+│  │  Branch Memory (UI):                                                    │    │
+│  │  [Auto-loaded from .puffin/memory/branches/ui.md]                       │    │
+│  │  - Facts, Decisions, Conventions, Bug Patterns                          │    │
+│  │                                                                         │    │
+│  │  h-DSL Code Model:                                                      │    │
+│  │  [Codebase structure, dependencies]                                     │    │
 │  │                                                                         │    │
 │  │  Project Context:                                                       │    │
 │  │  • Architecture overview                                                │    │
@@ -254,18 +335,21 @@
 │                                   │                                             │
 │                                   ▼                                             │
 │  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │                     AUTO-CONTINUE LOOP                                  │    │
+│  │              AUTOMATED ORCHESTRATION LOOP (v3.0.0)                      │    │
 │  │                                                                         │    │
 │  │   ┌─────────────────────────────────────────────────────────────────┐   │    │
-│  │   │                Claude implements...                             │   │    │
+│  │   │     Claude implements with bidirectional streaming...           │   │    │
+│  │   │     • Monitors file operations (files modified tracked)         │   │    │
+│  │   │     • Session ID captured for resume capability                 │   │    │
 │  │   └────────────────────────────┬────────────────────────────────────┘   │    │
 │  │                                │                                        │    │
 │  │                                ▼                                        │    │
 │  │   ┌─────────────────────────────────────────────────────────────────┐   │    │
-│  │   │  completeResponse()                                             │   │    │
-│  │   │  • recordIterationOutput() ──► similarity hash for stuck detect │   │    │
-│  │   │  • Check for [Complete] keyword                                 │   │    │
-│  │   │  • Check iteration count < maxIterations (10)                   │   │    │
+│  │   │  handleOrchestrationContinuation()                              │   │    │
+│  │   │  • Check for [Complete] marker in output                        │   │    │
+│  │   │  • Stuck detection: compare last 200 chars                      │   │    │
+│  │   │  • Check turn count < maxTurns (configurable)                   │   │    │
+│  │   │  • Store to implementation_journeys table                       │   │    │
 │  │   └────────────────────────────┬────────────────────────────────────┘   │    │
 │  │                                │                                        │    │
 │  │              ┌─────────────────┼─────────────────┐                      │    │
@@ -279,23 +363,108 @@
 │  │            │                 ▼                 ▼                        │    │
 │  │            │        ┌──────────────┐  ┌──────────────┐                  │    │
 │  │            │        │ Show stuck   │  │ Wait 20 sec  │                  │    │
-│  │            │        │ alert:       │  │ (countdown)  │                  │    │
-│  │            │        │ • Continue   │  │              │                  │    │
-│  │            │        │ • Modify     │  │ Auto-submit  │                  │    │
-│  │            │        │ • Stop       │  │ continuation │──► Loop back     │    │
-│  │            │        │ • Dismiss    │  │ prompt       │                  │    │
-│  │            │        └──────────────┘  └──────────────┘                  │    │
+│  │            │        │ warning:     │  │ (countdown   │                  │    │
+│  │            │        │ repetitive   │  │  visible)    │                  │    │
+│  │            │        │ output       │  │              │                  │    │
+│  │            │        │ detected     │  │ Auto-submit  │                  │    │
+│  │            │        └──────────────┘  │"Please       │──► Loop back     │    │
+│  │            │                          │ continue"    │                  │    │
+│  │            │                          └──────────────┘                  │    │
 │  │            │                                                            │    │
 │  │            ▼                                                            │    │
 │  │   ┌─────────────────────────────────────────────────────────────────┐   │    │
-│  │   │  handleImplementationComplete()                                 │   │    │
+│  │   │  handleOrchestrationCompletion()                                │   │    │
 │  │   │                                                                 │   │    │
-│  │   │  • Clear activeImplementationStory                              │   │    │
-│  │   │  • Show toast: "Implementation complete. Test and mark ready."  │   │    │
-│  │   │  • Story status NOT auto-changed (user must test first)         │   │    │
+│  │   │  1. Generate completion summary (AI-generated)                  │   │    │
+│  │   │     • Files modified                                            │   │    │
+│  │   │     • Test status (passed/failed/skipped)                       │   │    │
+│  │   │     • Criteria matched                                          │   │    │
+│  │   │     • Turn count, cost, duration                                │   │    │
+│  │   │     Saved to: completion_summaries table                        │   │    │
+│  │   │                                                                 │   │    │
+│  │   │  2. Trigger CRE introspection                                   │   │    │
+│  │   │     • Update h-DSL Code Model with changes                      │   │    │
+│  │   │                                                                 │   │    │
+│  │   │  3. Mark story complete in database                             │   │    │
+│  │   │     • user_stories.status = 'completed'                         │   │    │
+│  │   │     • Clear activeImplementationStory                           │   │    │
+│  │   │                                                                 │   │    │
+│  │   │  4. Show completion toast with summary                          │   │    │
 │  │   └─────────────────────────────────────────────────────────────────┘   │    │
 │  │                                                                         │    │
 │  └─────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Phase 4.5: Code Review & Assertion Evaluation (v3.0.0)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                      CODE REVIEW & VERIFICATION                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│   After all stories in sprint are completed:                                    │
+│                                                                                 │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │  User clicks [Close Sprint] button                                       │   │
+│  └──────────────────────────────────────────────┬───────────────────────────┘   │
+│                                                 │                               │
+│                                                 ▼                               │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                  CODE REVIEW CONFIRMATION MODAL                          │   │
+│  │                                                                          │   │
+│  │  Sprint: Authentication & Dashboard Features                             │   │
+│  │                                                                          │   │
+│  │  Completion Summary:                                                     │   │
+│  │  ┌────────────────────────────────────────────────────────────────────┐  │   │
+│  │  │ Story 1: User authentication login flow                           │  │   │
+│  │  │  Summary: Implemented login form with JWT auth and bcrypt         │  │   │
+│  │  │  Files Modified: src/auth/login.js, src/auth/auth-service.js      │  │   │
+│  │  │  Tests: ✓ Passed (12 tests)                                       │  │   │
+│  │  │  Cost: $0.45  Duration: 3m 15s  Turns: 8                          │  │   │
+│  │  │                                                                    │  │   │
+│  │  │ Story 2: Dashboard data visualization                             │  │   │
+│  │  │  Summary: Added Chart.js integration with real-time updates       │  │   │
+│  │  │  Files Modified: src/dashboard/Chart.js, src/api/data.js          │  │   │
+│  │  │  Tests: ✓ Passed (8 tests)                                        │  │   │
+│  │  │  Cost: $0.38  Duration: 2m 45s  Turns: 6                          │  │   │
+│  │  └────────────────────────────────────────────────────────────────────┘  │   │
+│  │                                                                          │   │
+│  │  Inspection Assertions:                                                  │   │
+│  │  ┌────────────────────────────────────────────────────────────────────┐  │   │
+│  │  │ Total: 24  Passed: 22  Failed: 2  Undecided: 0                    │  │   │
+│  │  │                                                                    │  │   │
+│  │  │ ✓ FILE_EXISTS: src/auth/login.js                                  │  │   │
+│  │  │ ✓ EXPORT_EXISTS: LoginForm (class)                                │  │   │
+│  │  │ ✗ PATTERN_MATCH: password validation (not found)                  │  │   │
+│  │  │ ✓ IPC_HANDLER_REGISTERED: auth:login                              │  │   │
+│  │  │ ...                                                                │  │   │
+│  │  └────────────────────────────────────────────────────────────────────┘  │   │
+│  │                                                                          │   │
+│  │  [Review Failed Assertions]  [Close Sprint Anyway]  [Cancel]             │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                            │
+│                    ┌───────────────┼───────────────┐                            │
+│                    │               │               │                            │
+│                    ▼               ▼               ▼                            │
+│         ┌─────────────────┐  ┌─────────────┐  ┌─────────────┐                  │
+│         │ state:evaluate  │  │state:close  │  │   Cancel    │                  │
+│         │   Assertions    │  │   Sprint    │  │             │                  │
+│         │  (re-evaluate)  │  │             │  │             │                  │
+│         └─────────────────┘  └──────┬──────┘  └─────────────┘                  │
+│                                     │                                           │
+│                                     ▼                                           │
+│                     ┌────────────────────────────────────┐                      │
+│                     │  Sprint archived to sprint_history │                      │
+│                     │                                    │                      │
+│                     │  • All sprint data preserved       │                      │
+│                     │  • Stories denormalized            │                      │
+│                     │  • Assertions + results saved      │                      │
+│                     │  • Completion summaries linked     │                      │
+│                     └────────────────────────────────────┘                      │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -654,36 +823,52 @@
 
 ---
 
-## Information Artifacts & Persistence
+## Information Artifacts & Persistence (v3.0.0)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    DATA ARTIFACTS & PERSISTENCE                                 │
+│                    DATA ARTIFACTS & PERSISTENCE (v3.0.0)                        │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
 │   .puffin/                                                                      │
+│   │                                                                             │
+│   ├── puffin.db ◄────────────── SQLite database (PRIMARY STORAGE)               │
+│   │                            13 tables, 9 migrations applied                 │
+│   │                            • user_stories, archived_stories                │
+│   │                            • sprints, sprint_stories, sprint_history       │
+│   │                            • plans, ris, inspection_assertions             │
+│   │                            • completion_summaries                          │
+│   │                            • story_generations, implementation_journeys    │
+│   │                            • _json_migration, _migrations                  │
 │   │                                                                             │
 │   ├── config.json ◄─────────── Project settings, assumptions, preferences       │
 │   │                                                                             │
 │   ├── history.json ◄────────── Conversation branches, prompts, responses        │
 │   │                            Handoff contexts per branch                      │
 │   │                                                                             │
-│   ├── user-stories.json ◄───── Backlog: stories with acceptance criteria        │
-│   │                            Status: pending → in-progress → completed        │
-│   │                            implementedOn: [branches where worked]           │
-│   │                                                                             │
-│   ├── story-generations.json ◄─ Derivation history, implementation journeys     │
-│   │                            Tracks accept/modify/reject decisions            │
-│   │                                                                             │
 │   ├── architecture.md ◄──────── System architecture documentation               │
 │   │                                                                             │
-│   ├── ui-guidelines.json ◄───── Design tokens, component patterns               │
+│   ├── git-operations.json ◄──── Git operation history log                       │
 │   │                                                                             │
-│   └── git-operations.json ◄──── Git operation history log                       │
+│   ├── cre/ ◄─────────────────── CRE subsystem data                              │
+│   │   ├── schema.json           h-DSL base schema                              │
+│   │   ├── instance.json         h-DSL code model instance                      │
+│   │   ├── memo.json             Navigation cache                               │
+│   │   └── plans/                Plan markdown files                            │
+│   │                                                                             │
+│   ├── memory/ ◄──────────────── Branch memory system                            │
+│   │   └── branches/             Branch-specific memory files                   │
+│   │       ├── fullstack.md      Facts, Decisions, Conventions, Bug Patterns    │
+│   │       ├── ui.md                                                            │
+│   │       └── backend.md                                                       │
+│   │                                                                             │
+│   ├── excalidraw-designs/ ◄──── Excalidraw plugin designs + thumbnails          │
+│   │                                                                             │
+│   └── outcome-lifecycles/ ◄──── Outcome plugin data                             │
 │                                                                                 │
 │   target-project/.claude/                                                       │
 │   │                                                                             │
-│   ├── CLAUDE.md ◄───────────── Active context (base + current branch)           │
+│   ├── CLAUDE.md ◄───────────── Active context (base + branch + memory)          │
 │   ├── CLAUDE_base.md ◄──────── Shared project context                           │
 │   ├── CLAUDE_specifications.md                                                  │
 │   ├── CLAUDE_architecture.md                                                    │
@@ -691,21 +876,52 @@
 │   ├── CLAUDE_backend.md                                                         │
 │   └── CLAUDE_deployment.md                                                      │
 │                                                                                 │
+│   KEY CHANGE: v3.0.0 migrated from JSON files to SQLite database for all       │
+│   transactional data. JSON files retained for config and history only.         │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-This diagram captures all the processes Puffin supports from initial specification through to git push, including:
+## Process Summary (v3.0.0)
 
+This diagram captures all the processes Puffin v3.0.0 supports from initial specification through to deployment, including:
+
+### Core Workflow
 1. **Specification capture** on the specifications branch
-2. **User story derivation** with review and editing
-3. **Backlog management** with status tracking
-4. **Sprint creation** with 4-story limit
-5. **Planning phase** with Claude-generated plans
-6. **Implementation** with branch-specific context
-7. **Auto-continue** scoped to active story with acceptance criteria
-8. **Stuck detection** and iteration limits
-9. **Handoff system** for context continuity
-10. **Git operations** (branch, stage, commit, push, merge)
-11. **Dynamic CLAUDE.md** generation per branch
+2. **User story derivation** with review and editing → saved to `user_stories` table
+3. **Backlog management** with status tracking in SQLite database
+4. **Sprint creation** with 4-story limit → saved to `sprints` and `sprint_stories` tables
+
+### CRE Two-Stage Planning
+5. **CRE Plan Generation** - High-level strategy, story sequencing → saved to `plans` table
+6. **Plan Iteration** - User review, refinement, approval → iteration count tracked
+7. **CRE RIS Generation** - Ready-to-Implement Specifications per story → saved to `ris` table
+8. **CRE Assertion Generation** - Inspection assertions → saved to `inspection_assertions` table
+
+### Automated Orchestration
+9. **Orchestrated Implementation** with multi-turn auto-continuation
+10. **File Tracking** - Monitor file operations during implementation
+11. **Stuck Detection** - Compare last 200 chars to detect infinite loops
+12. **Completion Summary** - AI-generated summary with metrics → saved to `completion_summaries` table
+13. **CRE Introspection** - Update h-DSL Code Model after implementation
+
+### Code Review & Verification
+14. **Assertion Evaluation** - Verify assertions against codebase
+15. **Code Review Modal** - Display completion summaries and assertion results
+16. **Sprint Closure** - Archive to `sprint_history` with denormalized data
+
+### Integration Features
+17. **Branch Memory** - Automated knowledge extraction and injection per branch
+18. **Handoff system** for context continuity between branches
+19. **Git operations** (branch, stage, commit, push, merge) with security checks
+20. **Dynamic CLAUDE.md** generation per branch with memory injection
+21. **Plugin System** - Excalidraw, Memory, h-DSL Viewer, Outcome Lifecycle, RLM Document
+
+### Key v3.0.0 Architectural Changes
+- **SQLite Database**: Replaces JSON files for all transactional data (13 tables)
+- **CRE Integration**: Deterministic planning with testable assertions
+- **Orchestration System**: Automated multi-turn implementation with monitoring
+- **Branch Memory**: Automated knowledge persistence across conversations
+- **Bidirectional Streaming**: Interactive Claude CLI integration with session resume

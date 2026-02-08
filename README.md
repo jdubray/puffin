@@ -4,7 +4,11 @@
 
 # Puffin
 
-A GUI for Claude Code to help cloders collaborate on new projects.
+**Version 3.0 - Central Reasoning Engine Edition**
+
+A structured development environment for Claude Code that transforms AI coding from conversation into deterministic, traceable software engineering.
+
+> **🚀 New in v3.0:** Central Reasoning Engine (CRE), Excalidraw AI Diagrams, Memory Plugin, and automated sprint orchestration with Code Model tracking.
 
 
 
@@ -12,16 +16,38 @@ A GUI for Claude Code to help cloders collaborate on new projects.
 
 Claude Code is extraordinary out of the box. It can take you to production for projects in the 10k-100k LoC range. But as projects grow, maintaining context, traceability, and structured collaboration becomes critical.
 
-**Puffin helps you get there faster, in a more maintainable way, with full traceability.**
+**Puffin transforms AI coding from ad-hoc prompting into structured software engineering.**
 
-The key insight: prompts alone create confusion. Claude responds much better to a **backlog-driven workflow**:
+### The Key Insight
 
-1. **Prompts generate user stories** - Your specifications become structured, reviewable stories
-2. **Stories live in a backlog** - A clear queue of work, not scattered across conversation threads
-3. **Pull stories into implementation threads** - Focused context for each piece of work
-4. **Mark complete when done** - Clear progress tracking and history
+Prompts alone create confusion. Claude responds much better to a **backlog-driven workflow with implementation plans**:
 
-This history, captured outside of Claude's context window, lets you charge ahead and grow your project without losing track of what was built, why, and how.
+1. **Prompts → User Stories** - Specifications become structured, reviewable stories
+2. **Stories → Sprint Planning** - CRE generates implementation plans with dependencies and sequencing
+3. **Plans → Ready-to-Implement Specs (RIS)** - Deterministic specifications that any AI could implement
+4. **RIS → Implementation** - Claude executes with full architectural context from the Code Model
+5. **Code Review → Verification** - Assertions validate correctness, findings tracked for bug fixes
+
+This structured approach, with **automated Code Model maintenance**, ensures traceability from requirements through implementation. You can charge ahead on complex projects without losing track of what was built, why, and how.
+
+### What Makes v3.0 Different
+
+| Traditional AI Coding | Puffin v3.0 |
+|----------------------|-------------|
+| Ad-hoc prompts | Structured user stories → Plans → RIS |
+| Context lost over time | Code Model tracks codebase structure |
+| Repeat architecture context | Memory Plugin auto-injects knowledge |
+| Manual story-by-story | Automated sprint orchestration |
+| Text-only planning | AI-generated diagrams from docs |
+| Hope code matches requirements | Inspection assertions verify correctness |
+| Implementation details in prompts | CRE generates deterministic RIS specs |
+
+**Key Benefits:**
+- **Deterministic Implementation** - Same RIS produces equivalent results across runs
+- **Traceability** - Track from requirements → plan → RIS → implementation → verification
+- **Knowledge Retention** - Architectural decisions preserved and auto-applied
+- **Sprint Automation** - Let Claude orchestrate entire implementation cycles
+- **Visual Documentation** - Generate diagrams directly from markdown docs
 
 ## Overview
 
@@ -32,18 +58,45 @@ Puffin is an Electron-based application that provides a visual interface for [Cl
 You can't "prompt along" a coding agent, just like you can't "prompt along" a developer—there are good reasons why we came up with processes and methodologies to build complex solutions. Processes and methodologies for cloding are yet to be built, but they are coming. Puffin serves as a foundation for structured collaboration between humans and AI coding agents.
 
 
-**Key Features:**
+## ✨ Key Features
 
-- **Project Configuration**: Define your project's description, assumptions, technical architecture, and data model
-- **Claude Guidance Options**: Set preferences for programming style (OOP, FP, Temporal Logic), testing approach, documentation level, and more
-- **Branched Conversations**: Organize prompts into branches (Specifications, Architecture, UI, Backend, Deployment) with tree-based history navigation
-- **Real-time Activity Tracking**: Monitor Claude's tool execution in real-time, showing current tools, file operations, and processing status
-- **User Story Derivation Workflow**: Extract user stories from project specifications, review and refine them, then generate implementation prompts
-- **GUI Designer**: Visual drag-and-drop interface for designing UI layouts that can be described to Claude
-- **User Stories Management**: Full CRUD lifecycle for user stories with intelligent derivation from specifications using Claude
-- **Architecture Document**: Living documentation that evolves with Claude reviews
-- **Intelligent Title Generation**: Automatic prompt title generation using Claude API with smart fallback mechanisms
-- **CLI Output View**: Real-time streaming of Claude's raw JSON output for debugging and transparency
+### 🧠 Central Reasoning Engine (CRE)
+- **Implementation Plans** with dependency analysis and story sequencing
+- **Ready-to-Implement Specifications (RIS)** - deterministic, AI-executable specs
+- **Code Model (h-DSL)** tracking codebase structure with incremental updates
+- **Inspection Assertions** for automated verification of implementation correctness
+- **MCP Integration** for enhanced code exploration via Model Context Protocol
+
+### 📐 Excalidraw AI Diagrams
+- **Generate diagrams from docs** - Architecture, sequence, flowcharts, component diagrams
+- **Professional hand-drawn aesthetic** with 10+ element types
+- **Industry-standard format** - `.excalidraw` files compatible with Excalidraw web app
+- **Multi-format export** - PNG, SVG, and JSON
+
+### 🧩 Memory & Context
+- **Branch Memory Plugin** auto-extracts domain knowledge from conversations
+- **Architectural Decisions** captured and injected into future sessions
+- **Branch-specific context** with facts, conventions, and bug patterns
+- **CLAUDE.md Generation** with Code Model snippets and memory context
+
+### 🚀 Sprint Orchestration
+- **Automated Sprint Implementation** - Claude orchestrates entire sprints end-to-end
+- **Sequential Story Implementation** with clean sessions per story
+- **Automated Code Review** identifies issues, queues bug fixes
+- **Acceptance Criteria Validation** after each implementation
+- **Cost & Duration Tracking** with completion summaries
+
+### 📚 Document Processing
+- **RLM Plugin** for Recursive Language Model document analysis
+- **Document Editor** with syntax highlighting, inline prompt markers, auto-save
+- **Document Viewer** for markdown and images
+
+### 🔧 Developer Tools
+- **Branched Conversations** (Specifications, Architecture, UI, Backend, Deployment, Plugins)
+- **Git Integration** with branch management, staging, commits, and merge operations
+- **Real-time Activity Tracking** showing Claude's tool execution
+- **CLI Output View** with live streaming and raw JSON debugging
+- **SAM Debugger** for state management visualization
 
 <p align="center">
   <br>
@@ -87,48 +140,45 @@ Your Project/
 - **AI Integration**: Claude Code CLI (spawned as subprocess with JSON streaming)
 - **Markdown**: [marked](https://www.npmjs.com/package/marked) for rendering responses
 
-## Getting Started
+## 🚀 Quick Start
 
-### Prerequisites
+### System Requirements
 
-- **Node.js v20 LTS** (required for SQLite/better-sqlite3 native module support)
-- Claude Code CLI installed globally: `npm install -g @anthropic-ai/claude-code`
-- Active Claude Code subscription or API access
+| Component | Requirement | Notes |
+|-----------|-------------|-------|
+| **Node.js** | v20 LTS | Required for SQLite native module support |
+| **RAM** | 4GB minimum, 8GB+ recommended | CRE and Code Model operations are memory-intensive |
+| **Disk Space** | 500MB for Puffin + project storage | Code Models and design files stored in `.puffin/` |
+| **OS** | Windows 10+, macOS 10.13+, Linux | Cross-platform Electron support |
+| **Claude CLI** | Latest version | Install: `npm install -g @anthropic-ai/claude-code` |
+| **Claude Subscription** | Pro or API access | Required for all AI operations |
 
-### Claude Authentication
+> **📖 First time using Puffin?** Check out the [User Manual](docs/USER_MANUAL.md) for a complete walkthrough of features, workflows, and best practices.
 
-Before using Puffin, you must authenticate Claude Code CLI in your terminal:
+### Step 1: Authenticate Claude CLI
 
-1. **Install Claude Code CLI** (if not already installed):
-   ```bash
-   npm install -g @anthropic-ai/claude-code
-   ```
+Before using Puffin, authenticate Claude Code CLI in your terminal:
 
-2. **Authenticate Claude** in your terminal:
-   ```bash
-   claude auth
-   ```
-   This will open a browser window where you'll log in to your Claude account and authorize the CLI.
+```bash
+# Install Claude Code CLI (if not already installed)
+npm install -g @anthropic-ai/claude-code
 
-3. **Verify authentication**:
-   ```bash
-   claude --version
-   ```
-   You should see the version number without any authentication errors.
+# Authenticate with your Claude account
+claude auth
 
-**Important**: The authentication happens at the system level through the Claude CLI. Once authenticated, Puffin will inherit this authentication when it spawns Claude as a subprocess. You don't need to re-authenticate within Puffin itself.
+# Verify authentication
+claude --version
+```
 
-**For PowerShell users**: If you prefer to start Claude in PowerShell first and then run Puffin, you can:
+The browser will open for login. Once authenticated, Puffin inherits this authentication automatically.
+
+**Windows PowerShell users**: Optionally start Claude first to ensure full initialization:
 ```powershell
-# Start Claude in the background (optional)
 claude
-
-# In the same or different PowerShell window
 npm start
 ```
-This approach ensures Claude is fully initialized before Puffin attempts to use it.
 
-### Installation
+### Step 2: Install Puffin
 
 ```bash
 # Clone the repository
@@ -138,18 +188,31 @@ cd puffin
 # Install dependencies
 npm install
 
-# Verify Claude CLI is installed
-claude --version
-
 # Start the application
 npm start
 ```
 
-On launch, Puffin will prompt you to select a project directory. You can also pass a directory as an argument:
+On first launch, Puffin prompts you to select a project directory. Alternatively, pass a path:
 
 ```bash
 npm start /path/to/your/project
 ```
+
+### Step 3: Configure Your Project
+
+1. **Project Setup** - Define description, assumptions, technical architecture
+2. **Coding Preferences** - Set style (OOP/FP), testing approach, documentation level
+3. **Branch Focus** - Configure focus areas for different branches (UI, Backend, etc.)
+
+### Step 4: Start Your First Sprint
+
+1. **Write Specifications** - Describe what you want to build in the Specifications branch
+2. **Derive User Stories** - Click "Derive User Stories" to extract structured stories
+3. **Create Sprint** - Select stories from backlog and create a sprint
+4. **Generate Plan** - CRE analyzes stories and produces an implementation plan
+5. **Approve & Implement** - Review the plan, approve, and choose automated or manual implementation
+
+> **📖 Need Help?** Read the [User Manual](docs/USER_MANUAL.md) for detailed workflows, plugin guides, and best practices.
 
 ### Development
 
@@ -160,9 +223,29 @@ npm run dev
 # Run tests
 npm test
 
-# Package for distribution
-npm run package
+# Run specific test suite
+npm test -- tests/rlm-chunk-strategy.test.js
+
+# Build Excalidraw bundle (after modifying excalidraw-bundle-entry.js)
+npm run build:excalidraw
 ```
+
+### Packaging & Distribution
+
+```bash
+# Package for current platform
+npm run package
+
+# Package for all platforms
+npm run package:all
+
+# Package for specific platforms
+npm run package:win    # Windows
+npm run package:mac    # macOS
+npm run package:linux  # Linux
+```
+
+Packaged apps are output to `dist/` directory. Electron Builder handles code signing (requires certificates for macOS/Windows distribution).
 
 ## Project Structure
 
@@ -273,21 +356,72 @@ Real-time streaming of Claude Code's output:
 
 ### Plugin Views
 
-Puffin includes five built-in plugins that add navigation tabs:
+Puffin includes 12 built-in plugins that extend functionality:
 
-- **Stats** 📊: Usage statistics dashboard with weekly metrics and export
-- **Designer** 🎨: Visual GUI designer for creating UI layouts
-- **Context** 📄: CLAUDE.md configuration viewer and editor with branch focus management
+**Core Plugins:**
+- **Excalidraw Sketcher** 📐: AI-powered diagram generation from markdown docs (Architecture, Sequence, Flowchart, Component diagrams)
+- **Document Editor** 📝: Collaborative Code/text editor with syntax highlighting (190+ languages), auto-save, inline prompt markers (`/@puffin: ... @/`)
+- **RLM Document Analysis** 🔍: Recursive Language Model for analyzing large documents with chunking and aggregation
+- **Context** 📄: CLAUDE.md configuration viewer/editor with branch focus management
 - **Docs** 📁: Documentation browser for markdown and image files in your docs/ directory
-- **Editor** 📝: Text file editor with syntax highlighting, auto-save, inline prompt markers, and line numbers
+- ~~**Designer**~~: Create simple GUI layouts to communicate UX requirements to Claude, this plugin is deprecated as we can now attach screen shots to a prompt to facilite the UX design
 
-## Latest Features
+**Analysis & Visualization:**
+- **Memory Plugin** 🧠: Auto-extracts domain knowledge from conversations (runs in background)
+- **Outcome Lifecycle** 🎯: Track development outcomes across sprint phases
+- **Code Model** 🗺️: Interactive Code Model visualization with dependency tracing and annotations
+- **Prompt Templates** 📋: Create and reuse prompt templates for common tasks
 
-### Inline Prompt Markers (v2.14.0)
+**Utility Plugins:**
+- **Stats** 📊: Usage statistics dashboard with weekly metrics, cost tracking, and markdown export
+- **Calendar** 📅: Development activity timeline with sprints, git branches, and post-it notes
+- **Toast History** 🔔: Notification history viewer with 24-hour tracking
+
+
+## 🎉 What's New in v3.0.0
+
+### Central Reasoning Engine (CRE)
+The CRE transforms Puffin from a conversation tracker into a deterministic implementation system:
+
+- **Two-Stage Planning**: Plans specify sequence and dependencies, RIS provides execution details
+- **Code Model (h-DSL)**: Living representation of your codebase structure
+- **Inspection Assertions**: Testable criteria validate each implementation
+- **Plan Iteration**: Review, question, and refine plans before approval
+- **CRE Introspector**: Automatically updates Code Model after each sprint
+
+**Workflow**: Sprint → CRE generates Plan → User approves → CRE generates RIS → Claude implements → Introspector updates Code Model
+
+### Excalidraw AI Diagram Generation
+Generate professional diagrams from your documentation:
+
+- **Doc-to-Diagram Pipeline**: Select markdown file, choose diagram type, Claude generates elements
+- **Diagram Types**: Architecture, sequence, flowchart, component diagrams
+- **Hand-Drawn Aesthetic**: Professional yet approachable via Rough.js rendering
+- **Export Formats**: PNG, SVG, JSON
+- **Editable Results**: Generated diagrams are fully editable in Excalidraw
+
+### Memory Plugin
+Stop repeating context - let Puffin remember architectural decisions:
+
+- **Auto-Extraction**: Background analysis extracts domain knowledge from conversations
+- **Categorized Storage**: Facts, Architectural Decisions, Conventions, Bug Patterns
+- **Auto-Injection**: Branch memory automatically included in CLAUDE.md context
+- **Memory Evolution**: New knowledge merges with existing, deduplicates, resolves conflicts
+
+### Code Model Plugin
+Visualize and explore your Code Model:
+
+- **Interactive Graph**: Navigate modules, dependencies, and relationships
+- **Annotations**: See which primitives (TERM, PROSE, RELATION, etc.) map to each element
+- **Dependency Tracing**: Follow import chains and call relationships
+
+### Previous Releases
+
+#### Inline Prompt Markers (v2.14.0)
 Embed Claude instructions directly in your documents with the new marker syntax:
 
 ```
-/@puffin: your instruction here @/
+/@puffin: your instructions here @/
 ```
 
 - **Insert via toolbar, context menu, or Ctrl+M**
@@ -356,12 +490,57 @@ Puffin includes a comprehensive Git panel for repository management directly wit
 
 **Cross-Platform Line Endings**: Puffin includes a `.gitattributes` file that automatically normalizes line endings (CRLF/LF) across different operating systems. This prevents phantom "modified" files when working in mixed environments like Windows with WSL. No additional configuration is required—Git will automatically handle line ending conversions on commit.
 
+## 📚 Documentation & Resources
+
+### Essential Reading
+- **[User Manual](docs/USER_MANUAL.md)** - Complete guide to features, workflows, and best practices
+- **[Central Reasoning Engine Specification](docs/CENTRAL_REASONING_ENGINE.md)** - CRE architecture and capabilities
+- **[CRE Detailed Design](docs/CRE_DETAILED_DESIGN.md)** - Technical implementation guide
+- **[h-DSL & h-M3 Research](docs/h-DSL.md)** - Hybrid DSL theoretical foundations
+- **[Excalidraw Plugin Guide](docs/summaries/excalidraw-plugin-summary.md)** - AI diagram generation workflow
+
+### Plugin Documentation
+- **[Memory Plugin Lifecycle](docs/summaries/memory-summary.md)** - How branch memory extraction works
+- **[RLM Document Plugin](docs/summaries/context-summary.md)** - Recursive Language Model document processing
+- **[Outcome Lifecycle](docs/summaries/outcomes-summary.md)** - Sprint outcome tracking
+- **[Calendar Plugin](docs/summaries/calendar-summary.md)** - Event scheduling and reminders
+- **[GitHub Integration](docs/summaries/github-summary.md)** - Repository operations
+
+### Architecture & Design
+- **[Architecture Report](docs/ARCHITECTURE_REPORT.md)** - System architecture analysis
+- **[3CLI Features Catalog](docs/reference/3CLI_FEATURES.md)** - Claude Code CLI capabilities
+- **[Plugin Architecture](docs/plugin-architecture/)** - Building Puffin plugins
+
+### Getting Help
+- **[Q&A Discussions](https://github.com/jdubray/puffin/discussions/categories/q-a)** - Ask questions, get AI-powered answers
+- **[Video Introduction](https://youtu.be/RzgzaSNgs1w)** - Watch the intro video
+- **[Changelog](CHANGELOG.md)** - Full version history
+
 ## License
 
 MIT
 
-## Credits
-- [RLM Skill](https://github.com/brainqub3/claude_code_RLM) by John Adeojo
-- [SAM Pattern](https://sam.js.org/) by Jean-Jacques Dubray
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) by Anthropic
-- [Electron](https://www.electronjs.org/)
+## 🙏 Credits & Acknowledgments
+
+- **[RLM Skill](https://github.com/brainqub3/claude_code_RLM)** by John Adeojo - Recursive Language Model implementation
+- **[SAM Pattern](https://sam.js.org/)** by Jean-Jacques Dubray - State-Action-Model architecture
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** by Anthropic - AI coding assistant
+- **[Excalidraw](https://excalidraw.com/)** - Hand-drawn diagram library
+- **[Electron](https://www.electronjs.org/)** - Cross-platform desktop framework
+- **[better-sqlite3](https://github.com/WiseLibs/better-sqlite3)** - Fast SQLite bindings
+- **[marked](https://www.npmjs.com/package/marked)** - Markdown rendering
+
+## 🌟 Contributing
+
+Puffin is under active development. Contributions welcome! See [GitHub Issues](https://github.com/jdubray/puffin/issues) for planned features and known issues.
+
+## 📄 License
+
+MIT - See [LICENSE](LICENSE) file for details.
+
+---
+
+<p align="center">
+  <strong>Built with ❤️ for the cloding community</strong><br>
+  <em>Transforming AI coding from conversation into software engineering</em>
+</p>

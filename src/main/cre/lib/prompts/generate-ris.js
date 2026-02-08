@@ -92,17 +92,20 @@ ${toolsBlock}`;
 
   const task = `Generate a detailed RIS document for the following story and plan item.
 ${contextBlock}
-STORY: ${story.title} [${story.id}]
+--- BEGIN STORY ---
+Title: ${story.title} [${story.id}]
 Description: ${story.description}
 Acceptance Criteria:
 ${ac}
+--- END STORY ---
 
-PLAN ITEM:
+--- BEGIN PLAN ITEM ---
 Order: ${planItem.order}
 Approach: ${planItem.approach}
 Files to create: ${filesCreated}
 Files to modify: ${filesModified}
 Dependencies: ${dependencies}
+--- END PLAN ITEM ---
 ${assertionsBlock}
 PROJECT CONFIG:
 Branch: ${projectConfig.branch || 'unknown'}

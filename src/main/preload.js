@@ -445,7 +445,10 @@ contextBridge.exposeInMainWorld('puffin', {
 
     // Get Git user identity
     getUserIdentity: (global = false) =>
-      ipcRenderer.invoke('git:getUserIdentity', global)
+      ipcRenderer.invoke('git:getUserIdentity', global),
+
+    // Check for active Git hooks (security check)
+    checkActiveHooks: () => ipcRenderer.invoke('git:checkActiveHooks')
   },
 
   /**

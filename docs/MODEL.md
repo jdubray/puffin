@@ -5,9 +5,10 @@
 The SAM Model in Puffin represents the application's state and provides acceptors that validate and apply proposals from actions. The model follows immutability principles where acceptors modify the model directly, but only in response to valid action proposals.
 
 **File**: `src/renderer/sam/model.js`
-**Total Lines**: 1,032
-**Total Acceptors**: 44 acceptors across 8 categories
+**Total Lines**: 4,272 (as of v3.0.0)
+**Total Acceptors**: 142 acceptors across 15+ categories
 **Pattern**: Curried functions: `model => proposal => { ... }`
+**Latest Features**: Sprint orchestration, CRE (Code Review Engine), automated implementation, GitHub integration
 
 ## Model Structure
 
@@ -343,15 +344,72 @@ The model ensures data integrity through:
 3. **Data Validation**: Uses shared validators for critical data
 4. **Defensive Programming**: Null checks and graceful error handling
 
+## v3.0.0 Feature Additions
+
+Since the initial documentation, Puffin has added major features resulting in significant model growth:
+
+### Sprint Management System (30+ acceptors)
+- **Sprint CRUD**: Create, update, delete, close sprints
+- **Story Assignment**: Add/remove stories to/from sprints
+- **Status Tracking**: Story states (pending, in-progress, completed)
+- **History**: Archive completed sprints to `sprint_history`
+- **Filtering**: Filter sprints by status
+
+### CRE (Code Review Engine) Integration (15+ acceptors)
+- **Planning Phase**: Generate implementation plans with Claude
+- **Plan Approval**: Human-in-the-loop plan review
+- **Iteration**: Refine plans based on feedback
+- **Assertions**: Generate and evaluate inspection assertions
+- **RIS Generation**: Create Refined Implementation Specifications
+
+### Automated Implementation Orchestration (20+ acceptors)
+- **Sprint Orchestration**: Automated multi-story implementation
+- **Story Sequencing**: Implement stories in dependency order
+- **Progress Tracking**: Real-time status updates
+- **Code Review Phase**: Post-implementation review workflow
+- **Bug Fix Phase**: Handle code review findings
+
+### GitHub Integration (10+ acceptors)
+- **OAuth Authentication**: Secure GitHub login
+- **Repository Management**: Select and track repositories
+- **Activity Tracking**: Contribution graphs and stats
+- **Rate Limiting**: Monitor GitHub API limits
+- **Profile Management**: Developer profile with GitHub data
+
+### Handoff System (5+ acceptors)
+- **Context Transfer**: Pass context between branches/threads
+- **Summary Generation**: Create handoff summaries
+- **Branch Switching**: Cross-branch workflow support
+
+### Implementation Journey Tracking (5+ acceptors)
+- **Journey Creation**: Track implementation sessions
+- **Input Recording**: Capture human inputs during implementation
+- **Iteration Tracking**: Record multiple implementation attempts
+- **Status Management**: Track journey completion
+
+### Story Generation System (5+ acceptors)
+- **Generation Workflow**: Create stories from specifications
+- **Feedback Loop**: Refine generated stories
+- **Batch Operations**: Handle multiple story generations
+
+### Debug & Introspection (5+ acceptors)
+- **Debug Mode**: Toggle debug logging
+- **Prompt Inspection**: Store debug prompts
+- **Activity Tracking**: Detailed execution traces
+- **Performance Metrics**: Track operation timing
+
 ## Summary
 
 Puffin's SAM Model implements a comprehensive state management system with:
 
-- **44 acceptors** across 8 functional categories
+- **142 acceptors** across 15+ functional categories
 - **Real-time activity tracking** for enhanced user feedback
 - **Automatic persistence** to structured .puffin/ directory
-- **Advanced workflows** like user story derivation
+- **Advanced workflows**: Sprint orchestration, CRE planning, automated implementation
+- **GitHub integration** for developer profiles and activity
 - **Robust validation** and error handling
 - **Immutable state updates** following SAM principles
 
-The model successfully balances complexity with maintainability, providing a solid foundation for Puffin's role as a management layer over Claude Code CLI.
+The model has evolved from a conversation manager to a full-featured development orchestration system, successfully balancing complexity with maintainability while providing a solid foundation for Puffin's role as a management layer over Claude Code CLI.
+
+**Note**: This documentation reflects v3.0.0. For detailed information on specific acceptors in new categories, refer to the source code in `src/renderer/sam/model.js` or use the codebase exploration tools.

@@ -2198,6 +2198,16 @@ function setupGitHandlers(ipcMain) {
       return { success: false, error: error.message }
     }
   })
+
+  // Check for active Git hooks (security warning)
+  ipcMain.handle('git:checkActiveHooks', async () => {
+    try {
+      const result = await gitService.checkForActiveGitHooks()
+      return { success: true, ...result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
 }
 
 /**

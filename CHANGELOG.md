@@ -5,9 +5,88 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0] - 2026-01-23
+## [3.0.0] - 2026-02-08
 
 ### Added
+
+- **Central Reasoning Engine (CRE)**: Core component for transforming user stories into deterministic implementation instructions
+  - **Implementation Plans**: Generate ordered plans specifying story implementation sequence, branch strategy, and dependencies
+  - **Ready-to-Implement Specifications (RIS)**: Concise, directive specifications that tell Claude exactly what to implement
+  - **Code Model**: Hybrid DSL (h-DSL) instance tracking codebase structure, updated as feedback loop after each implementation
+  - **Inspection Assertions**: Testable assertions for each plan item to verify implementation correctness
+  - **Plan Iteration**: Support for user review, questions, and plan refinement before approval
+  - **Two-Stage Planning**: Plan generation followed by RIS generation replaces single planning phase
+  - **h-DSL Schema Management**: Evolving schema where every element maps to h-M3 primitives (TERM, PROSE, SLOT, RELATION, STATE, TRANSITION, OUTCOME, ALIGNMENT)
+  - **CRE Introspector**: Examines code changes post-implementation and updates Code Model
+  - **MCP Integration**: h-DSL engine accessible via Model Context Protocol for Claude CLI
+  - **Explore Mode**: Enhanced code exploration using h-DSL tools for architectural understanding
+
+- **Excalidraw Plugin**: Professional diagramming tool with AI-powered diagram generation
+  - **Visual Editor**: Hand-drawn aesthetic with 10+ element types (rectangles, ellipses, diamonds, arrows, lines, frames, freedraw, text, images)
+  - **AI Diagram Generation**: Generate diagrams from markdown documentation using Claude
+    - Architecture diagrams (boxes, arrows, labels)
+    - Sequence diagrams (lifelines, messages)
+    - Flowcharts (decision nodes, flow arrows)
+    - Component diagrams
+  - **Document-to-Diagram Pipeline**: Select markdown files from docs directory, specify diagram type, Claude generates Excalidraw elements
+  - **Multiple Export Formats**: PNG, SVG, and JSON export capabilities
+  - **Industry-Standard Format**: `.excalidraw` files compatible with Excalidraw web app
+  - **Storage Layer**: CRUD operations for designs in `.puffin/excalidraw-designs/`
+  - **Thumbnail Previews**: 128x128 thumbnail generation for design list
+  - **Theme Support**: Light/dark theme toggle
+  - **Keyboard Shortcuts**: Ctrl+S (save), Ctrl+N (new), Ctrl+E (export)
+
+- **Memory Plugin**: Automated extraction and injection of domain knowledge from conversations
+  - **Branch Memory Files**: Categorized knowledge in `.puffin/memory/branches/` with four sections: Facts, Architectural Decisions, Conventions, Bug Patterns
+  - **LLM-Powered Extraction**: Analyzes conversation histories to extract cross-cutting technical knowledge
+  - **Automatic Maintenance**: Background memorization of unmemoized branches on startup (up to 20 branches per run)
+  - **Memory Evolution**: Merges new knowledge into existing memory, deduplicates, resolves conflicts
+  - **CLAUDE.md Injection**: Branch memory automatically injected into branch-specific context files
+  - **Manual Triggers**: IPC handler for user-initiated memorization
+  - **Fallback Detection**: Skips branches with insufficient substantive content
+  - **Retry Logic**: Exponential backoff for history service availability
+
+- **Outcome Lifecycle Plugin**: Track and manage development outcomes across sprint phases
+  - **Outcome States**: Planned, In-Progress, Completed, Failed, Cancelled
+  - **Sprint Phase Integration**: Outcomes linked to planning, implementation, code review, and bug fix phases
+  - **Outcome Persistence**: SQLite storage with full CRUD operations
+  - **Status Tracking**: Real-time progress monitoring in Sprint panel
+  - **Statistics**: Cost, duration, and outcome metrics for sprint completion summaries
+
+- **h-DSL Viewer Plugin**: Visualize code model structure and dependencies
+  - **Graph Viewport**: Interactive visualization of h-DSL Code Model
+  - **Annotation Loading**: Display h-M3 primitive mappings for schema elements
+  - **Dependency Tracing**: Follow import and call relationships through codebase
+  - **Architecture Navigation**: Browse module structure and artifact relationships
+
+- **Bidirectional Streaming**: Enhanced Claude CLI integration for interactive question support
+  - **Stream-JSON Format**: `--input-format stream-json --output-format stream-json`
+  - **Tool Suppression**: `--disallowedTools AskUserQuestion` for automated workflows
+  - **Session Resume**: Continue conversations via `--resume <sessionId>`
+  - **Structured Output**: JSON schema support for deterministic AI responses
+
+- **Branch Memory System**: Project-specific knowledge extraction and context preservation
+  - **Template System**: `branch-template.js` for parsing and generating branch memory files
+  - **CLAUDE.md Integration**: Branch memory automatically included in branch-specific context
+  - **Sanitized Filenames**: Handles special characters in branch names
+  - **Timestamp Tracking**: Last updated timestamps for memory freshness
+
+- **Enhanced Sprint Implementation**:
+  - **Derive User Stories Button**: Dedicated button in prompt area for story derivation workflow
+  - **Completion Summary**: Capture and display summary on story completion with AI-generated descriptions
+  - **Orchestration Improvements**: Better handling of story status transitions and active story tracking
+
+- **Documentation & Summaries**: Comprehensive plugin documentation
+  - **Calendar Plugin**: Event scheduling and reminder system documentation
+  - **GitHub Plugin**: GitHub integration capabilities summary
+  - **Memory Plugin**: Lifecycle and technical architecture documentation
+  - **CRE Process**: End-to-end Central Reasoning Engine workflow documentation
+  - **Excalidraw Plugin**: Implementation plan and user guide
+
+- **JSON Schema Integration**: Structured output support for CRE operations
+  - **Schema Files**: Dedicated schemas for plans, RIS, assertions, and other CRE outputs
+  - **Validation**: Structured validation of AI-generated outputs
+  - **Deterministic Responses**: Consistent output format across automated workflows
 
 - **RLM Document Plugin**: Full implementation of Recursive Language Model document processing
   - **Document Picker**: Select and load documents for RLM processing with file browser integration
@@ -66,17 +145,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Planning Workflow**: Two-stage process (Plan → RIS) replaces single planning phase
+- **Sprint Execution**: CRE generates implementation plans with inspection assertions before implementation begins
+- **Code Model Maintenance**: Incremental updates after each implementation cycle via CRE Introspector
+- **Claude Context**: Enhanced with branch memory, h-DSL Code Model snippets, and RIS specifications
 - **Document Editor Plugin**: Refactored to use project-level storage instead of global storage
-- **Plugin Architecture**: Enhanced IPC channels for RLM-specific operations
+- **Plugin Architecture**: Enhanced IPC channels for RLM-specific operations and CRE integration
+- **Designer Plugin**: Deprecated in favor of Excalidraw plugin (moved to `designer-plugin.disabled/`)
+- **Git Panel**: Enhanced branch switching and cross-branch merge workflows
+
+### Fixed
+
+- **Renderer Crash**: Resolved multiple crashes caused by state synchronization issues between main and renderer processes
+- **CRE Assertion Persistence**: Fixed dual-storage sync issues between `inspection_assertions` table and `user_stories.inspection_assertions` column
+- **Excalidraw Scene Serialization**: Fixed `collaborators` Map→object conversion breaking Excalidraw's internal operations
+- **Excalidraw Infinite Render Loop**: Fixed `boundElements` manual assignment causing stack overflow
+- **Git Panel Branch Return**: Fixed cross-branch merge to return to original branch after completion
+- **Story Status Persistence**: Orchestration story now properly clears "IMPLEMENTING" status on completion
+- **Completion Summary Generation**: Fixed empty summaries by correctly accessing Claude response structure
+- **Process Cleanup**: Windows process tree termination now uses `taskkill` to properly stop CLI subprocesses
+- **JSON CLI Arguments**: Fixed shell:true breaking JSON schema arguments on Windows (cmd.exe quote mangling)
+- **Tool Exploration in Structured Output**: Fixed assertion generation burning all turns on codebase exploration instead of producing JSON
+- **User Story Persistence**: DELETE and UPDATE operations now correctly persist to database
 
 ### Documentation
 
+- **Central Reasoning Engine**: Complete CRE specification (`CENTRAL_REASONING_ENGINE.md`)
+- **CRE Detailed Design**: Technical architecture and implementation guide (`CRE_DETAILED_DESIGN.md`)
+- **CRE Test Suite**: Comprehensive test scenarios and validation criteria (`CRE_TEST_SUITE.md`)
+- **h-DSL Engine**: Hybrid DSL code model bootstrap utility specification (`h-dsl-engine.md`)
+- **h-DSL Research**: h-DSL and h-M3 v2 theoretical foundations (`h-DSL.md`, `h-m3-v2.md`)
+- **Excalidraw Plugin**: Implementation plan and user guide (`excalidraw-plugin-implementation-plan.md`, `excalidraw-plugin-summary.md`, `EXCALIDRAW.md`)
+- **Plugin Summaries**: Calendar, GitHub, Memory, and Outcomes plugin documentation
+- **Architecture Report**: Comprehensive architecture analysis and recommendations (`ARCHITECTURE_REPORT.md`)
+- **3CLI Features**: Claude Code CLI feature catalog (`3CLI_FEATURES.md`)
+- **Branch Memory**: Template system and injection mechanics documentation
 - **RLM Plugin Architecture Design**: Comprehensive design document in `docs/plans/`
 - **RLM Routing Specification**: Document routing strategies for multi-file RLM
 - **RLM Plugin Review**: Analysis and recommendations for RLM implementation
 - **RLM History Index Generator Spec**: Specification for history indexing
 - **Architecture Decision Records**: ADRs for key architectural choices
-- **User Manual Updates**: Added RLM plugin documentation section
+- **Memory Plugin Architecture**: Reorganized memory plugin design specs into `docs/plugin-architecture/`
+- **User Manual Updates**: Added RLM, CRE, Excalidraw, and Memory plugin documentation sections
+
+### Technical
+
+- **MCP Configuration**: Added `.mcp.json` for Model Context Protocol server integration
+- **h-DSL Configuration**: Added `.hdslrc.json` for h-DSL engine settings
+- **Process Lock Management**: All CLI-spawning functions now use process locks to prevent concurrent execution
+- **Windows Process Tree Termination**: Platform-specific process cleanup using `taskkill /T /F`
+- **Excalidraw React Bundle**: Pre-built esbuild bundle with React components embedded in vanilla JS app
+- **Empty MCP Config**: Dynamic creation of tool-restricted MCP configuration for structured output workflows
+- **State Persistence Enhancements**: Extended `persistActions` whitelist for new SAM action types
+- **Database Schema Evolution**: New tables for `inspection_assertions`, `ris`, and memory storage
+
+### Breaking Changes
+
+- **Designer Plugin Deprecated**: GUI Designer functionality replaced by Excalidraw plugin. Existing designs must be manually recreated in Excalidraw (no migration path from JSON to `.excalidraw` format)
+- **Planning Workflow**: Two-stage planning (Plan → RIS) changes user workflow. Old single-stage plans are not automatically migrated
+- **Claude Context Structure**: CLAUDE.md files now include CRE Code Model snippets and branch memory. Third-party tools depending on previous structure may need updates
 
 ### Credits
 

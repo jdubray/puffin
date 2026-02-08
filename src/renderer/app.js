@@ -786,6 +786,9 @@ Please provide specific file locations and line numbers where issues are found, 
         const projectName = this.projectPath ? this.projectPath.split(/[/\\]/).pop() : 'Unknown'
         this.intents.initializeApp(this.projectPath, projectName)
 
+        // Security: Check for active Git hooks and warn user
+        await this.checkGitHooksSecurity()
+
         // Load state from .puffin/ directory
         await this.loadState()
 
@@ -828,6 +831,32 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Initialize style injector
     this.styleInjector.init()
+  }
+
+  /**
+   * Check for active Git hooks and warn user (security measure)
+   * Based on IDEsaster vulnerability research recommendations
+   */
+  async checkGitHooksSecurity() {
+    if (!window.puffin?.git) return
+
+    try {
+      const result = await window.puffin.git.checkActiveHooks()
+      if (result.success && result.hasActiveHooks && result.hooks.length > 0) {
+        const hookList = result.hooks.join(', ')
+        console.warn('[Security] Active Git hooks detected:', hookList)
+
+        this.showToast({
+          type: 'warning',
+          title: `Active Git hooks detected: ${hookList}`,
+          message: 'These scripts run automatically during Git operations. Review .git/hooks/ if you did not create them.',
+          duration: 15000
+        })
+      }
+    } catch (error) {
+      console.error('[Security] Error checking Git hooks:', error)
+      // Silent fail - this is a non-critical security check
+    }
   }
 
   /**
@@ -5296,15 +5325,21 @@ Keep it concise but informative. Use markdown formatting.`
 
 ---
 
-### User Story: ${story.title}
+### User Story
 
+--- BEGIN USER STORY ---
+Title: ${story.title}
 ${story.description || ''}
+--- END USER STORY ---
 `
 
     if (story.acceptanceCriteria?.length > 0) {
       prompt += `
 ### Acceptance Criteria
+
+--- BEGIN ACCEPTANCE CRITERIA ---
 ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+--- END ACCEPTANCE CRITERIA ---
 `
     }
 
@@ -5315,9 +5350,9 @@ ${story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 The following plan was approved. Please follow this guidance:
 
+--- BEGIN PLAN ---
 ${sprint.plan.substring(0, 8000)}
-
----
+--- END PLAN ---
 
 `
     }
@@ -5889,6 +5924,8 @@ You just completed implementing the following user stories for this sprint:
 
 `
 
+    prompt += `--- BEGIN STORIES ---
+`
     stories.forEach((story, idx) => {
       const isCompleted = completedStories.includes(story.id)
       prompt += `## ${idx + 1}. ${story.title}${isCompleted ? ' ✓' : ''}
@@ -5902,6 +5939,9 @@ ${story.acceptanceCriteria.map(ac => `- ${ac.description}`).join('\n')}
 `
       }
     })
+    prompt += `--- END STORIES ---
+
+`
 
     prompt += `## Review Instructions
 

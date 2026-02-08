@@ -790,6 +790,7 @@ ${updatedContext}
     lines.push('')
     lines.push('The following user stories are relevant to this conversation:')
     lines.push('')
+    lines.push('--- BEGIN USER STORIES ---')
 
     stories.forEach((story, i) => {
       lines.push(`### ${i + 1}. ${story.title}`)
@@ -808,6 +809,7 @@ ${updatedContext}
       lines.push('')
     })
 
+    lines.push('--- END USER STORIES ---')
     return lines.join('\n')
   }
 
@@ -825,9 +827,9 @@ ${updatedContext}
     lines.push(`**Source Thread:** ${handoffContext.sourceThreadName || 'Unknown'}`)
     lines.push(`**Source Branch:** ${handoffContext.sourceBranch || 'Unknown'}`)
     lines.push('')
-    lines.push('### Handoff Summary')
-    lines.push('')
+    lines.push('--- BEGIN HANDOFF SUMMARY ---')
     lines.push(handoffContext.summary)
+    lines.push('--- END HANDOFF SUMMARY ---')
     lines.push('')
 
     return lines.join('\n')
@@ -1331,14 +1333,14 @@ Guidelines:
     let fullPrompt = systemPrompt + '\n\n'
 
     if (project?.description) {
-      fullPrompt += `Project Context: ${project.description}\n\n`
+      fullPrompt += `--- BEGIN PROJECT CONTEXT ---\n${project.description}\n--- END PROJECT CONTEXT ---\n\n`
     }
 
     if (conversationContext) {
-      fullPrompt += `Recent Conversation Context (use this to understand what the user is referring to):\n${conversationContext}\n\n`
+      fullPrompt += `--- BEGIN CONVERSATION CONTEXT ---\n${conversationContext}\n--- END CONVERSATION CONTEXT ---\n\n`
     }
 
-    fullPrompt += `Current Request to derive user stories from:\n${prompt}`
+    fullPrompt += `--- BEGIN USER REQUEST ---\n${prompt}\n--- END USER REQUEST ---`
 
     return new Promise((resolve, reject) => {
       const cwd = projectPath || this.projectPath || process.cwd()
@@ -1556,8 +1558,9 @@ Guidelines:
     const systemPrompt = `You are a requirements analyst. You have previously derived user stories from a request.
 Now the user wants to modify these stories based on their feedback.
 
-Current stories:
+--- BEGIN CURRENT STORIES ---
 ${storiesJson}
+--- END CURRENT STORIES ---
 
 Output ONLY a valid JSON array with the modified user stories in this exact format:
 [
@@ -1573,8 +1576,9 @@ Output ONLY the JSON array, no other text or markdown.`
 
     const fullPrompt = `${systemPrompt}
 
-User's feedback:
-${feedback}`
+--- BEGIN USER FEEDBACK ---
+${feedback}
+--- END USER FEEDBACK ---`
 
     return this.deriveStories(fullPrompt, projectPath, project, null, null, model)
   }

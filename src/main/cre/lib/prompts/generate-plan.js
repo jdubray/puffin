@@ -60,8 +60,9 @@ ${toolsBlock}`;
 
   const task = `Generate an ordered implementation plan for the following user stories.
 ${contextBlock}${answersBlock}
-USER STORIES:
+--- BEGIN USER STORIES ---
 ${storiesBlock}
+--- END USER STORIES ---
 
 Produce a plan where each item maps to a user story and specifies:
 - Implementation order based on dependencies

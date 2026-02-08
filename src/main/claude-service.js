@@ -1729,10 +1729,18 @@ ${content}`
       // Optional: disable tools for methods that should answer from prompt context
       // only (e.g., assertion generation). Plan generation, RIS, and refinement
       // NEED tools to explore the codebase. Caller can pass { disableTools: true }.
-      if (options.disableTools) {
+      // CRITICAL: If jsonSchema is provided, we MUST allow StructuredOutput tool,
+      // so don't use --tools '' which disables ALL tools. Instead, just disable MCP.
+      if (options.disableTools && !jsonSchema) {
         args.push('--tools', '')
         // --strict-mcp-config with an empty config disables MCP tools (e.g. hdsl_*)
         args.push('--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config')
+      } else if (options.disableTools && jsonSchema) {
+        // When jsonSchema is used, we need StructuredOutput tool enabled,
+        // but we can still disable MCP tools (Read, Grep, hdsl_*, etc.)
+        args.push('--mcp-config', this._getEmptyMcpConfigPath(), '--strict-mcp-config')
+        console.log('[sendPrompt] jsonSchema requires StructuredOutput tool, only disabling MCP tools')
+        console.log('[sendPrompt] Claude args:', args.join(' '))
       }
 
       // Append --json-schema when a schema is provided

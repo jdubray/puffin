@@ -79,6 +79,7 @@ export class ExcalidrawView {
         <div class="excalidraw-toolbar" role="toolbar" aria-label="Design toolbar">
           <div class="toolbar-left">
             <button id="excalidraw-new-btn" class="excalidraw-btn small" title="New Design (Ctrl+N)" aria-label="New Design">New</button>
+            <button id="excalidraw-new-from-doc-btn" class="excalidraw-btn small" title="Generate diagram from document" aria-label="New from Document">New from Doc</button>
             <button id="excalidraw-save-btn" class="excalidraw-btn small" title="Save Design (Ctrl+S)" aria-label="Save Design">Save</button>
             <button id="excalidraw-clear-btn" class="excalidraw-btn small" title="Clear Canvas" aria-label="Clear Canvas">Clear</button>
           </div>
@@ -123,6 +124,10 @@ export class ExcalidrawView {
   attachEventListeners() {
     this.container.querySelector('#excalidraw-new-btn')?.addEventListener('click', () => {
       this.newDesign()
+    })
+
+    this.container.querySelector('#excalidraw-new-from-doc-btn')?.addEventListener('click', () => {
+      this.showDocSelectionModal()
     })
 
     this.container.querySelector('#excalidraw-save-btn')?.addEventListener('click', () => {
@@ -843,7 +848,12 @@ export class ExcalidrawView {
         filesIsArray: Array.isArray(scene.files)
       })
 
-      this.elements = scene.elements || []
+      // Strip boundElements from loaded elements — Excalidraw manages these internally.
+      // Stale/incorrect boundElements from serialization can cause infinite render loops.
+      this.elements = (scene.elements || []).map(el => {
+        const { boundElements, ...clean } = el
+        return clean
+      })
       // Strip collaborators from loaded appState to prevent "forEach is not a function" error
       // (collaborators is a Map at runtime but becomes plain object after JSON serialization)
       const { collaborators, ...cleanAppState } = scene.appState || {}
@@ -1249,6 +1259,695 @@ export class ExcalidrawView {
     }
   }
 
+  // ============ AI Diagram Loading ============
+
+  /**
+   * Load AI-generated diagram elements onto the canvas.
+   * Validates, sanitizes, and converts the response using parseDiagramResponse.
+   *
+   * @param {Object} response - Claude's parsed response { elements, appState? }
+   * @param {Object} [options] - Load options
+   * @param {string} [options.mode='replace'] - 'replace' clears canvas first, 'merge' adds to existing
+   * @returns {Promise<{success: boolean, stats: Object, error: string|null}>}
+   */
+  async loadDiagramResponse(response, options = {}) {
+    const mode = options.mode || 'replace'
+
+    // Dynamically import the parser (ES module), cached on instance after first load
+    if (!this._parseDiagramResponse) {
+      try {
+        const module = await import('./diagram-response-parser.js')
+        this._parseDiagramResponse = module.parseDiagramResponse
+      } catch (err) {
+        console.error('[ExcalidrawView] Failed to load diagram parser:', err)
+        return { success: false, stats: null, error: `Failed to load diagram parser: ${err.message}` }
+      }
+    }
+    const parseDiagramResponse = this._parseDiagramResponse
+
+    console.log('[ExcalidrawView] Parsing diagram response, element count:', response.elements?.length)
+    const result = parseDiagramResponse(response)
+
+    if (result.warnings.length > 0) {
+      console.warn('[ExcalidrawView] Diagram conversion warnings:', result.warnings)
+    }
+
+    if (!result.success) {
+      console.error('[ExcalidrawView] Diagram conversion failed:', result.error)
+      console.error('[ExcalidrawView] Conversion warnings:', result.warnings)
+      this.showNotification(`Diagram conversion failed: ${result.error}`, 'error')
+      return { success: false, stats: result.stats, error: result.error }
+    }
+
+    // Build final elements based on mode
+    if (mode === 'merge' && this.excalidrawAPI) {
+      const existing = this.excalidrawAPI.getSceneElements() || []
+      this.elements = [...existing, ...result.elements]
+    } else {
+      this.elements = result.elements
+    }
+    // Build a minimal appState for the diagram — only safe, serializable properties.
+    // Do NOT merge the full running Excalidraw appState (contains Map objects, internal
+    // state etc. that cause infinite render loops when fed back via updateScene).
+    const diagramAppState = {
+      viewBackgroundColor: result.appState?.viewBackgroundColor || '#ffffff',
+      theme: this.theme || 'light'
+    }
+    this.appState = diagramAppState
+
+    // Render on the Excalidraw canvas
+    if (this.excalidrawAPI) {
+      try {
+        console.log('[ExcalidrawView] Calling updateScene with', this.elements.length, 'elements')
+        this.excalidrawAPI.updateScene({
+          elements: this.elements,
+          appState: diagramAppState
+        })
+        console.log('[ExcalidrawView] updateScene completed, scrolling to content...')
+
+        // Center viewport on the new elements with padding
+        // Use longer timeout to ensure Excalidraw has fully processed the scene
+        setTimeout(() => {
+          try {
+            if (this.excalidrawAPI) {
+              this.excalidrawAPI.scrollToContent(this.excalidrawAPI.getSceneElements(), {
+                fitToContent: true,
+                animate: true,
+                fitToViewport: true
+              })
+              console.log('[ExcalidrawView] Scroll to content completed')
+            }
+          } catch (scrollErr) {
+            console.warn('[ExcalidrawView] scrollToContent failed:', scrollErr)
+          }
+        }, 300)
+
+        console.log('[ExcalidrawView] Diagram successfully rendered on canvas')
+      } catch (err) {
+        console.error('[ExcalidrawView] Failed to update scene with diagram:', err)
+        return { success: false, stats: result.stats, error: `Failed to render diagram: ${err.message}` }
+      }
+    } else {
+      console.error('[ExcalidrawView] excalidrawAPI not available — cannot render diagram')
+    }
+
+    this.updateCanvasPlaceholder()
+
+    // Clear currentFilename since this is a new unsaved diagram
+    if (mode === 'replace') {
+      this.currentFilename = null
+      this._updateActiveItem()
+    }
+
+    const { stats } = result
+    const modeLabel = mode === 'merge' ? 'added' : 'loaded'
+    this.showNotification(
+      `Diagram ${modeLabel}: ${stats.converted} elements` +
+        (stats.skipped > 0 ? ` (${stats.skipped} skipped)` : ''),
+      stats.skipped > 0 ? 'info' : 'success'
+    )
+
+    // Auto-save: prompt the save dialog so user can name the design
+    if (mode === 'replace' && stats.converted > 0) {
+      // Brief delay so the notification is visible before save dialog appears
+      // Store timeout so it can be cancelled on destroy or if another modal opens
+      clearTimeout(this._autoSaveTimeout)
+      this._autoSaveTimeout = setTimeout(() => {
+        this._autoSaveTimeout = null
+        // Skip if another modal is already open or the view was destroyed
+        if (this._activeOverlays.size > 0 || !this.excalidrawAPI) return
+        this.showSaveDialog()
+      }, 600)
+    }
+
+    return { success: true, stats: result.stats, error: null }
+  }
+
+  // ============ Document Selection Modal ============
+
+  /**
+   * Show modal for selecting a markdown document to generate a diagram from.
+   * Lists docs from the project, supports search/filter, shows metadata.
+   */
+  async showDocSelectionModal() {
+    // Fetch markdown files from the project
+    let files = []
+    try {
+      files = await window.puffin.plugins.invoke('excalidraw-plugin', 'listMarkdownFiles')
+    } catch (err) {
+      console.error('[ExcalidrawView] Failed to list markdown files:', err)
+      this.showNotification('Failed to list documents: ' + err.message, 'error')
+      return
+    }
+
+    if (files.length === 0) {
+      this.showNotification('No markdown files found in the project', 'info')
+      return
+    }
+
+    const modal = document.createElement('div')
+    modal.className = 'excalidraw-modal-overlay'
+    modal.setAttribute('role', 'dialog')
+    modal.setAttribute('aria-modal', 'true')
+    modal.setAttribute('aria-label', 'Select document for diagram generation')
+
+    modal.innerHTML = `
+      <div class="excalidraw-modal doc-select-modal">
+        <h3>New Diagram from Document</h3>
+        <div class="doc-select-controls">
+          <input type="text" id="doc-search-input" class="excalidraw-input"
+            placeholder="Search documents..." aria-label="Search documents" autocomplete="off">
+        </div>
+        <div class="doc-file-list" id="doc-file-list" role="listbox" aria-label="Document files" tabindex="0">
+          ${this._renderDocFileList(files, '')}
+        </div>
+        <div class="doc-select-footer">
+          <div class="doc-select-info" id="doc-select-info">${files.length} document${files.length !== 1 ? 's' : ''} found</div>
+          <div class="modal-actions">
+            <button id="doc-select-cancel" class="excalidraw-btn small" aria-label="Cancel">Cancel</button>
+            <button id="doc-select-browse" class="excalidraw-btn small" aria-label="Browse files" title="Open native file browser">Browse...</button>
+            <button id="doc-select-confirm" class="excalidraw-btn small primary" aria-label="Select document" disabled>Next</button>
+          </div>
+        </div>
+      </div>
+    `
+
+    this._trackOverlay(modal)
+
+    // State
+    let selectedFile = null
+    const searchInput = modal.querySelector('#doc-search-input')
+    const fileList = modal.querySelector('#doc-file-list')
+    const confirmBtn = modal.querySelector('#doc-select-confirm')
+    const cancelBtn = modal.querySelector('#doc-select-cancel')
+    const browseBtn = modal.querySelector('#doc-select-browse')
+    const infoEl = modal.querySelector('#doc-select-info')
+
+    searchInput.focus()
+
+    const closeModal = () => this._removeOverlay(modal)
+
+    // Focus trap
+    this._trapFocus(modal)
+
+    // Search/filter
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.toLowerCase().trim()
+      fileList.innerHTML = this._renderDocFileList(files, query)
+      selectedFile = null
+      confirmBtn.disabled = true
+
+      const filtered = files.filter(f =>
+        f.relativePath.toLowerCase().includes(query) || f.name.toLowerCase().includes(query)
+      )
+      infoEl.textContent = `${filtered.length} document${filtered.length !== 1 ? 's' : ''} found`
+    })
+
+    // File selection via click
+    fileList.addEventListener('click', (e) => {
+      const item = e.target.closest('.doc-file-item')
+      if (!item) return
+
+      // Clear previous selection
+      fileList.querySelectorAll('.doc-file-item.selected').forEach(el => el.classList.remove('selected'))
+      item.classList.add('selected')
+      item.setAttribute('aria-selected', 'true')
+
+      selectedFile = item.dataset.path
+      confirmBtn.disabled = false
+    })
+
+    // Double-click to select and confirm
+    fileList.addEventListener('dblclick', (e) => {
+      const item = e.target.closest('.doc-file-item')
+      if (!item) return
+      selectedFile = item.dataset.path
+      confirmBtn.click()
+    })
+
+    // Keyboard navigation in file list
+    fileList.addEventListener('keydown', (e) => {
+      const items = Array.from(fileList.querySelectorAll('.doc-file-item'))
+      if (items.length === 0) return
+
+      const currentIndex = items.findIndex(el => el.classList.contains('selected'))
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0
+        items.forEach(el => { el.classList.remove('selected'); el.removeAttribute('aria-selected') })
+        items[nextIndex].classList.add('selected')
+        items[nextIndex].setAttribute('aria-selected', 'true')
+        items[nextIndex].scrollIntoView({ block: 'nearest' })
+        selectedFile = items[nextIndex].dataset.path
+        confirmBtn.disabled = false
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1
+        items.forEach(el => { el.classList.remove('selected'); el.removeAttribute('aria-selected') })
+        items[prevIndex].classList.add('selected')
+        items[prevIndex].setAttribute('aria-selected', 'true')
+        items[prevIndex].scrollIntoView({ block: 'nearest' })
+        selectedFile = items[prevIndex].dataset.path
+        confirmBtn.disabled = false
+      } else if (e.key === 'Enter' && selectedFile) {
+        e.preventDefault()
+        confirmBtn.click()
+      }
+    })
+
+    // Escape / click-outside
+    cancelBtn.addEventListener('click', closeModal)
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal()
+    })
+    modal.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal()
+    })
+
+    // Browse — open native file picker, then show prompt modal
+    browseBtn.addEventListener('click', async () => {
+      closeModal()
+      try {
+        const result = await window.puffin.file.selectMarkdown({ title: 'Select Markdown Document' })
+        if (result.success && result.relativePath) {
+          this.showDiagramPromptModal(result.relativePath)
+        }
+      } catch (err) {
+        this.showNotification('File selection failed: ' + err.message, 'error')
+      }
+    })
+
+    // Confirm — proceed to diagram prompt modal
+    confirmBtn.addEventListener('click', () => {
+      if (!selectedFile) return
+      closeModal()
+      this.showDiagramPromptModal(selectedFile)
+    })
+  }
+
+  /**
+   * Render the file list HTML for the document selection modal.
+   * @param {Array} files - File metadata array
+   * @param {string} query - Search filter query
+   * @returns {string} HTML string
+   * @private
+   */
+  _renderDocFileList(files, query) {
+    const filtered = query
+      ? files.filter(f =>
+          f.relativePath.toLowerCase().includes(query) || f.name.toLowerCase().includes(query)
+        )
+      : files
+
+    if (filtered.length === 0) {
+      return '<div class="doc-file-empty">No matching documents found</div>'
+    }
+
+    return filtered.map(f => {
+      const sizeStr = f.size < 1024
+        ? `${f.size} B`
+        : f.size < 1024 * 1024
+          ? `${(f.size / 1024).toFixed(1)} KB`
+          : `${(f.size / (1024 * 1024)).toFixed(1)} MB`
+
+      const modDate = new Date(f.modifiedAt)
+      const dateStr = modDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+
+      return `
+        <div class="doc-file-item" role="option" aria-selected="false"
+          data-path="${this.escapeHtml(f.relativePath)}" tabindex="-1">
+          <div class="doc-file-icon">📄</div>
+          <div class="doc-file-info">
+            <div class="doc-file-name">${this.escapeHtml(f.name)}</div>
+            <div class="doc-file-path">${this.escapeHtml(f.dir || '.')}</div>
+          </div>
+          <div class="doc-file-meta">
+            <span class="doc-file-size">${sizeStr}</span>
+            <span class="doc-file-date">${dateStr}</span>
+          </div>
+        </div>`
+    }).join('')
+  }
+
+  // ============ Diagram Type & Prompt Modal ============
+
+  /**
+   * Example prompts for each diagram type, shown as clickable suggestions.
+   * @private
+   */
+  _getDiagramExamples() {
+    return {
+      architecture: [
+        'Show the high-level system architecture with all services and databases',
+        'Focus on the API layer and its connections to external services',
+        'Show microservices communication patterns and data flow'
+      ],
+      sequence: [
+        'Show the user authentication flow step by step',
+        'Diagram the request lifecycle from client to database and back',
+        'Show how data syncs between services'
+      ],
+      flowchart: [
+        'Show the decision logic for the main process',
+        'Diagram the error handling and retry flow',
+        'Show the deployment pipeline stages'
+      ],
+      component: [
+        'Show all software components and their interfaces',
+        'Diagram the plugin architecture and extension points',
+        'Show the frontend component hierarchy'
+      ]
+    }
+  }
+
+  /**
+   * Show the diagram type and prompt configuration modal.
+   * Appears after a document has been selected from the doc-selection modal.
+   *
+   * @param {string} docPath - Relative path to the selected markdown file
+   */
+  async showDiagramPromptModal(docPath) {
+    // Fetch diagram types and prepend "auto-detect" option
+    let diagramTypes = []
+    try {
+      diagramTypes = await window.puffin.plugins.invoke('excalidraw-plugin', 'getDiagramTypes')
+    } catch {
+      diagramTypes = [
+        { type: 'architecture', label: 'Architecture Diagram', description: 'System components and connections', icon: '' },
+        { type: 'sequence', label: 'Sequence Diagram', description: 'Message flow between participants', icon: '' },
+        { type: 'flowchart', label: 'Flowchart', description: 'Process flow with decisions', icon: '' },
+        { type: 'component', label: 'Component Diagram', description: 'Software components and interfaces', icon: '' }
+      ]
+    }
+
+    // Prepend auto-detect option
+    diagramTypes.unshift({
+      type: null,
+      label: 'Auto-detect',
+      description: 'Let AI choose based on document content (recommended for ASCII diagrams)',
+      icon: '🤖'
+    })
+
+    const examples = this._getDiagramExamples()
+    const fileName = docPath.split('/').pop()
+    const hasExistingElements = this.excalidrawAPI
+      ? (this.excalidrawAPI.getSceneElements() || []).length > 0
+      : this.elements.length > 0
+
+    const modal = document.createElement('div')
+    modal.className = 'excalidraw-modal-overlay'
+    modal.setAttribute('role', 'dialog')
+    modal.setAttribute('aria-modal', 'true')
+    modal.setAttribute('aria-label', 'Configure diagram generation')
+
+    const typeCards = diagramTypes.map((dt, i) =>
+      `<button class="diagram-type-card${i === 0 ? ' selected' : ''}" data-type="${dt.type || ''}"
+        role="radio" aria-checked="${i === 0 ? 'true' : 'false'}" aria-label="${this.escapeHtml(dt.label)}">
+        <div class="diagram-type-label">${this.escapeHtml(dt.label)}</div>
+        <div class="diagram-type-desc">${this.escapeHtml(dt.description || '')}</div>
+      </button>`
+    ).join('')
+
+    const firstType = diagramTypes[0]?.type || ''
+    const initialExamples = (examples[firstType] || []).map(ex =>
+      `<button class="example-prompt-btn" title="Use this prompt">${this.escapeHtml(ex)}</button>`
+    ).join('')
+
+    modal.innerHTML = `
+      <div class="excalidraw-modal diagram-prompt-modal">
+        <h3>Generate Diagram</h3>
+        <div class="diagram-prompt-doc">
+          <span class="diagram-prompt-doc-icon">📄</span>
+          <span class="diagram-prompt-doc-name">${this.escapeHtml(fileName)}</span>
+          <span class="diagram-prompt-doc-path">${this.escapeHtml(docPath)}</span>
+        </div>
+
+        ${hasExistingElements ? `
+        <div class="diagram-canvas-mode" role="group" aria-label="Canvas mode">
+          <label class="diagram-prompt-label">Canvas</label>
+          <div class="diagram-mode-toggle">
+            <button class="diagram-mode-btn selected" data-mode="replace" aria-pressed="true">Replace canvas</button>
+            <button class="diagram-mode-btn" data-mode="merge" aria-pressed="false">Add to existing</button>
+          </div>
+        </div>
+        ` : ''}
+
+        <label class="diagram-prompt-label">Diagram Type</label>
+        <div class="diagram-type-grid" role="radiogroup" aria-label="Diagram type selection">
+          ${typeCards}
+        </div>
+
+        <label class="diagram-prompt-label" for="diagram-custom-prompt">Custom Instructions <span class="label-optional">(optional)</span></label>
+        <textarea id="diagram-custom-prompt" class="excalidraw-textarea"
+          placeholder="Describe what the diagram should focus on..."
+          rows="3" aria-label="Custom instructions for diagram generation"></textarea>
+
+        <div class="diagram-examples" id="diagram-examples">
+          <label class="diagram-prompt-label-small">Example prompts — click to use</label>
+          <div class="diagram-examples-list" id="diagram-examples-list">
+            ${initialExamples}
+          </div>
+        </div>
+
+        <div class="diagram-prompt-status" id="diagram-prompt-status" style="display:none">
+          <div class="diagram-prompt-loading">
+            <div class="loading-spinner"></div>
+            <span id="diagram-prompt-status-text">Generating diagram...</span>
+          </div>
+        </div>
+
+        <div class="diagram-prompt-error" id="diagram-prompt-error" style="display:none">
+          <span class="error-icon">✗</span>
+          <span id="diagram-prompt-error-text"></span>
+        </div>
+
+        <div class="modal-actions">
+          <button id="diagram-prompt-cancel" class="excalidraw-btn small" aria-label="Cancel">Cancel</button>
+          <button id="diagram-prompt-generate" class="excalidraw-btn small primary" aria-label="Generate diagram">Generate</button>
+        </div>
+      </div>
+    `
+
+    this._trackOverlay(modal)
+
+    // State
+    let selectedType = firstType || undefined
+    let selectedMode = 'replace'
+    let isGenerating = false
+    const customPromptEl = modal.querySelector('#diagram-custom-prompt')
+    const examplesList = modal.querySelector('#diagram-examples-list')
+    const statusEl = modal.querySelector('#diagram-prompt-status')
+    const statusText = modal.querySelector('#diagram-prompt-status-text')
+    const errorEl = modal.querySelector('#diagram-prompt-error')
+    const errorText = modal.querySelector('#diagram-prompt-error-text')
+    const generateBtn = modal.querySelector('#diagram-prompt-generate')
+    const cancelBtn = modal.querySelector('#diagram-prompt-cancel')
+    const typeGrid = modal.querySelector('.diagram-type-grid')
+    const modeToggle = modal.querySelector('.diagram-mode-toggle')
+
+    customPromptEl.focus()
+
+    // Mode toggle (replace/merge)
+    if (modeToggle) {
+      modeToggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('.diagram-mode-btn')
+        if (!btn || isGenerating) return
+
+        modeToggle.querySelectorAll('.diagram-mode-btn').forEach(b => {
+          b.classList.remove('selected')
+          b.setAttribute('aria-pressed', 'false')
+        })
+        btn.classList.add('selected')
+        btn.setAttribute('aria-pressed', 'true')
+        selectedMode = btn.dataset.mode
+      })
+    }
+
+    const closeModal = () => {
+      if (isGenerating) return // Don't close while generating
+      this._removeOverlay(modal)
+    }
+
+    // Focus trap
+    this._trapFocus(modal)
+
+    // Diagram type selection
+    typeGrid.addEventListener('click', (e) => {
+      const card = e.target.closest('.diagram-type-card')
+      if (!card || isGenerating) return
+
+      typeGrid.querySelectorAll('.diagram-type-card').forEach(c => {
+        c.classList.remove('selected')
+        c.setAttribute('aria-checked', 'false')
+      })
+      card.classList.add('selected')
+      card.setAttribute('aria-checked', 'true')
+      selectedType = card.dataset.type || undefined
+
+      // Update example prompts
+      const typeExamples = examples[selectedType] || []
+      examplesList.innerHTML = typeExamples.map(ex =>
+        `<button class="example-prompt-btn" title="Use this prompt">${this.escapeHtml(ex)}</button>`
+      ).join('')
+
+      // Clear error
+      errorEl.style.display = 'none'
+    })
+
+    // Keyboard navigation for type cards
+    typeGrid.addEventListener('keydown', (e) => {
+      if (isGenerating) return
+      const cards = Array.from(typeGrid.querySelectorAll('.diagram-type-card'))
+      const currentIdx = cards.findIndex(c => c.classList.contains('selected'))
+
+      let nextIdx = -1
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        nextIdx = currentIdx < cards.length - 1 ? currentIdx + 1 : 0
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        nextIdx = currentIdx > 0 ? currentIdx - 1 : cards.length - 1
+      }
+
+      if (nextIdx >= 0) {
+        cards[nextIdx].click()
+        cards[nextIdx].focus()
+      }
+    })
+
+    // Example prompts — click to populate textarea
+    examplesList.addEventListener('click', (e) => {
+      const btn = e.target.closest('.example-prompt-btn')
+      if (!btn || isGenerating) return
+      customPromptEl.value = btn.textContent
+      customPromptEl.focus()
+    })
+
+    // Escape / click-outside (cancel button handled below with generation-aware logic)
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal()
+    })
+    modal.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal()
+    })
+
+    // Generate
+    let elapsedTimer = null
+    let cancelled = false
+
+    const stopElapsedTimer = () => {
+      if (elapsedTimer) {
+        clearInterval(elapsedTimer)
+        elapsedTimer = null
+      }
+    }
+
+    const showError = (message) => {
+      stopElapsedTimer()
+      statusEl.style.display = 'none'
+      errorEl.style.display = 'flex'
+      errorText.textContent = message
+      generateBtn.disabled = false
+      generateBtn.textContent = 'Retry'
+      cancelBtn.textContent = 'Cancel'
+      cancelBtn.disabled = false
+      isGenerating = false
+      cancelled = false
+    }
+
+    generateBtn.addEventListener('click', async () => {
+      if (isGenerating) return
+      isGenerating = true
+      cancelled = false
+
+      // Show loading state
+      generateBtn.disabled = true
+      generateBtn.textContent = 'Generating...'
+      cancelBtn.disabled = false
+      cancelBtn.textContent = 'Cancel Generation'
+      statusEl.style.display = 'block'
+      statusText.textContent = `Generating ${selectedType} diagram...`
+      errorEl.style.display = 'none'
+
+      // Elapsed time counter
+      const startTime = Date.now()
+      elapsedTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000)
+        if (elapsed < 60) {
+          statusText.textContent = `Generating ${selectedType} diagram... (${elapsed}s)`
+        } else {
+          const mins = Math.floor(elapsed / 60)
+          const secs = elapsed % 60
+          statusText.textContent = `Generating ${selectedType} diagram... (${mins}m ${secs}s)`
+        }
+      }, 1000)
+
+      const customPrompt = customPromptEl.value.trim() || undefined
+
+      try {
+        console.log('[ExcalidrawView] Invoking generateDiagram with:', { docPath, diagramType: selectedType, customPrompt })
+        const result = await window.puffin.plugins.invoke('excalidraw-plugin', 'generateDiagram', {
+          docPath: docPath,
+          diagramType: selectedType,
+          customPrompt
+        })
+
+        console.log('[ExcalidrawView] generateDiagram result:', result)
+        stopElapsedTimer()
+
+        if (cancelled) return // User cancelled while awaiting
+
+        if (result.success && result.elements) {
+          console.log('[ExcalidrawView] Generation successful, element count:', result.elements?.length)
+          this._removeOverlay(modal)
+          await this.loadDiagramResponse(result, { mode: selectedMode })
+        } else {
+          console.error('[ExcalidrawView] Generation failed or no elements:', result)
+          showError(result.error || 'Unknown error — check the document content and try again')
+        }
+      } catch (err) {
+        if (cancelled) return
+        console.error('[ExcalidrawView] Diagram generation failed:', err)
+
+        // Classify the error for user-friendly messaging
+        const message = err.message || 'Unknown error'
+        let userMessage
+        if (message.includes('timeout') || message.includes('ETIMEDOUT') || message.includes('timed out')) {
+          userMessage = 'Generation timed out — the document may be too large. Try a shorter document or simpler diagram type.'
+        } else if (message.includes('not available') || message.includes('not found')) {
+          userMessage = 'Claude service is not available. Make sure Claude CLI is installed and accessible.'
+        } else if (message.includes('invalid JSON') || message.includes('parse')) {
+          userMessage = 'Claude returned an unexpected response format. Try again — results may vary.'
+        } else {
+          userMessage = message
+        }
+        showError(userMessage)
+      }
+    })
+
+    // Cancel during generation
+    cancelBtn.addEventListener('click', () => {
+      if (isGenerating) {
+        cancelled = true
+        isGenerating = false
+        stopElapsedTimer()
+        this._removeOverlay(modal)
+        this.showNotification('Diagram generation cancelled', 'info')
+        return
+      }
+      closeModal()
+    })
+
+    // Ctrl+Enter to generate
+    customPromptEl.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        generateBtn.click()
+      }
+    })
+  }
+
   // ============ Canvas Placeholder ============
 
   /**
@@ -1342,6 +2041,7 @@ export class ExcalidrawView {
    */
   destroy() {
     document.removeEventListener('keydown', this._keyboardHandler)
+    clearTimeout(this._autoSaveTimeout)
 
     // Remove any open modals or notifications appended to document.body
     for (const el of this._activeOverlays) {

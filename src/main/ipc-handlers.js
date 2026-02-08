@@ -1585,6 +1585,60 @@ function setupFileHandlers(ipcMain) {
       return { success: false, error: error.message }
     }
   })
+
+  // Select a markdown file from the project's docs directory
+  ipcMain.handle('file:selectMarkdown', async (event, options = {}) => {
+    try {
+      if (!projectPath) {
+        return { success: false, error: 'No project is open' }
+      }
+
+      // Default to project root; prefer docs/ subdirectory if it exists
+      let defaultDir = projectPath
+      const docsDir = path.join(projectPath, 'docs')
+      try {
+        const stat = await fs.promises.stat(docsDir)
+        if (stat.isDirectory()) {
+          defaultDir = docsDir
+        }
+      } catch {
+        // docs/ doesn't exist — fall back to project root
+      }
+
+      const result = await dialog.showOpenDialog({
+        title: options.title || 'Select Markdown Document',
+        defaultPath: defaultDir,
+        filters: [
+          { name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }
+        ],
+        properties: ['openFile']
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: true, filePath: null, relativePath: null }
+      }
+
+      const selectedPath = result.filePaths[0]
+
+      // Validate the selected file is within the project directory
+      const normalizedSelected = path.resolve(selectedPath)
+      const normalizedRoot = path.resolve(projectPath)
+      if (!normalizedSelected.startsWith(normalizedRoot)) {
+        return { success: false, error: 'Selected file must be within the project directory' }
+      }
+
+      // Return both absolute and relative paths
+      const relativePath = path.relative(projectPath, normalizedSelected).replace(/\\/g, '/')
+
+      return {
+        success: true,
+        filePath: normalizedSelected,
+        relativePath
+      }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
 }
 
 /**
@@ -2805,6 +2859,14 @@ function setClaudeServicePluginManager(pluginManager) {
   }
 }
 
+/**
+ * Get the Claude service instance
+ * @returns {ClaudeService|null}
+ */
+function getClaudeService() {
+  return claudeService
+}
+
 module.exports = {
   setupIpcHandlers,
   setupPluginHandlers,
@@ -2812,5 +2874,6 @@ module.exports = {
   setupViewRegistryHandlers,
   setupPluginStyleHandlers,
   getPuffinState,
+  getClaudeService,
   setClaudeServicePluginManager
 }

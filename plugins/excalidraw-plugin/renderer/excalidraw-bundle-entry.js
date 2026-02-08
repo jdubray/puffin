@@ -7,7 +7,7 @@
  */
 import React from 'react'
 import ReactDOM from 'react-dom'
-import { Excalidraw, exportToCanvas, exportToSvg, exportToBlob } from '@excalidraw/excalidraw'
+import { Excalidraw, exportToCanvas, exportToSvg, exportToBlob, convertToExcalidrawElements } from '@excalidraw/excalidraw'
 
 window.React = React
 window.ReactDOM = ReactDOM
@@ -15,3 +15,4 @@ window.Excalidraw = Excalidraw
 window.exportToCanvas = exportToCanvas
 window.exportToSvg = exportToSvg
 window.exportToBlob = exportToBlob
+window.convertToExcalidrawElements = convertToExcalidrawElements

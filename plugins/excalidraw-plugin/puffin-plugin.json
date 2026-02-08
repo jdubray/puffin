@@ -18,7 +18,11 @@
       "excalidraw:renameDesign",
       "excalidraw:checkNameUnique",
       "excalidraw:exportDesign",
-      "excalidraw:importDesign"
+      "excalidraw:importDesign",
+      "excalidraw:buildDiagramPrompt",
+      "excalidraw:getDiagramTypes",
+      "excalidraw:generateDiagram",
+      "excalidraw:listMarkdownFiles"
     ],
     "components": ["excalidraw-view"]
   },

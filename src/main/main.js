@@ -9,7 +9,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, setClaudeServicePluginManager } = require('./ipc-handlers')
+const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 
 // Keep a global reference of the window object
@@ -363,7 +363,8 @@ app.whenReady().then(async () => {
         ipcMain: ipcMain,
         services: {
           history: historyService,
-          stories: storyService
+          stories: storyService,
+          claudeService: getClaudeService()
         },
         projectPath: currentProjectPath
       })

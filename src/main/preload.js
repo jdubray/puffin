@@ -337,7 +337,8 @@ contextBridge.exposeInMainWorld('puffin', {
   file: {
     export: (data) => ipcRenderer.invoke('file:export', data),
     import: (type) => ipcRenderer.invoke('file:import', type),
-    saveMarkdown: (content) => ipcRenderer.invoke('file:saveMarkdown', content)
+    saveMarkdown: (content) => ipcRenderer.invoke('file:saveMarkdown', content),
+    selectMarkdown: (options) => ipcRenderer.invoke('file:selectMarkdown', options)
   },
 
   /**

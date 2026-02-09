@@ -9,25 +9,25 @@
 ## Overview: Specification to Deployment Pipeline (v3.0.0)
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                      PUFFIN v3.0.0 WORKFLOW OVERVIEW                            │
-│                                                                                 │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                      PUFFIN v3.0.0 WORKFLOW OVERVIEW                                 │
+│                                                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌──────────┐ │
 │  │ SPECIFY  │─►│  DERIVE  │─►│  CREATE  │─►│   CRE    │─►│ORCHESTRATE│─►│   CODE   │ │
-│  │          │  │ STORIES  │  │  SPRINT  │  │ PLAN+RIS │  │   IMPL   │  │  REVIEW  │ │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘ │
-│                                                                   │                 │
-│                                                                   ▼                 │
+│  │          │  │ STORIES  │  │  SPRINT  │  │ PLAN+RIS │  │   IMPL    │  │  REVIEW  │ │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └───────────┘  └──────────┘ │
+│                                                                   │                  │
+│                                                                   ▼                  │
 │                                                           ┌──────────────┐           │
 │                                                           │   DEPLOY     │           │
 │                                                           └──────────────┘           │
-│                                                                                 │
-│  Key Changes in v3.0.0:                                                         │
-│  • CRE Two-Stage Planning: Plan (high-level) → RIS (directive specs)           │
-│  • Automated Orchestration: Multi-turn implementation with auto-continuation    │
-│  • Code Review Phase: Assertion evaluation and completion summary               │
-│  • SQLite Database: All state persisted to .puffin/puffin.db                   │
-└─────────────────────────────────────────────────────────────────────────────────┘
+│                                                                                      │
+│  Key Changes in v3.0.0:                                                              │
+│  • CRE Two-Stage Planning: Plan (high-level) → RIS (directive specs)                 │
+│  • Automated Orchestration: Multi-turn implementation with auto-continuation         │
+│  • Code Review Phase: Assertion evaluation and completion summary                    │
+│  • SQLite Database: All state persisted to .puffin/puffin.db                         │
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -119,10 +119,10 @@
 │                     │  │ • title                    │  │                        │
 │                     │  │ • description              │  │                        │
 │                     │  │ • acceptanceCriteria[]     │  │                        │
-│                     │  │ • inspectionAssertions[]   │  │ (generated when added │
-│                     │  │ • status: 'pending'        │  │  to sprint)           │
+│                     │  │ • inspectionAssertions[]   │  │ (generated when added  │
+│                     │  │ • status: 'pending'        │  │  to sprint)            │
 │                     │  │ • implementedOn: []        │  │                        │
-│                     │  │ • completionSummary: null  │  │ (added on completion) │
+│                     │  │ • completionSummary: null  │  │ (added on completion)  │
 │                     │  └────────────────────────────┘  │                        │
 │                     │           │                      │                        │
 │                     │           ▼                      │                        │
@@ -209,11 +209,11 @@
 │                    ┌───────────────┼───────────────┐                            │
 │                    │               │               │                            │
 │                    ▼               ▼               ▼                            │
-│         ┌─────────────────┐  ┌─────────────┐  ┌─────────────┐                  │
-│         │ cre:refine-plan │  │cre:approve- │  │  Continue   │                  │
-│         │  with feedback  │  │    plan     │  │   review    │                  │
-│         │  (loop back)    │  │             │  │             │                  │
-│         └─────────────────┘  └──────┬──────┘  └─────────────┘                  │
+│         ┌─────────────────┐  ┌─────────────┐  ┌─────────────┐                   │
+│         │ cre:refine-plan │  │cre:approve- │  │  Continue   │                   │
+│         │  with feedback  │  │    plan     │  │   review    │                   │
+│         │  (loop back)    │  │             │  │             │                   │
+│         └─────────────────┘  └──────┬──────┘  └─────────────┘                   │
 │                                     │                                           │
 │                                     ▼                                           │
 │  ╔═══════════════════════════════════════════════════════════════════════════╗  │
@@ -420,27 +420,27 @@
 │  │                                                                          │   │
 │  │  Completion Summary:                                                     │   │
 │  │  ┌────────────────────────────────────────────────────────────────────┐  │   │
-│  │  │ Story 1: User authentication login flow                           │  │   │
-│  │  │  Summary: Implemented login form with JWT auth and bcrypt         │  │   │
-│  │  │  Files Modified: src/auth/login.js, src/auth/auth-service.js      │  │   │
-│  │  │  Tests: ✓ Passed (12 tests)                                       │  │   │
-│  │  │  Cost: $0.45  Duration: 3m 15s  Turns: 8                          │  │   │
+│  │  │ Story 1: User authentication login flow                            │  │   │
+│  │  │  Summary: Implemented login form with JWT auth and bcrypt          │  │   │
+│  │  │  Files Modified: src/auth/login.js, src/auth/auth-service.js       │  │   │
+│  │  │  Tests: ✓ Passed (12 tests)                                        │  │   │
+│  │  │  Cost: $0.45  Duration: 3m 15s  Turns: 8                           │  │   │
 │  │  │                                                                    │  │   │
-│  │  │ Story 2: Dashboard data visualization                             │  │   │
-│  │  │  Summary: Added Chart.js integration with real-time updates       │  │   │
-│  │  │  Files Modified: src/dashboard/Chart.js, src/api/data.js          │  │   │
-│  │  │  Tests: ✓ Passed (8 tests)                                        │  │   │
-│  │  │  Cost: $0.38  Duration: 2m 45s  Turns: 6                          │  │   │
+│  │  │ Story 2: Dashboard data visualization                              │  │   │
+│  │  │  Summary: Added Chart.js integration with real-time updates        │  │   │
+│  │  │  Files Modified: src/dashboard/Chart.js, src/api/data.js           │  │   │
+│  │  │  Tests: ✓ Passed (8 tests)                                         │  │   │
+│  │  │  Cost: $0.38  Duration: 2m 45s  Turns: 6                           │  │   │
 │  │  └────────────────────────────────────────────────────────────────────┘  │   │
 │  │                                                                          │   │
 │  │  Inspection Assertions:                                                  │   │
 │  │  ┌────────────────────────────────────────────────────────────────────┐  │   │
-│  │  │ Total: 24  Passed: 22  Failed: 2  Undecided: 0                    │  │   │
+│  │  │ Total: 24  Passed: 22  Failed: 2  Undecided: 0                     │  │   │
 │  │  │                                                                    │  │   │
-│  │  │ ✓ FILE_EXISTS: src/auth/login.js                                  │  │   │
-│  │  │ ✓ EXPORT_EXISTS: LoginForm (class)                                │  │   │
-│  │  │ ✗ PATTERN_MATCH: password validation (not found)                  │  │   │
-│  │  │ ✓ IPC_HANDLER_REGISTERED: auth:login                              │  │   │
+│  │  │ ✓ FILE_EXISTS: src/auth/login.js                                   │  │   │
+│  │  │ ✓ EXPORT_EXISTS: LoginForm (class)                                 │  │   │
+│  │  │ ✗ PATTERN_MATCH: password validation (not found)                   │  │   │
+│  │  │ ✓ IPC_HANDLER_REGISTERED: auth:login                               │  │   │
 │  │  │ ...                                                                │  │   │
 │  │  └────────────────────────────────────────────────────────────────────┘  │   │
 │  │                                                                          │   │
@@ -450,11 +450,11 @@
 │                    ┌───────────────┼───────────────┐                            │
 │                    │               │               │                            │
 │                    ▼               ▼               ▼                            │
-│         ┌─────────────────┐  ┌─────────────┐  ┌─────────────┐                  │
-│         │ state:evaluate  │  │state:close  │  │   Cancel    │                  │
-│         │   Assertions    │  │   Sprint    │  │             │                  │
-│         │  (re-evaluate)  │  │             │  │             │                  │
-│         └─────────────────┘  └──────┬──────┘  └─────────────┘                  │
+│         ┌─────────────────┐  ┌─────────────┐  ┌─────────────┐                   │
+│         │ state:evaluate  │  │state:close  │  │   Cancel    │                   │
+│         │   Assertions    │  │   Sprint    │  │             │                   │
+│         │  (re-evaluate)  │  │             │  │             │                   │
+│         └─────────────────┘  └──────┬──────┘  └─────────────┘                   │
 │                                     │                                           │
 │                                     ▼                                           │
 │                     ┌────────────────────────────────────┐                      │

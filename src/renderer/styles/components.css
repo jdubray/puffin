@@ -2358,12 +2358,48 @@
   margin: 0;
 }
 
+/* Prompt separator (draggable resize handle) */
+.prompt-separator {
+  flex-shrink: 0;
+  height: 6px;
+  background: var(--border-color);
+  cursor: ns-resize;
+  position: relative;
+  transition: background 0.2s ease;
+}
+
+.prompt-separator:hover {
+  background: var(--primary-color);
+}
+
+.prompt-separator-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 4px;
+  background: var(--text-secondary);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.prompt-separator:hover .prompt-separator-handle {
+  background: white;
+}
+
 .prompt-area {
   padding: 1rem 1.5rem;
   background: var(--bg-secondary);
+  flex-shrink: 0;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .prompt-area textarea {
+  flex: 1;
   min-height: 100px;
   resize: none;
 }
@@ -2379,9 +2415,9 @@
   flex-wrap: wrap;
   column-gap: 1.5rem;
   row-gap: 0.5rem;
-  margin-top: 0.5rem;
   padding: 0.5rem 0;
   align-items: center;
+  flex-shrink: 0;
 }
 
 /* Model selector in prompt area */
@@ -2419,9 +2455,9 @@
 .prompt-actions {
   display: flex;
   gap: 0.5rem;
-  margin-top: 0.75rem;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 /* Button positioning for the new layout */
@@ -11532,6 +11568,105 @@
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border-color);
+}
+
+.cre-progress-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.cre-progress-column h4 {
+  margin: 0 0 1rem 0;
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.cre-progress-column-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.cre-column-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.cre-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.cre-item-header strong {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.cre-item-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 0.125rem 0.5rem;
+  border-radius: 10px;
+}
+
+.cre-item-content {
+  margin: 0;
+  padding: 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.cre-assertions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cre-assertion-item {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.cre-assertion-type {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+}
+
+.cre-assertion-desc {
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 /* ===== Plan Iteration Modal ===== */

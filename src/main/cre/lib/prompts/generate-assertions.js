@@ -81,12 +81,22 @@ ${ac}
 ${risMarkdown}
 --- END RIS ---
 
-Generate 3-6 assertions that verify the most critical aspects of this implementation.
+Generate 5-8 assertions that verify the most critical aspects of this implementation.
+
+IMPORTANT: Extract concrete, verifiable assertions from the RIS content. For each file, function, class, or integration point mentioned in the RIS:
+1. Create a file_exists assertion for any new files/directories mentioned
+2. Create function_exists assertions for key functions specified in the RIS
+3. Create export_exists assertions for modules that should export specific identifiers
+4. Create pattern_match assertions for critical code patterns or API calls mentioned
+
 Focus on:
-- File/directory existence mentioned in RIS
-- Key functions and exports specified in RIS
-- Integration patterns described in RIS
-- Critical acceptance criteria from the story`;
+- EVERY file/directory creation mentioned in RIS
+- EVERY key function name specified in RIS
+- EVERY export mentioned in RIS
+- Integration patterns and API calls described in RIS
+- Critical acceptance criteria from the story
+
+The RIS contains specific implementation details - use them to generate precise, targeted assertions.`;
   } else if (planItem) {
     // Legacy plan-based assertion generation (fallback)
     task = `Generate inspection assertions for the following plan item.
@@ -127,7 +137,7 @@ Generate 2-5 assertions that verify the most critical aspects of this implementa
       "criterion": "<which acceptance criterion this verifies>",
       "type": "file_exists" | "function_exists" | "export_exists" | "pattern_match",
       "target": "<file path relative to project root>",
-      "message": "<human-readable description>",
+      "description": "<human-readable description of what this verifies>",
       "assertion": {
         // For file_exists: { "kind": "file" | "directory" }
         // For function_exists: { "name": "<function name>" }
@@ -139,10 +149,12 @@ Generate 2-5 assertions that verify the most critical aspects of this implementa
 }
 
 RULES:
-- Generate 2-5 assertions per story, focusing on critical verifications
+- Generate 5-8 assertions per story based on RIS content, or 2-5 if no RIS available
+- Create at least one assertion for EACH concrete implementation detail in the RIS (files, functions, exports)
 - Use relative paths from project root
 - Each assertion ID must be unique
-- The criterion field should reference the specific acceptance criterion number
+- The criterion field should reference the specific acceptance criterion number (or "general" if not tied to specific AC)
+- Use "description" field (not "message") for the human-readable text
 - Do NOT use markdown code blocks — output raw JSON only`;
 
   return { system, task, constraints };

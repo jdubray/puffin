@@ -197,7 +197,7 @@ class AssertionGenerator {
    * @throws {Error} If type is not supported.
    */
   _validateAssertion(assertion) {
-    const { type, target, message, assertion: data } = assertion;
+    const { type, target, message, description, assertion: data } = assertion;
 
     if (!type || !VALID_TYPES.has(type)) {
       throw new Error(`Unsupported assertion type: ${type}. Valid: ${[...VALID_TYPES].join(', ')}`);
@@ -210,7 +210,7 @@ class AssertionGenerator {
       id: uuidv4(), // Always generate a unique ID — AI-generated IDs (e.g. "IA001") collide across stories
       type,
       target,
-      message: message || '',
+      message: description || message || '', // Accept both "description" (new) and "message" (legacy)
       assertion: data || {}
     };
   }

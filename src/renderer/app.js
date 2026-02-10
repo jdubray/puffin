@@ -310,6 +310,16 @@ class PuffinApp {
           `).join('')}
         </ul>
         <div class="cre-progress-detail"></div>
+        <div class="cre-progress-columns">
+          <div class="cre-progress-column">
+            <h4>RIS (Requirements, Interfaces, Structures)</h4>
+            <div class="cre-progress-column-content" id="cre-ris-content"></div>
+          </div>
+          <div class="cre-progress-column">
+            <h4>Inspection Assertions</h4>
+            <div class="cre-progress-column-content" id="cre-assertions-content"></div>
+          </div>
+        </div>
       </div>
     `
     document.body.appendChild(modal)
@@ -320,8 +330,9 @@ class PuffinApp {
    * @param {string} stepId - Step identifier
    * @param {'active'|'completed'|'error'} status
    * @param {string} [detail] - Optional detail text shown at the bottom
+   * @param {Object} [data] - Optional data for columns (risData, assertionsData)
    */
-  updateCreProgressStep(stepId, status, detail) {
+  updateCreProgressStep(stepId, status, detail, data) {
     const modal = document.getElementById('cre-progress-modal')
     if (!modal) return
 
@@ -333,6 +344,47 @@ class PuffinApp {
     if (detail) {
       const detailEl = modal.querySelector('.cre-progress-detail')
       if (detailEl) detailEl.textContent = detail
+    }
+
+    // Update RIS column if data provided
+    if (data?.risData) {
+      const risContent = modal.querySelector('#cre-ris-content')
+      if (risContent) {
+        const risItem = document.createElement('div')
+        risItem.className = 'cre-column-item'
+        risItem.innerHTML = `
+          <div class="cre-item-header">
+            <strong>${this.escapeHtml(data.storyTitle || 'Story')}</strong>
+          </div>
+          <pre class="cre-item-content">${this.escapeHtml(data.risData)}</pre>
+        `
+        risContent.appendChild(risItem)
+      }
+    }
+
+    // Update Assertions column if data provided
+    if (data?.assertions) {
+      const assertionsContent = modal.querySelector('#cre-assertions-content')
+      if (assertionsContent) {
+        const assertItem = document.createElement('div')
+        assertItem.className = 'cre-column-item'
+        const assertions = Array.isArray(data.assertions) ? data.assertions : []
+        assertItem.innerHTML = `
+          <div class="cre-item-header">
+            <strong>${this.escapeHtml(data.storyTitle || 'Story')}</strong>
+            <span class="cre-item-count">${assertions.length} assertion${assertions.length !== 1 ? 's' : ''}</span>
+          </div>
+          <ul class="cre-assertions-list">
+            ${assertions.map(a => `
+              <li class="cre-assertion-item">
+                <span class="cre-assertion-type">${this.escapeHtml(a.type || 'unknown')}</span>
+                <span class="cre-assertion-desc">${this.escapeHtml(a.description || '')}</span>
+              </li>
+            `).join('')}
+          </ul>
+        `
+        assertionsContent.appendChild(assertItem)
+      }
     }
   }
 
@@ -1351,6 +1403,9 @@ Please provide specific file locations and line numbers where issues are found, 
     // Sidebar resizer
     this.setupSidebarResize()
 
+    // Prompt area resizer
+    this.setupPromptResize()
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       this.handleKeyDown(e)
@@ -1607,6 +1662,56 @@ Please provide specific file locations and line numbers where issues are found, 
       if (isResizing) {
         isResizing = false
         resizer.classList.remove('resizing')
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    })
+  }
+
+  /**
+   * Setup prompt area resize functionality
+   */
+  setupPromptResize() {
+    const promptArea = document.getElementById('prompt-area')
+    const separator = document.getElementById('prompt-separator')
+
+    if (!promptArea || !separator) return
+
+    let isResizing = false
+    let startY = 0
+    let startHeight = 0
+
+    separator.addEventListener('mousedown', (e) => {
+      isResizing = true
+      startY = e.clientY
+      startHeight = promptArea.offsetHeight
+
+      separator.classList.add('resizing')
+      document.body.style.cursor = 'ns-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
+    })
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return
+
+      // Calculate new height (dragging down increases height, up decreases)
+      const deltaY = startY - e.clientY
+      const newHeight = startHeight + deltaY
+
+      // Set min/max height constraints
+      const minHeight = 150  // Minimum prompt area height
+      const maxHeight = window.innerHeight * 0.7  // Max 70% of viewport
+      const constrainedHeight = Math.max(minHeight, Math.min(newHeight, maxHeight))
+
+      promptArea.style.height = `${constrainedHeight}px`
+      e.preventDefault()
+    })
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false
+        separator.classList.remove('resizing')
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
       }
@@ -4812,7 +4917,10 @@ Keep it concise but informative. Use markdown formatting.`
         const risResult = await window.puffin.cre.generateRis({ planId, storyId: story.id })
         if (risResult.success) {
           risMap[story.id] = risResult.data
-          this.updateCreProgressStep(stepId, 'completed')
+          this.updateCreProgressStep(stepId, 'completed', null, {
+            storyTitle: story.title,
+            risData: risResult.data?.markdown || risResult.data || 'No RIS data'
+          })
         } else {
           console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
           risMap[story.id] = { error: risResult.error }
@@ -4852,7 +4960,10 @@ Keep it concise but informative. Use markdown formatting.`
         if (assertResult.success) {
           const assertions = assertResult.data?.assertions || []
           console.log(`[CRE] Generated ${assertions.length} assertions for story:`, story.id)
-          this.updateCreProgressStep(stepId, 'completed', `${assertions.length} assertions`)
+          this.updateCreProgressStep(stepId, 'completed', `${assertions.length} assertions`, {
+            storyTitle: story.title,
+            assertions: assertions
+          })
 
           // Always update sprint and user story state with assertions (even if empty).
           // The CRE IPC handler persists to user_stories DB directly, but we also

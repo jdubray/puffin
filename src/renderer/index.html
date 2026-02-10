@@ -36,7 +36,6 @@
         <!-- Designer is now provided by designer-plugin -->
         <button class="nav-btn" data-view="user-stories">Backlog</button>
         <button class="nav-btn" data-view="cli-output">CLI Output</button>
-        <button class="nav-btn" data-view="git">Git</button>
         <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn">Debug</button>
         <!-- Plugin nav buttons are inserted here dynamically -->
         <div id="plugin-nav-buttons"></div>
@@ -446,12 +445,16 @@
                 <button class="branch-tab" data-branch="tmp">Tmp</button>
               </div>
 
-              <div class="response-area">
+              <div class="response-area" id="response-area">
                 <div id="response-content" class="response-content">
                   <p class="placeholder">Select a thread and start a conversation with Claude...</p>
                 </div>
               </div>
-              <div class="prompt-area">
+              <!-- Resizable separator -->
+              <div class="prompt-separator" id="prompt-separator">
+                <div class="prompt-separator-handle"></div>
+              </div>
+              <div class="prompt-area" id="prompt-area">
                 <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
                 <div class="prompt-options">
                   <div class="prompt-option-group">
@@ -760,7 +763,7 @@
           </div>
         </section>
 
-        <!-- Git Panel View -->
+        <!-- Git Panel View (accessed via indicator, not tab) -->
         <section id="git-view" class="view">
           <div id="git-panel-view" class="view-content">
             <!-- Git panel content will be rendered dynamically by the GitPanelComponent -->

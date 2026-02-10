@@ -35,6 +35,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/release/v}
+          npm version $VERSION --no-git-tag-version
+        shell: bash
+
       - name: Build for ${{ matrix.platform }}
         run: npm run package -- --${{ matrix.platform }} --publish never
 

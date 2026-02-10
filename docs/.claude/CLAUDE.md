@@ -59,3 +59,13 @@ When deriving user stories, format them as:
 - Title: Brief descriptive name
 - Description: "As a [role], I want [feature] so that [benefit]"
 - Acceptance Criteria: Testable conditions for completion
+
+## Branch Memory (auto-extracted)
+
+### Architectural Decisions
+
+- Plugin architecture (like Excalidraw) integrates third-party React libraries. Requires careful isolation of onChange/setState cycles to prevent infinite recursion loops between plugin component lifecycle and host application state management.
+
+### Bug Patterns
+
+- Excalidraw infinite recursion occurs when onChange callback triggers setState that causes re-render, firing onChange again. Creates synchronous stack overflow in React reconciler and Excalidraw scene processing. Root causes: (1) ReactDOM.render() called inside onChange handler, (2) updateScene() mutation during onChange callback, (3) scene data with unstable object references causing false change detection on every render.

@@ -243,9 +243,21 @@ export class UserStoryReviewModalComponent {
             break
 
           case 'add-to-backlog':
-            const readyStories = state.pendingStories
+            // Query current state instead of using closure-captured state to avoid stale data
+            const currentState = window.puffinApp?.state?.storyDerivation
+            if (!currentState) {
+              console.error('[STORY-MODAL] Cannot add to backlog: storyDerivation state not found')
+              return
+            }
+            const readyStories = currentState.pendingStories
               .filter(s => s.status === 'ready')
             const readyIds = readyStories.map(s => s.id)
+            console.log('[STORY-MODAL] Adding to backlog:', {
+              totalPending: currentState.pendingStories.length,
+              readyCount: readyStories.length,
+              readyIds,
+              readyTitles: readyStories.map(s => s.title)
+            })
             // Add selected stories to backlog
             this.intents.addStoriesToBacklog(readyIds)
             break

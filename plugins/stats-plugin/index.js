@@ -11,6 +11,13 @@ try {
   // Metrics service unavailable (standalone testing or missing module)
 }
 
+// Known components instrumented with MetricsService
+// NOTE: If new components are added to the cognitive architecture, add them here
+const KNOWN_COMPONENTS = [
+  'claude-service', 'cre-plan', 'cre-ris', 'cre-assertion',
+  'hdsl-engine', 'memory-plugin', 'outcomes-plugin', 'skills-system'
+]
+
 const StatsPlugin = {
   context: null,
   historyService: null,
@@ -188,19 +195,19 @@ const StatsPlugin = {
 
   /**
    * Get metrics for cognitive architecture components from MetricsService.
-   * Falls back to null when MetricsService is unavailable.
+   * Falls back to empty object when MetricsService is unavailable.
    *
    * @param {Object} [options] - Filter options
    * @param {string} [options.component] - Filter by component (e.g. 'claude-service', 'cre-plan')
    * @param {string} [options.start_date] - ISO date filter start
    * @param {string} [options.end_date] - ISO date filter end
-   * @returns {Promise<Object|null>} Component metrics or null if unavailable
+   * @returns {Promise<Object>} Component metrics or empty object if unavailable
    */
   async getComponentMetrics(options = {}) {
     const ms = this._acquireMetricsService()
     if (!ms) {
       this.context.log.warn('MetricsService not available — cannot retrieve component metrics')
-      return null
+      return {}
     }
 
     try {
@@ -215,10 +222,7 @@ const StatsPlugin = {
       }
 
       // All components — query each known component
-      const components = [
-        'claude-service', 'cre-plan', 'cre-ris', 'cre-assertion',
-        'hdsl-engine', 'memory-plugin', 'outcomes-plugin'
-      ]
+      const components = KNOWN_COMPONENTS
 
       const results = {}
       for (const comp of components) {
@@ -231,7 +235,7 @@ const StatsPlugin = {
       return results
     } catch (err) {
       this.context.log.error('Failed to retrieve component metrics:', err.message)
-      return null
+      return {}
     }
   },
 
@@ -256,6 +260,8 @@ const StatsPlugin = {
       const prevPeriodStart = new Date(now.getTime() - days * 2 * 86400000).toISOString()
 
       // Query current and previous period events (complete events only carry metrics)
+      // SECURITY: limit is hardcoded. If made configurable, validate with:
+      // Math.min(Math.max(parseInt(limit, 10) || 1000, 1), 10000)
       const currentEvents = ms.queryEvents({
         event_type: 'complete',
         start_date: periodStart,
@@ -284,12 +290,12 @@ const StatsPlugin = {
       const uniqueStories = new Set(
         currentEvents.filter(e => e.story_id).map(e => e.story_id)
       )
-      const storyCount = uniqueStories.size || 1 // avoid division by zero
+      const storyCount = uniqueStories.size
       const perStory = {
-        storyCount: uniqueStories.size,
-        avgTokensPerStory: Math.round(current.totalTokens / storyCount),
-        avgCostPerStory: +(current.totalCost / storyCount).toFixed(4),
-        avgDurationPerStory: Math.round(current.totalDuration / storyCount)
+        storyCount,
+        avgTokensPerStory: storyCount > 0 ? Math.round(current.totalTokens / storyCount) : 0,
+        avgCostPerStory: storyCount > 0 ? +(current.totalCost / storyCount).toFixed(4) : 0,
+        avgDurationPerStory: storyCount > 0 ? Math.round(current.totalDuration / storyCount) : 0
       }
 
       return {
@@ -326,10 +332,7 @@ const StatsPlugin = {
       const periodStart = new Date(now.getTime() - days * 86400000).toISOString()
       const periodEnd = now.toISOString()
 
-      const allComponents = [
-        'claude-service', 'cre-plan', 'cre-ris', 'cre-assertion',
-        'hdsl-engine', 'memory-plugin', 'outcomes-plugin'
-      ]
+      const allComponents = KNOWN_COMPONENTS
 
       const componentResults = []
       for (const comp of allComponents) {
@@ -824,18 +827,33 @@ const StatsPlugin = {
    * @param {Object} data - Export data
    * @param {string} data.content - Markdown content
    * @param {string} data.filePath - Target file path
-   * @returns {Promise<Object>} Result
+   * @returns {Promise<Object>} Result with success indicator and error details
    */
   async saveMarkdownExport(data) {
     const { content, filePath } = data
     const fs = require('fs').promises
+    const path = require('path')
+
+    // Validate inputs
+    if (!filePath || typeof filePath !== 'string') {
+      return { success: false, error: 'Invalid file path' }
+    }
+    if (typeof content !== 'string') {
+      return { success: false, error: 'Invalid content (must be string)' }
+    }
+
+    // Resolve and validate path (prevent parent traversal)
+    const resolved = path.resolve(filePath)
+    if (resolved.includes('..')) {
+      return { success: false, error: 'Path traversal not allowed' }
+    }
 
     try {
-      await fs.writeFile(filePath, content, 'utf-8')
-      return { success: true, filePath }
+      await fs.writeFile(resolved, content, 'utf-8')
+      return { success: true, filePath: resolved }
     } catch (error) {
       this.context.log.error('Failed to save markdown export:', error.message)
-      throw error
+      return { success: false, error: error.message }
     }
   },
 

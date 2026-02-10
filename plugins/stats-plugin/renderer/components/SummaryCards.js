@@ -117,7 +117,7 @@ export class SummaryCards {
     }
 
     el.innerHTML = `
-      <div class="metrics-card-icon">${card.icon}</div>
+      <div class="metrics-card-icon">${this._escapeHtml(card.icon)}</div>
       <div class="metrics-card-body">
         <div class="metrics-card-value-row">
           <span class="metrics-card-value">${this._escapeHtml(card.value)}</span>

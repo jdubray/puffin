@@ -829,15 +829,12 @@ Rules:
       if (result.success) {
         this.showToast(`Successfully merged ${sourceBranch} into ${targetBranch}`, 'success')
 
-        // Switch back to original branch before showing post-merge dialog
-        if (needsCheckout) {
-          await window.puffin.git.checkout(originalBranch)
-        }
-
-        // Offer post-merge workflow
-        this.showPostMergeDialog(sourceBranch)
-
+        // Stay on the target branch so the merged source branch can be deleted
+        // (git cannot delete the currently checked-out branch)
         await this.refreshGitState()
+
+        // Offer post-merge workflow (delete source branch, create new branch)
+        this.showPostMergeDialog(sourceBranch)
       } else if (result.conflicts) {
         // Abort the conflicted merge and switch back
         if (needsCheckout) {

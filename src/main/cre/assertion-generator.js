@@ -143,7 +143,11 @@ class AssertionGenerator {
         model: MODEL_EXTRACT,
         timeout: TIMEOUT_EXTRACT,
         label: 'generate-assertions',
-        disableTools: true
+        disableTools: true,
+        metricsComponent: 'cre-assertion',
+        metricsOperation: 'generate-assertions',
+        storyId,
+        planId
       });
 
       if (aiResult.success && aiResult.data && Array.isArray(aiResult.data.assertions)) {

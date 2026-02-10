@@ -236,6 +236,24 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * Metrics operations
+   * Query and analyze cognitive architecture instrumentation metrics
+   */
+  metrics: {
+    // Query metrics events with filters
+    query: (filters) => ipcRenderer.invoke('metrics:query', filters),
+
+    // Get aggregated stats for a component
+    componentStats: (component, options) => ipcRenderer.invoke('metrics:componentStats', component, options),
+
+    // Get metrics for a specific story
+    storyMetrics: (storyId) => ipcRenderer.invoke('metrics:storyMetrics', storyId),
+
+    // Flush pending metrics to database
+    flush: () => ipcRenderer.invoke('metrics:flush')
+  },
+
+  /**
    * Claude CLI operations
    */
   claude: {

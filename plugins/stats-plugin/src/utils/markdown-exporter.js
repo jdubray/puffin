@@ -8,6 +8,10 @@ const {
   formatDuration,
   formatWeekShort,
   formatNumber,
+  formatTokens,
+  formatPercentChange,
+  formatComponentName,
+  renderSparkline,
   getDateRangeDescription
 } = require('./formatters')
 
@@ -119,8 +123,162 @@ function generateDefaultFilename() {
   return `stats-report-${date}.md`
 }
 
+/**
+ * Generate a complete metrics report in Markdown from aggregated metrics data.
+ *
+ * @param {Object} data - Metrics data object
+ * @param {Object} [data.summary] - Output from getMetricsSummary()
+ * @param {Object} [data.componentBreakdown] - Output from getComponentBreakdown()
+ * @param {Array}  [data.dailyTrends] - Output from getDailyTrends().days
+ * @param {Array}  [data.weeklyNormalized] - Output from getWeeklyNormalized().weeks
+ * @param {Object} [options]
+ * @param {string} [options.title] - Report title
+ * @returns {string} Markdown content
+ */
+function generateMetricsReport(data = {}, options = {}) {
+  const { title = 'Metrics Report' } = options
+  const lines = []
+  let hasSections = false
+
+  lines.push(`# ${escapeMarkdown(title)}`)
+  lines.push('')
+  lines.push(`*Generated on ${new Date().toISOString().split('T')[0]}*`)
+  lines.push('')
+
+  // ── Summary section ──────────────────────────────────────────
+  const summary = data.summary
+  if (summary && summary.current) {
+    hasSections = true
+    lines.push('## Summary')
+    lines.push('')
+    lines.push(`**Period**: ${summary.periodDays || 30} days`)
+    lines.push('')
+
+    const cur = summary.current
+    const cmp = summary.comparison || {}
+    const ps = summary.perStory || {}
+
+    const fmtOps = formatPercentChange(cmp.operations)
+    const fmtTokens = formatPercentChange(cmp.totalTokens)
+    const fmtCost = formatPercentChange(cmp.totalCost)
+
+    lines.push(`| Metric | Current | vs Previous |`)
+    lines.push(`|--------|--------:|------------:|`)
+    lines.push(`| Operations | ${formatNumber(cur.operations)} | ${escapeMarkdown(fmtOps.text)} |`)
+    lines.push(`| Tokens | ${formatTokens(cur.totalTokens)} | ${escapeMarkdown(fmtTokens.text)} |`)
+    lines.push(`| Cost | ${formatCost(cur.totalCost)} | ${escapeMarkdown(fmtCost.text)} |`)
+    lines.push(`| Avg Duration | ${formatDuration(cur.avgDuration)} | ${escapeMarkdown(fmtCost.text)} |`)
+    lines.push('')
+
+    if (ps.storyCount != null) {
+      lines.push(`### Per-Story Normalization (${ps.storyCount} stories)`)
+      lines.push('')
+      lines.push(`- Tokens/story: ${formatTokens(ps.avgTokensPerStory)}`)
+      lines.push(`- Cost/story: ${formatCost(ps.avgCostPerStory)}`)
+      lines.push(`- Duration/story: ${formatDuration(ps.avgDurationPerStory)}`)
+      lines.push('')
+    }
+  }
+
+  // ── Component breakdown ──────────────────────────────────────
+  const breakdown = data.componentBreakdown
+  if (breakdown && breakdown.components && breakdown.components.length > 0) {
+    hasSections = true
+    lines.push('## Component Breakdown')
+    lines.push('')
+    lines.push('| Component | Ops | Tokens | Cost | % Cost |')
+    lines.push('|-----------|----:|-------:|-----:|-------:|')
+    for (const c of breakdown.components) {
+      lines.push(
+        `| ${escapeMarkdown(formatComponentName(c.component))} | ${c.operations} | ${formatTokens(c.totalTokens)} | ${formatCost(c.totalCost)} | ${c.pctOfCost}% |`
+      )
+    }
+    lines.push('')
+  }
+
+  // ── Daily trends ─────────────────────────────────────────────
+  const dailyTrends = data.dailyTrends
+  if (Array.isArray(dailyTrends) && dailyTrends.length > 0) {
+    hasSections = true
+    const opsValues = dailyTrends.map(d => d.operations || 0)
+    const costValues = dailyTrends.map(d => d.totalCost || 0)
+
+    lines.push('## Daily Trends')
+    lines.push('')
+    lines.push(`Operations: ${renderSparkline(opsValues)}`)
+    lines.push(`Cost:       ${renderSparkline(costValues)}`)
+    lines.push('')
+    lines.push('| Date | Ops | Tokens | Cost |')
+    lines.push('|------|----:|-------:|-----:|')
+    for (const d of dailyTrends) {
+      if (d.operations === 0) continue // skip empty days for brevity
+      lines.push(`| ${d.date} | ${d.operations} | ${formatTokens(d.totalTokens)} | ${formatCost(d.totalCost)} |`)
+    }
+    lines.push('')
+  }
+
+  // ── Weekly normalized ────────────────────────────────────────
+  const weeklyNormalized = data.weeklyNormalized
+  if (Array.isArray(weeklyNormalized) && weeklyNormalized.length > 0) {
+    hasSections = true
+    lines.push('## Weekly Normalized')
+    lines.push('')
+    lines.push('| Week | Stories | Cost/Story | Tokens/Story | Dur/Op |')
+    lines.push('|------|--------:|-----------:|-------------:|-------:|')
+    for (const w of weeklyNormalized) {
+      lines.push(
+        `| ${escapeMarkdown(w.week)} | ${w.storyCount} | ${formatCost(w.costPerStory)} | ${formatTokens(w.tokensPerStory)} | ${formatDuration(w.durationPerOp)} |`
+      )
+    }
+    lines.push('')
+  }
+
+  if (!hasSections) {
+    lines.push('No metrics data available.')
+    lines.push('')
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Convert an array of objects to CSV format.
+ *
+ * @param {Array<Object>} rows - Data rows
+ * @param {Object} [options]
+ * @param {Array<string>} [options.columns] - Column names to include (default: all keys from first row)
+ * @param {string} [options.delimiter=','] - Field delimiter
+ * @returns {string} CSV string
+ */
+function generateCSV(rows, options = {}) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return ''
+  }
+
+  const delimiter = options.delimiter || ','
+  const columns = options.columns || Object.keys(rows[0])
+
+  const escapeCSVField = (value) => {
+    if (value == null) return ''
+    const str = String(value)
+    if (str.includes(delimiter) || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`
+    }
+    return str
+  }
+
+  const headerLine = columns.map(escapeCSVField).join(delimiter)
+  const dataLines = rows.map(row =>
+    columns.map(col => escapeCSVField(row[col])).join(delimiter)
+  )
+
+  return [headerLine, ...dataLines].join('\n')
+}
+
 module.exports = {
   generateMarkdown,
+  generateMetricsReport,
+  generateCSV,
   generateDefaultFilename,
   escapeMarkdown,
   computeTotals

@@ -124,7 +124,7 @@ class SynthesisEngine {
       try {
         this.logger.info(`[synthesis-engine] Claude invocation attempt ${attempt + 1}/${MAX_RETRIES + 1}`)
 
-        const rawResponse = await this.claudeClient.invoke(prompt, { model: 'haiku' })
+        const rawResponse = await this.claudeClient.invoke(prompt, { model: 'haiku', metricsOperation: 'outcome-synthesis' })
         const json = extractJson(rawResponse)
 
         if (!json) {

@@ -10,6 +10,13 @@
 
 const { spawn } = require('child_process')
 
+let _getMetricsService = null
+try {
+  _getMetricsService = require('../../../src/main/metrics-service').getMetricsService
+} catch {
+  // Metrics service unavailable (e.g. standalone testing) — will be null
+}
+
 /** Default timeout for LLM invocations (120 seconds) */
 const DEFAULT_TIMEOUT_MS = 120000
 
@@ -39,6 +46,8 @@ class ClaudeClient {
   async invoke(prompt, options = {}) {
     const model = options.model || this.model
     const timeoutMs = options.timeoutMs || this.timeoutMs
+    const metricsOperation = options.metricsOperation || 'invoke'
+    const startTime = Date.now()
 
     const args = ['--print', '--model', model, '--max-turns', '1', '--disallowedTools', 'AskUserQuestion']
 
@@ -46,6 +55,24 @@ class ClaudeClient {
       let stdout = ''
       let stderr = ''
       let timedOut = false
+
+      const recordMetrics = (success, extra = {}) => {
+        try {
+          const ms = _getMetricsService && _getMetricsService()
+          if (ms) {
+            const ctx = { branch_id: options.branchId }
+            if (success) {
+              ms.recordComplete('memory-plugin', metricsOperation, ctx,
+                { duration_ms: Date.now() - startTime },
+                { model, responseLength: stdout.length, ...extra })
+            } else {
+              ms.recordError('memory-plugin', metricsOperation, ctx,
+                extra.error || 'unknown error',
+                { duration_ms: Date.now() - startTime, model, ...extra })
+            }
+          }
+        } catch { /* metrics should never break caller */ }
+      }
 
       const proc = spawn(this.claudePath, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -55,6 +82,7 @@ class ClaudeClient {
       const timer = setTimeout(() => {
         timedOut = true
         proc.kill()
+        recordMetrics(false, { error: 'timeout', timeoutMs })
         reject(new Error(`Claude CLI timed out after ${timeoutMs}ms`))
       }, timeoutMs)
 
@@ -64,8 +92,10 @@ class ClaudeClient {
       proc.on('error', (err) => {
         clearTimeout(timer)
         if (err.code === 'ENOENT') {
+          recordMetrics(false, { error: 'ENOENT' })
           reject(new Error(`Claude CLI not found at "${this.claudePath}". Ensure it is installed and in PATH.`))
         } else {
+          recordMetrics(false, { error: err.message })
           reject(err)
         }
       })
@@ -75,12 +105,15 @@ class ClaudeClient {
         if (timedOut) return
 
         if (code === 0) {
+          recordMetrics(true)
           resolve(stdout.trim())
         } else {
           const lowerStderr = stderr.toLowerCase()
           if (lowerStderr.includes('rate limit')) {
+            recordMetrics(false, { error: 'rate-limit' })
             reject(new Error('Claude CLI rate limit exceeded'))
           } else {
+            recordMetrics(false, { error: `exit-code-${code}` })
             reject(new Error(`Claude CLI exited with code ${code}: ${stderr.trim()}`))
           }
         }

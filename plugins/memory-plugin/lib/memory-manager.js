@@ -118,7 +118,7 @@ class MemoryManager {
     const prompt = buildExtractionPrompt(prompts, branchId)
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const raw = await this.claudeClient.invoke(prompt)
+      const raw = await this.claudeClient.invoke(prompt, { metricsOperation: 'extraction', branchId })
       const json = extractJson(raw)
       const result = validateExtractionResponse(json)
 
@@ -145,7 +145,7 @@ class MemoryManager {
    */
   async _evolve(existingSections, newExtractions, branchId) {
     const prompt = buildEvolutionPrompt(existingSections, newExtractions, branchId)
-    const raw = await this.claudeClient.invoke(prompt)
+    const raw = await this.claudeClient.invoke(prompt, { metricsOperation: 'evolution', branchId })
     const json = extractJson(raw)
     const result = validateEvolutionResponse(json)
 

@@ -91,6 +91,11 @@ function parseJsonResponse(text) {
  * @param {Object|string} [options.jsonSchema] - JSON Schema for structured output via --json-schema.
  * @param {boolean} [options.disableTools] - Disable built-in and MCP tools (default: false).
  * @param {number} [options.maxTurns] - Override max turns (default: 1, or 4 when jsonSchema is used).
+ * @param {string} [options.metricsComponent] - Metrics component identifier (forwarded to sendPrompt).
+ * @param {string} [options.metricsOperation] - Metrics operation name (forwarded to sendPrompt).
+ * @param {string} [options.storyId] - Story ID for metrics context.
+ * @param {string} [options.planId] - Plan ID for metrics context.
+ * @param {string} [options.sprintId] - Sprint ID for metrics context.
  * @returns {Promise<{ success: boolean, data: Object|null, error: string|null, raw: string|null }>}
  */
 async function sendCrePrompt(claudeService, promptParts, options = {}) {
@@ -100,7 +105,12 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
     label = 'cre-prompt',
     jsonSchema = null,
     disableTools = false,
-    maxTurns = null
+    maxTurns = null,
+    metricsComponent = null,
+    metricsOperation = null,
+    storyId = null,
+    planId = null,
+    sprintId = null
   } = options;
 
   if (!claudeService) {
@@ -114,6 +124,12 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
     console.log(`[CRE-AI] Sending ${label} (model: ${model}, timeout: ${timeout}ms)`);
 
     const sendOptions = { model, maxTurns: maxTurns || 1, timeout, disableTools };
+    // Forward metrics context to sendPrompt for instrumentation tracking
+    if (metricsComponent) sendOptions.metricsComponent = metricsComponent;
+    if (metricsOperation) sendOptions.metricsOperation = metricsOperation;
+    if (storyId) sendOptions.storyId = storyId;
+    if (planId) sendOptions.planId = planId;
+    if (sprintId) sendOptions.sprintId = sprintId;
     if (jsonSchema) {
       sendOptions.jsonSchema = jsonSchema;
       // When tools are disabled, the model only needs enough turns for

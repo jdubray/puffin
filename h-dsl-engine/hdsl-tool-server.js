@@ -212,6 +212,21 @@ async function getModel() {
 // ---------------------------------------------------------------------------
 
 async function handleToolCall(name, args) {
+  const callStart = Date.now();
+  let result;
+  try {
+    result = await _executeToolCall(name, args);
+  } catch (err) {
+    const duration = Date.now() - callStart;
+    console.error(`[HDSL-METRICS] tool=${name} duration=${duration}ms error=${err.message}`);
+    throw err;
+  }
+  const duration = Date.now() - callStart;
+  console.error(`[HDSL-METRICS] tool=${name} duration=${duration}ms success=true`);
+  return result;
+}
+
+async function _executeToolCall(name, args) {
   const model = await getModel();
   const { schema, instance } = model;
 

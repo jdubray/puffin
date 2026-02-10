@@ -111,6 +111,106 @@ function formatNumber(num) {
 }
 
 /**
+ * Format a token count with abbreviation (e.g. 1500 → "1.5k", 2500000 → "2.5M")
+ * @param {number} tokens - Token count
+ * @returns {string} Abbreviated token string
+ */
+function formatTokens(tokens) {
+  if (tokens == null || typeof tokens !== 'number' || isNaN(tokens)) {
+    return '0'
+  }
+  if (tokens < 0) {
+    return '-' + formatTokens(-tokens)
+  }
+  if (tokens >= 1000000) {
+    const val = tokens / 1000000
+    return val % 1 === 0 ? `${val}M` : `${parseFloat(val.toFixed(1))}M`
+  }
+  if (tokens >= 1000) {
+    const val = tokens / 1000
+    return val % 1 === 0 ? `${val}k` : `${parseFloat(val.toFixed(1))}k`
+  }
+  return String(tokens)
+}
+
+/**
+ * Format a percentage change with +/- prefix and optional color hint.
+ * Returns an object with `text` (display string) and `direction` ('up'|'down'|'neutral').
+ *
+ * @param {number} pct - Percentage change value (e.g. 50 for +50%, -25 for -25%)
+ * @returns {{ text: string, direction: string }}
+ */
+function formatPercentChange(pct) {
+  if (pct == null || typeof pct !== 'number' || isNaN(pct)) {
+    return { text: '—', direction: 'neutral' }
+  }
+  if (pct === 0) {
+    return { text: '0%', direction: 'neutral' }
+  }
+  const sign = pct > 0 ? '+' : ''
+  const rounded = parseFloat(pct.toFixed(1))
+  return {
+    text: `${sign}${rounded}%`,
+    direction: pct > 0 ? 'up' : 'down'
+  }
+}
+
+/**
+ * Map of internal component identifiers to display-friendly names.
+ */
+const COMPONENT_DISPLAY_NAMES = {
+  'claude-service': 'Claude Service',
+  'cre-plan': 'CRE Plan Generator',
+  'cre-ris': 'CRE RIS Generator',
+  'cre-assertion': 'CRE Assertion Generator',
+  'hdsl-engine': 'h-DSL Engine',
+  'memory-plugin': 'Memory Plugin',
+  'outcomes-plugin': 'Outcomes Plugin',
+  'skills-system': 'Skills System'
+}
+
+/**
+ * Format a component identifier to a display-friendly name.
+ * @param {string} componentId - Internal component id (e.g. 'claude-service')
+ * @returns {string} Display name
+ */
+function formatComponentName(componentId) {
+  if (!componentId || typeof componentId !== 'string') {
+    return 'Unknown'
+  }
+  return COMPONENT_DISPLAY_NAMES[componentId] || componentId
+}
+
+/**
+ * Render a unicode sparkline from an array of numeric values.
+ * Uses the unicode block characters ▁▂▃▄▅▆▇█ to represent values.
+ *
+ * @param {Array<number>} values - Data points
+ * @param {Object} [options]
+ * @param {number} [options.min] - Explicit minimum (default: data min)
+ * @param {number} [options.max] - Explicit maximum (default: data max)
+ * @returns {string} Unicode sparkline string
+ */
+function renderSparkline(values, options = {}) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return ''
+  }
+
+  const bars = '▁▂▃▄▅▆▇█'
+  const nums = values.map(v => (typeof v === 'number' && !isNaN(v)) ? v : 0)
+
+  const min = options.min != null ? options.min : Math.min(...nums)
+  const max = options.max != null ? options.max : Math.max(...nums)
+  const range = max - min
+
+  return nums.map(v => {
+    if (range === 0) return bars[0]
+    const idx = Math.round(((v - min) / range) * (bars.length - 1))
+    return bars[Math.min(Math.max(idx, 0), bars.length - 1)]
+  }).join('')
+}
+
+/**
  * Get the date range description for a set of weekly stats
  * @param {Array} weeklyStats - Array of weekly stat objects with 'week' property
  * @returns {string} Date range description
@@ -140,5 +240,10 @@ module.exports = {
   formatWeekLabel,
   formatWeekShort,
   formatNumber,
+  formatTokens,
+  formatPercentChange,
+  formatComponentName,
+  renderSparkline,
+  COMPONENT_DISPLAY_NAMES,
   getDateRangeDescription
 }

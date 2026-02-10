@@ -102,7 +102,12 @@ class RISGenerator {
     const aiResult = await sendCrePrompt(this._claudeService, prompt, {
       model: MODEL_COMPLEX,
       timeout: TIMEOUT_COMPLEX,
-      label: 'generate-ris'
+      label: 'generate-ris',
+      metricsComponent: 'cre-ris',
+      metricsOperation: 'generate-ris',
+      storyId: userStoryId,
+      planId,
+      sprintId
     });
 
     if (aiResult.success && aiResult.data) {

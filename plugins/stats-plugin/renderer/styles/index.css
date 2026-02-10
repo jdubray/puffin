@@ -3,6 +3,11 @@
  */
 
 @import './stats-view.css';
+@import './summary-cards.css';
+@import './treemap.css';
+@import './daily-trends.css';
+@import './efficiency-chart.css';
+@import './performance-table.css';
 @import './stats-chart.css';
 @import './stats-table.css';
 @import './totals-row.css';

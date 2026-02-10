@@ -188,7 +188,9 @@ class Introspector {
       const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
         model: MODEL_EXTRACT,
         timeout: TIMEOUT_EXTRACT,
-        label: `infer-intent:${artifact.path}`
+        label: `infer-intent:${artifact.path}`,
+        metricsComponent: 'cre-plan',
+        metricsOperation: 'infer-intent'
       });
 
       if (aiResult.success && aiResult.data) {
@@ -231,7 +233,9 @@ class Introspector {
     const aiResult = await sendCrePrompt(this._claudeService, promptParts, {
       model: MODEL_EXTRACT,
       timeout: TIMEOUT_EXTRACT,
-      label: 'identify-schema-gaps'
+      label: 'identify-schema-gaps',
+      metricsComponent: 'cre-plan',
+      metricsOperation: 'identify-schema-gaps'
     });
 
     const extensions = [];

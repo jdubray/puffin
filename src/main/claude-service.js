@@ -16,6 +16,8 @@ const { spawn } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
+const { v4: uuidv4 } = require('uuid')
+const { getMetricsService, MetricComponent, MetricEventType } = require('./metrics-service')
 
 /**
  * Tool emoji mapping for different tool types
@@ -226,6 +228,28 @@ class ClaudeService {
     this._cancelRequested = false
     console.log('[CLAUDE-GUARD] Process lock acquired')
 
+    // Generate operation ID for tracking this session
+    const operationId = uuidv4()
+    const startTime = Date.now()
+
+    // Record start event
+    const metricsService = getMetricsService()
+    if (metricsService) {
+      metricsService.recordStart(
+        MetricComponent.CLAUDE_SERVICE,
+        'interactive-session',
+        {
+          session_id: operationId,
+          branch_id: data.branchId || this._currentBranchId
+        },
+        {
+          model: data.model,
+          resume: !!data.resume,
+          hasImages: data.images && data.images.length > 0
+        }
+      )
+    }
+
     // Build the prompt with project context (async for plugin-based branch context)
     const prompt = await this.buildPrompt(data)
 
@@ -372,6 +396,34 @@ class ClaudeService {
                   turns: response.turns,
                   exitCode: response.exitCode
                 })
+
+                // Record completion metrics
+                if (metricsService) {
+                  const endTime = Date.now()
+                  metricsService.recordComplete(
+                    MetricComponent.CLAUDE_SERVICE,
+                    'interactive-session',
+                    {
+                      session_id: json.session_id || operationId,
+                      branch_id: data.branchId || this._currentBranchId
+                    },
+                    {
+                      cost_usd: json.total_cost_usd,
+                      turns: json.num_turns,
+                      duration_ms: endTime - startTime,
+                      // Note: Claude CLI doesn't provide token counts in interactive mode
+                      total_tokens: null,
+                      input_tokens: null,
+                      output_tokens: null
+                    },
+                    {
+                      model: data.model,
+                      contentLength: responseContent?.length || 0,
+                      exitCode: 0
+                    }
+                  )
+                }
+
                 onComplete(response)
               }
             }
@@ -498,6 +550,18 @@ class ClaudeService {
         } else if (wasCancelled) {
           // User cancelled — treat as normal completion with partial content
           console.log('[CLAUDE-DEBUG] Process was cancelled by user')
+
+          // Record cancellation metrics
+          if (metricsService) {
+            metricsService.recordComplete(
+              MetricComponent.CLAUDE_SERVICE,
+              'interactive-session',
+              { session_id: resultData?.session_id || operationId, branch_id: data.branchId || this._currentBranchId },
+              { cost_usd: resultData?.total_cost_usd, turns: resultData?.num_turns, duration_ms: Date.now() - startTime },
+              { cancelled: true, exitCode: code }
+            )
+          }
+
           if (!completionCalled) {
             completionCalled = true
             const response = {
@@ -511,6 +575,18 @@ class ClaudeService {
         } else {
           const error = new Error(`Claude CLI exited with code ${code}: ${errorOutput}`)
           console.error('[CLAUDE-DEBUG] Process failed:', error.message)
+
+          // Record error metrics
+          if (metricsService) {
+            metricsService.recordError(
+              MetricComponent.CLAUDE_SERVICE,
+              'interactive-session',
+              { session_id: operationId, branch_id: data.branchId || this._currentBranchId },
+              error,
+              { exitCode: code, duration_ms: Date.now() - startTime }
+            )
+          }
+
           reject(error)
         }
       })
@@ -521,6 +597,18 @@ class ClaudeService {
         this._processLock = false
         console.log('[CLAUDE-GUARD] Process lock released (error)')
         console.error('Claude CLI spawn error:', error)
+
+        // Record spawn error metrics
+        if (metricsService) {
+          metricsService.recordError(
+            MetricComponent.CLAUDE_SERVICE,
+            'interactive-session',
+            { session_id: operationId, branch_id: data.branchId || this._currentBranchId },
+            error,
+            { phase: 'spawn', duration_ms: Date.now() - startTime }
+          )
+        }
+
         reject(error)
       })
     })
@@ -1297,6 +1385,15 @@ ${updatedContext}
     this._processLock = true
     console.log('[STORY-DERIVATION-GUARD] Process lock acquired')
 
+    // Metrics tracking
+    const deriveStartTime = Date.now()
+    const deriveOpId = uuidv4()
+    const deriveMetrics = getMetricsService()
+    if (deriveMetrics) {
+      deriveMetrics.recordStart(MetricComponent.CLAUDE_SERVICE, 'derive-stories',
+        { session_id: deriveOpId }, { model: model || 'sonnet', promptLength: prompt.length })
+    }
+
     progress('Initializing...')
 
     const systemPrompt = `You are a requirements analyst. Your ONLY task is to derive user stories from the request below.
@@ -1496,10 +1593,20 @@ Guidelines:
 
         if (parseResult.success) {
           progress(`Successfully parsed ${parseResult.stories.length} stories, resolving promise...`)
+          if (deriveMetrics) {
+            deriveMetrics.recordComplete(MetricComponent.CLAUDE_SERVICE, 'derive-stories',
+              { session_id: deriveOpId }, { duration_ms: Date.now() - deriveStartTime },
+              { storyCount: parseResult.stories.length })
+          }
           resolve(parseResult)
           progress('Promise resolved with success')
         } else {
           progress(`Parse failed: ${parseResult.error}`)
+          if (deriveMetrics) {
+            deriveMetrics.recordError(MetricComponent.CLAUDE_SERVICE, 'derive-stories',
+              { session_id: deriveOpId }, parseResult.error,
+              { duration_ms: Date.now() - deriveStartTime })
+          }
           resolve({
             success: false,
             error: parseResult.error,
@@ -1516,6 +1623,11 @@ Guidelines:
 
         if (resolved) return
         resolved = true
+        if (deriveMetrics) {
+          deriveMetrics.recordError(MetricComponent.CLAUDE_SERVICE, 'derive-stories',
+            { session_id: deriveOpId }, error,
+            { phase: 'spawn', duration_ms: Date.now() - deriveStartTime })
+        }
         progress(`Process error: ${error.message}`)
         resolve({ success: false, error: error.message })
       })
@@ -1535,6 +1647,11 @@ Guidelines:
         // Release the process lock
         this._processLock = false
         console.log('[STORY-DERIVATION-GUARD] Process lock released (timeout)')
+        if (deriveMetrics) {
+          deriveMetrics.recordError(MetricComponent.CLAUDE_SERVICE, 'derive-stories',
+            { session_id: deriveOpId }, 'Story derivation timed out',
+            { duration_ms: Date.now() - deriveStartTime })
+        }
         resolve({
           success: false,
           error: 'Story derivation timed out',
@@ -1599,6 +1716,10 @@ ${feedback}
     this._processLock = true
     console.log('[TITLE-GEN-GUARD] Process lock acquired')
 
+    // Metrics tracking
+    const titleStartTime = Date.now()
+    const titleMetrics = getMetricsService()
+
     return new Promise((resolve, reject) => {
       let resolved = false
 
@@ -1607,6 +1728,10 @@ ${feedback}
         resolved = true
         this._processLock = false
         console.log('[TITLE-GEN-GUARD] Process lock released')
+        if (titleMetrics) {
+          titleMetrics.recordComplete(MetricComponent.CLAUDE_SERVICE, 'generate-title',
+            {}, { duration_ms: Date.now() - titleStartTime }, { titleLength: value?.length || 0 })
+        }
         resolve(value)
       }
 
@@ -1711,6 +1836,33 @@ ${content}`
       console.log('[sendPrompt-GUARD] Process lock acquired')
     } else {
       console.log('[sendPrompt-GUARD] Lock already held by external caller, proceeding')
+    }
+
+    // Metrics tracking for one-shot prompts
+    const sendPromptStartTime = Date.now()
+    const sendPromptOpId = uuidv4()
+    const metricsService = getMetricsService()
+    const metricsComponent = options.metricsComponent || MetricComponent.CLAUDE_SERVICE
+    const metricsOperation = options.metricsOperation || 'one-shot-prompt'
+
+    if (metricsService) {
+      metricsService.recordStart(
+        metricsComponent,
+        metricsOperation,
+        {
+          session_id: sendPromptOpId,
+          story_id: options.storyId,
+          plan_id: options.planId,
+          sprint_id: options.sprintId,
+          branch_id: options.branchId
+        },
+        {
+          model: options.model || 'haiku',
+          hasJsonSchema: !!options.jsonSchema,
+          disableTools: !!options.disableTools,
+          promptLength: prompt.length
+        }
+      )
     }
 
     return new Promise((resolve) => {
@@ -1867,23 +2019,50 @@ ${content}`
           }
         }
 
+        // Helper to record sendPrompt metrics on completion
+        const recordSendPromptMetrics = (success, extra = {}) => {
+          if (metricsService) {
+            const duration = Date.now() - sendPromptStartTime
+            const ctx = {
+              session_id: sendPromptOpId,
+              story_id: options.storyId,
+              plan_id: options.planId,
+              sprint_id: options.sprintId,
+              branch_id: options.branchId
+            }
+            if (success) {
+              metricsService.recordComplete(metricsComponent, metricsOperation, ctx,
+                { duration_ms: duration, cost_usd: null, turns: null },
+                { exitCode: code, responseLength: extra.responseLength || 0, ...extra })
+            } else {
+              metricsService.recordError(metricsComponent, metricsOperation, ctx,
+                extra.error || `exit code ${code}`,
+                { duration_ms: duration, exitCode: code, ...extra })
+            }
+          }
+        }
+
         // When --json-schema was used, prefer the StructuredOutput tool_use data.
         // Serialize back to JSON string for backward compatibility with callers
         // that call JSON.parse() on the response.
         if (jsonSchema && structuredData !== null) {
           const responseStr = JSON.stringify(structuredData)
           console.log('[sendPrompt] Using StructuredOutput data, length:', responseStr.length)
+          recordSendPromptMetrics(true, { responseLength: responseStr.length, source: 'structured-output' })
           resolve({ success: true, response: responseStr })
         } else if (jsonSchema && structuredData === null && resultText.length > 0) {
           // Schema was provided but no StructuredOutput block found — fall back
           // to raw text so parseJsonResponse() heuristics can attempt extraction
           console.warn('[sendPrompt] --json-schema was used but no StructuredOutput tool_use found, falling back to text')
+          recordSendPromptMetrics(true, { responseLength: resultText.trim().length, source: 'text-fallback' })
           resolve({ success: true, response: resultText.trim() })
         } else if (code === 0 || resultText.length > 0) {
           console.log('[sendPrompt] Success, response length:', resultText.trim().length)
+          recordSendPromptMetrics(true, { responseLength: resultText.trim().length, source: 'text' })
           resolve({ success: true, response: resultText.trim() })
         } else {
           console.log('[sendPrompt] Failed, error:', errorOutput || `exit code ${code}`)
+          recordSendPromptMetrics(false, { error: errorOutput || `exit code ${code}` })
           resolve({
             success: false,
             error: errorOutput || `Process exited with code ${code}`
@@ -1899,6 +2078,14 @@ ${content}`
         console.error('[sendPrompt] Process error:', error.message)
         if (resolved) return
         resolved = true
+
+        // Record error metrics
+        if (metricsService) {
+          metricsService.recordError(metricsComponent, metricsOperation,
+            { session_id: sendPromptOpId, story_id: options.storyId, plan_id: options.planId },
+            error, { phase: 'spawn', duration_ms: Date.now() - sendPromptStartTime })
+        }
+
         resolve({ success: false, error: error.message })
       })
 
@@ -1913,6 +2100,20 @@ ${content}`
         // Release the process lock only if we own it
         if (!lockAlreadyHeld) { this._processLock = false }
         console.log('[sendPrompt-GUARD] Process lock released (timeout), external:', lockAlreadyHeld)
+
+        const timedOut = structuredData === null && resultText.length === 0
+        if (metricsService) {
+          const ctx = { session_id: sendPromptOpId, story_id: options.storyId, plan_id: options.planId }
+          if (timedOut) {
+            metricsService.recordError(metricsComponent, metricsOperation, ctx,
+              'Request timed out', { duration_ms: Date.now() - sendPromptStartTime, timeout })
+          } else {
+            metricsService.recordComplete(metricsComponent, metricsOperation, ctx,
+              { duration_ms: Date.now() - sendPromptStartTime },
+              { timedOutButHadData: true, timeout })
+          }
+        }
+
         if (structuredData !== null) {
           resolve({ success: true, response: JSON.stringify(structuredData) })
         } else if (resultText.length > 0) {

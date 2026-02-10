@@ -17,6 +17,7 @@ const ClaudeMdGenerator = require('./claude-md-generator')
 const { AssertionEvaluator } = require('./evaluators/assertion-evaluator')
 const { AssertionGenerator } = require('./generators/assertion-generator')
 const { getTempImageService } = require('./services')
+const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 
 let puffinState = null
 let claudeService = null
@@ -74,6 +75,9 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
   // State handlers
   setupStateHandlers(ipcMain)
 
+  // Metrics handlers
+  setupMetricsHandlers(ipcMain)
+
   // Claude handlers
   setupClaudeHandlers(ipcMain)
 
@@ -101,6 +105,14 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:init', async () => {
     try {
       const state = await puffinState.open(projectPath)
+
+      // Initialize MetricsService after database is ready
+      try {
+        initializeMetricsService(puffinState.database)
+        console.log('[METRICS] Service initialized successfully')
+      } catch (metricsErr) {
+        console.error('[METRICS] Initialization failed (non-fatal):', metricsErr.message)
+      }
 
       // Initialize CRE (Central Reasoning Engine)
       try {
@@ -1285,6 +1297,94 @@ function setupStateHandlers(ipcMain) {
       return { success: true, clearedCount }
     } catch (error) {
       console.error('[IPC] Failed to clear toast history:', error)
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+/**
+ * Metrics IPC handlers
+ */
+function setupMetricsHandlers(ipcMain) {
+  // Query metrics events with filters
+  ipcMain.handle('metrics:query', async (event, filters) => {
+    try {
+      const metricsService = getMetricsService()
+      if (!metricsService) {
+        return { success: false, error: 'Metrics service not initialized' }
+      }
+
+      const events = metricsService.queryEvents(filters)
+      return { success: true, events }
+    } catch (error) {
+      console.error('[METRICS] Query error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get aggregated stats for a component
+  ipcMain.handle('metrics:componentStats', async (event, component, options) => {
+    try {
+      const metricsService = getMetricsService()
+      if (!metricsService) {
+        return { success: false, error: 'Metrics service not initialized' }
+      }
+
+      const stats = metricsService.getComponentStats(component, options)
+      return { success: true, stats }
+    } catch (error) {
+      console.error('[METRICS] Component stats error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Get metrics for a specific story
+  ipcMain.handle('metrics:storyMetrics', async (event, storyId) => {
+    try {
+      const metricsService = getMetricsService()
+      if (!metricsService) {
+        return { success: false, error: 'Metrics service not initialized' }
+      }
+
+      const events = metricsService.queryEvents({ story_id: storyId })
+
+      // Calculate aggregates
+      const completeEvents = events.filter(e => e.event_type === 'complete')
+      const totalCost = completeEvents.reduce((sum, e) => sum + (e.cost_usd || 0), 0)
+      const totalTokens = completeEvents.reduce((sum, e) => sum + (e.total_tokens || 0), 0)
+      const totalDuration = completeEvents.reduce((sum, e) => sum + (e.duration_ms || 0), 0)
+
+      return {
+        success: true,
+        metrics: {
+          events,
+          summary: {
+            operationCount: completeEvents.length,
+            totalCost,
+            totalTokens,
+            totalDuration,
+            avgDuration: completeEvents.length > 0 ? totalDuration / completeEvents.length : 0
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[METRICS] Story metrics error:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Flush pending metrics to database
+  ipcMain.handle('metrics:flush', async () => {
+    try {
+      const metricsService = getMetricsService()
+      if (!metricsService) {
+        return { success: false, error: 'Metrics service not initialized' }
+      }
+
+      metricsService._flushBatch()
+      return { success: true }
+    } catch (error) {
+      console.error('[METRICS] Flush error:', error)
       return { success: false, error: error.message }
     }
   })
@@ -2885,5 +2985,6 @@ module.exports = {
   setupPluginStyleHandlers,
   getPuffinState,
   getClaudeService,
-  setClaudeServicePluginManager
+  setClaudeServicePluginManager,
+  getMetricsService
 }

@@ -459,6 +459,9 @@ class OllamaService extends LLMProvider {
     // Escape single quotes in prompt for shell
     const escapedPrompt = prompt.replace(/'/g, "'\\''")
 
+    // Use full PATH to ensure ollama is found in non-interactive SSH sessions
+    const command = `export PATH=$PATH:/usr/local/bin:/usr/bin:/bin && ollama run ${safeModel} '${escapedPrompt}'`
+
     return [
       '-i', privateKeyPath,
       '-p', String(port),
@@ -466,7 +469,7 @@ class OllamaService extends LLMProvider {
       '-o', `ConnectTimeout=${Math.ceil(this._sshConfig.timeout / 1000)}`,
       '-o', 'BatchMode=yes',
       target,
-      `ollama run ${safeModel} '${escapedPrompt}'`
+      command
     ]
   }
 
@@ -480,6 +483,12 @@ class OllamaService extends LLMProvider {
       const { host, user, port, privateKeyPath } = this._sshConfig
       const target = `${user}@${host}`
 
+      // Use full PATH to ensure ollama is found in non-interactive SSH sessions
+      const command = 'export PATH=$PATH:/usr/local/bin:/usr/bin:/bin && ollama list'
+
+      console.log(`[OLLAMA] Fetching models via SSH: ${target}`)
+      console.log(`[OLLAMA] SSH command: ${command}`)
+
       const proc = spawn('ssh', [
         '-i', privateKeyPath,
         '-p', String(port),
@@ -487,7 +496,7 @@ class OllamaService extends LLMProvider {
         '-o', `ConnectTimeout=${Math.ceil(this._sshConfig.timeout / 1000)}`,
         '-o', 'BatchMode=yes',
         target,
-        'ollama list'
+        command
       ], { stdio: ['pipe', 'pipe', 'pipe'] })
 
       let stdout = ''

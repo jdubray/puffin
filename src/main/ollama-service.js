@@ -479,6 +479,7 @@ class OllamaService extends LLMProvider {
     const command = `PATH=$PATH:/usr/local/bin:/usr/bin:~/.local/bin ollama run ${safeModel} '${escapedPrompt}'`
 
     return [
+      '-t',  // Allocate pseudo-terminal for ollama run (interactive mode)
       '-i', expandedKeyPath,
       '-p', String(port),
       '-o', 'StrictHostKeyChecking=accept-new',

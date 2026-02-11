@@ -185,19 +185,29 @@ function setupStateHandlers(ipcMain) {
   // Update config
   ipcMain.handle('state:updateConfig', async (event, updates) => {
     try {
+      console.log('[IPC] state:updateConfig received:', JSON.stringify({
+        ollama: updates.ollama,
+        defaultModel: updates.defaultModel
+      }, null, 2))
+
       const config = await puffinState.updateConfig(updates)
+
+      console.log('[IPC] Config saved. Ollama in saved config:', JSON.stringify(config.ollama, null, 2))
 
       // Sync Ollama service config when ollama settings change
       if (updates.ollama) {
         if (updates.ollama.enabled && updates.ollama.ssh) {
-          ollamaService.updateConfig({
+          const sshConfig = {
             host: updates.ollama.ssh.host || '',
             user: updates.ollama.ssh.user || '',
             port: updates.ollama.ssh.port || 22
-          })
+          }
+          ollamaService.updateConfig(sshConfig)
+          console.log('[IPC] Ollama service updated with config:', sshConfig)
         } else if (!updates.ollama.enabled) {
           // Disable by clearing host/user
           ollamaService.updateConfig({ host: '', user: '' })
+          console.log('[IPC] Ollama service disabled (cleared config)')
         }
       }
 

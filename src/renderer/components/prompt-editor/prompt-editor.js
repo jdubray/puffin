@@ -22,7 +22,7 @@ export class PromptEditorComponent {
     this.useCurrentDesign = false // Track if current design is selected
     this.deriveStoriesBtn = null
     this.modelSelect = null
-    this.defaultModel = 'claude:sonnet-4.5' // Will be updated from project config
+    this.defaultModel = 'claude:sonnet' // Will be updated from project config
     // Thinking budget selector
     this.thinkingBudgetSelect = null
     // Handoff button
@@ -697,7 +697,8 @@ export class PromptEditorComponent {
       if (state.config?.defaultModel && state.config.defaultModel !== this.defaultModel) {
         let configModel = state.config.defaultModel
         // Map legacy model names to new prefixed format
-        const legacyMap = { opus: 'claude:opus-4.6', sonnet: 'claude:sonnet-4.5', haiku: 'claude:haiku-4.5' }
+        const legacyMap = { opus: 'claude:opus', sonnet: 'claude:sonnet', haiku: 'claude:haiku',
+          'claude:opus-4.6': 'claude:opus', 'claude:sonnet-4.5': 'claude:sonnet', 'claude:haiku-4.5': 'claude:haiku' }
         if (legacyMap[configModel]) configModel = legacyMap[configModel]
 
         this.defaultModel = configModel
@@ -1240,7 +1241,7 @@ export class PromptEditorComponent {
 
       // Handle thinking budget - wrap prompt and potentially upgrade model
       const thinkingBudget = this.thinkingBudgetSelect?.value || 'none'
-      let selectedModel = this.modelSelect?.value || this.defaultModel || 'claude:sonnet-4.5'
+      let selectedModel = this.modelSelect?.value || this.defaultModel || 'claude:sonnet'
 
       if (thinkingBudget !== 'none') {
         finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
@@ -1248,7 +1249,7 @@ export class PromptEditorComponent {
 
         // Upgrade to opus for think-harder and superthink
         if (thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') {
-          selectedModel = 'claude:opus-4.6'
+          selectedModel = 'claude:opus'
           console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
         }
       }

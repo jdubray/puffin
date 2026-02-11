@@ -503,11 +503,18 @@ class OllamaService extends LLMProvider {
 
       proc.on('close', (code) => {
         clearTimeout(timer)
+        console.log(`[OLLAMA] ollama list SSH command completed. Exit code: ${code}`)
+        console.log(`[OLLAMA] stdout length: ${stdout.length}, stderr length: ${stderr.length}`)
+        console.log(`[OLLAMA] stdout content:`, stdout)
+        if (stderr) console.log(`[OLLAMA] stderr content:`, stderr)
+
         if (code !== 0) {
           reject(new Error(stderr.trim() || `ollama list failed with code ${code}`))
           return
         }
-        resolve(this._parseOllamaList(stdout))
+        const parsed = this._parseOllamaList(stdout)
+        console.log(`[OLLAMA] Parsed ${parsed.length} models:`, parsed.map(m => m.name))
+        resolve(parsed)
       })
 
       proc.on('error', (err) => {

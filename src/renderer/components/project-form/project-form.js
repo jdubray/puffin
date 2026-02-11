@@ -390,15 +390,16 @@ export class ProjectFormComponent {
     if (techArchInput) techArchInput.value = config.technicalArchitecture || ''
     if (dataModelInput) dataModelInput.value = config.dataModel || ''
 
-    // Default model — handle both legacy ('sonnet') and new ('claude:sonnet-4.5') formats
+    // Default model — handle both legacy ('sonnet') and new ('claude:sonnet') formats
     const defaultModel = document.getElementById('default-model')
     if (defaultModel) {
-      const modelValue = config.defaultModel || 'claude:sonnet-4.5'
+      const modelValue = config.defaultModel || 'claude:sonnet'
       defaultModel.value = modelValue
       // If value didn't match (legacy format), try mapping
       if (defaultModel.value !== modelValue) {
-        const legacyMap = { opus: 'claude:opus-4.6', sonnet: 'claude:sonnet-4.5', haiku: 'claude:haiku-4.5' }
-        defaultModel.value = legacyMap[modelValue] || 'claude:sonnet-4.5'
+        const legacyMap = { opus: 'claude:opus', sonnet: 'claude:sonnet', haiku: 'claude:haiku',
+          'claude:opus-4.6': 'claude:opus', 'claude:sonnet-4.5': 'claude:sonnet', 'claude:haiku-4.5': 'claude:haiku' }
+        defaultModel.value = legacyMap[modelValue] || 'claude:sonnet'
       }
     }
 
@@ -497,6 +498,11 @@ export class ProjectFormComponent {
   handleSubmit() {
     const formData = this.getFormData()
 
+    console.log('[CONFIG] Form data collected:', JSON.stringify({
+      ollama: formData.ollama,
+      defaultModel: formData.defaultModel
+    }, null, 2))
+
     // Update config (auto-persisted to .puffin/config.json)
     this.intents.updateConfig(formData)
 
@@ -540,7 +546,7 @@ export class ProjectFormComponent {
       assumptions: this.assumptions.filter(a => a.trim()),
       technicalArchitecture: this.getElementValue('technical-architecture'),
       dataModel: this.getElementValue('data-model'),
-      defaultModel: this.getElementValue('default-model', 'claude:sonnet-4.5'),
+      defaultModel: this.getElementValue('default-model', 'claude:sonnet'),
       options: {
         programmingStyle: this.getElementValue('programming-style', 'hybrid'),
         testingApproach: this.getElementValue('testing-approach', 'bdd'),

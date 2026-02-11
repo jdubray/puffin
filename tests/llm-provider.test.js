@@ -860,9 +860,9 @@ describe('ClaudeService extends LLMProvider', () => {
     const models = await service.getAvailableModels()
     assert.ok(Array.isArray(models))
     assert.ok(models.length >= 3)
-    assert.ok(models.some(m => m.id === 'claude:opus-4.6'))
-    assert.ok(models.some(m => m.id === 'claude:sonnet-4.5'))
-    assert.ok(models.some(m => m.id === 'claude:haiku-4.5'))
+    assert.ok(models.some(m => m.id === 'claude:opus'))
+    assert.ok(models.some(m => m.id === 'claude:sonnet'))
+    assert.ok(models.some(m => m.id === 'claude:haiku'))
     for (const model of models) {
       assert.strictEqual(model.provider, 'claude')
       assert.ok(model.name)
@@ -934,9 +934,9 @@ describe('LLMRouter integration with Claude default', () => {
     const router = new LLMRouter()
     const claude = new MockProvider('claude', 'Claude')
     claude.setModels([
-      { id: 'claude:opus-4.6', name: 'Opus 4.6', provider: 'claude' },
-      { id: 'claude:sonnet-4.5', name: 'Sonnet 4.5', provider: 'claude' },
-      { id: 'claude:haiku-4.5', name: 'Haiku 4.5', provider: 'claude' }
+      { id: 'claude:opus', name: 'Opus 4.6', provider: 'claude' },
+      { id: 'claude:sonnet', name: 'Sonnet 4.5', provider: 'claude' },
+      { id: 'claude:haiku', name: 'Haiku 4.5', provider: 'claude' }
     ])
     const ollama = new MockProvider('ollama', 'Ollama')
     ollama.setModels([
@@ -1047,9 +1047,9 @@ describe('LLMRouter prefix stripping for providers', () => {
 
   describe('submit strips prefix from data.model', () => {
     it('should strip claude: prefix before passing to Claude provider', async () => {
-      const data = { prompt: 'hello', model: 'claude:opus-4.6' }
+      const data = { prompt: 'hello', model: 'claude:opus' }
       await router.submit(data, () => {}, () => {})
-      assert.strictEqual(claudeProvider._lastSubmit.model, 'opus-4.6')
+      assert.strictEqual(claudeProvider._lastSubmit.model, 'opus')
     })
 
     it('should strip ollama: prefix before passing to Ollama provider', async () => {
@@ -1065,19 +1065,19 @@ describe('LLMRouter prefix stripping for providers', () => {
     })
 
     it('should preserve other data fields when stripping prefix', async () => {
-      const data = { prompt: 'hello', model: 'claude:sonnet-4.5', branchId: 'test-branch', maxTurns: 40 }
+      const data = { prompt: 'hello', model: 'claude:sonnet', branchId: 'test-branch', maxTurns: 40 }
       await router.submit(data, () => {}, () => {})
       assert.strictEqual(claudeProvider._lastSubmit.prompt, 'hello')
       assert.strictEqual(claudeProvider._lastSubmit.branchId, 'test-branch')
       assert.strictEqual(claudeProvider._lastSubmit.maxTurns, 40)
-      assert.strictEqual(claudeProvider._lastSubmit.model, 'sonnet-4.5')
+      assert.strictEqual(claudeProvider._lastSubmit.model, 'sonnet')
     })
   })
 
   describe('sendPrompt strips prefix from options.model', () => {
     it('should strip claude: prefix in sendPrompt options', async () => {
-      await router.sendPrompt('hello', { model: 'claude:haiku-4.5' })
-      assert.strictEqual(claudeProvider._lastSendPrompt.options.model, 'haiku-4.5')
+      await router.sendPrompt('hello', { model: 'claude:haiku' })
+      assert.strictEqual(claudeProvider._lastSendPrompt.options.model, 'haiku')
     })
 
     it('should strip ollama: prefix in sendPrompt options', async () => {
@@ -1087,22 +1087,22 @@ describe('LLMRouter prefix stripping for providers', () => {
   })
 
   describe('resolveProvider returns clean model names (AC3, AC4)', () => {
-    it('should resolve claude:opus-4.6 to Claude with opus-4.6', () => {
-      const result = router.resolveProvider('claude:opus-4.6')
+    it('should resolve claude:opus to Claude with opus', () => {
+      const result = router.resolveProvider('claude:opus')
       assert.strictEqual(result.provider.providerId, 'claude')
-      assert.strictEqual(result.model, 'opus-4.6')
+      assert.strictEqual(result.model, 'opus')
     })
 
-    it('should resolve claude:sonnet-4.5 to Claude with sonnet-4.5', () => {
-      const result = router.resolveProvider('claude:sonnet-4.5')
+    it('should resolve claude:sonnet to Claude with sonnet', () => {
+      const result = router.resolveProvider('claude:sonnet')
       assert.strictEqual(result.provider.providerId, 'claude')
-      assert.strictEqual(result.model, 'sonnet-4.5')
+      assert.strictEqual(result.model, 'sonnet')
     })
 
-    it('should resolve claude:haiku-4.5 to Claude with haiku-4.5', () => {
-      const result = router.resolveProvider('claude:haiku-4.5')
+    it('should resolve claude:haiku to Claude with haiku', () => {
+      const result = router.resolveProvider('claude:haiku')
       assert.strictEqual(result.provider.providerId, 'claude')
-      assert.strictEqual(result.model, 'haiku-4.5')
+      assert.strictEqual(result.model, 'haiku')
     })
 
     it('should resolve ollama:mistral-small to Ollama with mistral-small (AC4)', () => {
@@ -1150,13 +1150,13 @@ describe('LLMRouter provider context injection', () => {
     it('should inject Claude provider info into onComplete response', async () => {
       let completedResponse = null
       await router.submit(
-        { prompt: 'hello', model: 'claude:sonnet-4.5' },
+        { prompt: 'hello', model: 'claude:sonnet' },
         () => {},
         (response) => { completedResponse = response }
       )
       assert.strictEqual(completedResponse.provider, 'claude')
       assert.strictEqual(completedResponse.providerName, 'Claude')
-      assert.strictEqual(completedResponse.model, 'sonnet-4.5')
+      assert.strictEqual(completedResponse.model, 'sonnet')
     })
 
     it('should inject Ollama provider info into onComplete response', async () => {
@@ -1187,7 +1187,7 @@ describe('LLMRouter provider context injection', () => {
     it('should inject provider into onRaw messages that lack it', async () => {
       const rawMessages = []
       await router.submit(
-        { prompt: 'hello', model: 'claude:sonnet-4.5' },
+        { prompt: 'hello', model: 'claude:sonnet' },
         () => {},
         () => {},
         (jsonLine) => { rawMessages.push(JSON.parse(jsonLine)) }
@@ -1263,12 +1263,12 @@ describe('LLMRouter provider context injection', () => {
     it('should include model name in injected onRaw messages', async () => {
       const rawMessages = []
       await router.submit(
-        { prompt: 'hello', model: 'claude:opus-4.6' },
+        { prompt: 'hello', model: 'claude:opus' },
         () => {},
         () => {},
         (jsonLine) => { rawMessages.push(JSON.parse(jsonLine)) }
       )
-      assert.ok(rawMessages.some(msg => msg.model === 'opus-4.6'))
+      assert.ok(rawMessages.some(msg => msg.model === 'opus'))
     })
   })
 })

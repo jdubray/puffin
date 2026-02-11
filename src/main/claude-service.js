@@ -93,9 +93,9 @@ class ClaudeService extends LLMProvider {
    */
   async getAvailableModels() {
     return [
-      { id: 'claude:opus-4.6', name: 'Opus 4.6', provider: 'claude' },
-      { id: 'claude:sonnet-4.5', name: 'Sonnet 4.5', provider: 'claude' },
-      { id: 'claude:haiku-4.5', name: 'Haiku 4.5', provider: 'claude' }
+      { id: 'claude:opus', name: 'Opus 4.6', provider: 'claude' },
+      { id: 'claude:sonnet', name: 'Sonnet 4.5', provider: 'claude' },
+      { id: 'claude:haiku', name: 'Haiku 4.5', provider: 'claude' }
     ]
   }
 

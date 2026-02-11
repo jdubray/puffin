@@ -32,7 +32,7 @@ export const initialModel = {
     technicalArchitecture: '',
     dataModel: '',
     // Default Claude model for this project
-    defaultModel: 'claude:sonnet-4.5',
+    defaultModel: 'claude:sonnet',
     options: {
       programmingStyle: 'HYBRID',
       testingApproach: 'TDD',
@@ -1083,7 +1083,7 @@ export const receiveDerivedStoriesAcceptor = model => proposal => {
         backlog_story_id: null
       })),
       timestamp: new Date().toISOString(),
-      model_used: model.config?.defaultModel || 'claude:sonnet-4.5'
+      model_used: model.config?.defaultModel || 'claude:sonnet'
     }
     model.storyGenerations.generations.push(generation)
     model.storyGenerations.currentGenerationId = generationId

@@ -70,7 +70,8 @@
       "Bash(powershell -Command:*)",
       "Bash(powershell -File -:*)",
       "Bash(ssh:*)",
-      "Bash(ssh-keygen:*)"
+      "Bash(ssh-keygen:*)",
+      "Bash(npx node --test:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -394,6 +394,21 @@ class OllamaService extends LLMProvider {
   }
 
   /**
+   * Expand tilde (~) in file paths to actual home directory.
+   * Node.js spawn() doesn't expand tildes, so we must do it manually.
+   *
+   * @param {string} filepath - Path that may contain ~
+   * @returns {string} Expanded absolute path
+   * @private
+   */
+  _expandTilde(filepath) {
+    if (!filepath || !filepath.startsWith('~')) {
+      return filepath
+    }
+    return filepath.replace(/^~/, os.homedir())
+  }
+
+  /**
    * Format SSH/Ollama stderr into a user-friendly error message (AC3, AC4).
    *
    * @param {string} stderr - Raw stderr output
@@ -451,6 +466,7 @@ class OllamaService extends LLMProvider {
   _buildSshArgs(model, prompt) {
     const { host, user, port, privateKeyPath } = this._sshConfig
     const target = `${user}@${host}`
+    const expandedKeyPath = this._expandTilde(privateKeyPath)
 
     // Sanitize model name to prevent command injection
     // Only allow alphanumerics, dots, underscores, colons, and hyphens
@@ -463,7 +479,7 @@ class OllamaService extends LLMProvider {
     const command = `PATH=$PATH:/usr/local/bin:/usr/bin:~/.local/bin ollama run ${safeModel} '${escapedPrompt}'`
 
     return [
-      '-i', privateKeyPath,
+      '-i', expandedKeyPath,
       '-p', String(port),
       '-o', 'StrictHostKeyChecking=accept-new',
       '-o', `ConnectTimeout=${Math.ceil(this._sshConfig.timeout / 1000)}`,
@@ -482,8 +498,10 @@ class OllamaService extends LLMProvider {
     return new Promise((resolve, reject) => {
       const { host, user, port, privateKeyPath } = this._sshConfig
       const target = `${user}@${host}`
+      const expandedKeyPath = this._expandTilde(privateKeyPath)
 
       console.log(`[OLLAMA] Fetching models via SSH: ${target}`)
+      console.log(`[OLLAMA] Using private key: ${expandedKeyPath}`)
 
       // First find where ollama is installed, then run list
       // Common locations: /usr/local/bin, /usr/bin, ~/.local/bin
@@ -492,7 +510,7 @@ class OllamaService extends LLMProvider {
       console.log(`[OLLAMA] SSH command: ${command}`)
 
       const proc = spawn('ssh', [
-        '-i', privateKeyPath,
+        '-i', expandedKeyPath,
         '-p', String(port),
         '-o', 'StrictHostKeyChecking=accept-new',
         '-o', `ConnectTimeout=${Math.ceil(this._sshConfig.timeout / 1000)}`,

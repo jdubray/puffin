@@ -114,6 +114,7 @@ class OllamaService extends LLMProvider {
 
     const model = this._stripPrefix(data.model || 'llama3.2:latest')
     const prompt = data.prompt || ''
+    const timeout = data.timeout || 300000  // Default 5 minute timeout for interactive sessions
 
     if (onFullPrompt) onFullPrompt(prompt)
 
@@ -138,6 +139,19 @@ class OllamaService extends LLMProvider {
       let stderrOutput = ''
       let stdoutBuffer = '' // Buffer for line-by-line parsing
       let firstChunkReceived = false
+      let timedOut = false
+
+      // Set timeout for hung connections
+      const timer = setTimeout(() => {
+        timedOut = true
+        this._killProcess(proc)
+        this._currentProcess = null
+        const duration = Date.now() - startTime
+        onRaw?.(JSON.stringify({ type: 'status', provider: 'ollama', model, status: 'error', message: 'Connection timed out' }))
+        const result = this._buildCompleteResponse(fullResponse, `Ollama request timed out after ${timeout}ms`, 1, duration)
+        onComplete?.(result)
+        resolve(result)
+      }, timeout)
 
       // Stream stdout line-by-line (AC2)
       proc.stdout.on('data', (chunk) => {
@@ -170,6 +184,8 @@ class OllamaService extends LLMProvider {
       })
 
       proc.on('close', (code) => {
+        clearTimeout(timer)
+        if (timedOut) return  // Already resolved by timeout handler
         this._currentProcess = null
         const duration = Date.now() - startTime
 
@@ -208,6 +224,8 @@ class OllamaService extends LLMProvider {
       })
 
       proc.on('error', (err) => {
+        clearTimeout(timer)
+        if (timedOut) return  // Already resolved by timeout handler
         this._currentProcess = null
         const duration = Date.now() - startTime
         const error = this._formatSpawnError(err)
@@ -250,8 +268,10 @@ class OllamaService extends LLMProvider {
       this._currentProcess = proc
       let fullResponse = ''
       let stderrOutput = ''
+      let timedOut = false
 
       const timer = setTimeout(() => {
+        timedOut = true
         this._killProcess(proc)
         this._currentProcess = null
         resolve({ success: false, error: `Ollama request timed out after ${timeout}ms` })
@@ -267,6 +287,7 @@ class OllamaService extends LLMProvider {
 
       proc.on('close', (code) => {
         clearTimeout(timer)
+        if (timedOut) return  // Already resolved by timeout handler
         this._currentProcess = null
 
         if (this._cancelRequested) {
@@ -285,6 +306,7 @@ class OllamaService extends LLMProvider {
 
       proc.on('error', (err) => {
         clearTimeout(timer)
+        if (timedOut) return  // Already resolved by timeout handler
         this._currentProcess = null
         resolve({ success: false, error: this._formatSpawnError(err) })
       })
@@ -363,7 +385,7 @@ class OllamaService extends LLMProvider {
       sessionId: null,   // Ollama has no session concept
       cost: null,        // Ollama is self-hosted, no cost
       turns: 1,          // Always single-turn for Ollama
-      duration: duration || null,
+      duration: duration ?? null,  // Use nullish coalescing to preserve 0ms durations
       exitCode: exitCode ?? 0
     }
     if (cancelled) response.cancelled = true
@@ -430,6 +452,10 @@ class OllamaService extends LLMProvider {
     const { host, user, port, privateKeyPath } = this._sshConfig
     const target = `${user}@${host}`
 
+    // Sanitize model name to prevent command injection
+    // Only allow alphanumerics, dots, underscores, colons, and hyphens
+    const safeModel = model.replace(/[^a-zA-Z0-9._:-]/g, '')
+
     // Escape single quotes in prompt for shell
     const escapedPrompt = prompt.replace(/'/g, "'\\''")
 
@@ -440,7 +466,7 @@ class OllamaService extends LLMProvider {
       '-o', `ConnectTimeout=${Math.ceil(this._sshConfig.timeout / 1000)}`,
       '-o', 'BatchMode=yes',
       target,
-      `ollama run ${model} '${escapedPrompt}'`
+      `ollama run ${safeModel} '${escapedPrompt}'`
     ]
   }
 

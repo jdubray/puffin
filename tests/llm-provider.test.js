@@ -718,10 +718,13 @@ mistral-small:latest    abc123    14 GB   2 days ago`
       assert.strictEqual(result.exitCode, 0)
     })
 
-    it('should default duration to null for falsy values', () => {
+    it('should preserve 0ms duration and default null/undefined to null', () => {
       const service = new OllamaService()
-      assert.strictEqual(service._buildCompleteResponse('ok', null, 0, 0).duration, null)
+      // 0ms is a valid duration and should be preserved (not mapped to null)
+      assert.strictEqual(service._buildCompleteResponse('ok', null, 0, 0).duration, 0)
+      // null and undefined should both map to null
       assert.strictEqual(service._buildCompleteResponse('ok', null, 0, null).duration, null)
+      assert.strictEqual(service._buildCompleteResponse('ok', null, 0, undefined).duration, null)
     })
   })
 

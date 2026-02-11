@@ -746,8 +746,11 @@ export class PromptEditorComponent {
     if (!window.puffin?.llm) return
 
     try {
+      // Check if Ollama is both configured (host/user set) AND enabled
       const configured = await window.puffin.llm.isOllamaConfigured()
-      if (!configured) {
+      const enabled = this._ollamaWasEnabled !== false  // Check enabled flag from state
+
+      if (!configured || !enabled) {
         this._removeOllamaOptgroup(this.modelSelect)
         this._removeOllamaOptgroup(document.getElementById('default-model'))
         return

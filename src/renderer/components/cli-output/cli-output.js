@@ -315,7 +315,9 @@ export class CliOutputComponent {
    */
   handleStatusMessage(msg) {
     const prefix = this.formatProviderPrefix(msg.provider, msg.model)
-    this.appendToStreamRaw(`${prefix}<span class="status-text status-${msg.status || 'info'}">${this.escapeHtml(msg.message || msg.status)}</span>`, 'provider-status')
+    // Sanitize status for CSS class name to prevent XSS
+    const safeStatus = (msg.status || 'info').replace(/[^a-z0-9-]/gi, '')
+    this.appendToStreamRaw(`${prefix}<span class="status-text status-${safeStatus}">${this.escapeHtml(msg.message || msg.status)}</span>`, 'provider-status')
   }
 
   /**
@@ -326,9 +328,11 @@ export class CliOutputComponent {
    */
   formatProviderPrefix(provider, model) {
     if (!provider) return ''
+    // Sanitize provider for CSS class name to prevent XSS
+    const safeProvider = provider.replace(/[^a-z0-9-]/gi, '')
     const displayName = provider === 'claude' ? 'Claude' : provider === 'ollama' ? 'Ollama' : provider
     const label = model ? `${displayName}: ${this.escapeHtml(model)}` : displayName
-    return `<span class="provider-prefix provider-${provider}">[${label}]</span> `
+    return `<span class="provider-prefix provider-${safeProvider}">[${label}]</span> `
   }
 
   /**

@@ -1682,7 +1682,26 @@ function setupLlmHandlers(ipcMain) {
 
   // Update Ollama SSH configuration
   ipcMain.handle('llm:updateOllamaConfig', (event, config) => {
-    ollamaService.updateConfig(config)
+    // Validate and sanitize config to prevent injection attacks
+    const sanitized = {}
+
+    if (typeof config?.host === 'string') {
+      sanitized.host = config.host
+    }
+    if (typeof config?.user === 'string') {
+      sanitized.user = config.user
+    }
+    if (typeof config?.port === 'number') {
+      // Clamp port to valid range
+      sanitized.port = Math.min(65535, Math.max(1, Math.floor(config.port)))
+    }
+    if (typeof config?.timeout === 'number') {
+      // Clamp timeout to reasonable range (1s to 5 minutes)
+      sanitized.timeout = Math.min(300000, Math.max(1000, Math.floor(config.timeout)))
+    }
+    // privateKeyPath should NOT be accepted from renderer - use default only
+
+    ollamaService.updateConfig(sanitized)
     return { success: true }
   })
 
@@ -1704,16 +1723,16 @@ function setupLlmHandlers(ipcMain) {
 
   // Test Ollama SSH connection and list available models
   ipcMain.handle('llm:testConnection', async (event, config) => {
+    // Save previous config to restore after test
+    const previousConfig = { ...ollamaService._sshConfig }
+
     try {
       // Temporarily apply the provided config for the test
-      const previousConfig = { ...ollamaService._sshConfig }
       if (config) {
         ollamaService.updateConfig(config)
       }
 
       if (!ollamaService.isConfigured()) {
-        // Restore previous config
-        ollamaService.updateConfig(previousConfig)
         return { success: false, error: 'SSH host and user are required' }
       }
 
@@ -1727,6 +1746,9 @@ function setupLlmHandlers(ipcMain) {
       }
     } catch (error) {
       return { success: false, error: error.message }
+    } finally {
+      // Always restore previous config, whether test succeeded or failed
+      ollamaService.updateConfig(previousConfig)
     }
   })
 }

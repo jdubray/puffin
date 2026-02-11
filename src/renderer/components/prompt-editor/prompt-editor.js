@@ -744,24 +744,37 @@ export class PromptEditorComponent {
    * Only adds models when Ollama SSH is configured and enabled (AC5).
    */
   async refreshOllamaModels() {
-    if (!window.puffin?.llm) return
+    console.log('[PROMPT-EDITOR] refreshOllamaModels called')
+
+    if (!window.puffin?.llm) {
+      console.log('[PROMPT-EDITOR] window.puffin.llm not available yet')
+      return
+    }
 
     try {
       // Check if Ollama is both configured (host/user set) AND enabled
       const configured = await window.puffin.llm.isOllamaConfigured()
       const enabled = this._ollamaWasEnabled !== false  // Check enabled flag from state
 
+      console.log('[PROMPT-EDITOR] Ollama check:', { configured, enabled, _ollamaWasEnabled: this._ollamaWasEnabled })
+
       if (!configured || !enabled) {
+        console.log('[PROMPT-EDITOR] Ollama not configured or not enabled, removing optgroup')
         this._removeOllamaOptgroup(this.modelSelect)
         this._removeOllamaOptgroup(document.getElementById('default-model'))
         return
       }
 
+      console.log('[PROMPT-EDITOR] Fetching Ollama models...')
       const result = await window.puffin.llm.refreshOllamaModels()
       const models = result.success ? (result.models || []) : []
 
+      console.log('[PROMPT-EDITOR] Ollama models fetched:', models)
+
       this._updateOllamaOptgroup(this.modelSelect, models)
       this._updateOllamaOptgroup(document.getElementById('default-model'), models)
+
+      console.log('[PROMPT-EDITOR] Ollama optgroups updated in both dropdowns')
     } catch (err) {
       console.warn('[PROMPT-EDITOR] Failed to refresh Ollama models:', err)
     }

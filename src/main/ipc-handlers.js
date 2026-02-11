@@ -9,6 +9,7 @@ const { dialog, shell } = require('electron')
 const { marked } = require('marked')
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
 const { OllamaService } = require('./ollama-service')
@@ -200,7 +201,8 @@ function setupStateHandlers(ipcMain) {
           const sshConfig = {
             host: updates.ollama.ssh.host || '',
             user: updates.ollama.ssh.user || '',
-            port: updates.ollama.ssh.port || 22
+            port: updates.ollama.ssh.port || 22,
+            privateKeyPath: updates.ollama.ssh.privateKeyPath || path.join(os.homedir(), '.ssh', 'id_ed25519')
           }
           ollamaService.updateConfig(sshConfig)
           console.log('[IPC] Ollama service updated with config:', sshConfig)

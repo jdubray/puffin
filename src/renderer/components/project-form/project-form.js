@@ -471,12 +471,14 @@ export class ProjectFormComponent {
     const ollamaEnabled = document.getElementById('ollama-enabled')
     const ollamaSshHost = document.getElementById('ollama-ssh-host')
     const ollamaSshPort = document.getElementById('ollama-ssh-port')
+    const ollamaSshKey = document.getElementById('ollama-ssh-key')
 
     if (ollamaEnabled) ollamaEnabled.checked = ollamaConfig.enabled || false
     if (ollamaSshHost) ollamaSshHost.value = ollamaConfig.ssh?.host
       ? `${ollamaConfig.ssh.user || ''}@${ollamaConfig.ssh.host}`
       : ''
     if (ollamaSshPort) ollamaSshPort.value = ollamaConfig.ssh?.port || 22
+    if (ollamaSshKey) ollamaSshKey.value = ollamaConfig.ssh?.privateKeyPath || '~/.ssh/id_ed25519'
 
     // Toggle field visibility based on enabled state
     this._updateOllamaFieldsVisibility()
@@ -595,6 +597,7 @@ export class ProjectFormComponent {
     const enabled = this.getCheckboxValue('ollama-enabled')
     const hostField = this.getElementValue('ollama-ssh-host')
     const port = parseInt(this.getElementValue('ollama-ssh-port', '22')) || 22
+    const privateKeyPath = this.getElementValue('ollama-ssh-key', '~/.ssh/id_ed25519')
 
     // Parse user@host format
     let user = ''
@@ -609,7 +612,7 @@ export class ProjectFormComponent {
 
     return {
       enabled,
-      ssh: { host, user, port }
+      ssh: { host, user, port, privateKeyPath }
     }
   }
 

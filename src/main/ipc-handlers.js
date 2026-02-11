@@ -167,6 +167,11 @@ function setupStateHandlers(ipcMain) {
       const getAgentContent = (branchId) => puffinState.getBranchAgentContent(branchId)
       await claudeMdGenerator.generateAll(state, activeBranch, getSkillContent, getAgentContent)
 
+      console.log('[IPC] state:init - About to return state. Has ollama?', !!state.config?.ollama)
+      if (state.config?.ollama) {
+        console.log('[IPC] state:init - Ollama config being returned:', JSON.stringify(state.config.ollama, null, 2))
+      }
+
       return { success: true, state }
     } catch (error) {
       return { success: false, error: error.message }

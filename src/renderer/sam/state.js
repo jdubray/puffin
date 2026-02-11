@@ -158,7 +158,15 @@ function computeConfigState(model) {
     uxStyle: config.uxStyle || {},
     debugMode: config.debugMode || false,
     createdAt: config.createdAt,
-    updatedAt: config.updatedAt
+    updatedAt: config.updatedAt,
+    // LLM provider configurations
+    ollama: config.ollama || null,
+    // CRE configuration
+    cre: config.cre || null,
+    // Sprint execution configuration
+    sprintExecution: config.sprintExecution || null,
+    // Coding standard configuration
+    codingStandard: config.codingStandard || null
   }
 }
 

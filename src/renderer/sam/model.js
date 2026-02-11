@@ -273,6 +273,11 @@ export const loadStateAcceptor = model => proposal => {
   if (proposal?.type === 'LOAD_STATE') {
     const { state } = proposal.payload
 
+    console.log('[LOAD_STATE] Acceptor received state. Has ollama?', !!state.config?.ollama)
+    if (state.config?.ollama) {
+      console.log('[LOAD_STATE] Ollama config in acceptor:', JSON.stringify(state.config.ollama, null, 2))
+    }
+
     model.projectPath = state.projectPath
     model.projectName = state.projectName
     model.config = state.config

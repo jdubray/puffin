@@ -921,6 +921,10 @@ Please provide specific file locations and line numbers where issues are found, 
       const result = await window.puffin.state.init()
       if (result.success) {
         console.log('State loaded from .puffin/', result.state)
+        console.log('[APP] State received. Has ollama?', !!result.state.config?.ollama)
+        if (result.state.config?.ollama) {
+          console.log('[APP] Ollama config received:', JSON.stringify(result.state.config.ollama, null, 2))
+        }
         this.intents.loadState(result.state)
       } else {
         console.error('Failed to load state:', result.error)

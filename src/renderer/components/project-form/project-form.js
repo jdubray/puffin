@@ -468,17 +468,30 @@ export class ProjectFormComponent {
 
     // Ollama Settings
     const ollamaConfig = config.ollama || {}
+    console.log('[PROJECT-FORM] Loading Ollama config:', JSON.stringify(ollamaConfig, null, 2))
+
     const ollamaEnabled = document.getElementById('ollama-enabled')
     const ollamaSshHost = document.getElementById('ollama-ssh-host')
     const ollamaSshPort = document.getElementById('ollama-ssh-port')
     const ollamaSshKey = document.getElementById('ollama-ssh-key')
 
     if (ollamaEnabled) ollamaEnabled.checked = ollamaConfig.enabled || false
-    if (ollamaSshHost) ollamaSshHost.value = ollamaConfig.ssh?.host
-      ? `${ollamaConfig.ssh.user || ''}@${ollamaConfig.ssh.host}`
-      : ''
-    if (ollamaSshPort) ollamaSshPort.value = ollamaConfig.ssh?.port || 22
-    if (ollamaSshKey) ollamaSshKey.value = ollamaConfig.ssh?.privateKeyPath || '~/.ssh/id_ed25519'
+    if (ollamaSshHost) {
+      const hostValue = ollamaConfig.ssh?.host
+        ? `${ollamaConfig.ssh.user || ''}@${ollamaConfig.ssh.host}`
+        : ''
+      console.log('[PROJECT-FORM] Setting SSH Host field to:', hostValue)
+      ollamaSshHost.value = hostValue
+    }
+    if (ollamaSshPort) {
+      console.log('[PROJECT-FORM] Setting SSH Port field to:', ollamaConfig.ssh?.port || 22)
+      ollamaSshPort.value = ollamaConfig.ssh?.port || 22
+    }
+    if (ollamaSshKey) {
+      const keyPath = ollamaConfig.ssh?.privateKeyPath || '~/.ssh/id_ed25519'
+      console.log('[PROJECT-FORM] Setting SSH Key field to:', keyPath)
+      ollamaSshKey.value = keyPath
+    }
 
     // Toggle field visibility based on enabled state
     this._updateOllamaFieldsVisibility()
@@ -700,6 +713,8 @@ export class ProjectFormComponent {
    * Spawns SSH to verify connectivity and lists available models
    */
   async handleTestOllamaConnection() {
+    console.log('[PROJECT-FORM] ===== TEST CONNECTION CLICKED =====')
+
     const btn = document.getElementById('test-ollama-btn')
     const resultDiv = document.getElementById('ollama-test-result')
     const originalText = btn?.textContent
@@ -716,18 +731,24 @@ export class ProjectFormComponent {
 
       // Build config from current form fields
       const ollamaData = this._getOllamaFormData()
+      console.log('[PROJECT-FORM] Form data for test:', JSON.stringify(ollamaData, null, 2))
+
       const sshConfig = {
         host: ollamaData.ssh.host,
         user: ollamaData.ssh.user,
-        port: ollamaData.ssh.port
+        port: ollamaData.ssh.port,
+        privateKeyPath: ollamaData.ssh.privateKeyPath
       }
+      console.log('[PROJECT-FORM] SSH config for test:', JSON.stringify(sshConfig, null, 2))
 
       if (!sshConfig.host || !sshConfig.user) {
         this._showOllamaTestResult(resultDiv, false, 'Enter SSH host in user@host format')
         return
       }
 
+      console.log('[PROJECT-FORM] Calling window.puffin.llm.testConnection...')
       const result = await window.puffin.llm.testConnection(sshConfig)
+      console.log('[PROJECT-FORM] Test connection result:', JSON.stringify(result, null, 2))
 
       if (result.success) {
         const modelList = result.models?.length > 0

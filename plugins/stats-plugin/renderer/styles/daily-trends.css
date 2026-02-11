@@ -11,11 +11,16 @@
 /* Header + Legend */
 .daily-trends-header {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.daily-trends-header-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
 }
 
 .daily-trends-title {
@@ -23,6 +28,37 @@
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary, #e0e0e0);
+}
+
+.daily-trends-period-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-tertiary, #232340);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.daily-trends-period-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary, #888);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.daily-trends-period-btn:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.daily-trends-period-btn.active {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--accent-primary, #6c63ff);
+  font-weight: 600;
 }
 
 .daily-trends-legend {

@@ -2,29 +2,19 @@
  * ComponentPerformanceTable - Sortable, expandable component stats table.
  *
  * Features:
- * - Columns: Component, Operations, Cost, Tokens, Avg Duration, % of Total
+ * - Columns: Component, Operations, Cost, Avg Duration, % of Total
  * - Click column header to sort (asc/desc toggle)
  * - Click row to expand inline operation-level sub-table
  * - Search/filter by component name
  * - Export to CSV or Markdown
  */
 
-const COMPONENT_DISPLAY_NAMES = {
-  'claude-service': 'Claude Service',
-  'cre-plan': 'CRE Plan Generator',
-  'cre-ris': 'CRE RIS Generator',
-  'cre-assertion': 'CRE Assertion Generator',
-  'hdsl-engine': 'h-DSL Engine',
-  'memory-plugin': 'Memory Plugin',
-  'outcomes-plugin': 'Outcomes Plugin',
-  'skills-system': 'Skills System'
-}
+import { COMPONENT_DISPLAY_NAMES } from './component-names.js'
 
 const COLUMNS = [
   { id: 'component', label: 'Component', sortable: true, align: 'left' },
   { id: 'operations', label: 'Operations', sortable: true, align: 'right' },
   { id: 'totalCost', label: 'Cost', sortable: true, align: 'right' },
-  { id: 'totalTokens', label: 'Tokens', sortable: true, align: 'right' },
   { id: 'avgDuration', label: 'Avg Duration', sortable: true, align: 'right' },
   { id: 'pctOfCost', label: '% of Total', sortable: true, align: 'right' }
 ]
@@ -33,7 +23,6 @@ const OP_COLUMNS = [
   { id: 'operation', label: 'Operation', align: 'left' },
   { id: 'count', label: 'Count', align: 'right' },
   { id: 'totalCost', label: 'Cost', align: 'right' },
-  { id: 'totalTokens', label: 'Tokens', align: 'right' },
   { id: 'avgDuration', label: 'Avg Duration', align: 'right' },
   { id: 'avgCostPerOp', label: 'Avg Cost/Op', align: 'right' }
 ]
@@ -195,7 +184,6 @@ export class ComponentPerformanceTable {
         </td>
         <td class="perf-td-right">${comp.operations.toLocaleString()}</td>
         <td class="perf-td-right">$${comp.totalCost.toFixed(2)}</td>
-        <td class="perf-td-right">${ComponentPerformanceTable.abbreviateNumber(comp.totalTokens)}</td>
         <td class="perf-td-right">${ComponentPerformanceTable.formatDuration(comp.avgDuration)}</td>
         <td class="perf-td-right">${comp.pctOfCost}%</td>
       `
@@ -233,7 +221,6 @@ export class ComponentPerformanceTable {
         <td class="perf-td-left"><strong>Total</strong></td>
         <td class="perf-td-right"><strong>${t.operations.toLocaleString()}</strong></td>
         <td class="perf-td-right"><strong>$${t.totalCost.toFixed(2)}</strong></td>
-        <td class="perf-td-right"><strong>${ComponentPerformanceTable.abbreviateNumber(t.totalTokens)}</strong></td>
         <td class="perf-td-right"></td>
         <td class="perf-td-right"><strong>100%</strong></td>
       `
@@ -269,7 +256,6 @@ export class ComponentPerformanceTable {
         <td class="perf-td-left">${this._escapeHtml(op.operation)}</td>
         <td class="perf-td-right">${op.count.toLocaleString()}</td>
         <td class="perf-td-right">$${op.totalCost.toFixed(2)}</td>
-        <td class="perf-td-right">${ComponentPerformanceTable.abbreviateNumber(op.totalTokens)}</td>
         <td class="perf-td-right">${ComponentPerformanceTable.formatDuration(op.avgDuration)}</td>
         <td class="perf-td-right">$${op.avgCostPerOp.toFixed(4)}</td>
       `
@@ -434,7 +420,7 @@ export class ComponentPerformanceTable {
   static toCSV(rows) {
     if (!rows || rows.length === 0) return ''
 
-    const headers = ['Component', 'Operations', 'Cost', 'Tokens', 'Avg Duration (ms)', '% of Cost']
+    const headers = ['Component', 'Operations', 'Cost', 'Avg Duration (ms)', '% of Cost']
     const lines = [headers.join(',')]
 
     for (const r of rows) {
@@ -442,7 +428,6 @@ export class ComponentPerformanceTable {
         ComponentPerformanceTable.csvEscape(ComponentPerformanceTable.displayName(r.component)),
         String(r.operations),
         r.totalCost.toFixed(4),
-        String(r.totalTokens),
         String(r.avgDuration),
         String(r.pctOfCost)
       ]
@@ -464,13 +449,13 @@ export class ComponentPerformanceTable {
     lines.push('')
     lines.push(`Generated: ${new Date().toISOString().slice(0, 10)}`)
     lines.push('')
-    lines.push('| Component | Operations | Cost | Tokens | Avg Duration | % of Cost |')
-    lines.push('|-----------|-----------|------|--------|-------------|-----------|')
+    lines.push('| Component | Operations | Cost | Avg Duration | % of Cost |')
+    lines.push('|-----------|-----------|------|-------------|-----------|')
 
     for (const r of rows) {
       const name = ComponentPerformanceTable.displayName(r.component)
       lines.push(
-        `| ${name} | ${r.operations.toLocaleString()} | $${r.totalCost.toFixed(2)} | ${ComponentPerformanceTable.abbreviateNumber(r.totalTokens)} | ${ComponentPerformanceTable.formatDuration(r.avgDuration)} | ${r.pctOfCost}% |`
+        `| ${name} | ${r.operations.toLocaleString()} | $${r.totalCost.toFixed(2)} | ${ComponentPerformanceTable.formatDuration(r.avgDuration)} | ${r.pctOfCost}% |`
       )
     }
 

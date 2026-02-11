@@ -1,6 +1,6 @@
 {
   "name": "stats-plugin",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "displayName": "Stats Dashboard",
   "description": "Track and visualize usage statistics across branches",
   "main": "index.js",
@@ -52,7 +52,18 @@
       }
     ],
     "styles": [
-      "renderer/styles/stats-view.css"
+      "renderer/styles/stats-view.css",
+      "renderer/styles/summary-cards.css",
+      "renderer/styles/treemap.css",
+      "renderer/styles/daily-trends.css",
+      "renderer/styles/efficiency-chart.css",
+      "renderer/styles/performance-table.css",
+      "renderer/styles/stats-chart.css",
+      "renderer/styles/stats-table.css",
+      "renderer/styles/totals-row.css",
+      "renderer/styles/chart-tooltip.css",
+      "renderer/styles/export-button.css",
+      "renderer/styles/notification.css"
     ]
   }
 }

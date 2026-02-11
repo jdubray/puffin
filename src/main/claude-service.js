@@ -1932,6 +1932,7 @@ ${content}`
       let buffer = ''
       let resultText = ''
       let structuredData = null // Extracted from StructuredOutput tool_use block
+      let resultData = null // Captures the result message with cost/turns data
       let errorOutput = ''
       let resolved = false
       let dataReceived = false
@@ -1970,9 +1971,15 @@ ${content}`
               }
             }
 
-            // Also check for result type
+            // Capture result message with cost/usage metadata
             if (json.type === 'result') {
-              console.log('[sendPrompt] Received result message, result length:', json.result?.length || 0)
+              resultData = json // Capture the full result message
+              console.log('[sendPrompt] Received result message:', {
+                resultLength: json.result?.length || 0,
+                cost: json.total_cost_usd,
+                turns: json.num_turns,
+                sessionId: json.session_id
+              })
               if (json.result) {
                 resultText = json.result
               }
@@ -2024,7 +2031,7 @@ ${content}`
           if (metricsService) {
             const duration = Date.now() - sendPromptStartTime
             const ctx = {
-              session_id: sendPromptOpId,
+              session_id: resultData?.session_id || sendPromptOpId,
               story_id: options.storyId,
               plan_id: options.planId,
               sprint_id: options.sprintId,
@@ -2032,7 +2039,11 @@ ${content}`
             }
             if (success) {
               metricsService.recordComplete(metricsComponent, metricsOperation, ctx,
-                { duration_ms: duration, cost_usd: null, turns: null },
+                {
+                  duration_ms: duration,
+                  cost_usd: resultData?.total_cost_usd ?? null,
+                  turns: resultData?.num_turns ?? null
+                },
                 { exitCode: code, responseLength: extra.responseLength || 0, ...extra })
             } else {
               metricsService.recordError(metricsComponent, metricsOperation, ctx,

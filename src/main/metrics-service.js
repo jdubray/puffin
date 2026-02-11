@@ -52,7 +52,8 @@ class MetricsService extends EventEmitter {
     this.batchSize = 50
     this.flushInterval = 300000 // 5 minutes — AI operations are slow, no need for aggressive flushing
     this.flushTimer = null
-    this.insertStmt = null
+    this.insertStmt = null // Legacy: writes to metrics_events (kept during transition)
+    this.insertPromptStmt = null // New: writes to prompt_metrics
     this._flushing = false
     this._initializeStatements()
     this._startBatchTimer()
@@ -74,8 +75,32 @@ class MetricsService extends EventEmitter {
       return
     }
 
+    // Verify database connection is open
+    if (!db.open) {
+      console.warn('[METRICS] Database connection is not open, statements will be prepared later')
+      return
+    }
+
+    // Legacy statement: writes to metrics_events (kept during transition)
     this.insertStmt = db.prepare(`
       INSERT INTO metrics_events (
+        id, component, operation, event_type,
+        session_id, branch_id, story_id, plan_id, sprint_id,
+        input_tokens, output_tokens, total_tokens,
+        cost_usd, turns, duration_ms,
+        metadata, created_at
+      ) VALUES (
+        @id, @component, @operation, @event_type,
+        @session_id, @branch_id, @story_id, @plan_id, @sprint_id,
+        @input_tokens, @output_tokens, @total_tokens,
+        @cost_usd, @turns, @duration_ms,
+        @metadata, @created_at
+      )
+    `)
+
+    // New statement: writes to prompt_metrics (primary going forward)
+    this.insertPromptStmt = db.prepare(`
+      INSERT INTO prompt_metrics (
         id, component, operation, event_type,
         session_id, branch_id, story_id, plan_id, sprint_id,
         input_tokens, output_tokens, total_tokens,
@@ -134,13 +159,19 @@ class MetricsService extends EventEmitter {
 
     this._flushing = true
     try {
+      // Check if database is initialized and ready
+      if (!this.database || !this.database.isInitialized()) {
+        console.warn('[METRICS] Cannot flush batch: database not initialized')
+        return
+      }
+
       // Ensure statements are initialized
-      if (!this.insertStmt) {
+      if (!this.insertStmt || !this.insertPromptStmt) {
         this._initializeStatements()
       }
 
-      if (!this.insertStmt) {
-        console.error('[METRICS] Cannot flush batch: insert statement not initialized')
+      if (!this.insertStmt || !this.insertPromptStmt) {
+        console.error('[METRICS] Cannot flush batch: insert statements not initialized')
         return
       }
 
@@ -150,10 +181,18 @@ class MetricsService extends EventEmitter {
         return
       }
 
+      // Verify database connection is open (better-sqlite3 specific check)
+      if (!db.open) {
+        console.error('[METRICS] Cannot flush batch: database connection is not open')
+        return
+      }
+
       // Batch insert within transaction for performance
+      // Dual-write to both tables during transition period
       const insertMany = db.transaction((events) => {
         for (const event of events) {
-          this.insertStmt.run(event)
+          this.insertStmt.run(event) // Legacy: metrics_events
+          this.insertPromptStmt.run(event) // New: prompt_metrics (+ story_metrics via trigger)
         }
       })
 
@@ -309,12 +348,24 @@ class MetricsService extends EventEmitter {
    */
   queryEvents(filters = {}) {
     try {
+      // Check if database is initialized before attempting flush or query
+      if (!this.database || !this.database.isInitialized()) {
+        console.warn('[METRICS] Cannot query: database not initialized')
+        return []
+      }
+
       // Flush pending batch before query
       this._flushBatch()
 
       const db = this.database.getConnection()
       if (!db) {
         console.error('[METRICS] Cannot query: no database connection')
+        return []
+      }
+
+      // Verify database connection is open
+      if (!db.open) {
+        console.error('[METRICS] Cannot query: database connection is not open')
         return []
       }
 
@@ -354,7 +405,7 @@ class MetricsService extends EventEmitter {
       const limit = Math.min(Math.max(parseInt(filters.limit, 10) || 1000, 1), 10000)
 
       const query = `
-        SELECT * FROM metrics_events
+        SELECT * FROM prompt_metrics
         ${whereClause}
         ORDER BY created_at DESC
         LIMIT ${limit}
@@ -386,10 +437,22 @@ class MetricsService extends EventEmitter {
    */
   getComponentStats(component, options = {}) {
     try {
+      // Check if database is initialized before attempting flush or query
+      if (!this.database || !this.database.isInitialized()) {
+        console.warn('[METRICS] Cannot get component stats: database not initialized')
+        return null
+      }
+
       this._flushBatch()
 
       const db = this.database.getConnection()
       if (!db) {
+        return null
+      }
+
+      // Verify database connection is open
+      if (!db.open) {
+        console.error('[METRICS] Cannot get component stats: database connection is not open')
         return null
       }
 
@@ -415,7 +478,7 @@ class MetricsService extends EventEmitter {
           AVG(duration_ms) as avg_duration_ms,
           MAX(duration_ms) as max_duration_ms,
           MIN(duration_ms) as min_duration_ms
-        FROM metrics_events
+        FROM prompt_metrics
         WHERE ${conditions.join(' AND ')}
       `
 
@@ -424,6 +487,68 @@ class MetricsService extends EventEmitter {
     } catch (error) {
       console.error('[METRICS] Error getting component stats:', error.message)
       return null
+    }
+  }
+
+  /**
+   * Get story-level metrics (aggregated per story)
+   *
+   * @param {Object} [filters] - Query filters
+   * @param {string} [filters.story_id] - Filter by story ID
+   * @param {string} [filters.sprint_id] - Filter by sprint ID
+   * @param {number} [filters.limit] - Limit results (default 1000)
+   * @returns {Array<Object>} Array of story metrics
+   */
+  getStoryMetrics(filters = {}) {
+    try {
+      // Check if database is initialized
+      if (!this.database || !this.database.isInitialized()) {
+        console.warn('[METRICS] Cannot query story metrics: database not initialized')
+        return []
+      }
+
+      // Flush pending batch to ensure story_metrics is up to date
+      this._flushBatch()
+
+      const db = this.database.getConnection()
+      if (!db) {
+        console.error('[METRICS] Cannot query story metrics: no database connection')
+        return []
+      }
+
+      if (!db.open) {
+        console.error('[METRICS] Cannot query story metrics: database connection is not open')
+        return []
+      }
+
+      const conditions = []
+      const params = {}
+
+      if (filters.story_id) {
+        conditions.push('id = @story_id')
+        params.story_id = filters.story_id
+      }
+      if (filters.sprint_id) {
+        conditions.push('sprint_id = @sprint_id')
+        params.sprint_id = filters.sprint_id
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+      const limit = Math.min(Math.max(parseInt(filters.limit, 10) || 1000, 1), 10000)
+
+      const query = `
+        SELECT * FROM story_metrics
+        ${whereClause}
+        ORDER BY total_cost_usd DESC
+        LIMIT ${limit}
+      `
+
+      const stmt = db.prepare(query)
+      return stmt.all(params)
+    } catch (error) {
+      console.error('[METRICS] Error querying story metrics:', error.message)
+      this.emit('error', { error, context: 'query-story-metrics' })
+      return []
     }
   }
 

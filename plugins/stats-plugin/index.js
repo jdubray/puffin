@@ -61,6 +61,7 @@ const StatsPlugin = {
     context.registerIpcHandler('getWeeklyNormalized', this.getWeeklyNormalized.bind(this))
     context.registerIpcHandler('showSaveDialog', this.showSaveDialog.bind(this))
     context.registerIpcHandler('saveMarkdownExport', this.saveMarkdownExport.bind(this))
+    context.registerIpcHandler('getStoryMetrics', this.getStoryMetrics.bind(this))
 
     // Register actions (for programmatic access from other plugins)
     context.registerAction('getStats', this.getStats.bind(this))
@@ -475,6 +476,48 @@ const StatsPlugin = {
   },
 
   /**
+   * Get story metrics summary from story_metrics table.
+   *
+   * @param {Object} [options]
+   * @param {number} [options.limit=100] - Max number of stories to return.
+   * @returns {Promise<Object>} Story metrics with totals and individual stories.
+   */
+  async getStoryMetrics(options = {}) {
+    const ms = this._acquireMetricsService()
+    if (!ms) {
+      return { stories: [], totals: { totalOperations: 0, totalCost: 0, totalDuration: 0 } }
+    }
+
+    try {
+      const limit = Math.min(Math.max(parseInt(options.limit, 10) || 100, 1), 500)
+
+      // Get story metrics from story_metrics table
+      const stories = ms.getStoryMetrics({ limit })
+
+      // Compute totals
+      const totals = {
+        totalOperations: 0,
+        totalCost: 0,
+        totalDuration: 0
+      }
+
+      for (const story of stories) {
+        totals.totalOperations += story.total_operations || 0
+        totals.totalCost += story.total_cost_usd || 0
+        totals.totalDuration += story.total_duration_ms || 0
+      }
+
+      return {
+        stories,
+        totals
+      }
+    } catch (err) {
+      this.context.log.error('getStoryMetrics failed:', err.message)
+      return { stories: [], totals: { totalOperations: 0, totalCost: 0, totalDuration: 0 } }
+    }
+  },
+
+  /**
    * Get daily aggregated trends for the last N days.
    *
    * @param {Object} [options]
@@ -842,11 +885,11 @@ const StatsPlugin = {
       return { success: false, error: 'Invalid content (must be string)' }
     }
 
-    // Resolve and validate path (prevent parent traversal)
-    const resolved = path.resolve(filePath)
-    if (resolved.includes('..')) {
+    // Validate path before resolving (prevent parent traversal)
+    if (filePath.includes('..')) {
       return { success: false, error: 'Path traversal not allowed' }
     }
+    const resolved = path.resolve(filePath)
 
     try {
       await fs.writeFile(resolved, content, 'utf-8')

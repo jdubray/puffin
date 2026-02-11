@@ -2,23 +2,14 @@
  * ComponentTreemap - Interactive treemap showing component-level cost breakdown.
  *
  * Features:
- * - Rectangle size proportional to selected metric (cost, tokens, operations)
+ * - Rectangle size proportional to selected metric (cost or operations)
  * - Color gradient based on efficiency (cost per operation)
  * - Click to drill down into operation-level view
  * - Metric toggle and time range selector
  * - Hover tooltips with exact values
  */
 
-const COMPONENT_DISPLAY_NAMES = {
-  'claude-service': 'Claude Service',
-  'cre-plan': 'CRE Plan Generator',
-  'cre-ris': 'CRE RIS Generator',
-  'cre-assertion': 'CRE Assertion Generator',
-  'hdsl-engine': 'h-DSL Engine',
-  'memory-plugin': 'Memory Plugin',
-  'outcomes-plugin': 'Outcomes Plugin',
-  'skills-system': 'Skills System'
-}
+import { COMPONENT_DISPLAY_NAMES } from './component-names.js'
 
 export class ComponentTreemap {
   /**
@@ -32,7 +23,7 @@ export class ComponentTreemap {
       window.puffin.plugins.invoke(plugin, handler, args))
 
     // State
-    this.metric = 'totalCost'    // 'totalCost' | 'totalTokens' | 'operations'
+    this.metric = 'totalCost'    // 'totalCost' | 'operations'
     this.days = 30               // 7 | 30 | 90
     this.breakdown = null        // getComponentBreakdown() result
     this.drillComponent = null   // component id when drilled down
@@ -65,7 +56,6 @@ export class ComponentTreemap {
         <label class="treemap-control-label">Metric</label>
         <div class="treemap-toggle" data-group="metric">
           <button class="treemap-toggle-btn ${this.metric === 'totalCost' ? 'active' : ''}" data-value="totalCost">Cost</button>
-          <button class="treemap-toggle-btn ${this.metric === 'totalTokens' ? 'active' : ''}" data-value="totalTokens">Tokens</button>
           <button class="treemap-toggle-btn ${this.metric === 'operations' ? 'active' : ''}" data-value="operations">Operations</button>
         </div>
       </div>
@@ -250,11 +240,9 @@ export class ComponentTreemap {
     if (this.metric === 'totalCost') {
       return typeof val === 'number' ? `$${val.toFixed(2)}` : '$0.00'
     }
-    if (this.metric === 'totalTokens') {
-      if (val >= 1000000) return `${parseFloat((val / 1000000).toFixed(1))}M`
-      if (val >= 1000) return `${parseFloat((val / 1000).toFixed(1))}k`
-      return String(val)
-    }
+    // operations
+    if (val >= 1000000) return `${parseFloat((val / 1000000).toFixed(1))}M`
+    if (val >= 1000) return `${parseFloat((val / 1000).toFixed(1))}k`
     return String(val)
   }
 
@@ -400,7 +388,6 @@ export class ComponentTreemap {
 
     let html = `<strong>${this._escapeHtml(item.label)}</strong>`
     if (raw.totalCost != null) html += `<br>Cost: $${raw.totalCost.toFixed(2)}`
-    if (raw.totalTokens != null) html += `<br>Tokens: ${(raw.totalTokens || 0).toLocaleString()}`
     const ops = raw.operations || raw.count
     if (ops != null) html += `<br>Operations: ${ops}`
     if (raw.avgDuration != null) html += `<br>Avg Duration: ${this._fmtDuration(raw.avgDuration)}`

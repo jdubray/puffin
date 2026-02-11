@@ -4,21 +4,26 @@
  * Displays 4 key metric cards:
  * - Total Cost (30d)
  * - Avg Cost/Story
- * - Total Tokens (30d)
- * - Avg Tokens/Story
+ * - Total Operations (30d)
+ * - Avg Operations/Story
  *
  * Each card shows an icon, formatted value, label, and trend indicator
  * (% change vs previous period) with color coding.
+ *
+ * Note: Token counts are not available from Claude CLI, so we display
+ * operation counts instead as a proxy for activity level.
  */
 export class SummaryCards {
   /**
    * @param {HTMLElement} element - Container element
    * @param {Object} [options]
    * @param {Object} [options.data] - Metrics summary data (from getMetricsSummary)
+   * @param {string} [options.mode='mixed'] - Display mode: 'prompt' (prompt-level only), 'story' (story-level only), or 'mixed' (both)
    */
   constructor(element, options = {}) {
     this.container = element
     this.data = options.data || null
+    this.mode = options.mode || 'mixed'
   }
 
   /**
@@ -55,36 +60,77 @@ export class SummaryCards {
     const comparison = summary?.comparison || {}
     const perStory = summary?.perStory || {}
 
+    // Prompt-level cards (raw prompt metrics)
+    if (this.mode === 'prompt') {
+      return [
+        {
+          icon: '💰',
+          value: SummaryCards.formatCost(current.totalCost),
+          label: 'Total Cost (30d)',
+          trend: comparison.totalCost,
+          invertColor: true
+        },
+        {
+          icon: '💵',
+          value: current.operations > 0
+            ? SummaryCards.formatCost(current.totalCost / current.operations)
+            : '$0.00',
+          label: 'Avg Cost / Operation',
+          trend: null,
+          subtitle: `${current.operations || 0} operations`,
+          invertColor: true
+        },
+        {
+          icon: '🔢',
+          value: SummaryCards.formatNumber(current.operations),
+          label: 'Total Operations (30d)',
+          trend: comparison.operations,
+          invertColor: false
+        },
+        {
+          icon: '⏱️',
+          value: current.operations > 0
+            ? SummaryCards.formatDuration(Math.round(current.totalDuration / current.operations))
+            : '0s',
+          label: 'Avg Duration / Op',
+          trend: null,
+          subtitle: SummaryCards.formatDuration(current.totalDuration),
+          invertColor: false
+        }
+      ]
+    }
+
+    // Mixed mode (default - includes story-level metrics)
     return [
       {
         icon: '💰',
         value: SummaryCards.formatCost(current.totalCost),
         label: 'Total Cost (30d)',
         trend: comparison.totalCost,
-        invertColor: true // cost increase = red
+        invertColor: true
       },
       {
         icon: '📊',
         value: SummaryCards.formatCost(perStory.avgCostPerStory),
         label: 'Avg Cost / Story',
-        trend: null, // no comparison for per-story
-        subtitle: perStory.storyCount != null ? `${perStory.storyCount} stories` : null,
-        invertColor: true
-      },
-      {
-        icon: '🔤',
-        value: SummaryCards.formatTokens(current.totalTokens),
-        label: 'Total Tokens (30d)',
-        trend: comparison.totalTokens,
-        invertColor: true // more tokens = more cost, so red
-      },
-      {
-        icon: '📈',
-        value: SummaryCards.formatTokens(perStory.avgTokensPerStory),
-        label: 'Avg Tokens / Story',
         trend: null,
         subtitle: perStory.storyCount != null ? `${perStory.storyCount} stories` : null,
         invertColor: true
+      },
+      {
+        icon: '🔢',
+        value: SummaryCards.formatNumber(current.operations),
+        label: 'Total Operations (30d)',
+        trend: comparison.operations,
+        invertColor: false
+      },
+      {
+        icon: '📈',
+        value: SummaryCards.formatNumber(Math.round((current.operations || 0) / (perStory.storyCount || 1))),
+        label: 'Avg Operations / Story',
+        trend: null,
+        subtitle: perStory.storyCount != null ? `${perStory.storyCount} stories` : null,
+        invertColor: false
       }
     ]
   }
@@ -180,20 +226,20 @@ export class SummaryCards {
   }
 
   /**
-   * @param {number} tokens
+   * @param {number} num
    * @returns {string}
    */
-  static formatTokens(tokens) {
-    if (tokens == null || typeof tokens !== 'number' || isNaN(tokens)) return '0'
-    if (tokens >= 1000000) {
-      const v = tokens / 1000000
+  static formatNumber(num) {
+    if (num == null || typeof num !== 'number' || isNaN(num)) return '0'
+    if (num >= 1000000) {
+      const v = num / 1000000
       return v % 1 === 0 ? `${v}M` : `${parseFloat(v.toFixed(1))}M`
     }
-    if (tokens >= 1000) {
-      const v = tokens / 1000
+    if (num >= 1000) {
+      const v = num / 1000
       return v % 1 === 0 ? `${v}k` : `${parseFloat(v.toFixed(1))}k`
     }
-    return String(tokens)
+    return String(num)
   }
 
   /**
@@ -211,6 +257,20 @@ export class SummaryCards {
       text: `${sign}${rounded}%`,
       direction: pct > 0 ? 'up' : 'down'
     }
+  }
+
+  /**
+   * @param {number} ms - Duration in milliseconds
+   * @returns {string}
+   */
+  static formatDuration(ms) {
+    if (!ms || ms === 0) return '0s'
+    const seconds = Math.floor(ms / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    if (hours > 0) return `${hours}h ${minutes % 60}m`
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`
+    return `${seconds}s`
   }
 }
 

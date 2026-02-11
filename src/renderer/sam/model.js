@@ -1906,7 +1906,7 @@ export const clearBranchHandoffContextAcceptor = model => proposal => {
 // Create a sprint from selected stories
 export const createSprintAcceptor = model => proposal => {
   if (proposal?.type === 'CREATE_SPRINT') {
-    const { stories, timestamp } = proposal.payload
+    const { stories, branchName, timestamp } = proposal.payload
 
     // Deduplicate stories by ID
     const seenIds = new Set()
@@ -1966,6 +1966,7 @@ export const createSprintAcceptor = model => proposal => {
     model.activeSprint = {
       id: sprintId,
       title: sprintTitle,
+      branchName: branchName || '',
       stories: sprintStories,
       status: 'created', // 'created' | 'planning' | 'planned' | 'implementing'
       storyProgress: {}, // Initialize empty story progress

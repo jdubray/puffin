@@ -2,7 +2,7 @@
  * NormalizedEfficiencyChart - Tabbed bar chart for per-story/per-operation efficiency.
  *
  * Features:
- * - 3 tabs: Cost/Story, Tokens/Story, Duration/Operation
+ * - 2 tabs: Cost/Story, Duration/Operation
  * - Bar chart for last 12 weeks, color-coded by value thresholds
  * - Linear regression trend line overlay
  * - Overall % change indicator (first → last week)
@@ -11,7 +11,6 @@
 
 const TABS = [
   { id: 'costPerStory', label: 'Cost / Story', unit: '$', format: v => `$${v.toFixed(2)}` },
-  { id: 'tokensPerStory', label: 'Tokens / Story', unit: 'tok', format: v => NormalizedEfficiencyChart.abbreviateNumber(v) },
   { id: 'durationPerOp', label: 'Duration / Op', unit: 'ms', format: v => NormalizedEfficiencyChart.formatDuration(v) }
 ]
 
@@ -28,6 +27,7 @@ export class NormalizedEfficiencyChart {
 
     // State
     this.activeTab = 'costPerStory'
+    this.weeks = 12        // 8 | 12 | 26
     this.data = null       // getWeeklyNormalized() result
     this.loading = false
 
@@ -46,7 +46,7 @@ export class NormalizedEfficiencyChart {
     this.render()
 
     try {
-      this.data = await this.invoke('stats-plugin', 'getWeeklyNormalized', { weeks: 12 })
+      this.data = await this.invoke('stats-plugin', 'getWeeklyNormalized', { weeks: this.weeks })
     } catch (err) {
       console.error('[NormalizedEfficiencyChart] fetchData failed:', err)
       this.data = null
@@ -61,9 +61,12 @@ export class NormalizedEfficiencyChart {
     this.container.innerHTML = ''
     this.container.className = 'efficiency-chart-component'
 
-    // Header with tabs + % change badge
+    // Header with tabs + period controls
     const header = document.createElement('div')
     header.className = 'efficiency-chart-header'
+
+    const topRow = document.createElement('div')
+    topRow.className = 'efficiency-chart-top-row'
 
     const tabBar = document.createElement('div')
     tabBar.className = 'efficiency-chart-tabs'
@@ -78,7 +81,25 @@ export class NormalizedEfficiencyChart {
       })
       tabBar.appendChild(btn)
     }
-    header.appendChild(tabBar)
+    topRow.appendChild(tabBar)
+
+    // Period toggle
+    const periodToggle = document.createElement('div')
+    periodToggle.className = 'efficiency-chart-period-toggle'
+    periodToggle.innerHTML = `
+      <button class="efficiency-period-btn ${this.weeks === 8 ? 'active' : ''}" data-weeks="8">8w</button>
+      <button class="efficiency-period-btn ${this.weeks === 12 ? 'active' : ''}" data-weeks="12">12w</button>
+      <button class="efficiency-period-btn ${this.weeks === 26 ? 'active' : ''}" data-weeks="26">26w</button>
+    `
+    periodToggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.efficiency-period-btn')
+      if (!btn) return
+      this.weeks = parseInt(btn.dataset.weeks, 10)
+      this.fetchData()
+    })
+    topRow.appendChild(periodToggle)
+
+    header.appendChild(topRow)
 
     // % change badge
     const weeks = this.data?.weeks || []
@@ -189,7 +210,7 @@ export class NormalizedEfficiencyChart {
       // Color: lower is better for all efficiency metrics
       ctx.fillStyle = NormalizedEfficiencyChart.barColor(v, thresholds)
 
-      if (weeks[i].storyCount === 0 && (tab.id === 'costPerStory' || tab.id === 'tokensPerStory')) {
+      if (weeks[i].storyCount === 0 && tab.id === 'costPerStory') {
         // Zero-story week: draw a thin dashed outline instead
         ctx.strokeStyle = '#555'
         ctx.lineWidth = 1

@@ -1486,10 +1486,10 @@ export class UserStoriesComponent {
       // Continue anyway - the backend will reject if there's a conflict
     }
 
-    // Call intent to create sprint - this will switch to prompt view with sprint header
-    this.intents.createSprint(selectedStories)
+    // Show sprint creation modal with branch name suggestion
+    this.intents.showModal('sprint-create', { stories: selectedStories })
 
-    // Clear selection after creating sprint
+    // Clear selection after opening modal (sprint creation will change the view)
     this.selectedStoryIds.clear()
     this.updateActionBar()
   }

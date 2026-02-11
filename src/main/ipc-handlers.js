@@ -1338,7 +1338,7 @@ function setupMetricsHandlers(ipcMain) {
     }
   })
 
-  // Get metrics for a specific story
+  // Get metrics for a specific story (uses pre-aggregated story_metrics table)
   ipcMain.handle('metrics:storyMetrics', async (event, storyId) => {
     try {
       const metricsService = getMetricsService()
@@ -1346,25 +1346,34 @@ function setupMetricsHandlers(ipcMain) {
         return { success: false, error: 'Metrics service not initialized' }
       }
 
-      const events = metricsService.queryEvents({ story_id: storyId })
+      // Get pre-aggregated story metrics (fast!)
+      const storyMetrics = metricsService.getStoryMetrics({ story_id: storyId })
+      const story = storyMetrics.length > 0 ? storyMetrics[0] : null
 
-      // Calculate aggregates
-      const completeEvents = events.filter(e => e.event_type === 'complete')
-      const totalCost = completeEvents.reduce((sum, e) => sum + (e.cost_usd || 0), 0)
-      const totalTokens = completeEvents.reduce((sum, e) => sum + (e.total_tokens || 0), 0)
-      const totalDuration = completeEvents.reduce((sum, e) => sum + (e.duration_ms || 0), 0)
+      // Also get individual prompts for drill-down capability
+      const prompts = metricsService.queryEvents({
+        story_id: storyId,
+        event_type: 'complete'
+      })
 
       return {
         success: true,
         metrics: {
-          events,
-          summary: {
-            operationCount: completeEvents.length,
-            totalCost,
-            totalTokens,
-            totalDuration,
-            avgDuration: completeEvents.length > 0 ? totalDuration / completeEvents.length : 0
-          }
+          story: story ? {
+            storyId: story.id,
+            storyTitle: story.story_title,
+            totalOperations: story.total_operations,
+            totalCost: story.total_cost_usd,
+            totalTokens: story.total_tokens,
+            totalDuration: story.total_duration_ms,
+            avgDuration: story.total_operations > 0
+              ? Math.round(story.total_duration_ms / story.total_operations)
+              : 0,
+            firstOperationAt: story.first_operation_at,
+            lastOperationAt: story.last_operation_at,
+            status: story.status
+          } : null,
+          prompts // Individual operations for drill-down
         }
       }
     } catch (error) {

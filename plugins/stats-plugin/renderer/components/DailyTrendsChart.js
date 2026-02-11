@@ -2,9 +2,9 @@
  * DailyTrendsChart - Multi-metric daily trends visualization.
  *
  * Features:
- * - Multi-line area chart: cost (filled area), tokens (line), operations (line)
- * - Dual Y-axes: left = cost USD, right = tokens
- * - Sparkline rows below chart for tokens & operations
+ * - Multi-line area chart: cost (filled area), operations (line)
+ * - Dual Y-axes: left = cost USD, right = operations
+ * - Sparkline row below chart for operations
  * - Hover tooltip with exact values for each day
  * - Click day to emit filter event
  * - Color-coded legend
@@ -12,7 +12,6 @@
 
 const METRICS = {
   cost: { key: 'totalCost', label: 'Cost', color: '#6c63ff', fillAlpha: 0.25 },
-  tokens: { key: 'totalTokens', label: 'Tokens', color: '#48bb78', fillAlpha: 0 },
   operations: { key: 'operations', label: 'Operations', color: '#ecc94b', fillAlpha: 0 }
 }
 
@@ -77,11 +76,19 @@ export class DailyTrendsChart {
     this.container.innerHTML = ''
     this.container.className = 'daily-trends-component'
 
-    // Header + legend
+    // Header + legend + period controls
     const header = document.createElement('div')
     header.className = 'daily-trends-header'
     header.innerHTML = `
-      <h3 class="daily-trends-title">Daily Trends (${this.days}d)</h3>
+      <div class="daily-trends-header-row">
+        <h3 class="daily-trends-title">Daily Trends</h3>
+        <div class="daily-trends-period-toggle">
+          <button class="daily-trends-period-btn ${this.days === 7 ? 'active' : ''}" data-days="7">7d</button>
+          <button class="daily-trends-period-btn ${this.days === 14 ? 'active' : ''}" data-days="14">14d</button>
+          <button class="daily-trends-period-btn ${this.days === 30 ? 'active' : ''}" data-days="30">30d</button>
+          <button class="daily-trends-period-btn ${this.days === 90 ? 'active' : ''}" data-days="90">90d</button>
+        </div>
+      </div>
       <div class="daily-trends-legend">
         ${Object.values(METRICS).map(m =>
           `<span class="daily-trends-legend-item">
@@ -92,6 +99,17 @@ export class DailyTrendsChart {
       </div>
     `
     this.container.appendChild(header)
+
+    // Attach period toggle listener
+    const periodToggle = header.querySelector('.daily-trends-period-toggle')
+    if (periodToggle) {
+      periodToggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('.daily-trends-period-btn')
+        if (!btn) return
+        this.days = parseInt(btn.dataset.days, 10)
+        this.fetchData()
+      })
+    }
 
     // Loading / empty state
     if (this.loading) {
@@ -157,14 +175,12 @@ export class DailyTrendsChart {
     const ch = cssHeight - pad.top - pad.bottom
 
     const maxCost = Math.max(...entries.map(d => d.totalCost), 0.01)
-    const maxTokens = Math.max(...entries.map(d => d.totalTokens), 1)
     const maxOps = Math.max(...entries.map(d => d.operations), 1)
 
     const xStep = entries.length > 1 ? cw / (entries.length - 1) : cw
 
     // Helper: map value to Y
     const yForCost = v => pad.top + ch - (v / maxCost) * ch
-    const yForTokens = v => pad.top + ch - (v / maxTokens) * ch
     const yForOps = v => pad.top + ch - (v / maxOps) * ch
     const xFor = i => pad.left + i * xStep
 
@@ -189,11 +205,11 @@ export class DailyTrendsChart {
       ctx.fillText(`$${val.toFixed(2)}`, pad.left - 8, y + 3)
     }
 
-    // ── Right Y-axis labels (tokens) ──
-    ctx.fillStyle = METRICS.tokens.color
+    // ── Right Y-axis labels (operations) ──
+    ctx.fillStyle = METRICS.operations.color
     ctx.textAlign = 'left'
     for (let i = 0; i <= 4; i++) {
-      const val = maxTokens - (maxTokens / 4) * i
+      const val = maxOps - (maxOps / 4) * i
       const y = pad.top + (ch / 4) * i
       ctx.fillText(DailyTrendsChart.abbreviateNumber(val), pad.left + cw + 8, y + 3)
     }
@@ -228,9 +244,6 @@ export class DailyTrendsChart {
     // ── Cost line ──
     this._drawLine(ctx, entries, xFor, yForCost, 'totalCost', METRICS.cost.color, 2)
 
-    // ── Tokens line ──
-    this._drawLine(ctx, entries, xFor, yForTokens, 'totalTokens', METRICS.tokens.color, 1.5)
-
     // ── Operations line ──
     this._drawLine(ctx, entries, xFor, yForOps, 'operations', METRICS.operations.color, 1.5)
 
@@ -249,7 +262,6 @@ export class DailyTrendsChart {
       // Dots at each metric
       const day = entries[this.hoveredIndex]
       this._drawDot(ctx, hx, yForCost(day.totalCost), METRICS.cost.color)
-      this._drawDot(ctx, hx, yForTokens(day.totalTokens), METRICS.tokens.color)
       this._drawDot(ctx, hx, yForOps(day.operations), METRICS.operations.color)
     }
 
@@ -356,10 +368,6 @@ export class DailyTrendsChart {
         Cost: $${day.totalCost.toFixed(2)}
       </div>
       <div class="daily-trends-tooltip-row">
-        <span class="daily-trends-tooltip-swatch" style="background:${METRICS.tokens.color}"></span>
-        Tokens: ${day.totalTokens.toLocaleString()}
-      </div>
-      <div class="daily-trends-tooltip-row">
         <span class="daily-trends-tooltip-swatch" style="background:${METRICS.operations.color}"></span>
         Ops: ${day.operations}
       </div>
@@ -387,14 +395,9 @@ export class DailyTrendsChart {
     const wrap = document.createElement('div')
     wrap.className = 'daily-trends-sparklines'
 
-    const tokenValues = entries.map(d => d.totalTokens)
     const opValues = entries.map(d => d.operations)
 
     wrap.innerHTML = `
-      <div class="daily-trends-sparkline-row">
-        <span class="daily-trends-sparkline-label" style="color:${METRICS.tokens.color}">Tokens</span>
-        <span class="daily-trends-sparkline-chart">${DailyTrendsChart.renderSparkline(tokenValues, METRICS.tokens.color)}</span>
-      </div>
       <div class="daily-trends-sparkline-row">
         <span class="daily-trends-sparkline-label" style="color:${METRICS.operations.color}">Ops</span>
         <span class="daily-trends-sparkline-chart">${DailyTrendsChart.renderSparkline(opValues, METRICS.operations.color)}</span>

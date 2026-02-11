@@ -8,14 +8,20 @@
   margin-bottom: 16px;
 }
 
-/* Header: tabs + badge */
+/* Header: tabs + period controls + badge */
 .efficiency-chart-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.efficiency-chart-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 8px;
 }
 
 .efficiency-chart-tabs {
@@ -24,6 +30,37 @@
   border: 1px solid var(--border-color, #444);
   border-radius: 6px;
   overflow: hidden;
+}
+
+.efficiency-chart-period-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-tertiary, #232340);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.efficiency-period-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary, #888);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.efficiency-period-btn:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.efficiency-period-btn.active {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--accent-primary, #6c63ff);
+  font-weight: 600;
 }
 
 .efficiency-chart-tab {

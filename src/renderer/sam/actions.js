@@ -810,10 +810,11 @@ export const clearBranchHandoffContext = (branchId) => ({
  */
 
 // Create a sprint from selected user stories
-export const createSprint = (stories) => ({
+export const createSprint = (stories, branchName = '') => ({
   type: 'CREATE_SPRINT',
   payload: {
     stories,
+    branchName,
     timestamp: Date.now()
   }
 })

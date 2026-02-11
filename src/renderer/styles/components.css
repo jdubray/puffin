@@ -6104,6 +6104,242 @@
   padding: 2rem;
 }
 
+/* Sprint Create Modal */
+.modal:has(.sprint-create-modal) {
+  min-width: 480px;
+  max-width: 560px;
+}
+
+.sprint-create-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sprint-create-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.sprint-create-info {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.sprint-create-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  min-width: 4rem;
+}
+
+.sprint-create-value {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.sprint-create-title {
+  font-weight: 500;
+}
+
+.sprint-create-branch-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.sprint-create-branch-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sprint-create-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.sprint-create-branch-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sprint-create-branch-input {
+  flex: 1;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sprint-create-branch-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+}
+
+.sprint-create-branch-input.invalid {
+  border-color: var(--color-error, #f56565);
+  box-shadow: 0 0 0 2px rgba(245, 101, 101, 0.15);
+}
+
+.sprint-create-branch-error {
+  font-size: 0.75rem;
+  color: var(--color-error, #f56565);
+  margin-top: 0.125rem;
+}
+
+.sprint-create-stories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.sprint-create-story-items {
+  margin: 0.25rem 0 0 0;
+  padding: 0 0 0 1.25rem;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.sprint-create-story-items li {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ── Sprint Branch Create Modal ───────────────────────────── */
+
+.modal:has(.sprint-branch-create-modal) {
+  width: 400px;
+  max-width: 90vw;
+}
+
+.sprint-branch-create-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sprint-branch-create-prompt {
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.sprint-branch-create-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+
+.sprint-branch-create-preview-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sprint-branch-create-preview-name {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.875rem;
+  color: var(--accent-primary, #6c63ff);
+  word-break: break-all;
+}
+
+.sprint-branch-create-warning {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: rgba(230, 161, 0, 0.1);
+  border: 1px solid rgba(230, 161, 0, 0.35);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: #e6a100;
+  line-height: 1.4;
+}
+
+.sprint-branch-create-warning code {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.8125rem;
+  background: rgba(230, 161, 0, 0.12);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+}
+
+.sprint-branch-create-warning-icon {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+}
+
+.sprint-branch-create-current {
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #888);
+}
+
+.sprint-branch-create-current code {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #aaa);
+}
+
+/* Toast notification from modal manager */
+.modal-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #fff;
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+  max-width: 90vw;
+}
+
+.modal-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.modal-toast-success {
+  background: #2d6a4f;
+  border: 1px solid #40916c;
+}
+
+.modal-toast-error {
+  background: #9b2226;
+  border: 1px solid #ae2012;
+}
+
+.modal-toast-info {
+  background: #1d3557;
+  border: 1px solid #457b9d;
+}
+
 /* Sprint Story Assertion Status Badges */
 .assertion-status-badge {
   display: inline-flex;

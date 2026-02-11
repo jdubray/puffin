@@ -41,6 +41,7 @@ export class StatsView {
     this.loading = true
     this.error = null
     this.activeChart = 'weekly' // 'weekly' | 'branch' | 'cost'
+    this.metricsViewMode = 'prompt' // 'prompt' | 'story'
 
     // Sub-components (v2)
     this._summaryCards = null
@@ -48,6 +49,7 @@ export class StatsView {
     this._dailyTrends = null
     this._efficiencyChart = null
     this._perfTable = null
+    this._storyMetricsInitialized = false
 
     // Timers
     this._refreshTimer = null
@@ -114,34 +116,107 @@ export class StatsView {
 
     this.container.innerHTML = `
       <div class="stats-header">
-        <div class="stats-header-text">
-          <h2>Usage Statistics</h2>
-          <p class="stats-subtitle">
-            ${modeLabel}
-            <span class="stats-mode-badge ${this.metricsAvailable ? 'mode-v2' : 'mode-v1'}">${this.metricsAvailable ? 'v2' : 'v1'}</span>
-          </p>
+        <div class="stats-header-top">
+          <div class="stats-header-text">
+            <h2>Usage Statistics</h2>
+            <p class="stats-subtitle">
+              ${modeLabel}
+              <span class="stats-mode-badge ${this.metricsAvailable ? 'mode-v2' : 'mode-v1'}">${this.metricsAvailable ? 'v2' : 'v1'}</span>
+            </p>
+          </div>
+          <div class="stats-header-actions">
+            <button class="stats-btn stats-btn-secondary stats-refresh-btn" title="Refresh data">
+              Refresh
+            </button>
+            <button class="stats-btn stats-btn-primary stats-export-btn" title="Export as Markdown">
+              Export
+            </button>
+          </div>
         </div>
-        <div class="stats-header-actions">
-          <button class="stats-btn stats-btn-secondary stats-refresh-btn" title="Refresh data">
-            Refresh
-          </button>
-          <button class="stats-btn stats-btn-primary stats-export-btn" title="Export as Markdown">
-            Export
-          </button>
+        <div class="stats-header-totals">
+          <div class="stats-total-item">
+            <div class="stats-total-icon">🔄</div>
+            <div class="stats-total-content">
+              <div class="stats-total-value">${totals.turns.toLocaleString()}</div>
+              <div class="stats-total-label">Total Turns</div>
+            </div>
+          </div>
+          <div class="stats-total-item">
+            <div class="stats-total-icon">💰</div>
+            <div class="stats-total-content">
+              <div class="stats-total-value">$${totals.cost.toFixed(2)}</div>
+              <div class="stats-total-label">Total Cost</div>
+            </div>
+          </div>
+          <div class="stats-total-item">
+            <div class="stats-total-icon">⏱️</div>
+            <div class="stats-total-content">
+              <div class="stats-total-value">${this.formatDuration(totals.duration)}</div>
+              <div class="stats-total-label">Total Duration</div>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- v2: Metrics-based components (hidden if metrics unavailable) -->
-      <div id="stats-v2-section" style="${this.metricsAvailable ? '' : 'display:none'}">
-        <div id="metrics-summary-cards-container"></div>
-        <div id="component-treemap-container"></div>
-        <div id="daily-trends-container"></div>
-        <div id="efficiency-chart-container"></div>
-        <div id="perf-table-container"></div>
+      <div id="stats-v2-section" class="stats-v2-section" style="${this.metricsAvailable ? '' : 'display:none'}">
+        <!-- Metrics View Mode Toggle -->
+        <div class="metrics-mode-toggle">
+          <button class="metrics-mode-btn ${this.metricsViewMode === 'prompt' ? 'active' : ''}" data-mode="prompt">
+            📊 Prompt Metrics
+            <span class="metrics-mode-desc">Individual AI Operations</span>
+          </button>
+          <button class="metrics-mode-btn ${this.metricsViewMode === 'story' ? 'active' : ''}" data-mode="story">
+            📚 Story Metrics
+            <span class="metrics-mode-desc">Aggregated per User Story</span>
+          </button>
+        </div>
+
+        <!-- Prompt Metrics View -->
+        <div id="prompt-metrics-view" class="metrics-view-section" style="${this.metricsViewMode === 'prompt' ? '' : 'display:none'}">
+          <section class="stats-section">
+            <div id="metrics-summary-cards-container"></div>
+          </section>
+
+          <section class="stats-section">
+            <h3 class="stats-section-title">Component Breakdown (Prompts)</h3>
+            <div id="component-treemap-container"></div>
+          </section>
+
+          <section class="stats-section">
+            <div id="daily-trends-container"></div>
+          </section>
+
+          <section class="stats-section">
+            <h3 class="stats-section-title">Normalized Efficiency (Prompts)</h3>
+            <div id="efficiency-chart-container"></div>
+          </section>
+
+          <section class="stats-section">
+            <div id="perf-table-container"></div>
+          </section>
+        </div>
+
+        <!-- Story Metrics View -->
+        <div id="story-metrics-view" class="metrics-view-section" style="${this.metricsViewMode === 'story' ? '' : 'display:none'}">
+          <section class="stats-section">
+            <div id="story-metrics-cards-container"></div>
+          </section>
+
+          <section class="stats-section">
+            <h3 class="stats-section-title">Story Cost Breakdown</h3>
+            <div id="story-treemap-container"></div>
+          </section>
+
+          <section class="stats-section">
+            <h3 class="stats-section-title">Story Performance Overview</h3>
+            <div id="story-table-container"></div>
+          </section>
+        </div>
       </div>
 
-      <!-- v1: Legacy history-based components (always shown if data exists) -->
-      <div id="stats-v1-section">
+      <!-- v1: Legacy history-based components (hidden when v2 is available) -->
+      <div id="stats-v1-section" style="${this.metricsAvailable ? 'display:none' : ''}" class="stats-v1-section">
         <div class="stats-charts-section">
           <div class="stats-chart-tabs">
             <button class="stats-chart-tab ${this.activeChart === 'weekly' ? 'active' : ''}" data-chart="weekly">
@@ -231,9 +306,13 @@ export class StatsView {
    */
   _initSubComponents() {
     // SummaryCards — data passed directly (already fetched in parallel)
+    // Use 'prompt' mode to show only prompt-level metrics (no per-story aggregates)
     const cardsContainer = this.container.querySelector('#metrics-summary-cards-container')
     if (cardsContainer) {
-      this._summaryCards = new SummaryCards(cardsContainer, { data: this.metricsSummary })
+      this._summaryCards = new SummaryCards(cardsContainer, {
+        data: this.metricsSummary,
+        mode: 'prompt'
+      })
       this._summaryCards.render()
     }
 
@@ -267,6 +346,197 @@ export class StatsView {
   }
 
   /**
+   * Initialize story metrics view (lazy loaded)
+   */
+  async _initStoryMetrics() {
+    const storyCardsContainer = this.container.querySelector('#story-metrics-cards-container')
+    const storyTreemapContainer = this.container.querySelector('#story-treemap-container')
+    const storyTableContainer = this.container.querySelector('#story-table-container')
+
+    if (!storyCardsContainer || !storyTreemapContainer || !storyTableContainer) return
+
+    try {
+      // Fetch story metrics from story_metrics table
+      const result = await window.puffin.plugins.invoke('stats-plugin', 'getStoryMetrics', {})
+
+      if (!result || !result.stories || result.stories.length === 0) {
+        storyCardsContainer.innerHTML = '<div class="stats-empty">No story metrics available yet.</div>'
+        storyTreemapContainer.innerHTML = '<div class="stats-empty">Complete some user stories to see metrics here.</div>'
+        storyTableContainer.innerHTML = '<div class="stats-empty">Complete some user stories to see metrics here.</div>'
+        this._storyMetricsInitialized = true
+        return
+      }
+
+      // Render story summary cards
+      this._renderStoryMetricsCards(storyCardsContainer, result)
+
+      // Render story treemap
+      this._renderStoryTreemap(storyTreemapContainer, result.stories)
+
+      // Render story performance table
+      this._renderStoryMetricsTable(storyTableContainer, result.stories)
+
+      this._storyMetricsInitialized = true
+    } catch (err) {
+      console.error('[StatsView] Failed to load story metrics:', err)
+      storyCardsContainer.innerHTML = `<div class="stats-error-small">Failed to load story metrics: ${this.escapeHtml(err.message)}</div>`
+    }
+  }
+
+  /**
+   * Render story metrics summary cards
+   */
+  _renderStoryMetricsCards(container, data) {
+    const { stories, totals } = data
+    const avgCostPerStory = stories.length > 0 ? totals.totalCost / stories.length : 0
+    const avgOpsPerStory = stories.length > 0 ? totals.totalOperations / stories.length : 0
+
+    container.innerHTML = `
+      <div class="metrics-summary-cards">
+        <div class="metrics-card">
+          <div class="metrics-card-icon">📚</div>
+          <div class="metrics-card-body">
+            <div class="metrics-card-value-row">
+              <div class="metrics-card-value">${stories.length}</div>
+            </div>
+            <div class="metrics-card-label">Total Stories</div>
+          </div>
+        </div>
+        <div class="metrics-card">
+          <div class="metrics-card-icon">💰</div>
+          <div class="metrics-card-body">
+            <div class="metrics-card-value-row">
+              <div class="metrics-card-value">$${totals.totalCost.toFixed(2)}</div>
+            </div>
+            <div class="metrics-card-label">Total Cost (Stories)</div>
+          </div>
+        </div>
+        <div class="metrics-card">
+          <div class="metrics-card-icon">📊</div>
+          <div class="metrics-card-body">
+            <div class="metrics-card-value-row">
+              <div class="metrics-card-value">${totals.totalOperations}</div>
+            </div>
+            <div class="metrics-card-label">Total Operations</div>
+          </div>
+        </div>
+        <div class="metrics-card">
+          <div class="metrics-card-icon">💵</div>
+          <div class="metrics-card-body">
+            <div class="metrics-card-value-row">
+              <div class="metrics-card-value">$${avgCostPerStory.toFixed(2)}</div>
+            </div>
+            <div class="metrics-card-label">Avg Cost / Story</div>
+          </div>
+        </div>
+        <div class="metrics-card">
+          <div class="metrics-card-icon">🔢</div>
+          <div class="metrics-card-body">
+            <div class="metrics-card-value-row">
+              <div class="metrics-card-value">${Math.round(avgOpsPerStory)}</div>
+            </div>
+            <div class="metrics-card-label">Avg Operations / Story</div>
+          </div>
+        </div>
+      </div>
+    `
+  }
+
+  /**
+   * Render story treemap (visual cost breakdown by story)
+   */
+  _renderStoryTreemap(container, stories) {
+    // Sort by cost descending and take top 15
+    const sorted = [...stories]
+      .filter(s => s.total_cost_usd > 0)
+      .sort((a, b) => b.total_cost_usd - a.total_cost_usd)
+      .slice(0, 15)
+
+    if (sorted.length === 0) {
+      container.innerHTML = '<div class="stats-empty">No story cost data available</div>'
+      return
+    }
+
+    const totalCost = sorted.reduce((sum, s) => sum + s.total_cost_usd, 0)
+    const maxCost = sorted[0].total_cost_usd
+
+    const boxes = sorted.map(story => {
+      const pct = (story.total_cost_usd / totalCost) * 100
+      const efficiency = story.total_operations > 0
+        ? story.total_cost_usd / story.total_operations
+        : 0
+
+      // Color scale: green (low cost/op) to red (high cost/op)
+      const colorIntensity = Math.min(efficiency / 0.5, 1) // $0.50 per op = max red
+      const hue = (1 - colorIntensity) * 120 // 120 = green, 0 = red
+      const bgColor = `hsl(${hue}, 60%, 35%)`
+
+      return `
+        <div class="story-treemap-box" style="flex: ${pct}; background: ${bgColor};" title="${this.escapeHtml(story.story_title)}">
+          <div class="story-treemap-label">${this.escapeHtml(this._truncate(story.story_title, 30))}</div>
+          <div class="story-treemap-value">$${story.total_cost_usd.toFixed(2)}</div>
+          <div class="story-treemap-pct">${pct.toFixed(1)}%</div>
+        </div>
+      `
+    }).join('')
+
+    container.innerHTML = `
+      <div class="story-treemap-grid">
+        ${boxes}
+      </div>
+    `
+  }
+
+  /**
+   * Render story performance table
+   */
+  _renderStoryMetricsTable(container, stories) {
+    // Sort by cost descending
+    const sorted = [...stories].sort((a, b) => b.total_cost_usd - a.total_cost_usd)
+
+    const rows = sorted.map(story => {
+      const avgCostPerOp = story.total_operations > 0 ? story.total_cost_usd / story.total_operations : 0
+      const duration = this.formatDuration(story.total_duration_ms)
+
+      return `
+        <tr>
+          <td class="story-title-cell">
+            <div class="story-title">${this.escapeHtml(story.story_title)}</div>
+            <div class="story-meta">${story.id}</div>
+          </td>
+          <td class="numeric-cell">${story.total_operations}</td>
+          <td class="numeric-cell cost-cell">$${story.total_cost_usd.toFixed(2)}</td>
+          <td class="numeric-cell">$${avgCostPerOp.toFixed(3)}</td>
+          <td class="numeric-cell">${duration}</td>
+          <td class="status-cell">
+            <span class="story-status story-status-${story.status}">${story.status}</span>
+          </td>
+        </tr>
+      `
+    }).join('')
+
+    container.innerHTML = `
+      <div class="story-metrics-table-wrapper">
+        <table class="story-metrics-table">
+          <thead>
+            <tr>
+              <th>Story</th>
+              <th class="numeric-cell">Operations</th>
+              <th class="numeric-cell">Total Cost</th>
+              <th class="numeric-cell">Avg Cost/Op</th>
+              <th class="numeric-cell">Duration</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+    `
+  }
+
+  /**
    * Destroy all v2 sub-components
    */
   _destroySubComponents() {
@@ -275,6 +545,7 @@ export class StatsView {
     if (this._dailyTrends) { this._dailyTrends.destroy(); this._dailyTrends = null }
     if (this._efficiencyChart) { this._efficiencyChart.destroy(); this._efficiencyChart = null }
     if (this._perfTable) { this._perfTable.destroy(); this._perfTable = null }
+    this._storyMetricsInitialized = false
   }
 
   // ── Event listeners ──────────────────────────────────────────
@@ -295,6 +566,27 @@ export class StatsView {
         this.container.querySelectorAll('.stats-chart-tab').forEach(t => t.classList.remove('active'))
         e.target.classList.add('active')
         this.renderChart()
+      })
+    })
+
+    // Metrics view mode toggle (prompt vs story)
+    this.container.querySelectorAll('.metrics-mode-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const mode = e.currentTarget.dataset.mode
+        this.metricsViewMode = mode
+        this.container.querySelectorAll('.metrics-mode-btn').forEach(b => b.classList.remove('active'))
+        e.currentTarget.classList.add('active')
+
+        // Toggle visibility
+        const promptView = this.container.querySelector('#prompt-metrics-view')
+        const storyView = this.container.querySelector('#story-metrics-view')
+        if (promptView) promptView.style.display = mode === 'prompt' ? '' : 'none'
+        if (storyView) storyView.style.display = mode === 'story' ? '' : 'none'
+
+        // Initialize story metrics on first view
+        if (mode === 'story' && !this._storyMetricsInitialized) {
+          this._initStoryMetrics()
+        }
       })
     })
   }
@@ -623,23 +915,124 @@ export class StatsView {
 
   // ── Export ───────────────────────────────────────────────────
 
-  async handleExport() {
+  handleExport() {
+    this._showExportDialog()
+  }
+
+  _showExportDialog() {
+    // Remove any existing dialog
+    const existing = this.container.querySelector('.stats-export-dialog-overlay')
+    if (existing) existing.remove()
+
+    const overlay = document.createElement('div')
+    overlay.className = 'stats-export-dialog-overlay'
+
+    const dialog = document.createElement('div')
+    dialog.className = 'stats-export-dialog'
+    dialog.innerHTML = `
+      <div class="stats-export-dialog-header">
+        <h3>Export Statistics</h3>
+        <button class="stats-export-dialog-close" title="Close">\u2715</button>
+      </div>
+      <div class="stats-export-dialog-body">
+        <div class="stats-export-field">
+          <label class="stats-export-label">Format</label>
+          <div class="stats-export-format-group">
+            <label class="stats-export-format-option">
+              <input type="radio" name="export-format" value="markdown" checked />
+              <span class="stats-export-format-label">Markdown</span>
+              <span class="stats-export-format-ext">.md</span>
+            </label>
+            <label class="stats-export-format-option">
+              <input type="radio" name="export-format" value="csv" />
+              <span class="stats-export-format-label">CSV</span>
+              <span class="stats-export-format-ext">.csv</span>
+            </label>
+            <label class="stats-export-format-option">
+              <input type="radio" name="export-format" value="json" />
+              <span class="stats-export-format-label">JSON</span>
+              <span class="stats-export-format-ext">.json</span>
+            </label>
+          </div>
+        </div>
+        <div class="stats-export-field">
+          <label class="stats-export-label">Sections</label>
+          <div class="stats-export-sections">
+            <label class="stats-export-section-option">
+              <input type="checkbox" name="export-section" value="summary" checked />
+              Summary
+            </label>
+            <label class="stats-export-section-option">
+              <input type="checkbox" name="export-section" value="branches" checked />
+              Branch Statistics
+            </label>
+            <label class="stats-export-section-option">
+              <input type="checkbox" name="export-section" value="weekly" checked />
+              Weekly Breakdown
+            </label>
+            <label class="stats-export-section-option ${this.metricsAvailable ? '' : 'disabled'}">
+              <input type="checkbox" name="export-section" value="components" ${this.metricsAvailable ? 'checked' : 'disabled'} />
+              Component Metrics
+            </label>
+          </div>
+        </div>
+        <div class="stats-export-field">
+          <label class="stats-export-label">Time Range</label>
+          <select class="stats-export-range-select">
+            <option value="all" selected>All Data</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="12">Last 12 weeks</option>
+          </select>
+        </div>
+      </div>
+      <div class="stats-export-dialog-footer">
+        <button class="stats-btn stats-btn-secondary stats-export-cancel-btn">Cancel</button>
+        <button class="stats-btn stats-btn-primary stats-export-confirm-btn">Export</button>
+      </div>
+    `
+    overlay.appendChild(dialog)
+    this.container.appendChild(overlay)
+
+    // Bind events
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove()
+    })
+    dialog.querySelector('.stats-export-dialog-close').addEventListener('click', () => overlay.remove())
+    dialog.querySelector('.stats-export-cancel-btn').addEventListener('click', () => overlay.remove())
+    dialog.querySelector('.stats-export-confirm-btn').addEventListener('click', () => {
+      const format = dialog.querySelector('input[name="export-format"]:checked')?.value || 'markdown'
+      const sections = Array.from(dialog.querySelectorAll('input[name="export-section"]:checked'))
+        .map(cb => cb.value)
+      const range = dialog.querySelector('.stats-export-range-select')?.value || 'all'
+      overlay.remove()
+      this._executeExport(format, sections, range)
+    })
+  }
+
+  async _executeExport(format, sections, range) {
     try {
-      const markdown = this.generateMarkdown()
+      const content = this._generateExportContent(format, sections, range)
+      const extMap = { markdown: 'md', csv: 'csv', json: 'json' }
+      const ext = extMap[format] || 'md'
+      const filterMap = {
+        markdown: [{ name: 'Markdown', extensions: ['md'] }],
+        csv: [{ name: 'CSV', extensions: ['csv'] }],
+        json: [{ name: 'JSON', extensions: ['json'] }]
+      }
+
       const dialogResult = await window.puffin.plugins.invoke(
         'stats-plugin', 'showSaveDialog',
         {
-          defaultPath: 'puffin-stats-report.md',
-          filters: [
-            { name: 'Markdown', extensions: ['md'] },
-            { name: 'All Files', extensions: ['*'] }
-          ]
+          defaultPath: `puffin-stats-report.${ext}`,
+          filters: filterMap[format] || filterMap.markdown
         }
       )
       if (!dialogResult?.filePath) return
+
       await window.puffin.plugins.invoke(
         'stats-plugin', 'saveMarkdownExport',
-        { content: markdown, filePath: dialogResult.filePath }
+        { content, filePath: dialogResult.filePath }
       )
       this.showNotification('Export successful!', 'success')
     } catch (err) {
@@ -648,37 +1041,127 @@ export class StatsView {
     }
   }
 
-  generateMarkdown() {
-    const totals = this.computeTotals(this.weeklyStats)
+  _generateExportContent(format, sections, range) {
+    const filteredWeekly = this._filterByRange(this.weeklyStats, range)
+    const totals = this.computeTotals(filteredWeekly)
     const branchTotals = this.computeBranchTotals()
-    const date = new Date().toLocaleDateString()
 
+    if (format === 'json') {
+      return this._generateJSON(sections, filteredWeekly, totals, branchTotals)
+    }
+    if (format === 'csv') {
+      return this._generateCSV(sections, filteredWeekly, totals, branchTotals)
+    }
+    return this._generateMarkdown(sections, filteredWeekly, totals, branchTotals)
+  }
+
+  _filterByRange(weeklyStats, range) {
+    if (range === 'all') return weeklyStats
+    const weeks = parseInt(range, 10)
+    if (isNaN(weeks) || weeks <= 0) return weeklyStats
+    return weeklyStats.slice(-weeks)
+  }
+
+  _generateMarkdown(sections, weeklyStats, totals, branchTotals) {
+    const date = new Date().toLocaleDateString()
     let md = `# Puffin Usage Statistics Report\n\n`
     md += `Generated: ${date}\n\n`
 
-    md += `## Summary\n\n`
-    md += `- **Total Turns**: ${totals.turns.toLocaleString()}\n`
-    md += `- **Total Cost**: $${totals.cost.toFixed(2)}\n`
-    md += `- **Total Duration**: ${this.formatDuration(totals.duration)}\n`
-    md += `- **Branches**: ${this.branchStats.length}\n`
-    md += `- **Metrics Mode**: ${this.metricsAvailable ? 'v2 (metrics + history)' : 'v1 (history only)'}\n\n`
+    if (sections.includes('summary')) {
+      md += `## Summary\n\n`
+      md += `- **Total Turns**: ${totals.turns.toLocaleString()}\n`
+      md += `- **Total Cost**: $${totals.cost.toFixed(2)}\n`
+      md += `- **Total Duration**: ${this.formatDuration(totals.duration)}\n`
+      md += `- **Branches**: ${this.branchStats.length}\n`
+      md += `- **Metrics Mode**: ${this.metricsAvailable ? 'v2 (metrics + history)' : 'v1 (history only)'}\n\n`
+    }
 
-    md += `## Statistics by Branch\n\n`
-    md += `| Branch | Threads | Turns | Cost | Duration |\n`
-    md += `|--------|---------|-------|------|----------|\n`
-    branchTotals.forEach(branch => {
-      md += `| ${branch.name} | ${branch.threads} | ${branch.turns} | $${branch.cost.toFixed(2)} | ${this.formatDuration(branch.duration)} |\n`
-    })
-    md += `| **Total** | **${branchTotals.reduce((sum, b) => sum + b.threads, 0)}** | **${totals.turns}** | **$${totals.cost.toFixed(2)}** | **${this.formatDuration(totals.duration)}** |\n\n`
+    if (sections.includes('branches') && branchTotals.length > 0) {
+      md += `## Statistics by Branch\n\n`
+      md += `| Branch | Threads | Turns | Cost | Duration |\n`
+      md += `|--------|---------|-------|------|----------|\n`
+      branchTotals.forEach(branch => {
+        md += `| ${branch.name} | ${branch.threads} | ${branch.turns} | $${branch.cost.toFixed(2)} | ${this.formatDuration(branch.duration)} |\n`
+      })
+      md += `| **Total** | **${branchTotals.reduce((sum, b) => sum + b.threads, 0)}** | **${totals.turns}** | **$${totals.cost.toFixed(2)}** | **${this.formatDuration(totals.duration)}** |\n\n`
+    }
 
-    md += `## Weekly Breakdown\n\n`
-    md += `| Week | Turns | Cost | Duration |\n`
-    md += `|------|-------|------|----------|\n`
-    this.weeklyStats.forEach(week => {
-      md += `| ${week.week} | ${week.turns} | $${week.cost.toFixed(2)} | ${this.formatDuration(week.duration)} |\n`
-    })
+    if (sections.includes('weekly') && weeklyStats.length > 0) {
+      md += `## Weekly Breakdown\n\n`
+      md += `| Week | Turns | Cost | Duration |\n`
+      md += `|------|-------|------|----------|\n`
+      weeklyStats.forEach(week => {
+        md += `| ${week.week} | ${week.turns} | $${week.cost.toFixed(2)} | ${this.formatDuration(week.duration)} |\n`
+      })
+      md += '\n'
+    }
 
     return md
+  }
+
+  _generateCSV(sections, weeklyStats, totals, branchTotals) {
+    const lines = []
+
+    if (sections.includes('summary')) {
+      lines.push('Section,Metric,Value')
+      lines.push(`Summary,Total Turns,${totals.turns}`)
+      lines.push(`Summary,Total Cost,${totals.cost.toFixed(2)}`)
+      lines.push(`Summary,Total Duration (ms),${totals.duration}`)
+      lines.push(`Summary,Branches,${this.branchStats.length}`)
+      lines.push('')
+    }
+
+    if (sections.includes('branches') && branchTotals.length > 0) {
+      lines.push('Branch,Threads,Turns,Cost,Duration (ms)')
+      branchTotals.forEach(b => {
+        lines.push(`${StatsView.csvEscape(b.name)},${b.threads},${b.turns},${b.cost.toFixed(2)},${b.duration}`)
+      })
+      lines.push('')
+    }
+
+    if (sections.includes('weekly') && weeklyStats.length > 0) {
+      lines.push('Week,Turns,Cost,Duration (ms)')
+      weeklyStats.forEach(w => {
+        lines.push(`${w.week},${w.turns},${w.cost.toFixed(2)},${w.duration}`)
+      })
+      lines.push('')
+    }
+
+    return lines.join('\n')
+  }
+
+  _generateJSON(sections, weeklyStats, totals, branchTotals) {
+    const data = {
+      generated: new Date().toISOString(),
+      metricsMode: this.metricsAvailable ? 'v2' : 'v1'
+    }
+
+    if (sections.includes('summary')) {
+      data.summary = {
+        totalTurns: totals.turns,
+        totalCost: totals.cost,
+        totalDuration: totals.duration,
+        branchCount: this.branchStats.length
+      }
+    }
+
+    if (sections.includes('branches')) {
+      data.branches = branchTotals
+    }
+
+    if (sections.includes('weekly')) {
+      data.weekly = weeklyStats
+    }
+
+    return JSON.stringify(data, null, 2)
+  }
+
+  static csvEscape(val) {
+    const str = String(val)
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`
+    }
+    return str
   }
 
   // ── Notification ─────────────────────────────────────────────
@@ -715,6 +1198,12 @@ export class StatsView {
     const div = document.createElement('div')
     div.textContent = text
     return div.innerHTML
+  }
+
+  _truncate(text, maxLen) {
+    if (!text) return ''
+    if (text.length <= maxLen) return text
+    return text.substring(0, maxLen - 3) + '...'
   }
 
   // ── Lifecycle ────────────────────────────────────────────────

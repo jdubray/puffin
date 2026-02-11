@@ -5,6 +5,8 @@
  * Extracted from app.js for better separation of concerns.
  */
 
+import { deriveBranchName, validateBranchName } from './branch-name-utils.js'
+
 export class ModalManager {
   constructor(intents, showToast, showCodeReviewConfirmation = null) {
     this.intents = intents
@@ -370,6 +372,12 @@ export class ModalManager {
         break
       case 'claude-question':
         this.renderClaudeQuestion(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'sprint-create':
+        this.renderSprintCreate(modalTitle, modalContent, modalActions, modal.data)
+        break
+      case 'sprint-branch-create':
+        this.renderSprintBranchCreate(modalTitle, modalContent, modalActions, modal.data)
         break
       default:
         console.warn('Unknown modal type:', modal.type)
@@ -3805,4 +3813,272 @@ export class ModalManager {
       </div>
     `
   }
+
+  // ── Sprint Create Modal ─────────────────────────────────────
+
+  /** @see deriveBranchName from branch-name-utils.js */
+  static deriveBranchName(title) { return deriveBranchName(title) }
+
+  /** @see validateBranchName from branch-name-utils.js */
+  static validateBranchName(name) { return validateBranchName(name) }
+
+  /**
+   * Render the sprint creation modal with branch name suggestion.
+   */
+  renderSprintCreate(title, content, actions, data) {
+    const stories = data?.stories || []
+    if (stories.length === 0) {
+      this.intents.hideModal()
+      return
+    }
+
+    // Generate sprint title the same way the acceptor does
+    let sprintTitle
+    if (stories.length === 1) {
+      sprintTitle = stories[0].title
+    } else {
+      sprintTitle = `${stories[0].title} (+${stories.length - 1} more)`
+    }
+
+    const suggestedBranch = ModalManager.deriveBranchName(sprintTitle)
+
+    title.textContent = 'Create Sprint'
+
+    content.innerHTML = `
+      <div class="sprint-create-modal">
+        <div class="sprint-create-summary">
+          <div class="sprint-create-info">
+            <span class="sprint-create-label">Stories</span>
+            <span class="sprint-create-value">${stories.length} selected</span>
+          </div>
+          <div class="sprint-create-info">
+            <span class="sprint-create-label">Title</span>
+            <span class="sprint-create-value sprint-create-title">${this.escapeHtml(sprintTitle)}</span>
+          </div>
+        </div>
+
+        <div class="sprint-create-branch-section">
+          <label for="sprint-branch-name" class="sprint-create-branch-label">
+            Branch Name
+          </label>
+          <p class="sprint-create-hint">Suggested from sprint title. Edit to customize.</p>
+          <div class="sprint-create-branch-input-row">
+            <input
+              type="text"
+              id="sprint-branch-name"
+              class="sprint-create-branch-input"
+              value="${this.escapeHtml(suggestedBranch)}"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <div id="sprint-branch-error" class="sprint-create-branch-error" style="display:none"></div>
+        </div>
+
+        <div class="sprint-create-stories-list">
+          <span class="sprint-create-label">Selected Stories</span>
+          <ul class="sprint-create-story-items">
+            ${stories.map(s => `<li>${this.escapeHtml(s.title)}</li>`).join('')}
+          </ul>
+        </div>
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="sprint-create-cancel">Cancel</button>
+      <button class="btn primary" id="sprint-create-confirm">Create Sprint</button>
+    `
+
+    // Bind events
+    this._bindSprintCreateEvents(data)
+  }
+
+  /**
+   * Bind events for sprint create modal.
+   */
+  _bindSprintCreateEvents(data) {
+    const branchInput = document.getElementById('sprint-branch-name')
+    const errorEl = document.getElementById('sprint-branch-error')
+    const confirmBtn = document.getElementById('sprint-create-confirm')
+
+    // Escape key dismisses
+    const keyHandler = (e) => {
+      if (e.key === 'Escape') {
+        cleanupEscape()
+        this.intents.hideModal()
+      }
+    }
+    const cleanupEscape = () => document.removeEventListener('keydown', keyHandler)
+    document.addEventListener('keydown', keyHandler)
+
+    // Validate on input
+    if (branchInput) {
+      branchInput.addEventListener('input', () => {
+        const result = ModalManager.validateBranchName(branchInput.value)
+        if (result.valid) {
+          errorEl.style.display = 'none'
+          branchInput.classList.remove('invalid')
+          confirmBtn.disabled = false
+        } else {
+          errorEl.textContent = result.error
+          errorEl.style.display = ''
+          branchInput.classList.add('invalid')
+          confirmBtn.disabled = true
+        }
+      })
+
+      // Focus the input and select all text
+      requestAnimationFrame(() => {
+        branchInput.focus()
+        branchInput.select()
+      })
+    }
+
+    // Cancel
+    document.getElementById('sprint-create-cancel')?.addEventListener('click', () => {
+      cleanupEscape()
+      this.intents.hideModal()
+    })
+
+    // Confirm
+    confirmBtn?.addEventListener('click', async () => {
+      const branchName = branchInput?.value?.trim() || ''
+      const validation = ModalManager.validateBranchName(branchName)
+      if (!validation.valid) return
+
+      cleanupEscape()
+
+      // Create the sprint with selected stories and branch name
+      this.intents.createSprint(data.stories, branchName)
+
+      // Check existing branches to detect conflicts and find a unique name
+      let suggestedName = branchName
+      let branchConflict = false
+      let currentBranch = ''
+
+      try {
+        const branchResult = await window.puffin.git.getBranches()
+        if (branchResult?.success && branchResult.branches) {
+          const existingNames = new Set(branchResult.branches.map(b => b.name))
+          const current = branchResult.branches.find(b => b.current)
+          currentBranch = current?.name || ''
+
+          if (existingNames.has(branchName)) {
+            branchConflict = true
+            // Derive unique name with -2, -3, etc.
+            let suffix = 2
+            while (existingNames.has(`${branchName}-${suffix}`) && suffix < 100) {
+              suffix++
+            }
+            suggestedName = `${branchName}-${suffix}`
+          }
+        }
+      } catch {
+        // Git not available — proceed without conflict check
+      }
+
+      // Show git branch creation modal
+      this.intents.hideModal()
+      this.intents.showModal('sprint-branch-create', {
+        branchName: suggestedName,
+        originalName: branchConflict ? branchName : null,
+        currentBranch
+      })
+    })
+  }
+
+  // ── Sprint Branch Create modal ─────────────────────────────
+
+  /**
+   * Render the "Create a git branch?" modal shown after sprint creation.
+   */
+  renderSprintBranchCreate(title, content, actions, data) {
+    const branchName = data?.branchName || 'sprint'
+    const originalName = data?.originalName || null
+    const currentBranch = data?.currentBranch || ''
+
+    title.textContent = 'Create Git Branch'
+
+    const warningHtml = originalName
+      ? `<div class="sprint-branch-create-warning">
+           <span class="sprint-branch-create-warning-icon">&#9888;</span>
+           Branch <code>${this.escapeHtml(originalName)}</code> already exists. Suggested alternative:
+         </div>`
+      : ''
+
+    const currentBranchHtml = currentBranch
+      ? `<div class="sprint-branch-create-current">
+           Currently on <code>${this.escapeHtml(currentBranch)}</code>
+         </div>`
+      : ''
+
+    content.innerHTML = `
+      <div class="sprint-branch-create-modal">
+        <p class="sprint-branch-create-prompt">Create a git branch for this sprint?</p>
+        ${warningHtml}
+        <div class="sprint-branch-create-preview">
+          <span class="sprint-branch-create-preview-label">Branch name</span>
+          <code class="sprint-branch-create-preview-name">${this.escapeHtml(branchName)}</code>
+        </div>
+        ${currentBranchHtml}
+      </div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="sprint-branch-skip">Skip</button>
+      <button class="btn primary" id="sprint-branch-create">Create Branch</button>
+    `
+
+    this._bindSprintBranchCreateEvents(branchName)
+  }
+
+  /**
+   * Bind events for sprint branch create modal.
+   */
+  _bindSprintBranchCreateEvents(branchName) {
+    const createBtn = document.getElementById('sprint-branch-create')
+    const skipBtn = document.getElementById('sprint-branch-skip')
+
+    // Escape key dismisses
+    const keyHandler = (e) => {
+      if (e.key === 'Escape') {
+        cleanupEscape()
+        this.intents.hideModal()
+      }
+    }
+    const cleanupEscape = () => document.removeEventListener('keydown', keyHandler)
+    document.addEventListener('keydown', keyHandler)
+
+    // Skip — just dismiss
+    skipBtn?.addEventListener('click', () => {
+      cleanupEscape()
+      this.intents.hideModal()
+    })
+
+    // Create Branch — call git IPC, show toast
+    createBtn?.addEventListener('click', async () => {
+      cleanupEscape()
+      createBtn.disabled = true
+      createBtn.textContent = 'Creating...'
+
+      try {
+        const result = await window.puffin.git.createBranch(branchName, undefined, true)
+        this.intents.hideModal()
+
+        if (result?.success) {
+          this.showToast(`Branch "${branchName}" created and checked out`, 'success')
+        } else {
+          const errMsg = result?.error || 'Unknown error'
+          const hint = errMsg.includes('already exists')
+            ? ' Try a different branch name.'
+            : ''
+          this.showToast(`Failed to create branch: ${errMsg}${hint}`, 'error')
+        }
+      } catch (err) {
+        this.intents.hideModal()
+        this.showToast(`Failed to create branch: ${err.message}`, 'error')
+      }
+    })
+  }
+
 }

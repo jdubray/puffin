@@ -456,11 +456,11 @@ class OllamaService extends LLMProvider {
     // Only allow alphanumerics, dots, underscores, colons, and hyphens
     const safeModel = model.replace(/[^a-zA-Z0-9._:-]/g, '')
 
-    // Escape single quotes in prompt for shell
-    const escapedPrompt = prompt.replace(/'/g, "'\\''")
+    // Escape single quotes for nested shell command
+    const escapedPrompt = prompt.replace(/'/g, "'\"'\"'")
 
-    // Use full PATH to ensure ollama is found in non-interactive SSH sessions
-    const command = `export PATH=$PATH:/usr/local/bin:/usr/bin:/bin && ollama run ${safeModel} '${escapedPrompt}'`
+    // Use bash -c to ensure command runs in a proper shell environment
+    const command = `bash -c 'export PATH=$PATH:/usr/local/bin:/usr/bin; ollama run ${safeModel} \"${escapedPrompt}\"'`
 
     return [
       '-i', privateKeyPath,
@@ -483,8 +483,9 @@ class OllamaService extends LLMProvider {
       const { host, user, port, privateKeyPath } = this._sshConfig
       const target = `${user}@${host}`
 
-      // Use full PATH to ensure ollama is found in non-interactive SSH sessions
-      const command = 'export PATH=$PATH:/usr/local/bin:/usr/bin:/bin && ollama list'
+      // Use bash -c to ensure command runs in a proper shell environment
+      // This ensures PATH is properly set and ollama binary is found
+      const command = `bash -c 'export PATH=$PATH:/usr/local/bin:/usr/bin; ollama list'`
 
       console.log(`[OLLAMA] Fetching models via SSH: ${target}`)
       console.log(`[OLLAMA] SSH command: ${command}`)

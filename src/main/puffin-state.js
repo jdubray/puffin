@@ -335,6 +335,8 @@ class PuffinState {
     const archivedStories = this.getArchivedStories()
     const activeSprint = this.getActiveSprint()
 
+    console.log('[PUFFIN-STATE] getState() - this.config has ollama?', !!this.config?.ollama)
+
     const state = {
       projectPath: this.projectPath,
       projectName: path.basename(this.projectPath),
@@ -2114,6 +2116,10 @@ ${content}`
     try {
       const content = await fs.readFile(configPath, 'utf-8')
       const config = JSON.parse(content)
+      console.log('[PUFFIN-STATE] Config loaded from disk, has ollama?', !!config.ollama)
+      if (config.ollama) {
+        console.log('[PUFFIN-STATE] Ollama config:', JSON.stringify(config.ollama, null, 2))
+      }
       // Ensure uxStyle exists for older configs
       if (!config.uxStyle) {
         config.uxStyle = this.getDefaultUxStyle()
@@ -2125,6 +2131,7 @@ ${content}`
       // Ensure CRE config exists for older configs
       const { ensureCreConfig } = require('./cre/lib/cre-config')
       ensureCreConfig(config)
+      console.log('[PUFFIN-STATE] After ensureCreConfig, has ollama?', !!config.ollama)
       return config
     } catch {
       // Create default config

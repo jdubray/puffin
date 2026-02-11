@@ -514,10 +514,14 @@ class OllamaService extends LLMProvider {
 
       proc.on('close', (code) => {
         clearTimeout(timer)
-        console.log(`[OLLAMA] ollama list SSH command completed. Exit code: ${code}`)
-        console.log(`[OLLAMA] stdout length: ${stdout.length}, stderr length: ${stderr.length}`)
-        console.log(`[OLLAMA] stdout content:`, stdout)
-        if (stderr) console.log(`[OLLAMA] stderr content:`, stderr)
+        console.log(`[OLLAMA] ======== SSH COMMAND COMPLETED ========`)
+        console.log(`[OLLAMA] Exit code: ${code}`)
+        console.log(`[OLLAMA] stdout length: ${stdout.length} bytes`)
+        console.log(`[OLLAMA] stderr length: ${stderr.length} bytes`)
+        console.log(`[OLLAMA] stdout raw bytes:`, Buffer.from(stdout).toString('hex').slice(0, 100))
+        console.log(`[OLLAMA] stdout content:`, JSON.stringify(stdout))
+        if (stderr) console.log(`[OLLAMA] stderr content:`, JSON.stringify(stderr))
+        console.log(`[OLLAMA] =====================================`)
 
         if (code !== 0) {
           reject(new Error(stderr.trim() || `ollama list failed with code ${code}`))

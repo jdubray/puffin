@@ -207,7 +207,7 @@ function setupStateHandlers(ipcMain) {
             host: updates.ollama.ssh.host || '',
             user: updates.ollama.ssh.user || '',
             port: updates.ollama.ssh.port || 22,
-            privateKeyPath: updates.ollama.ssh.privateKeyPath || path.join(os.homedir(), '.ssh', 'id_ed25519')
+            privateKeyPath: updates.ollama.ssh.privateKeyPath || path.join(os.homedir(), '.ssh', 'id_rsa')
           }
           ollamaService.updateConfig(sshConfig)
           console.log('[IPC] Ollama service updated with config:', sshConfig)

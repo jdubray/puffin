@@ -488,7 +488,7 @@ export class ProjectFormComponent {
       ollamaSshPort.value = ollamaConfig.ssh?.port || 22
     }
     if (ollamaSshKey) {
-      const keyPath = ollamaConfig.ssh?.privateKeyPath || '~/.ssh/id_ed25519'
+      const keyPath = ollamaConfig.ssh?.privateKeyPath || '~/.ssh/id_rsa'
       console.log('[PROJECT-FORM] Setting SSH Key field to:', keyPath)
       ollamaSshKey.value = keyPath
     }
@@ -610,7 +610,7 @@ export class ProjectFormComponent {
     const enabled = this.getCheckboxValue('ollama-enabled')
     const hostField = this.getElementValue('ollama-ssh-host')
     const port = parseInt(this.getElementValue('ollama-ssh-port', '22')) || 22
-    const privateKeyPath = this.getElementValue('ollama-ssh-key', '~/.ssh/id_ed25519')
+    const privateKeyPath = this.getElementValue('ollama-ssh-key', '~/.ssh/id_rsa')
 
     // Parse user@host format
     let user = ''

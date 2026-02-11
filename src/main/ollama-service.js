@@ -21,7 +21,7 @@ const DEFAULT_SSH_CONFIG = {
   host: '',
   user: '',
   port: 22,
-  privateKeyPath: path.join(os.homedir(), '.ssh', 'id_ed25519'),
+  privateKeyPath: path.join(os.homedir(), '.ssh', 'id_rsa'),
   timeout: 10000
 }
 

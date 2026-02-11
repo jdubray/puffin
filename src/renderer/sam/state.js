@@ -153,7 +153,7 @@ function computeConfigState(model) {
     assumptions: config.assumptions || [],
     technicalArchitecture: config.technicalArchitecture || '',
     dataModel: config.dataModel || '',
-    defaultModel: config.defaultModel || 'sonnet',
+    defaultModel: config.defaultModel || 'claude:sonnet-4.5',
     options: config.options || {},
     uxStyle: config.uxStyle || {},
     debugMode: config.debugMode || false,

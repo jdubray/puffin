@@ -247,6 +247,23 @@ export class ProjectFormComponent {
       })
     }
 
+    // Ollama enable/disable toggle
+    const ollamaToggle = document.getElementById('ollama-enabled')
+    if (ollamaToggle) {
+      ollamaToggle.addEventListener('change', () => {
+        this._updateOllamaFieldsVisibility()
+        this.handleInputChange()
+      })
+    }
+
+    // Ollama Test Connection button
+    const testOllamaBtn = document.getElementById('test-ollama-btn')
+    if (testOllamaBtn) {
+      testOllamaBtn.addEventListener('click', () => {
+        this.handleTestOllamaConnection()
+      })
+    }
+
     // Color input synchronization (color picker <-> text input)
     this.bindColorInputs()
 
@@ -373,9 +390,17 @@ export class ProjectFormComponent {
     if (techArchInput) techArchInput.value = config.technicalArchitecture || ''
     if (dataModelInput) dataModelInput.value = config.dataModel || ''
 
-    // Default model
+    // Default model — handle both legacy ('sonnet') and new ('claude:sonnet-4.5') formats
     const defaultModel = document.getElementById('default-model')
-    if (defaultModel) defaultModel.value = config.defaultModel || 'sonnet'
+    if (defaultModel) {
+      const modelValue = config.defaultModel || 'claude:sonnet-4.5'
+      defaultModel.value = modelValue
+      // If value didn't match (legacy format), try mapping
+      if (defaultModel.value !== modelValue) {
+        const legacyMap = { opus: 'claude:opus-4.6', sonnet: 'claude:sonnet-4.5', haiku: 'claude:haiku-4.5' }
+        defaultModel.value = legacyMap[modelValue] || 'claude:sonnet-4.5'
+      }
+    }
 
     // Options
     const options = config.options || {}
@@ -439,6 +464,21 @@ export class ProjectFormComponent {
     const creFullRebuild = document.getElementById('cre-sprint-full-rebuild')
     if (creAutoRefresh) creAutoRefresh.checked = sprintEndConfig.autoRefresh || false
     if (creFullRebuild) creFullRebuild.checked = sprintEndConfig.fullRebuild || false
+
+    // Ollama Settings
+    const ollamaConfig = config.ollama || {}
+    const ollamaEnabled = document.getElementById('ollama-enabled')
+    const ollamaSshHost = document.getElementById('ollama-ssh-host')
+    const ollamaSshPort = document.getElementById('ollama-ssh-port')
+
+    if (ollamaEnabled) ollamaEnabled.checked = ollamaConfig.enabled || false
+    if (ollamaSshHost) ollamaSshHost.value = ollamaConfig.ssh?.host
+      ? `${ollamaConfig.ssh.user || ''}@${ollamaConfig.ssh.host}`
+      : ''
+    if (ollamaSshPort) ollamaSshPort.value = ollamaConfig.ssh?.port || 22
+
+    // Toggle field visibility based on enabled state
+    this._updateOllamaFieldsVisibility()
   }
 
   /**
@@ -500,7 +540,7 @@ export class ProjectFormComponent {
       assumptions: this.assumptions.filter(a => a.trim()),
       technicalArchitecture: this.getElementValue('technical-architecture'),
       dataModel: this.getElementValue('data-model'),
-      defaultModel: this.getElementValue('default-model', 'optus'),
+      defaultModel: this.getElementValue('default-model', 'claude:sonnet-4.5'),
       options: {
         programmingStyle: this.getElementValue('programming-style', 'hybrid'),
         testingApproach: this.getElementValue('testing-approach', 'bdd'),
@@ -535,7 +575,35 @@ export class ProjectFormComponent {
           autoRefresh: this.getCheckboxValue('cre-sprint-auto-refresh'),
           fullRebuild: this.getCheckboxValue('cre-sprint-full-rebuild')
         }
-      }
+      },
+      ollama: this._getOllamaFormData()
+    }
+  }
+
+  /**
+   * Parse the Ollama SSH host field (user@host format) and build config
+   * @returns {Object} Ollama config for persistence
+   * @private
+   */
+  _getOllamaFormData() {
+    const enabled = this.getCheckboxValue('ollama-enabled')
+    const hostField = this.getElementValue('ollama-ssh-host')
+    const port = parseInt(this.getElementValue('ollama-ssh-port', '22')) || 22
+
+    // Parse user@host format
+    let user = ''
+    let host = ''
+    if (hostField.includes('@')) {
+      const parts = hostField.split('@')
+      user = parts[0]
+      host = parts.slice(1).join('@') // Handle edge case of @ in host
+    } else {
+      host = hostField
+    }
+
+    return {
+      enabled,
+      ssh: { host, user, port }
     }
   }
 
@@ -615,6 +683,84 @@ export class ProjectFormComponent {
         btn.disabled = false
         btn.textContent = originalText
       }
+    }
+  }
+
+  /**
+   * Handle Test Connection button for Ollama SSH
+   * Spawns SSH to verify connectivity and lists available models
+   */
+  async handleTestOllamaConnection() {
+    const btn = document.getElementById('test-ollama-btn')
+    const resultDiv = document.getElementById('ollama-test-result')
+    const originalText = btn?.textContent
+
+    try {
+      if (btn) {
+        btn.disabled = true
+        btn.textContent = 'Testing...'
+      }
+      if (resultDiv) {
+        resultDiv.style.display = 'none'
+        resultDiv.className = 'ollama-test-result'
+      }
+
+      // Build config from current form fields
+      const ollamaData = this._getOllamaFormData()
+      const sshConfig = {
+        host: ollamaData.ssh.host,
+        user: ollamaData.ssh.user,
+        port: ollamaData.ssh.port
+      }
+
+      if (!sshConfig.host || !sshConfig.user) {
+        this._showOllamaTestResult(resultDiv, false, 'Enter SSH host in user@host format')
+        return
+      }
+
+      const result = await window.puffin.llm.testConnection(sshConfig)
+
+      if (result.success) {
+        const modelList = result.models?.length > 0
+          ? result.models.join(', ')
+          : 'No models installed'
+        this._showOllamaTestResult(resultDiv, true, `Connected. Available models: ${modelList}`)
+      } else {
+        this._showOllamaTestResult(resultDiv, false, result.error || 'Connection failed')
+      }
+    } catch (error) {
+      this._showOllamaTestResult(resultDiv, false, `Error: ${error.message}`)
+    } finally {
+      if (btn) {
+        btn.disabled = false
+        btn.textContent = originalText
+      }
+    }
+  }
+
+  /**
+   * Show test connection result in the result div
+   * @param {HTMLElement|null} el - The result element
+   * @param {boolean} success - Whether the test succeeded
+   * @param {string} message - Message to display
+   * @private
+   */
+  _showOllamaTestResult(el, success, message) {
+    if (!el) return
+    el.style.display = 'block'
+    el.className = `ollama-test-result ${success ? 'success' : 'error'}`
+    el.textContent = message
+  }
+
+  /**
+   * Toggle visibility of Ollama config fields based on enabled checkbox
+   * @private
+   */
+  _updateOllamaFieldsVisibility() {
+    const enabled = this.getCheckboxValue('ollama-enabled')
+    const fields = document.getElementById('ollama-config-fields')
+    if (fields) {
+      fields.style.display = enabled ? '' : 'none'
     }
   }
 

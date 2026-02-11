@@ -179,6 +179,11 @@ export class CliOutputComponent {
       this.messages = this.messages.slice(-Math.floor(MAX_MESSAGES * 0.75))
     }
 
+    // Track active provider from messages
+    if (msg.provider && !this._activeProvider) {
+      this._activeProvider = { provider: msg.provider, model: msg.model }
+    }
+
     switch (msg.type) {
       case 'assistant':
         this.handleAssistantMessage(msg)
@@ -196,6 +201,10 @@ export class CliOutputComponent {
         this.handleResultMessage(msg)
         break
 
+      case 'status':
+        this.handleStatusMessage(msg)
+        break
+
       default:
         this.appendToStream(`[${msg.type}] ${JSON.stringify(msg)}`, 'unknown')
     }
@@ -208,10 +217,24 @@ export class CliOutputComponent {
    * Handle assistant message (Claude's response)
    */
   handleAssistantMessage(msg) {
+    // Ollama sends flat assistant messages with provider/model/text fields
+    if (msg.provider && msg.text !== undefined) {
+      const prefix = this.formatProviderPrefix(msg.provider, msg.model)
+      this.appendToStreamRaw(`${prefix}${this.escapeHtml(msg.text)}`, 'assistant-text')
+      return
+    }
+
     if (msg.message?.content) {
+      // Build provider prefix from message metadata (injected by LLMRouter)
+      const prefix = msg.provider ? this.formatProviderPrefix(msg.provider, msg.model) : ''
+
       for (const block of msg.message.content) {
         if (block.type === 'text') {
-          this.appendToStream(block.text, 'assistant-text')
+          if (prefix) {
+            this.appendToStreamRaw(`${prefix}${this.escapeHtml(block.text)}`, 'assistant-text')
+          } else {
+            this.appendToStream(block.text, 'assistant-text')
+          }
         } else if (block.type === 'tool_use') {
           // Track active tool (only store name — input is not needed here)
           this.activeTools.set(block.id, {
@@ -288,6 +311,27 @@ export class CliOutputComponent {
   }
 
   /**
+   * Handle SSH/provider status message (e.g. Connecting, Connected, Response received)
+   */
+  handleStatusMessage(msg) {
+    const prefix = this.formatProviderPrefix(msg.provider, msg.model)
+    this.appendToStreamRaw(`${prefix}<span class="status-text status-${msg.status || 'info'}">${this.escapeHtml(msg.message || msg.status)}</span>`, 'provider-status')
+  }
+
+  /**
+   * Format a color-coded provider prefix for display.
+   * @param {string} provider - Provider ID ('claude' or 'ollama')
+   * @param {string} [model] - Model name to display alongside provider
+   * @returns {string} HTML string with color-coded prefix
+   */
+  formatProviderPrefix(provider, model) {
+    if (!provider) return ''
+    const displayName = provider === 'claude' ? 'Claude' : provider === 'ollama' ? 'Ollama' : provider
+    const label = model ? `${displayName}: ${this.escapeHtml(model)}` : displayName
+    return `<span class="provider-prefix provider-${provider}">[${label}]</span> `
+  }
+
+  /**
    * Handle result message (final summary)
    */
   handleResultMessage(msg) {
@@ -317,6 +361,17 @@ export class CliOutputComponent {
 
     this.updateSessionInfo()
     this.updateCostInfo()
+  }
+
+  /**
+   * Append a provider-tagged error to the stream view (AC6).
+   * @param {string} provider - Provider ID ('claude' or 'ollama')
+   * @param {string} [model] - Model name
+   * @param {string} message - Error message
+   */
+  appendProviderError(provider, model, message) {
+    const prefix = this.formatProviderPrefix(provider, model)
+    this.appendToStreamRaw(`${prefix}<span class="provider-error">${this.escapeHtml(message)}</span>`, 'provider-error-line')
   }
 
   /**
@@ -439,8 +494,18 @@ export class CliOutputComponent {
 
   /**
    * Set processing status
+   * @param {boolean} isProcessing - Whether processing is active
+   * @param {Object} [providerInfo] - Provider context
+   * @param {string} [providerInfo.provider] - Provider ID ('claude' or 'ollama')
+   * @param {string} [providerInfo.model] - Model name
    */
-  setProcessing(isProcessing) {
+  setProcessing(isProcessing, providerInfo) {
+    if (isProcessing && providerInfo?.provider) {
+      this._activeProvider = providerInfo
+    } else if (!isProcessing) {
+      this._activeProvider = null
+    }
+
     this.updateStatus(isProcessing ? 'Processing...' : 'Idle')
 
     const statusEl = document.getElementById('cli-status')

@@ -18,6 +18,7 @@ const fs = require('fs')
 const os = require('os')
 const { v4: uuidv4 } = require('uuid')
 const { getMetricsService, MetricComponent, MetricEventType } = require('./metrics-service')
+const { LLMProvider } = require('./llm-provider')
 
 /**
  * Tool emoji mapping for different tool types
@@ -74,8 +75,9 @@ function getToolEmoji(toolName) {
 // Import branch defaults as fallback when plugin is unavailable
 const { getDefaultBranchFocus, getCustomBranchFallback } = require('../../plugins/claude-config-plugin/branch-defaults')
 
-class ClaudeService {
+class ClaudeService extends LLMProvider {
   constructor() {
+    super({ id: 'claude', name: 'Claude Code' })
     this.currentProcess = null
     this.projectPath = null
     this._processLock = false // Prevents multiple CLI spawns
@@ -83,6 +85,18 @@ class ClaudeService {
     this._pluginManager = null // Reference to plugin manager for branch focus retrieval
     this._pendingContextUpdate = null // Queued branch focus update to include in next prompt
     this._currentBranchId = null // Track current branch for context updates
+  }
+
+  /**
+   * Get available Claude models.
+   * @returns {Promise<import('./llm-provider').LLMModel[]>}
+   */
+  async getAvailableModels() {
+    return [
+      { id: 'claude:opus-4.6', name: 'Opus 4.6', provider: 'claude' },
+      { id: 'claude:sonnet-4.5', name: 'Sonnet 4.5', provider: 'claude' },
+      { id: 'claude:haiku-4.5', name: 'Haiku 4.5', provider: 'claude' }
+    ]
   }
 
   /**

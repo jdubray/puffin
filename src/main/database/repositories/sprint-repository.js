@@ -836,6 +836,22 @@ class SprintRepository extends BaseRepository {
 
       console.log(`[SQL-TRACE] SPRINT_ARCHIVE: ${completedStoryIds.length} completed, ${incompleteStoryIds.length} returned to pending`)
 
+      // Re-fetch stories with UPDATED statuses for accurate historical record
+      // This ensures the archived sprint shows the final status (completed/pending) not the stale "in-progress" status
+      const updatedStories = stories && stories.length > 0 ? stories.map(story => {
+        const finalStatus = completedStoryIds.includes(story.id) ? 'completed' : 'pending'
+        return {
+          ...story,
+          status: finalStatus
+        }
+      }) : []
+
+      // Update the sprint_history.stories column with corrected statuses
+      const updateStoriesSql = 'UPDATE sprint_history SET stories = ? WHERE id = ?'
+      this.traceQuery('UPDATE_SPRINT_HISTORY_STORIES', updateStoriesSql, [this.toJson(updatedStories), id], () => {
+        db.prepare(updateStoriesSql).run(this.toJson(updatedStories), id)
+      })
+
       // Remove sprint-story relationships
       const deleteRelSql = 'DELETE FROM sprint_stories WHERE sprint_id = ?'
       this.traceQuery('DELETE_SPRINT_STORIES', deleteRelSql, [id], () => {
@@ -856,7 +872,7 @@ class SprintRepository extends BaseRepository {
         description,
         status: SprintStatus.CLOSED,
         storyIds,
-        stories: stories || [],
+        stories: updatedStories,
         closedAt
       }
     })

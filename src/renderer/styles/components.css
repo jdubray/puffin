@@ -4481,6 +4481,45 @@
 }
 
 /* ========================================
+   Ollama Configuration UI
+   ======================================== */
+
+.ollama-fieldset .fieldset-description {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin: 0.5rem 0 1rem 0;
+  line-height: 1.4;
+}
+
+.ollama-test-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ollama-test-result {
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--border-radius);
+  margin-top: 0.5rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.ollama-test-result.success {
+  background: var(--success-bg, rgba(72, 187, 120, 0.1));
+  color: var(--success-color, #48bb78);
+  border: 1px solid var(--success-color, #48bb78);
+}
+
+.ollama-test-result.error {
+  background: var(--error-bg, rgba(245, 101, 101, 0.1));
+  color: var(--error-color, #f56565);
+  border: 1px solid var(--error-color, #f56565);
+}
+
+/* ========================================
    Plugin Management UI
    ======================================== */
 
@@ -5092,6 +5131,59 @@
 
 .stream-line.unknown {
   color: var(--warning-color);
+}
+
+/* Provider Prefixes (AC4 — color-coded by provider) */
+.provider-prefix {
+  font-weight: 600;
+  font-size: 0.85em;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 4px;
+}
+
+.provider-prefix.provider-claude {
+  color: #6b9eff;
+}
+
+.provider-prefix.provider-ollama {
+  color: #4ade80;
+}
+
+/* Provider status messages (SSH connection lifecycle) */
+.stream-line.provider-status {
+  padding: 2px 0;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.status-text.status-connecting {
+  color: #f59e0b;
+}
+
+.status-text.status-connected {
+  color: #4ade80;
+}
+
+.status-text.status-complete {
+  color: #4ade80;
+}
+
+.status-text.status-closed {
+  color: var(--text-secondary);
+}
+
+.status-text.status-error {
+  color: var(--error-color);
+}
+
+/* Provider error messages */
+.stream-line.provider-error-line {
+  padding: 4px 0;
+}
+
+.provider-error {
+  color: var(--error-color);
 }
 
 /* Messages View */

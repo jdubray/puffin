@@ -350,6 +350,29 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * LLM Router operations (multi-provider support)
+   */
+  llm: {
+    // Get available models from all registered providers
+    getAvailableModels: () => ipcRenderer.invoke('llm:getAvailableModels'),
+
+    // Get registered provider IDs
+    getProviders: () => ipcRenderer.invoke('llm:getProviders'),
+
+    // Update Ollama SSH configuration
+    updateOllamaConfig: (config) => ipcRenderer.invoke('llm:updateOllamaConfig', config),
+
+    // Check if Ollama provider is configured
+    isOllamaConfigured: () => ipcRenderer.invoke('llm:isOllamaConfigured'),
+
+    // Refresh Ollama models from remote server
+    refreshOllamaModels: () => ipcRenderer.invoke('llm:refreshOllamaModels'),
+
+    // Test Ollama SSH connection (returns available models on success)
+    testConnection: (config) => ipcRenderer.invoke('llm:testConnection', config)
+  },
+
+  /**
    * File operations
    */
   file: {

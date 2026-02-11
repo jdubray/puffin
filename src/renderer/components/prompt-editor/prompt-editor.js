@@ -22,7 +22,7 @@ export class PromptEditorComponent {
     this.useCurrentDesign = false // Track if current design is selected
     this.deriveStoriesBtn = null
     this.modelSelect = null
-    this.defaultModel = 'optus' // Will be updated from project config
+    this.defaultModel = 'claude:sonnet-4.5' // Will be updated from project config
     // Thinking budget selector
     this.thinkingBudgetSelect = null
     // Handoff button
@@ -43,6 +43,8 @@ export class PromptEditorComponent {
     this.supportedImageExtensions = ['.png', '.jpg', '.jpeg', '.webp']
     // Track whether the current prompt session has written/edited files
     this._writtenFileCount = 0
+    // Track Ollama enabled state for config change detection
+    this._ollamaWasEnabled = false
   }
 
   /**
@@ -72,6 +74,9 @@ export class PromptEditorComponent {
 
     this.bindEvents()
     this.subscribeToState()
+
+    // Populate Ollama models if configured
+    this.refreshOllamaModels()
 
     // Initialize image service
     this.initImageService()
@@ -690,11 +695,23 @@ export class PromptEditorComponent {
       const { state } = e.detail
       // Update default model from config if changed
       if (state.config?.defaultModel && state.config.defaultModel !== this.defaultModel) {
-        this.defaultModel = state.config.defaultModel
+        let configModel = state.config.defaultModel
+        // Map legacy model names to new prefixed format
+        const legacyMap = { opus: 'claude:opus-4.6', sonnet: 'claude:sonnet-4.5', haiku: 'claude:haiku-4.5' }
+        if (legacyMap[configModel]) configModel = legacyMap[configModel]
+
+        this.defaultModel = configModel
         // Update the select if user hasn't manually changed it
         if (this.modelSelect && !this.modelSelect.dataset.userChanged) {
           this.modelSelect.value = this.defaultModel
         }
+      }
+
+      // Refresh Ollama models when config changes
+      const ollamaEnabled = state.config?.ollama?.enabled || false
+      if (ollamaEnabled !== this._ollamaWasEnabled) {
+        this._ollamaWasEnabled = ollamaEnabled
+        this.refreshOllamaModels()
       }
 
       // Track file write count from activity state for cancel confirmation
@@ -719,6 +736,71 @@ export class PromptEditorComponent {
 
       this.render(state.prompt, state.history, state.storyGenerations, state.storyDerivation)
     })
+  }
+
+  /**
+   * Fetch Ollama models and update both model dropdowns with an Ollama optgroup.
+   * Only adds models when Ollama SSH is configured and enabled (AC5).
+   */
+  async refreshOllamaModels() {
+    if (!window.puffin?.llm) return
+
+    try {
+      const configured = await window.puffin.llm.isOllamaConfigured()
+      if (!configured) {
+        this._removeOllamaOptgroup(this.modelSelect)
+        this._removeOllamaOptgroup(document.getElementById('default-model'))
+        return
+      }
+
+      const result = await window.puffin.llm.refreshOllamaModels()
+      const models = result.success ? (result.models || []) : []
+
+      this._updateOllamaOptgroup(this.modelSelect, models)
+      this._updateOllamaOptgroup(document.getElementById('default-model'), models)
+    } catch (err) {
+      console.warn('[PROMPT-EDITOR] Failed to refresh Ollama models:', err)
+    }
+  }
+
+  /**
+   * Update or create the Ollama optgroup in a model select element.
+   * @param {HTMLSelectElement|null} selectEl - The select element
+   * @param {Array} models - Array of {id, name, provider} model objects
+   * @private
+   */
+  _updateOllamaOptgroup(selectEl, models) {
+    if (!selectEl) return
+
+    // Remove existing Ollama optgroup
+    this._removeOllamaOptgroup(selectEl)
+
+    if (models.length === 0) return
+
+    // Create new Ollama optgroup (AC2)
+    const optgroup = document.createElement('optgroup')
+    optgroup.label = 'Ollama (SSH Server)'
+    optgroup.dataset.provider = 'ollama'
+
+    for (const model of models) {
+      const option = document.createElement('option')
+      option.value = model.id // e.g. 'ollama:mistral-small:latest'
+      option.textContent = model.name // e.g. 'mistral-small:latest'
+      optgroup.appendChild(option)
+    }
+
+    selectEl.appendChild(optgroup)
+  }
+
+  /**
+   * Remove the Ollama optgroup from a select element.
+   * @param {HTMLSelectElement|null} selectEl
+   * @private
+   */
+  _removeOllamaOptgroup(selectEl) {
+    if (!selectEl) return
+    const existing = selectEl.querySelector('optgroup[data-provider="ollama"]')
+    if (existing) existing.remove()
   }
 
   /**
@@ -1155,7 +1237,7 @@ export class PromptEditorComponent {
 
       // Handle thinking budget - wrap prompt and potentially upgrade model
       const thinkingBudget = this.thinkingBudgetSelect?.value || 'none'
-      let selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+      let selectedModel = this.modelSelect?.value || this.defaultModel || 'claude:sonnet-4.5'
 
       if (thinkingBudget !== 'none') {
         finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
@@ -1163,7 +1245,7 @@ export class PromptEditorComponent {
 
         // Upgrade to opus for think-harder and superthink
         if (thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') {
-          selectedModel = 'opus'
+          selectedModel = 'claude:opus-4.6'
           console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
         }
       }

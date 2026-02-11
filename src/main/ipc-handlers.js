@@ -11,6 +11,8 @@ const fs = require('fs')
 const path = require('path')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
+const { OllamaService } = require('./ollama-service')
+const { LLMRouter } = require('./llm-router')
 const { DeveloperProfileManager } = require('./developer-profile')
 const { GitService } = require('./git-service')
 const ClaudeMdGenerator = require('./claude-md-generator')
@@ -21,6 +23,8 @@ const { initializeMetricsService, getMetricsService } = require('./metrics-servi
 
 let puffinState = null
 let claudeService = null
+let ollamaService = null
+let llmRouter = null
 let developerProfile = null
 let gitService = null
 let claudeMdGenerator = null
@@ -62,6 +66,11 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
   projectPath = initialProjectPath
   puffinState = new PuffinState()
   claudeService = new ClaudeService()
+  ollamaService = new OllamaService()
+  llmRouter = new LLMRouter()
+  llmRouter.registerProvider(claudeService)
+  llmRouter.registerProvider(ollamaService)
+
   developerProfile = new DeveloperProfileManager()
   gitService = new GitService()
   claudeMdGenerator = new ClaudeMdGenerator()
@@ -80,6 +89,9 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
 
   // Claude handlers
   setupClaudeHandlers(ipcMain)
+
+  // LLM Router handlers
+  setupLlmHandlers(ipcMain)
 
   // File handlers
   setupFileHandlers(ipcMain)
@@ -133,6 +145,18 @@ function setupStateHandlers(ipcMain) {
         console.error('[CRE] Initialization failed (non-fatal):', creErr.message)
       }
 
+      // Initialize Ollama service from saved config (if configured)
+      const ollamaConfig = state.config?.ollama
+      if (ollamaConfig?.enabled && ollamaConfig.ssh) {
+        const sshConfig = {
+          host: ollamaConfig.ssh.host || '',
+          user: ollamaConfig.ssh.user || '',
+          port: ollamaConfig.ssh.port || 22
+        }
+        ollamaService.updateConfig(sshConfig)
+        console.log(`[LLM] Ollama configured: ${sshConfig.user}@${sshConfig.host}:${sshConfig.port}`)
+      }
+
       // Initialize CLAUDE.md generator and generate initial files
       await claudeMdGenerator.initialize(projectPath)
       const activeBranch = state.history?.activeBranch || 'specifications'
@@ -162,6 +186,20 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:updateConfig', async (event, updates) => {
     try {
       const config = await puffinState.updateConfig(updates)
+
+      // Sync Ollama service config when ollama settings change
+      if (updates.ollama) {
+        if (updates.ollama.enabled && updates.ollama.ssh) {
+          ollamaService.updateConfig({
+            host: updates.ollama.ssh.host || '',
+            user: updates.ollama.ssh.user || '',
+            port: updates.ollama.ssh.port || 22
+          })
+        } else if (!updates.ollama.enabled) {
+          // Disable by clearing host/user
+          ollamaService.updateConfig({ host: '', user: '' })
+        }
+      }
 
       // Regenerate CLAUDE.md base (config affects all branches)
       const state = puffinState.getState()
@@ -1412,16 +1450,16 @@ function setupClaudeHandlers(ipcMain) {
 
   // Check if a CLI process is currently running
   ipcMain.handle('claude:isRunning', () => {
-    return claudeService.isProcessRunning()
+    return llmRouter.isProcessRunning()
   })
 
-  // Submit prompt to Claude CLI
+  // Submit prompt to LLM provider (routes via LLMRouter based on model prefix)
   ipcMain.on('claude:submit', async (event, data) => {
     // Additional guard at IPC layer - log and reject if already running
-    if (claudeService.isProcessRunning()) {
-      console.error('[IPC-GUARD] Rejected submit: CLI process already running')
+    if (llmRouter.isProcessRunning()) {
+      console.error('[IPC-GUARD] Rejected submit: LLM process already running')
       event.sender.send('claude:error', {
-        message: 'A Claude CLI process is already running. Please wait for it to complete.',
+        message: 'An LLM process is already running. Please wait for it to complete.',
         code: 'PROCESS_ALREADY_RUNNING'
       })
       return
@@ -1434,7 +1472,8 @@ function setupClaudeHandlers(ipcMain) {
       const branch = state.history?.branches?.[branchId]
       const codeModificationAllowed = branch?.codeModificationAllowed !== false
 
-      console.log('[IPC-GUARD] Starting CLI process for branch:', branchId)
+      const { provider } = llmRouter.resolveProvider(data?.model)
+      console.log(`[IPC-GUARD] Starting ${provider.providerId} process for branch:`, branchId)
 
       // Ensure we're using the correct project path
       const submitData = {
@@ -1456,7 +1495,7 @@ function setupClaudeHandlers(ipcMain) {
         }
       }
 
-      await claudeService.submit(
+      await llmRouter.submit(
         submitData,
         // On chunk received (streaming output)
         (chunk) => {
@@ -1486,14 +1525,20 @@ function setupClaudeHandlers(ipcMain) {
       console.error('[IPC-ERROR] claude:submit failed:', error)
       console.error('[IPC-ERROR] Error stack:', error.stack)
       try {
-        event.sender.send('claude:error', { message: error.message })
+        // Include provider context in error if available
+        const { provider: errProvider } = llmRouter.resolveProvider(data?.model) || {}
+        event.sender.send('claude:error', {
+          message: error.message,
+          provider: errProvider?.providerId,
+          model: data?.model
+        })
       } catch { /* frame already gone */ }
     }
   })
 
-  // Cancel current request
+  // Cancel current request (routes to active provider)
   ipcMain.on('claude:cancel', () => {
-    claudeService.cancel()
+    llmRouter.cancel()
   })
 
   // Answer a question from Claude (AskUserQuestion tool response)
@@ -1611,6 +1656,76 @@ function setupClaudeHandlers(ipcMain) {
       return result
     } catch (error) {
       console.error('sendPrompt failed:', error)
+      return { success: false, error: error.message }
+    }
+  })
+}
+
+/**
+ * LLM Router IPC handlers
+ */
+function setupLlmHandlers(ipcMain) {
+  // Get available models from all registered providers
+  ipcMain.handle('llm:getAvailableModels', async () => {
+    try {
+      return await llmRouter.getAvailableModels()
+    } catch (error) {
+      console.error('[LLM] getAvailableModels failed:', error)
+      return []
+    }
+  })
+
+  // Get registered provider IDs
+  ipcMain.handle('llm:getProviders', () => {
+    return llmRouter.getProviderIds()
+  })
+
+  // Update Ollama SSH configuration
+  ipcMain.handle('llm:updateOllamaConfig', (event, config) => {
+    ollamaService.updateConfig(config)
+    return { success: true }
+  })
+
+  // Check if Ollama provider is configured
+  ipcMain.handle('llm:isOllamaConfigured', () => {
+    return ollamaService.isConfigured()
+  })
+
+  // Refresh Ollama model cache (re-fetch from remote)
+  ipcMain.handle('llm:refreshOllamaModels', async () => {
+    try {
+      ollamaService.clearModelCache()
+      const models = await ollamaService.getAvailableModels()
+      return { success: true, models }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Test Ollama SSH connection and list available models
+  ipcMain.handle('llm:testConnection', async (event, config) => {
+    try {
+      // Temporarily apply the provided config for the test
+      const previousConfig = { ...ollamaService._sshConfig }
+      if (config) {
+        ollamaService.updateConfig(config)
+      }
+
+      if (!ollamaService.isConfigured()) {
+        // Restore previous config
+        ollamaService.updateConfig(previousConfig)
+        return { success: false, error: 'SSH host and user are required' }
+      }
+
+      // Fetch models (this verifies SSH connectivity + Ollama availability)
+      ollamaService.clearModelCache()
+      const models = await ollamaService.getAvailableModels()
+
+      return {
+        success: true,
+        models: models.map(m => m.name)
+      }
+    } catch (error) {
       return { success: false, error: error.message }
     }
   })
@@ -2986,6 +3101,14 @@ function getClaudeService() {
   return claudeService
 }
 
+/**
+ * Get the LLM Router instance
+ * @returns {LLMRouter|null}
+ */
+function getLlmRouter() {
+  return llmRouter
+}
+
 module.exports = {
   setupIpcHandlers,
   setupPluginHandlers,
@@ -2994,6 +3117,7 @@ module.exports = {
   setupPluginStyleHandlers,
   getPuffinState,
   getClaudeService,
+  getLlmRouter,
   setClaudeServicePluginManager,
   getMetricsService
 }

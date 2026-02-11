@@ -1888,19 +1888,25 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Response error
     const unsubError = window.puffin.claude.onError((error) => {
-      console.error('[CLAUDE-ERROR] Response error received:', error)
-      console.error('[CLAUDE-ERROR] Error message:', error?.message || error)
+      console.error('[LLM-ERROR] Response error received:', error)
+      console.error('[LLM-ERROR] Error message:', error?.message || error)
       this.intents.responseError(error)
       this.components.cliOutput.setProcessing(false)
 
-      // Show error toast to user
+      // Show error toast with provider context (AC6)
+      const providerLabel = error?.provider === 'ollama' ? 'Ollama' : error?.provider === 'claude' ? 'Claude' : 'LLM'
       const errorMessage = error?.message || String(error) || 'An unknown error occurred'
       this.showToast({
         type: 'error',
-        title: 'Claude Error',
+        title: `${providerLabel} Error`,
         message: errorMessage,
         duration: 8000 // Show errors longer
       })
+
+      // Show provider-tagged error in CLI output stream
+      if (error?.provider) {
+        this.components.cliOutput.appendProviderError(error.provider, error.model, errorMessage)
+      }
     })
     this.claudeListeners.push(unsubError)
 

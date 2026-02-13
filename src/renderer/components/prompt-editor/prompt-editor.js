@@ -22,7 +22,7 @@ export class PromptEditorComponent {
     this.useCurrentDesign = false // Track if current design is selected
     this.deriveStoriesBtn = null
     this.modelSelect = null
-    this.defaultModel = 'optus' // Will be updated from project config
+    this.defaultModel = '__uninitialized__' // Sentinel value - will be updated from project config on first state load
     // Thinking budget selector
     this.thinkingBudgetSelect = null
     // Handoff button
@@ -688,12 +688,21 @@ export class PromptEditorComponent {
 
     document.addEventListener('puffin-state-change', (e) => {
       const { state } = e.detail
-      // Update default model from config if changed
-      if (state.config?.defaultModel && state.config.defaultModel !== this.defaultModel) {
-        this.defaultModel = state.config.defaultModel
-        // Update the select if user hasn't manually changed it
-        if (this.modelSelect && !this.modelSelect.dataset.userChanged) {
-          this.modelSelect.value = this.defaultModel
+      // Update default model from config
+      // Always update on first load (when defaultModel is still the sentinel value)
+      // or when config changes
+      if (state.config?.defaultModel) {
+        const configModel = state.config.defaultModel
+        const isFirstLoad = this.defaultModel === '__uninitialized__'
+        const hasChanged = configModel !== this.defaultModel
+
+        if (isFirstLoad || hasChanged) {
+          this.defaultModel = configModel
+          // Update the select if user hasn't manually changed it
+          if (this.modelSelect && !this.modelSelect.dataset.userChanged) {
+            this.modelSelect.value = this.defaultModel
+            console.log('[PROMPT-EDITOR] Set model select to:', this.defaultModel)
+          }
         }
       }
 
@@ -1767,11 +1776,17 @@ export class PromptEditorComponent {
     const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
     if (!rawBranch || !rawBranch.prompts || rawBranch.prompts.length === 0) return null
 
-    // Collect all sessions that have hit "Prompt is too long" - these are dead sessions
+    // Collect dead sessions: "Prompt is too long" errors AND 0-turn error responses
+    // (e.g., expired/invalid session resume attempts)
     const deadSessions = new Set()
     for (const prompt of rawBranch.prompts) {
-      if (prompt.response?.content === 'Prompt is too long' && prompt.response?.sessionId) {
-        deadSessions.add(prompt.response.sessionId)
+      if (prompt.response?.sessionId) {
+        if (prompt.response.content === 'Prompt is too long') {
+          deadSessions.add(prompt.response.sessionId)
+        } else if (prompt.response.turns === 0 && (!prompt.response.content || prompt.response.content.length === 0)) {
+          // Session returned 0 turns with no content — likely a failed resume attempt
+          deadSessions.add(prompt.response.sessionId)
+        }
       }
     }
 

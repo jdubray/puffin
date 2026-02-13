@@ -27,12 +27,14 @@ export function deriveBranchName(title) {
 
 /**
  * Validate a git branch name.
+ * Empty names are valid (indicating no new branch should be created).
  * @param {string} name - Branch name to validate
  * @returns {{ valid: boolean, error: string|null }}
  */
 export function validateBranchName(name) {
+  // Empty name is valid - it means "don't create a new branch"
   if (!name || name.trim().length === 0) {
-    return { valid: false, error: 'Branch name is required' }
+    return { valid: true, error: null }
   }
   if (/\s/.test(name)) {
     return { valid: false, error: 'Branch name cannot contain spaces' }

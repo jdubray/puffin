@@ -683,7 +683,8 @@ export class StatePersistence {
           // Get session ID from last successful prompt in the target branch
           const targetBranch = state.history.raw?.branches?.[pendingSprintImpl.branchId]
           const lastPromptWithResponse = targetBranch?.prompts
-            ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
+            ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long'
+              && !(p.response?.turns === 0 && (!p.response?.content || p.response.content.length === 0)))
             ?.pop()
           const sessionId = lastPromptWithResponse?.response?.sessionId || null
 

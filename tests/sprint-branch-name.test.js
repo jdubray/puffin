@@ -121,20 +121,22 @@ describe('validateBranchName', () => {
     assert.strictEqual(result.valid, true)
   })
 
-  it('should reject empty string', () => {
+  it('should accept empty string (meaning no branch creation)', () => {
     const result = validateBranchName('')
-    assert.strictEqual(result.valid, false)
-    assert.ok(result.error.includes('required'))
+    assert.strictEqual(result.valid, true)
+    assert.strictEqual(result.error, null)
   })
 
-  it('should reject null', () => {
+  it('should accept null (meaning no branch creation)', () => {
     const result = validateBranchName(null)
-    assert.strictEqual(result.valid, false)
+    assert.strictEqual(result.valid, true)
+    assert.strictEqual(result.error, null)
   })
 
-  it('should reject whitespace-only string', () => {
+  it('should accept whitespace-only string (treated as empty)', () => {
     const result = validateBranchName('   ')
-    assert.strictEqual(result.valid, false)
+    assert.strictEqual(result.valid, true)
+    assert.strictEqual(result.error, null)
   })
 
   it('should reject names with spaces', () => {
@@ -788,23 +790,30 @@ describe('sprint-create to sprint-branch-create chaining', () => {
     assert.strictEqual(showModalData.currentBranch, 'main')
   })
 
-  it('should not proceed when branch name validation fails', () => {
+  it('should allow empty branch name (no branch creation) and skip branch-create modal', () => {
     let createSprintCalled = false
+    let hideModalCalled = false
+    let showModalCalled = false
 
     const intents = {
       createSprint() { createSprintCalled = true },
-      hideModal() {},
-      showModal() {}
+      hideModal() { hideModalCalled = true },
+      showModal() { showModalCalled = true }
     }
 
-    const branchName = '' // Invalid
+    const branchName = '' // Empty = no new branch
 
     const validation = validateBranchName(branchName)
-    if (!validation.valid) return
+    // Empty is now valid — user wants to stay on current branch
+    assert.strictEqual(validation.valid, true)
 
+    // In the real flow, empty branch name creates the sprint but skips the branch modal
     intents.createSprint([], branchName)
+    intents.hideModal() // would be called directly, not followed by showModal
 
-    assert.strictEqual(createSprintCalled, false)
+    assert.strictEqual(createSprintCalled, true)
+    assert.strictEqual(hideModalCalled, true)
+    assert.strictEqual(showModalCalled, false, 'branch-create modal should NOT be shown for empty branch name')
   })
 
   it('should pass branch name derived from sprint title through the chain', () => {

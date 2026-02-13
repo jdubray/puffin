@@ -84,11 +84,13 @@ const samplePlanItem = {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('AssertionType and AssertionResult enums', () => {
-  it('should define 4 assertion types (AC3)', () => {
+  it('should define assertion types matching evaluators (AC3)', () => {
     assert.equal(AssertionType.FILE_EXISTS, 'file_exists');
-    assert.equal(AssertionType.FUNCTION_EXISTS, 'function_exists');
+    assert.equal(AssertionType.FUNCTION_SIGNATURE, 'function_signature');
     assert.equal(AssertionType.EXPORT_EXISTS, 'export_exists');
     assert.equal(AssertionType.PATTERN_MATCH, 'pattern_match');
+    assert.equal(AssertionType.FILE_CONTAINS, 'file_contains');
+    assert.equal(AssertionType.IMPORT_EXISTS, 'import_exists');
   });
 
   it('should define 3 result states', () => {

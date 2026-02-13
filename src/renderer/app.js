@@ -292,6 +292,28 @@ class PuffinApp {
     this._creProgressSteps = steps.map(s => ({ ...s, status: 'pending' }))
     this._creBusy = true
 
+    // Separate steps into header, RIS, Assertions, and footer
+    const headerSteps = []
+    const risSteps = []
+    const assertionSteps = []
+    const footerSteps = []
+
+    for (const step of steps) {
+      if (step.id === 'approve' || step.id === 'analyze' || step.id === 'questions' ||
+          step.id === 'submit' || step.id === 'generate' || step.id === 'refine' ||
+          step.id === 'result') {
+        headerSteps.push(step)
+      } else if (step.id.startsWith('ris-')) {
+        risSteps.push(step)
+      } else if (step.id.startsWith('assert-')) {
+        assertionSteps.push(step)
+      } else if (step.id === 'complete') {
+        footerSteps.push(step)
+      } else {
+        headerSteps.push(step)
+      }
+    }
+
     const modal = document.createElement('div')
     modal.id = 'cre-progress-modal'
     modal.className = 'cre-progress-modal'
@@ -301,23 +323,67 @@ class PuffinApp {
           <div class="cre-progress-spinner"></div>
           <h3>${this.escapeHtml(title)}</h3>
         </div>
-        <ul class="cre-progress-steps">
-          ${steps.map(s => `
-            <li class="cre-progress-step pending" data-step-id="${this.escapeHtml(s.id)}">
-              <span class="cre-progress-step-icon"></span>
-              <span>${this.escapeHtml(s.label)}</span>
-            </li>
-          `).join('')}
-        </ul>
+        ${headerSteps.length > 0 ? `
+          <ul class="cre-progress-steps">
+            ${headerSteps.map(s => `
+              <li class="cre-progress-step pending" data-step-id="${this.escapeHtml(s.id)}">
+                <span class="cre-progress-step-icon"></span>
+                <span>${this.escapeHtml(s.label)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        ` : ''}
+        ${risSteps.length > 0 || assertionSteps.length > 0 ? `
+          <div class="cre-progress-steps-columns">
+            <div class="cre-progress-steps-column">
+              ${risSteps.length > 0 ? `
+                <ul class="cre-progress-steps">
+                  ${risSteps.map(s => `
+                    <li class="cre-progress-step pending" data-step-id="${this.escapeHtml(s.id)}">
+                      <span class="cre-progress-step-icon"></span>
+                      <span>${this.escapeHtml(s.label.replace('RIS: ', ''))}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              ` : ''}
+            </div>
+            <div class="cre-progress-steps-column">
+              ${assertionSteps.length > 0 ? `
+                <ul class="cre-progress-steps">
+                  ${assertionSteps.map(s => `
+                    <li class="cre-progress-step pending" data-step-id="${this.escapeHtml(s.id)}">
+                      <span class="cre-progress-step-icon"></span>
+                      <span>${this.escapeHtml(s.label.replace('Assertions: ', ''))}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              ` : ''}
+            </div>
+          </div>
+        ` : ''}
+        ${footerSteps.length > 0 ? `
+          <ul class="cre-progress-steps">
+            ${footerSteps.map(s => `
+              <li class="cre-progress-step pending" data-step-id="${this.escapeHtml(s.id)}">
+                <span class="cre-progress-step-icon"></span>
+                <span>${this.escapeHtml(s.label)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        ` : ''}
         <div class="cre-progress-detail"></div>
         <div class="cre-progress-columns">
           <div class="cre-progress-column">
-            <h4>RIS (Requirements, Interfaces, Structures)</h4>
-            <div class="cre-progress-column-content" id="cre-ris-content"></div>
+            <h4>Latest RIS Generated</h4>
+            <div class="cre-column-latest" id="cre-ris-latest" style="display:none">
+              <div class="cre-column-latest-content"></div>
+            </div>
           </div>
           <div class="cre-progress-column">
-            <h4>Inspection Assertions</h4>
-            <div class="cre-progress-column-content" id="cre-assertions-content"></div>
+            <h4>Latest Assertions Generated</h4>
+            <div class="cre-column-latest" id="cre-assertions-latest" style="display:none">
+              <div class="cre-column-latest-content"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -348,42 +414,45 @@ class PuffinApp {
 
     // Update RIS column if data provided
     if (data?.risData) {
-      const risContent = modal.querySelector('#cre-ris-content')
-      if (risContent) {
-        const risItem = document.createElement('div')
-        risItem.className = 'cre-column-item'
-        risItem.innerHTML = `
-          <div class="cre-item-header">
-            <strong>${this.escapeHtml(data.storyTitle || 'Story')}</strong>
-          </div>
-          <pre class="cre-item-content">${this.escapeHtml(data.risData)}</pre>
-        `
-        risContent.appendChild(risItem)
+      const risLatest = modal.querySelector('#cre-ris-latest')
+      if (risLatest) {
+        risLatest.style.display = 'block'
+        const latestContent = risLatest.querySelector('.cre-column-latest-content')
+        if (latestContent) {
+          latestContent.innerHTML = `
+            <div class="cre-item-header">
+              <strong>${this.escapeHtml(data.storyTitle || 'Story')}</strong>
+            </div>
+            <pre class="cre-item-content">${this.escapeHtml(data.risData)}</pre>
+          `
+        }
       }
     }
 
     // Update Assertions column if data provided
     if (data?.assertions) {
-      const assertionsContent = modal.querySelector('#cre-assertions-content')
-      if (assertionsContent) {
-        const assertItem = document.createElement('div')
-        assertItem.className = 'cre-column-item'
-        const assertions = Array.isArray(data.assertions) ? data.assertions : []
-        assertItem.innerHTML = `
-          <div class="cre-item-header">
-            <strong>${this.escapeHtml(data.storyTitle || 'Story')}</strong>
-            <span class="cre-item-count">${assertions.length} assertion${assertions.length !== 1 ? 's' : ''}</span>
-          </div>
-          <ul class="cre-assertions-list">
-            ${assertions.map(a => `
-              <li class="cre-assertion-item">
-                <span class="cre-assertion-type">${this.escapeHtml(a.type || 'unknown')}</span>
-                <span class="cre-assertion-desc">${this.escapeHtml(a.description || '')}</span>
-              </li>
-            `).join('')}
-          </ul>
-        `
-        assertionsContent.appendChild(assertItem)
+      const assertions = Array.isArray(data.assertions) ? data.assertions : []
+
+      const assertionsLatest = modal.querySelector('#cre-assertions-latest')
+      if (assertionsLatest) {
+        assertionsLatest.style.display = 'block'
+        const latestContent = assertionsLatest.querySelector('.cre-column-latest-content')
+        if (latestContent) {
+          latestContent.innerHTML = `
+            <div class="cre-item-header">
+              <strong>${this.escapeHtml(data.storyTitle || 'Story')}</strong>
+              <span class="cre-item-count">${assertions.length} assertion${assertions.length !== 1 ? 's' : ''}</span>
+            </div>
+            <ul class="cre-assertions-list">
+              ${assertions.map(a => `
+                <li class="cre-assertion-item">
+                  <span class="cre-assertion-type">${this.escapeHtml(a.type || 'unknown')}</span>
+                  <span class="cre-assertion-desc">${this.escapeHtml(a.description || a.message || '')}</span>
+                </li>
+              `).join('')}
+            </ul>
+          `
+        }
       }
     }
   }
@@ -5118,12 +5187,16 @@ Keep it concise but informative. Use markdown formatting.`
 
     const branch = state.history.raw?.branches?.[branchId]
 
-    // Collect all dead sessions (hit context limit)
+    // Collect dead sessions: context limit errors and 0-turn error responses
     const deadSessions = new Set()
     if (branch?.prompts) {
       for (const prompt of branch.prompts) {
-        if (prompt.response?.content === 'Prompt is too long' && prompt.response?.sessionId) {
-          deadSessions.add(prompt.response.sessionId)
+        if (prompt.response?.sessionId) {
+          if (prompt.response.content === 'Prompt is too long') {
+            deadSessions.add(prompt.response.sessionId)
+          } else if (prompt.response.turns === 0 && (!prompt.response.content || prompt.response.content.length === 0)) {
+            deadSessions.add(prompt.response.sessionId)
+          }
         }
       }
     }
@@ -5186,12 +5259,16 @@ Keep it concise but informative. Use markdown formatting.`
     // Get the branch to find session ID
     const branch = state.history.raw?.branches?.[branchId]
 
-    // Collect dead sessions (hit context limit)
+    // Collect dead sessions: context limit errors and 0-turn error responses
     const deadSessions = new Set()
     if (branch?.prompts) {
       for (const prompt of branch.prompts) {
-        if (prompt.response?.content === 'Prompt is too long' && prompt.response?.sessionId) {
-          deadSessions.add(prompt.response.sessionId)
+        if (prompt.response?.sessionId) {
+          if (prompt.response.content === 'Prompt is too long') {
+            deadSessions.add(prompt.response.sessionId)
+          } else if (prompt.response.turns === 0 && (!prompt.response.content || prompt.response.content.length === 0)) {
+            deadSessions.add(prompt.response.sessionId)
+          }
         }
       }
     }
@@ -5995,7 +6072,8 @@ Respond with ONLY a JSON object (no markdown, no code fences):
     try {
       const targetBranch = this.state.history.raw?.branches?.fullstack
       const lastPromptWithResponse = targetBranch?.prompts
-        ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
+        ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long'
+          && !(p.response?.turns === 0 && (!p.response?.content || p.response.content.length === 0)))
         ?.pop()
       const sessionId = lastPromptWithResponse?.response?.sessionId || null
 
@@ -6228,7 +6306,8 @@ If no issues are found, report:
     try {
       const targetBranch = this.state.history.raw?.branches?.fullstack
       const lastPromptWithResponse = targetBranch?.prompts
-        ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long')
+        ?.filter(p => p.response?.sessionId && p.response?.content !== 'Prompt is too long'
+          && !(p.response?.turns === 0 && (!p.response?.content || p.response.content.length === 0)))
         ?.pop()
       const sessionId = lastPromptWithResponse?.response?.sessionId || null
 

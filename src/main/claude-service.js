@@ -280,6 +280,7 @@ class ClaudeService {
       let lastAssistantMessage = '' // Track the last complete assistant message
       let errorOutput = ''
       let resultData = null
+      let retryWithoutSession = false // Flag for auto-retry when session resume fails
       let buffer = ''
       let allMessages = [] // Store all messages for debugging/fallback
       let completionCalled = false // Track if we've already called onComplete
@@ -360,6 +361,19 @@ class ClaudeService {
             if (json.type === 'result') {
               resultData = json
               console.log('[CLAUDE-DEBUG] Captured result, result field length:', json.result?.length || 0)
+
+              // Detect session resume failure: CLI returns is_error with 0 turns
+              // when the session ID is stale/expired/invalid
+              if (json.is_error && json.num_turns === 0 && data.sessionId) {
+                console.log('[CLAUDE-DEBUG] Session resume failed (error_during_execution) - will retry without --resume')
+                retryWithoutSession = true
+                // Close stdin to let the process exit
+                if (this.currentProcess?.stdin && !this.currentProcess.stdin.destroyed) {
+                  this.currentProcess.stdin.end()
+                }
+                // Don't call onComplete — the close handler will retry
+                return
+              }
 
               // Close stdin now that the session is complete
               if (this.currentProcess?.stdin && !this.currentProcess.stdin.destroyed) {
@@ -453,12 +467,26 @@ class ClaudeService {
       })
 
       // Handle process completion
-      this.currentProcess.on('close', (code) => {
+      this.currentProcess.on('close', async (code) => {
         const wasCancelled = this._cancelRequested
         this.currentProcess = null
         this._processLock = false
         this._cancelRequested = false
         console.log('[CLAUDE-GUARD] Process lock released (close)', wasCancelled ? '(cancelled)' : '')
+
+        // Auto-retry without --resume when session resume failed
+        if (retryWithoutSession) {
+          console.log('[CLAUDE-DEBUG] Retrying submit without session resume...')
+          try {
+            const retryData = { ...data, sessionId: null }
+            const result = await this.submit(retryData, onChunk, onComplete, onRaw, onFullPrompt, onQuestion)
+            resolve(result)
+          } catch (err) {
+            console.error('[CLAUDE-DEBUG] Retry without session also failed:', err.message)
+            reject(err)
+          }
+          return
+        }
 
         console.log('[CLAUDE-DEBUG] Process closed with code:', code)
         console.log('[CLAUDE-DEBUG] buffer remaining:', buffer?.length || 0, 'chars')

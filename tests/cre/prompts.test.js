@@ -134,9 +134,9 @@ describe('generate-assertions (DERIVE)', () => {
     assert.ok(task.includes('AC1'));
   });
 
-  it('supports assertion types: file_exists, function_exists, export_exists, pattern_match', () => {
+  it('supports assertion types matching evaluators', () => {
     const { constraints } = buildFor('generate-assertions');
-    for (const type of ['file_exists', 'function_exists', 'export_exists', 'pattern_match']) {
+    for (const type of ['file_exists', 'function_signature', 'export_exists', 'pattern_match', 'import_exists', 'file_contains']) {
       assert.ok(constraints.includes(type), `should include ${type}`);
     }
   });

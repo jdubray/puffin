@@ -18,15 +18,30 @@
 const fs = require('fs').promises;
 const path = require('path');
 
-/** @readonly @enum {string} */
+/** @readonly @enum {string} — must match evaluator types (lowercased) */
 const AssertionType = {
   FILE_EXISTS: 'file_exists',
-  FUNCTION_EXISTS: 'function_exists',
+  FILE_CONTAINS: 'file_contains',
+  FUNCTION_SIGNATURE: 'function_signature',
   EXPORT_EXISTS: 'export_exists',
-  PATTERN_MATCH: 'pattern_match'
+  IMPORT_EXISTS: 'import_exists',
+  PATTERN_MATCH: 'pattern_match',
+  // Legacy types that get normalized
+  JSON_PROPERTY: 'json_property',
+  CLASS_STRUCTURE: 'class_structure',
+  IPC_HANDLER_REGISTERED: 'ipc_handler_registered',
+  CSS_SELECTOR_EXISTS: 'css_selector_exists'
 };
 
 const VALID_TYPES = new Set(Object.values(AssertionType));
+
+/**
+ * Map of legacy/alias type names to their canonical forms.
+ * AI may still generate the old type names — normalize them here.
+ */
+const TYPE_ALIASES = {
+  'function_exists': 'function_signature'  // Old CRE prompt used function_exists; evaluator key is FUNCTION_SIGNATURE
+};
 
 /** @readonly @enum {string} */
 const AssertionResult = {
@@ -196,12 +211,20 @@ class AssertionGenerator {
   /**
    * AC3: Validate an assertion object has the correct type and shape.
    *
+   * Normalizes type names (e.g. function_exists → function_signature) and
+   * assertion data shapes to match what the evaluators expect.
+   *
    * @param {Object} assertion - Raw assertion from AI response.
    * @returns {Object} Validated assertion.
    * @throws {Error} If type is not supported.
    */
   _validateAssertion(assertion) {
-    const { type, target, message, description, assertion: data } = assertion;
+    let { type, target, message, description, assertion: data } = assertion;
+
+    // Normalize type aliases (e.g. function_exists → function_signature)
+    if (type && TYPE_ALIASES[type]) {
+      type = TYPE_ALIASES[type];
+    }
 
     if (!type || !VALID_TYPES.has(type)) {
       throw new Error(`Unsupported assertion type: ${type}. Valid: ${[...VALID_TYPES].join(', ')}`);
@@ -210,13 +233,92 @@ class AssertionGenerator {
       throw new Error('Assertion target is required');
     }
 
+    // Normalize assertion data shapes to match evaluator expectations
+    data = this._normalizeAssertionData(type, data || {});
+
     return {
       id: uuidv4(), // Always generate a unique ID — AI-generated IDs (e.g. "IA001") collide across stories
       type,
       target,
-      message: description || message || '', // Accept both "description" (new) and "message" (legacy)
-      assertion: data || {}
+      message: description || message || '', // Accept both "description" and "message"
+      assertion: data
     };
+  }
+
+  /**
+   * Normalize assertion data shapes to match evaluator expectations.
+   *
+   * Fixes common mismatches between what the AI generates and what evaluators expect:
+   * - file_exists: "kind" → "type"
+   * - function_signature: "name" → "function_name"
+   * - export_exists: exports[].kind → exports[].type
+   *
+   * @param {string} type - Assertion type
+   * @param {Object} data - Raw assertion data
+   * @returns {Object} Normalized assertion data
+   */
+  _normalizeAssertionData(type, data) {
+    switch (type) {
+      case 'file_exists':
+        // Evaluator expects { type: 'file'|'directory' }, AI may generate { kind: 'file'|'directory' }
+        if (data.kind && !data.type) {
+          data.type = data.kind;
+          delete data.kind;
+        }
+        // Default to 'file' if neither is set
+        if (!data.type) {
+          data.type = 'file';
+        }
+        break;
+
+      case 'function_signature':
+        // Evaluator expects { function_name: '...' }, AI may generate { name: '...' }
+        if (data.name && !data.function_name) {
+          data.function_name = data.name;
+          delete data.name;
+        }
+        break;
+
+      case 'export_exists':
+        // Evaluator expects exports[].type, AI may generate exports[].kind
+        if (Array.isArray(data.exports)) {
+          data.exports = data.exports.map(exp => {
+            if (exp.kind && !exp.type) {
+              return { name: exp.name, type: exp.kind };
+            }
+            return exp;
+          });
+        }
+        break;
+
+      case 'pattern_match':
+        // Ensure operator defaults to 'present'
+        if (!data.operator) {
+          data.operator = 'present';
+        }
+        break;
+
+      case 'file_contains':
+        // Evaluator expects { match: 'literal'|'regex', content: '...' }
+        // AI may omit 'match' — default to 'literal'
+        if (!data.match) {
+          data.match = 'literal';
+        }
+        break;
+
+      case 'import_exists':
+        // Evaluator expects { imports: [{ module, names }] }
+        // AI may generate { module, identifiers } (single import) — wrap in array
+        if (data.module && !data.imports) {
+          data.imports = [{ module: data.module, names: data.identifiers || data.names || [] }];
+          delete data.module;
+          delete data.identifiers;
+          delete data.names;
+        }
+        break;
+    }
+
+    return data;
   }
 
   /**
@@ -293,7 +395,8 @@ class AssertionGenerator {
         case AssertionType.FILE_EXISTS:
           result = await this._verifyFileExists(target, assertion.assertion);
           break;
-        case AssertionType.FUNCTION_EXISTS:
+        case AssertionType.FUNCTION_SIGNATURE:
+        case 'function_exists': // Legacy type alias — old DB records
           result = await this._verifyFunctionExists(target, assertion.assertion);
           break;
         case AssertionType.EXPORT_EXISTS:
@@ -301,6 +404,12 @@ class AssertionGenerator {
           break;
         case AssertionType.PATTERN_MATCH:
           result = await this._verifyPatternMatch(target, assertion.assertion);
+          break;
+        case AssertionType.FILE_CONTAINS:
+          result = await this._verifyFileContains(target, assertion.assertion);
+          break;
+        case AssertionType.IMPORT_EXISTS:
+          result = await this._verifyImportExists(target, assertion.assertion);
           break;
         default:
           result = AssertionResult.FAIL;
@@ -315,13 +424,13 @@ class AssertionGenerator {
   /**
    * Check that a file or directory exists.
    * @param {string} target - Absolute path.
-   * @param {Object} data - { kind: 'file' | 'directory' }
+   * @param {Object} data - { type: 'file' | 'directory' }
    * @returns {Promise<string>}
    */
   async _verifyFileExists(target, data) {
     try {
       const stat = await fs.stat(target);
-      if (data && data.kind === 'directory') {
+      if (data && (data.type === 'directory' || data.kind === 'directory')) {
         return stat.isDirectory() ? AssertionResult.PASS : AssertionResult.FAIL;
       }
       return stat.isFile() ? AssertionResult.PASS : AssertionResult.FAIL;
@@ -333,19 +442,20 @@ class AssertionGenerator {
   /**
    * Check that a function is defined in a file.
    * @param {string} target - Absolute file path.
-   * @param {Object} data - { name: string }
+   * @param {Object} data - { function_name: string } (normalized) or { name: string } (legacy)
    * @returns {Promise<string>}
    */
   async _verifyFunctionExists(target, data) {
-    if (!data || !data.name) return AssertionResult.FAIL;
+    if (!data || !(data.function_name || data.name)) return AssertionResult.FAIL;
     try {
       const content = await fs.readFile(target, 'utf8');
+      const funcName = data.function_name || data.name;
       // Match function declarations, methods, arrow functions assigned to the name
       const patterns = [
-        new RegExp(`function\\s+${this._escapeRegex(data.name)}\\s*\\(`),
-        new RegExp(`${this._escapeRegex(data.name)}\\s*\\(`),
-        new RegExp(`${this._escapeRegex(data.name)}\\s*=\\s*(?:async\\s+)?(?:function|\\()`),
-        new RegExp(`async\\s+${this._escapeRegex(data.name)}\\s*\\(`)
+        new RegExp(`function\\s+${this._escapeRegex(funcName)}\\s*\\(`),
+        new RegExp(`${this._escapeRegex(funcName)}\\s*\\(`),
+        new RegExp(`${this._escapeRegex(funcName)}\\s*=\\s*(?:async\\s+)?(?:function|\\()`),
+        new RegExp(`async\\s+${this._escapeRegex(funcName)}\\s*\\(`)
       ];
       return patterns.some(p => p.test(content)) ? AssertionResult.PASS : AssertionResult.FAIL;
     } catch {
@@ -356,7 +466,7 @@ class AssertionGenerator {
   /**
    * Check that exports exist in a module.
    * @param {string} target - Absolute file path.
-   * @param {Object} data - { exports: [{ name, kind }] }
+   * @param {Object} data - { exports: [{ name, type }] }
    * @returns {Promise<string>}
    */
   async _verifyExportExists(target, data) {
@@ -400,6 +510,58 @@ class AssertionGenerator {
         return found ? AssertionResult.PASS : AssertionResult.FAIL;
       }
       return found ? AssertionResult.FAIL : AssertionResult.PASS;
+    } catch {
+      return AssertionResult.FAIL;
+    }
+  }
+
+  /**
+   * Check that a file contains specific content (literal or regex).
+   * @param {string} target - Absolute file path.
+   * @param {Object} data - { match: 'literal'|'regex', content: string }
+   * @returns {Promise<string>}
+   */
+  async _verifyFileContains(target, data) {
+    if (!data || !data.content) return AssertionResult.FAIL;
+    try {
+      const content = await fs.readFile(target, 'utf8');
+      const matchType = data.match || 'literal';
+      if (matchType === 'literal') {
+        return content.includes(data.content) ? AssertionResult.PASS : AssertionResult.FAIL;
+      } else if (matchType === 'regex') {
+        if (!isSafeRegex(data.content)) {
+          console.warn(`[CRE-ASSERT] Rejected unsafe regex in file_contains: ${data.content.slice(0, 50)}`);
+          return AssertionResult.FAIL;
+        }
+        const regex = new RegExp(data.content, 'm');
+        return regex.test(content) ? AssertionResult.PASS : AssertionResult.FAIL;
+      }
+      return AssertionResult.FAIL;
+    } catch {
+      return AssertionResult.FAIL;
+    }
+  }
+
+  /**
+   * Check that a file imports specific modules (ES or CommonJS).
+   * @param {string} target - Absolute file path.
+   * @param {Object} data - { imports: [{ module: string, names?: string[] }] }
+   * @returns {Promise<string>}
+   */
+  async _verifyImportExists(target, data) {
+    if (!data || !Array.isArray(data.imports) || data.imports.length === 0) return AssertionResult.FAIL;
+    try {
+      const content = await fs.readFile(target, 'utf8');
+      const allFound = data.imports.every(imp => {
+        const moduleName = this._escapeRegex(imp.module);
+        // Check for ES import or CommonJS require
+        const importPatterns = [
+          new RegExp(`import\\s.*from\\s*['"]${moduleName}['"]`),
+          new RegExp(`require\\s*\\(\\s*['"]${moduleName}['"]\\s*\\)`)
+        ];
+        return importPatterns.some(p => p.test(content));
+      });
+      return allFound ? AssertionResult.PASS : AssertionResult.FAIL;
     } catch {
       return AssertionResult.FAIL;
     }

@@ -6163,6 +6163,12 @@
   color: var(--text-primary);
 }
 
+.sprint-create-branch-label .optional-label {
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
 .sprint-create-hint {
   margin: 0;
   font-size: 0.75rem;
@@ -11713,7 +11719,10 @@
   border-radius: 12px;
   padding: 2rem 2.5rem;
   width: 90%;
-  max-width: 480px;
+  max-width: 1200px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border-color);
 }
@@ -11798,6 +11807,25 @@
   content: '\2717';
 }
 
+/* Two-column layout for RIS and Assertion steps */
+.cre-progress-steps-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+.cre-progress-steps-column {
+  min-height: 0;
+}
+
+.cre-progress-steps-column .cre-progress-steps {
+  margin: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
 .cre-progress-detail {
   color: var(--text-secondary);
   font-size: 0.8125rem;
@@ -11811,8 +11839,15 @@
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
   margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--border-color);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cre-progress-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .cre-progress-column h4 {
@@ -11820,15 +11855,68 @@
   font-size: 0.9375rem;
   color: var(--text-primary);
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .cre-progress-column-content {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  max-height: 300px;
+  flex: 1;
   overflow-y: auto;
   padding-right: 0.5rem;
+  min-height: 0;
+}
+
+/* Activity section (scrollable list of all items) */
+.cre-column-activity {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--border-color);
+  min-height: 150px;
+}
+
+/* Latest section (pinned at bottom) */
+.cre-column-latest {
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--accent-color);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.cre-column-latest-header {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent-color);
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Compact styling for activity items */
+.cre-column-activity .cre-column-item {
+  padding: 0.5rem 0.75rem;
+}
+
+.cre-column-activity .cre-item-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.cre-column-activity .cre-item-count {
+  color: var(--color-success, #48bb78);
+  font-weight: 600;
+}
+
+/* Latest section styling */
+.cre-column-latest .cre-column-latest-content {
+  background: var(--bg-primary);
+  border-radius: 6px;
+  padding: 0.75rem;
 }
 
 .cre-column-item {
@@ -11836,6 +11924,11 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 0.75rem;
+  transition: background-color 0.2s ease;
+}
+
+.cre-column-item:hover {
+  background: var(--bg-tertiary);
 }
 
 .cre-item-header {
@@ -11862,16 +11955,17 @@
 
 .cre-item-content {
   margin: 0;
-  padding: 0.5rem;
-  background: var(--bg-tertiary);
+  padding: 0.75rem;
+  background: var(--bg-primary);
   border-radius: 4px;
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: 0.8125rem;
+  line-height: 1.5;
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-wrap: break-word;
-  max-height: 200px;
+  max-height: 300px;
   overflow-y: auto;
+  border: 1px solid var(--border-color);
 }
 
 .cre-assertions-list {

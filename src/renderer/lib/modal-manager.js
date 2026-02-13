@@ -3859,15 +3859,16 @@ export class ModalManager {
 
         <div class="sprint-create-branch-section">
           <label for="sprint-branch-name" class="sprint-create-branch-label">
-            Branch Name
+            Branch Name <span class="optional-label">(optional)</span>
           </label>
-          <p class="sprint-create-hint">Suggested from sprint title. Edit to customize.</p>
+          <p class="sprint-create-hint">Leave empty to continue on current branch, or provide a name for a new branch.</p>
           <div class="sprint-create-branch-input-row">
             <input
               type="text"
               id="sprint-branch-name"
               class="sprint-create-branch-input"
               value="${this.escapeHtml(suggestedBranch)}"
+              placeholder="Leave empty for current branch"
               spellcheck="false"
               autocomplete="off"
             />
@@ -3950,6 +3951,13 @@ export class ModalManager {
 
       // Create the sprint with selected stories and branch name
       this.intents.createSprint(data.stories, branchName)
+
+      // If no branch name provided, user wants to continue on current branch
+      // Skip the branch creation modal entirely
+      if (!branchName) {
+        this.intents.hideModal()
+        return
+      }
 
       // Check existing branches to detect conflicts and find a unique name
       let suggestedName = branchName

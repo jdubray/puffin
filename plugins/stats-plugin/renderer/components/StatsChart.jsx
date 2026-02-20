@@ -22,6 +22,7 @@ import '../styles/stats-chart.css'
  * @param {boolean} props.loading - Loading state
  */
 function StatsChart({ data = [], loading = false }) {
+  const [useLogScale, setUseLogScale] = React.useState(true)
   if (loading) {
     return (
       <div className="stats-chart-container">
@@ -48,6 +49,16 @@ function StatsChart({ data = [], loading = false }) {
 
   return (
     <div className="stats-chart-container">
+      <div className="chart-controls">
+        <label className="chart-control-checkbox">
+          <input
+            type="checkbox"
+            checked={useLogScale}
+            onChange={(e) => setUseLogScale(e.target.checked)}
+          />
+          <span>Logarithmic scale</span>
+        </label>
+      </div>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart
           data={chartData}
@@ -81,16 +92,24 @@ function StatsChart({ data = [], loading = false }) {
           <YAxis
             yAxisId="right"
             orientation="right"
+            scale={useLogScale ? 'log' : 'auto'}
+            domain={useLogScale ? ['auto', 'auto'] : [0, 'auto']}
             tick={{ fontSize: 11, fill: 'var(--chart-axis-text, #666)' }}
             tickLine={{ stroke: 'var(--chart-axis-line, #ccc)' }}
             axisLine={{ stroke: 'var(--chart-axis-line, #ccc)' }}
-            tickFormatter={(value) => `$${value.toFixed(0)}`}
+            tickFormatter={(value) => {
+              if (value === 0) return '$0'
+              if (value < 0.01) return `$${value.toFixed(4)}`
+              if (value < 1) return `$${value.toFixed(2)}`
+              return `$${value.toFixed(0)}`
+            }}
             label={{
-              value: 'Cost',
+              value: useLogScale ? 'Cost (log scale)' : 'Cost',
               angle: 90,
               position: 'insideRight',
               style: { fontSize: 12, fill: 'var(--chart-axis-text, #666)' }
             }}
+            allowDataOverflow={false}
           />
           <Tooltip
             content={<ChartTooltip />}

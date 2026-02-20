@@ -373,9 +373,11 @@ puffin/
 - User stories are organized in three-tier hierarchy: Personal → Team → Organization, with rich metadata including owner, assignees, collaborators, visibility, and audit trails. Template system supports feature, bug, and design review templates.
 - Code Model artifact classification differentiates artifact types (service, component, utility, config, etc.) and tracks dependency kinds beyond imports (calls, inheritance, composition) for richer architectural queries.
 - Tiered model selection for RLM agents: Opus for orchestrator/specialist agents that require sophisticated reasoning, Haiku for recursive sub-calls that are parallelizable and simple. This balances capability with cost and latency.
+- CSP directives in Electron app use allowlist approach. img-src requires explicit directives for 'self', file:, and data: to support same-origin, local filesystem, and base64-encoded data URLs respectively.
+- Plugin storage pattern: Plugins own their data storage within `.puffin/plugins/{pluginName}/` namespace. Storage and lifecycle managed by PluginContext with file-based persistence, enabling portable and self-contained plugin features.
+- GUI definition metadata stored as JSON files containing name, definition content, createdAt, lastModifiedAt timestamps. Enables audit trail and versioning within plugin storage.
 
 ### Architectural Decisions
-
 - Multi-user Puffin architecture follows a three-phase progression: Phase 1 (Local Multi-User Foundation) with user-scoped file storage at `.puffin/users/{userId}/` and enhanced SAM pattern with user context, Phase 2 (Hybrid Backend Integration) with GraphQL API and WebSocket-based collaboration, Phase 3 (Enterprise Features) with advanced permissions and analytics. Each phase builds on the previous without breaking existing functionality (progressive enhancement).
 - Multi-user architecture adopts Local-First design where primary data remains local and backend provides sync and collaboration via GraphQL API with real-time subscriptions. This pattern applies to all multi-user features.
 - Designer Plugin storage uses plugin namespace (`.puffin/plugins/designer/designs/`) rather than core Puffin state directory. This makes the designer feature self-contained, portable, and aligns with the existing plugin infrastructure pattern.
@@ -383,8 +385,6 @@ puffin/
 - RLM (Recursive Language Model) execution uses smart parallelization with dependency detection for parallel sub-calls, but performs result aggregation only after all sub-calls complete before responding. This ensures consistent context and ordering.
 - RLM agent model selection is tiered: Opus for orchestrator and specialist agents (complex reasoning), Haiku for recursive sub-calls (efficiency and cost). This tiered approach balances capability with performance and cost constraints.
 - Context management for long-context reasoning tasks uses REPL-based external environment rather than direct injection or RAG, enabling stateful execution and efficient context handling across multiple agent calls.
-- Context Vault uses hierarchical four-domain organization (specifications, codebase-index, traceability, history, active-context) for structured knowledge management in long-context reasoning tasks. History is indexed by sprint-based + periodic checkpoints for efficient navigation.
-- h-DSL Code Model implements five-phase pipeline (Discover → Derive → Populate → Emit → Annotate) for codebase analysis, with MCP server providing stdio transport JSON-RPC interface for tool invocation by Claude Code.
 
 # Assigned Skills
 

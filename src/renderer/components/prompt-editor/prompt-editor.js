@@ -66,6 +66,8 @@ export class PromptEditorComponent {
     this.includeDocsBtn = document.getElementById('include-docs-btn')
     this.includeDocsDropdown = document.getElementById('include-docs-dropdown')
     this.includeDocsMenu = document.getElementById('include-docs-menu')
+    // Clear prompt button (X)
+    this.clearPromptBtn = document.getElementById('clear-prompt-btn')
 
     // Initialize image attachment UI
     this.initImageAttachmentUI()
@@ -227,6 +229,11 @@ export class PromptEditorComponent {
     this.textarea.addEventListener('input', () => {
       const hasContent = this.textarea.value.trim().length > 0
       this.submitBtn.disabled = !hasContent
+
+      // Show/hide clear button based on content
+      if (this.clearPromptBtn) {
+        this.clearPromptBtn.style.display = hasContent ? 'flex' : 'none'
+      }
     })
 
     // Submit button
@@ -234,10 +241,17 @@ export class PromptEditorComponent {
       this.submit()
     })
 
-    // New thread button - clears and starts fresh
+    // New thread button - starts fresh WITHOUT clearing the prompt
     this.newThreadBtn.addEventListener('click', () => {
       this.createNewThread()
     })
+
+    // Clear prompt button (X) - clears the textarea
+    if (this.clearPromptBtn) {
+      this.clearPromptBtn.addEventListener('click', () => {
+        this.clearPrompt()
+      })
+    }
 
     // Cancel button
     this.cancelBtn.addEventListener('click', () => {
@@ -1218,11 +1232,11 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Create a new thread - clears the prompt and starts fresh
+   * Create a new thread - starts fresh WITHOUT clearing the prompt text
    */
   createNewThread() {
-    // Clear the textarea
-    this.textarea.value = ''
+    // DO NOT clear the textarea - preserve user's typed content
+    // this.textarea.value = ''
 
     // Clear any pending handoff context
     this.pendingHandoff = null
@@ -1232,8 +1246,8 @@ export class PromptEditorComponent {
       this.thinkingBudgetSelect.value = 'none'
     }
 
-    // Disable submit button until user types
-    this.submitBtn.disabled = true
+    // Keep submit button state based on textarea content
+    // this.submitBtn.disabled = true
 
     // Remove handoff banner if present
     this.hideHandoffBanner()
@@ -1243,6 +1257,31 @@ export class PromptEditorComponent {
 
     // Trigger SAM action to explicitly clear active prompt selection
     this.intents.clearPromptSelection()
+  }
+
+  /**
+   * Clear the prompt textarea - called by the clear button (X)
+   */
+  clearPrompt() {
+    // Clear the textarea
+    this.textarea.value = ''
+
+    // Clear any pending handoff context
+    this.pendingHandoff = null
+
+    // Disable submit button until user types again
+    this.submitBtn.disabled = true
+
+    // Remove handoff banner if present
+    this.hideHandoffBanner()
+
+    // Focus the textarea
+    this.textarea.focus()
+
+    // Hide the clear button since textarea is empty
+    if (this.clearPromptBtn) {
+      this.clearPromptBtn.style.display = 'none'
+    }
   }
 
   /**

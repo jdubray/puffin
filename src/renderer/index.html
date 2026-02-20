@@ -455,7 +455,14 @@
                 <div class="prompt-separator-handle"></div>
               </div>
               <div class="prompt-area" id="prompt-area">
-                <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
+                <div class="prompt-input-wrapper">
+                  <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
+                  <button id="clear-prompt-btn" class="clear-prompt-btn" title="Clear prompt" style="display:none;">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                </div>
                 <div class="prompt-options">
                   <div class="prompt-option-group">
                     <label for="thread-model" class="prompt-select-label">Model:</label>

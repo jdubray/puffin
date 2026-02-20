@@ -116,7 +116,6 @@ Main call-to-action button with primary styling
 ## Branch Memory (auto-extracted)
 
 ### Conventions
-
 - Plugin architecture uses naming convention '*-plugin' for plugin directories. Plugins export module with 'name', 'initialize(context)', and 'cleanup()' methods. Main process plugins access ipcMain, app, mainWindow, config, pluginDir. Renderer plugins access ipcRenderer, document, window, config, pluginDir via preload.
 - IPC communication uses channel naming pattern 'featureName:methodName'. All IPC handlers in main process must validate input. Preload script exposes APIs via window.puffin namespace with nested structure like window.puffin.github, window.puffin.git, window.puffin.file.
 - SAM (State-Action-Model) pattern: actions defined in actions.js, acceptors in model.js, state computed in state.js, rendering in components. Actions must be registered in app.js both in actionNames array and component.actions array to be available as intents.
@@ -130,10 +129,8 @@ Main call-to-action button with primary styling
 - Copy/paste markdown functionality: 'Copy MD' button uses navigator.clipboard.writeText() for client-side copy (works immediately), 'Save MD' button uses file:saveMarkdown IPC handler to show native save dialog and write to filesystem.
 - Tool emoji mapping: use single emoji per tool type (Read=📖, Edit=✏️, Write=📝, Grep/Glob=🔍, Bash=💻, WebFetch=🌐, WebSearch=🔎, Task=🤖, NotebookEdit=📓, TodoWrite=📋, default=⚙️). Display emoji-only in stream (no 'Tool:' text), with tooltip on hover and active animation state.
 - Component event delegation: add event listeners in bindEvents() method during init, remove in destroy() method. Use data attributes (data-action, data-id) for declarative event routing instead of direct element references to enable dynamic content.
-
-### Architectural Decisions
-- CLI output persistence implemented by storing CLI output state in SAM model and syncing to disk via state-persistence.js. Only the last CLI output session is retained on app restart, no history kept.
-- GitHub authentication uses OAuth Device Flow for browser-based auth and Personal Access Token (PAT) method. Tokens stored encrypted using Electron's safeStorage. App already has registered GitHub OAuth app with Client ID 'Ov23liUkVBHmYgqhqfnP'.
+- SAM actions must be registered in app.js in TWO places: (1) actionNames array for action name collection, (2) component.actions object for intent function creation. Missing either registration causes 'intent not found' errors when components try to call intents.
+- Modal types must be registered in modal-manager.js switch-case with a dedicated renderXxx() method. Unknown modal types log 'Unknown modal type: xxx' and display 'Loading' indefinitely. Each new modal type requires both registration and renderer implementation.
 
 # Assigned Skills
 

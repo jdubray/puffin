@@ -11,6 +11,36 @@
   margin-bottom: 16px;
 }
 
+/* Chart controls */
+.chart-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.chart-control-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary, #333333);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chart-control-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.chart-control-checkbox:hover span {
+  color: var(--color-primary, #6c63ff);
+}
+
 /* Loading and empty states */
 .stats-chart-loading,
 .stats-chart-empty {
@@ -75,6 +105,14 @@
     --chart-grid-color: #4a5568;
     --chart-axis-text: #a0aec0;
     --chart-axis-line: #4a5568;
+  }
+
+  .chart-controls {
+    border-bottom-color: var(--border-color-dark, #2d3748);
+  }
+
+  .chart-control-checkbox {
+    color: var(--text-primary-dark, #e2e8f0);
   }
 
   .stats-chart-container .recharts-legend-item-text {

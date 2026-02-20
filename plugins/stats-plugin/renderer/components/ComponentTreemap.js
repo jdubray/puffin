@@ -25,6 +25,7 @@ export class ComponentTreemap {
     // State
     this.metric = 'totalCost'    // 'totalCost' | 'operations'
     this.days = 30               // 7 | 30 | 90
+    this.useLogScale = true      // Use logarithmic scale for size by default
     this.breakdown = null        // getComponentBreakdown() result
     this.drillComponent = null   // component id when drilled down
     this.drillData = null        // getOperationStats() result
@@ -66,6 +67,12 @@ export class ComponentTreemap {
           <button class="treemap-toggle-btn ${this.days === 30 ? 'active' : ''}" data-value="30">30d</button>
           <button class="treemap-toggle-btn ${this.days === 90 ? 'active' : ''}" data-value="90">90d</button>
         </div>
+      </div>
+      <div class="treemap-control-group">
+        <label class="treemap-control-checkbox">
+          <input type="checkbox" ${this.useLogScale ? 'checked' : ''} data-control="logscale">
+          <span>Logarithmic scale</span>
+        </label>
       </div>
     `
     this.container.appendChild(controls)
@@ -194,28 +201,40 @@ export class ComponentTreemap {
     if (this.drillComponent && this.drillData) {
       return (this.drillData.operations || [])
         .filter(op => this._metricValue(op) > 0)
-        .map(op => ({
-          id: null,
-          label: op.operation,
-          value: this._metricValue(op),
-          formattedValue: this._formatMetricValue(this._metricValue(op)),
-          efficiency: op.count > 0 ? (op.totalCost / op.count) : 0,
-          raw: op
-        }))
+        .map(op => {
+          const rawValue = this._metricValue(op)
+          const displayValue = this.useLogScale && rawValue > 0
+            ? Math.log10(rawValue + 1)
+            : rawValue
+          return {
+            id: null,
+            label: op.operation,
+            value: displayValue,
+            formattedValue: this._formatMetricValue(rawValue),
+            efficiency: op.count > 0 ? (op.totalCost / op.count) : 0,
+            raw: op
+          }
+        })
         .sort((a, b) => b.value - a.value)
     }
 
     if (this.breakdown) {
       return (this.breakdown.components || [])
         .filter(c => this._metricValue(c) > 0)
-        .map(c => ({
-          id: c.component,
-          label: this._displayName(c.component),
-          value: this._metricValue(c),
-          formattedValue: this._formatMetricValue(this._metricValue(c)),
-          efficiency: c.operations > 0 ? (c.totalCost / c.operations) : 0,
-          raw: c
-        }))
+        .map(c => {
+          const rawValue = this._metricValue(c)
+          const displayValue = this.useLogScale && rawValue > 0
+            ? Math.log10(rawValue + 1)
+            : rawValue
+          return {
+            id: c.component,
+            label: this._displayName(c.component),
+            value: displayValue,
+            formattedValue: this._formatMetricValue(rawValue),
+            efficiency: c.operations > 0 ? (c.totalCost / c.operations) : 0,
+            raw: c
+          }
+        })
         .sort((a, b) => b.value - a.value)
     }
 
@@ -427,6 +446,13 @@ export class ComponentTreemap {
       if (!btn) return
       this.days = parseInt(btn.dataset.value, 10)
       this.fetchData()
+    })
+
+    // Log scale checkbox
+    controls.querySelector('[data-control="logscale"]')?.addEventListener('change', (e) => {
+      this.useLogScale = e.target.checked
+      this.render()
+      if (!this.loading) this._renderTreemap(this.container.querySelector('.treemap-area'))
     })
 
     // Back button

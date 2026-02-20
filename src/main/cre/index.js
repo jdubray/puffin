@@ -119,6 +119,13 @@ async function withProcessLock(fn) {
 async function initialize(context) {
   const { ipcMain, db, config, projectRoot, claudeService } = context;
 
+  // Register IPC handlers first (even if initialization fails later).
+  // This ensures handlers can return proper errors instead of "no handler registered".
+  if (!initialized) {
+    registerHandlers(ipcMain);
+    initialized = true;
+  }
+
   // Ensure CRE config defaults are present
   ensureCreConfig(config);
 
@@ -152,12 +159,6 @@ async function initialize(context) {
 
   // Initialize Introspector
   introspector = new Introspector({ codeModel, schemaManager, projectRoot, config: creConfig, claudeService: cs });
-
-  // Register IPC handlers only once (state:init may be called multiple times)
-  if (!initialized) {
-    registerHandlers(ipcMain);
-    initialized = true;
-  }
 
   console.log('[CRE] Initialized');
 }

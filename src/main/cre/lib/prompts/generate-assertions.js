@@ -38,17 +38,23 @@ function buildPrompt({ story, risMarkdown = '', planItem = null, codeModelContex
   const toolsBlock = includeToolGuidance ? CODE_MODEL_TOOLS_BLOCK : '';
 
   const system = risMarkdown
-    ? `You are generating inspection assertions for a user story implementation. You operate using the DERIVE principle: generate new verifiable knowledge from the RIS (Refined Implementation Specification) and acceptance criteria.
+    ? `You are generating inspection assertions to PREDICT what artifacts will be created when Claude implements a feature following a Refined Implementation Specification (RIS).
 
-Assertions will be automatically evaluated against the codebase to verify implementation completeness.
+CRITICAL CONTEXT:
+- The code does NOT exist yet
+- Claude will implement the feature following the RIS instructions
+- Your job is to PREDICT what files, functions, and integrations Claude will most likely create
+- These assertions will be evaluated AFTER implementation to verify completeness
 
-The RIS contains detailed technical specifications including:
+The RIS is a detailed implementation guide that Claude will follow. It contains:
 - Exact file paths and function names to implement
 - Data structures and API contracts
 - Integration points and error handling requirements
 - Step-by-step implementation instructions
 
-Extract the most critical, verifiable requirements from the RIS to create precise assertions.
+Your task: Extract the most verifiable, concrete artifacts mentioned in the RIS that Claude will create during implementation.
+
+Think of this as: "Given this RIS, what files/functions/exports will Claude DEFINITELY create?"
 ${toolsBlock}`
     : `You are generating inspection assertions for a user story implementation. You operate using the DERIVE principle: generate new verifiable knowledge from the plan and acceptance criteria.
 
@@ -68,37 +74,96 @@ ${toolsBlock}`;
   let task;
   if (risMarkdown) {
     // RIS-based assertion generation (preferred path)
-    task = `Generate inspection assertions for the following user story based on its Refined Implementation Specification (RIS).
+    task = `Generate inspection assertions to predict what Claude will implement following this Refined Implementation Specification (RIS).
 ${contextBlock}${standardBlock}
---- BEGIN STORY ---
-Title: ${story.title} [${story.id}]
-Description: ${story.description}
-Acceptance Criteria:
-${ac}
---- END STORY ---
-
 --- BEGIN RIS (Refined Implementation Specification) ---
 ${risMarkdown}
 --- END RIS ---
 
-Generate 5-8 assertions that verify the most critical aspects of this implementation.
+TASK: Read the RIS carefully and generate 5-8 assertions predicting what artifacts Claude will create.
 
-IMPORTANT: Extract concrete, verifiable assertions from the RIS content. For each file, function, class, or integration point mentioned in the RIS:
-1. Create a "file_exists" assertion for any new files/directories mentioned
-2. Create "function_signature" assertions for key functions specified in the RIS (use function_name field)
-3. Create "export_exists" assertions for modules that should export specific identifiers (use exports array with name and type fields)
-4. Create "file_contains" or "import_exists" assertions for integration patterns (prefer these over pattern_match)
-5. Only use "pattern_match" for truly regex-specific checks — keep patterns short and simple
+EXTRACTION STRATEGY:
+1. For EVERY file path mentioned → generate "file_exists" assertion
+2. For EVERY function/method name specified → generate "function_signature" assertion
+3. For EVERY export mentioned → generate "export_exists" assertion
+4. For EVERY import/integration described → generate "import_exists" assertion
+5. For CRITICAL implementation patterns → generate "file_contains" assertion
 
-Focus on:
-- EVERY file/directory creation mentioned in RIS → file_exists
-- EVERY key function name specified in RIS → function_signature
-- EVERY export mentioned in RIS → export_exists
-- Import statements and module dependencies → import_exists
-- Specific text content that must appear → file_contains
-- Critical acceptance criteria from the story
+EXAMPLE EXTRACTION:
 
-The RIS contains specific implementation details - use them to generate precise, targeted assertions.`;
+Given RIS excerpt:
+"""
+Create file src/main/user-service.js with class UserService that exports methods
+getUserById(id) and createUser(data). Import the database module:
+const db = require('./database').
+Add IPC handler 'user:get' in src/main/ipc-handlers.js.
+"""
+
+Generate these assertions:
+{
+  "assertions": [
+    {
+      "id": "IA001",
+      "criterion": "general",
+      "type": "file_exists",
+      "target": "src/main/user-service.js",
+      "message": "User service implementation file must exist",
+      "assertion": { "type": "file" }
+    },
+    {
+      "id": "IA002",
+      "criterion": "general",
+      "type": "export_exists",
+      "target": "src/main/user-service.js",
+      "message": "UserService class must be exported",
+      "assertion": { "exports": [{ "name": "UserService", "type": "class" }] }
+    },
+    {
+      "id": "IA003",
+      "criterion": "general",
+      "type": "function_signature",
+      "target": "src/main/user-service.js",
+      "message": "getUserById method must be implemented",
+      "assertion": { "function_name": "getUserById" }
+    },
+    {
+      "id": "IA004",
+      "criterion": "general",
+      "type": "function_signature",
+      "target": "src/main/user-service.js",
+      "message": "createUser method must be implemented",
+      "assertion": { "function_name": "createUser" }
+    },
+    {
+      "id": "IA005",
+      "criterion": "general",
+      "type": "import_exists",
+      "target": "src/main/user-service.js",
+      "message": "Database module must be imported",
+      "assertion": { "imports": [{ "module": "./database", "names": ["db"] }] }
+    },
+    {
+      "id": "IA006",
+      "criterion": "general",
+      "type": "file_contains",
+      "target": "src/main/ipc-handlers.js",
+      "message": "IPC handler for user:get must be registered",
+      "assertion": { "match": "literal", "content": "ipcMain.handle('user:get'" }
+    }
+  ]
+}
+
+IMPORTANT REMINDERS:
+- Generate EXACTLY 5-8 assertions (not fewer)
+- Extract file paths, function names, and exports DIRECTLY from the RIS text
+- Be LITERAL — if RIS says "src/main/foo.js", use exactly that path
+- Focus on HIGH-CONFIDENCE predictions (what Claude will DEFINITELY create)
+- Avoid vague assertions — be specific about file paths and identifiers
+- Remember: the code doesn't exist yet, you're predicting what WILL be created
+
+Story context for reference only:
+Title: ${story.title}
+Acceptance Criteria: ${story.acceptanceCriteria?.length || 0} criteria defined`;
   } else if (planItem) {
     // Legacy plan-based assertion generation (fallback)
     task = `Generate inspection assertions for the following plan item.
@@ -165,15 +230,26 @@ ASSERTION TYPES and their "assertion" data shapes (MUST match exactly):
 6. "file_contains" — Check that a file contains specific text (literal match)
    assertion: { "match": "literal", "content": "<exact text to find>" }
 
-RULES:
-- Generate 5-8 assertions per story based on RIS content, or 2-5 if no RIS available
+RULES FOR HIGH-QUALITY ASSERTIONS:
+- Generate EXACTLY 5-8 assertions per story (never fewer than 5)
+- Extract paths/names LITERALLY from the RIS text — if RIS says "src/main/foo.js", use exactly that
 - Use relative paths from project root (e.g. "src/main/foo.js", NOT absolute paths)
-- Each assertion ID must be unique
-- The criterion field should reference the specific acceptance criterion number (or "general" if not tied to specific AC)
-- Use the "message" field for human-readable description text
-- Keep regex patterns SIMPLE — avoid complex regex. Prefer "file_contains" or "function_signature" over "pattern_match" when possible
+- Each assertion ID must be unique within this response
+- Focus on HIGH-CONFIDENCE predictions (artifacts Claude will DEFINITELY create based on RIS)
+- Prioritize core implementation files and key functions over helper/utility code
+- The "message" field should be specific and actionable (e.g., "FooService class must be exported" NOT "Service must exist")
+- Keep regex patterns SIMPLE — prefer "file_contains" or "function_signature" over "pattern_match"
 - For function checks, ALWAYS use "function_signature" type (not "function_exists")
-- Do NOT use markdown code blocks — output raw JSON only`;
+- For class methods, use the method name in "function_name" field
+- Do NOT use markdown code blocks — output raw JSON only
+
+QUALITY CHECKLIST (before submitting your response):
+✓ Did I extract file paths directly from RIS text?
+✓ Did I generate assertions for ALL key functions mentioned in RIS?
+✓ Did I generate assertions for ALL exports mentioned in RIS?
+✓ Did I generate 5-8 assertions (not fewer)?
+✓ Are all paths relative to project root?
+✓ Are all assertion types valid and data shapes correct?
 
   return { system, task, constraints };
 }

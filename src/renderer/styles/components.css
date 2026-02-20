@@ -2398,16 +2398,60 @@
   gap: 0.5rem;
 }
 
+/* Wrapper for textarea and clear button */
+.prompt-input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
 .prompt-area textarea {
   flex: 1;
   min-height: 100px;
   resize: none;
+  padding-right: 2.5rem; /* Make room for clear button */
 }
 
 .prompt-area textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   background: var(--bg-tertiary);
+}
+
+/* Clear prompt button (X) */
+.clear-prompt-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  z-index: 10;
+}
+
+.clear-prompt-btn:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.clear-prompt-btn:active {
+  transform: scale(0.95);
+}
+
+.clear-prompt-btn svg {
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
 }
 
 .prompt-options {

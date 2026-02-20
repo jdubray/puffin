@@ -5,6 +5,26 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.4] - 2026-02-19
+
+### Fixed
+
+- **Startup crash on auto-archive**: Project failed to load on every restart with "FOREIGN KEY constraint failed" when any completed story (>2 weeks old) had a completion summary. Root cause: `completion_summaries.story_id` FK references `user_stories.id` without `ON DELETE CASCADE`. Both `archive()` and `delete()` in `user-story-repository.js` now explicitly delete from `completion_summaries` before removing the parent story row.
+
+### Added
+
+- **Stats Plugin — Story Metrics**: New story-level metrics view with cost, token, and duration tracking per user story. Pre-aggregated `story_metrics` and `prompt_metrics` tables (migration 011) with auto-maintained trigger for zero-latency aggregation.
+- **Stats Plugin — Component Breakdown**: Treemap and chart visualizations for cognitive architecture component usage (Claude Service, CRE, h-DSL, Memory Plugin, Outcomes Plugin).
+- **CRE — Expanded Assertion Types**: Additional assertion patterns for function signatures including class methods, object methods, and ES module exports (`function_signature`, `export_exists` improvements).
+- **CRE — IPC Handler Early Registration**: Handlers registered before full initialization so callers receive proper errors instead of "no handler registered" during startup race conditions.
+- **Session — Rate Limit Events**: `rate_limit_event` stream messages now surfaced in the response viewer with human-readable status, rate limit type, and reset countdown.
+- **UI — Clear Prompt Button**: Dedicated X button to clear the textarea without starting a new thread. New thread button no longer clears the prompt text, preserving typed content across thread resets.
+- **UI — Emoji Line Breaks**: Response viewer post-processes rendered markdown to add line breaks after emojis followed by capital letters, preventing run-on text in AI responses.
+
+### Changed
+
+- **Stats Plugin**: Improved security (parameterized queries throughout), data consistency fixes for component metrics, enhanced UI styling.
+
 ## [3.0.0] - 2026-02-08
 
 ### Added

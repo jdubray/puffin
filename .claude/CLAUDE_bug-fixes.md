@@ -47,17 +47,17 @@ Be thorough in testing and consider edge cases.
 - Sprint history UI: tiles display sprint date as title, loaded on Backlog view focus and via refresh button. Each sprint filters backlog stories; sprint data includes title, closedAt/createdAt dates, and storyIds array.
 - Modal CSS width overrides use pattern .modal:has(.classname) for conditional styling. Avoids deep specificity chains and makes modal styling modular based on content type.
 - Plugin name consistency critical: designer-plugin vs 'designer' vs 'designer-plugin'. Must use exact plugin name everywhere: history-tree.js, project-form.js, modal-manager.js, prompt-editor.js. Wrong name causes plugin IPC invoke to fail silently.
+- IPC handler naming follows pattern: 'component:action' or 'feature:action' (e.g., 'designer-plugin:listDesigns', 'metrics:componentStats'). Main process exposes via window.puffin.* in preload.
+- Date serialization issue with JSON: Date objects become 'Invalid Date' after JSON round-trip. Must explicitly serialize dates as ISO strings in backend, then parse with new Date(dateString) on frontend.
+- Modal type registration required: New modal types must be added to componentManagedModals array in modal-manager.js or modal manager clears content instead of letting component render.
+- IPC response format variance: Backend returns {success, data} but frontend sometimes expects direct array. Must always check for {success, result/designs/design} wrapper or use data extraction helper.
+- View focus-triggered refresh pattern: Components should refresh data when coming into focus (onActivate) rather than on init. Handles timing issues where backend resources aren't ready yet.
+- Plugin list refresh pattern: instead of caching plugin/design lists, read from disk on each user interaction (dropdown click, view focus). This ensures fresh data and eliminates race conditions between plugin updates and UI state.
+- Story status uses hyphen 'in-progress' not underscore 'in_progress'. Inconsistency in one location (line 2257 for branch status) caused filtering failures. Must standardize throughout codebase.
+- Modal backdrop opacity should be nearly opaque (0.85 or higher) not translucent. Use solid color with opacity (e.g., #000000 with opacity: 0.85) for consistent dark overlay. Modal should use flex-direction: column for vertical layout.
 
 ### Architectural Decisions
-
 - Plugin architecture uses file system (.puffin/gui-definitions/ and .puffin/claude-plugins/) as primary store; core SAM and plugins communicate via IPC and file I/O, not shared in-memory state. Plugin state is ephemeral and reloaded from disk on each interaction.
-- Auto-continuation of Claude CLI responses should be explicit by default, not automatic. Users must manually click Continue button to proceed with additional turns. Auto-continue feature is disabled (enabled: false) and stuck detection alerts are disabled to prevent UI blocking.
-- Component data refresh pattern: Instead of fetching once on init, components should refresh when they come into focus (onActivate) or respond to explicit refresh button clicks. This handles timing issues and stale data gracefully.
-- Designer plugin should be fully decoupled from core SAM model. Core contains no designer state, actions, or rendering code. Plugin manages all designer logic; core only provides .puffin/gui-definitions/ file directory as interface.
-- GUI definitions stored in .puffin/gui-definitions/ directory as JSON files (e.g., my-first-ui.json). Each GUI file contains name, description, element definitions. Core reads this directory on-demand (e.g., when Include GUI dropdown opens); plugin writes/deletes files in same directory.
-- Dropdown menu positioning: use left:0 to align left edge of menu with button, extending right. Ensures menu stays within view boundaries (right-aligned dropdowns clip when near right edge). Applies to Include GUI dropdown in prompt view.
-- State persistence flow: state-persistence.js intercepts SAM actions and triggers IPC. Persistence works ONLY if action type added to persistActions whitelist AND handler condition block exists. Missing from either = silent failure (no DB write).
-- Sprint story status automatic sync on creation: when sprint created, acceptor immediately updates backlog story status from 'pending' to 'in-progress' (lines 1953-1960). Persistence logic syncs these updates to DB. This must happen during sprint creation, not lazily.
 
 # Assigned Skills
 

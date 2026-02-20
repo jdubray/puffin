@@ -450,12 +450,15 @@ class AssertionGenerator {
     try {
       const content = await fs.readFile(target, 'utf8');
       const funcName = data.function_name || data.name;
-      // Match function declarations, methods, arrow functions assigned to the name
+      // Match function declarations, methods, arrow functions, class methods
       const patterns = [
-        new RegExp(`function\\s+${this._escapeRegex(funcName)}\\s*\\(`),
-        new RegExp(`${this._escapeRegex(funcName)}\\s*\\(`),
-        new RegExp(`${this._escapeRegex(funcName)}\\s*=\\s*(?:async\\s+)?(?:function|\\()`),
-        new RegExp(`async\\s+${this._escapeRegex(funcName)}\\s*\\(`)
+        new RegExp(`function\\s+${this._escapeRegex(funcName)}\\s*\\(`),                           // function foo(
+        new RegExp(`${this._escapeRegex(funcName)}\\s*\\(`),                                       // foo( - loose match
+        new RegExp(`${this._escapeRegex(funcName)}\\s*=\\s*(?:async\\s+)?(?:function|\\()`),      // foo = function / foo = async (
+        new RegExp(`async\\s+${this._escapeRegex(funcName)}\\s*\\(`),                              // async foo(
+        new RegExp(`${this._escapeRegex(funcName)}\\s*\\([^)]*\\)\\s*\\{`),                        // foo() { - class methods
+        new RegExp(`${this._escapeRegex(funcName)}\\s*:\\s*(?:async\\s+)?(?:function|\\()`),      // foo: function / foo: async (
+        new RegExp(`['"]${this._escapeRegex(funcName)}['"]\\s*:\\s*(?:async\\s+)?(?:function|\\()`) // 'foo': function - object methods
       ];
       return patterns.some(p => p.test(content)) ? AssertionResult.PASS : AssertionResult.FAIL;
     } catch {
@@ -476,10 +479,12 @@ class AssertionGenerator {
       const allFound = data.exports.every(exp => {
         const name = this._escapeRegex(exp.name);
         const patterns = [
-          new RegExp(`exports\\.${name}\\b`),
-          new RegExp(`module\\.exports\\b[^;]*${name}`),
-          new RegExp(`export\\s+(const|let|var|function|class|default)\\s+${name}\\b`),
-          new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`)
+          new RegExp(`exports\\.${name}\\b`),                                                      // exports.Foo
+          new RegExp(`module\\.exports\\b[^;]*${name}`),                                           // module.exports = { Foo }
+          new RegExp(`export\\s+(const|let|var|function|class|default)\\s+${name}\\b`),           // export class Foo
+          new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`),                                           // export { Foo }
+          new RegExp(`export\\s+default\\s+${name}\\b`),                                           // export default Foo
+          new RegExp(`module\\.exports\\s*=\\s*${name}\\b`)                                        // module.exports = Foo
         ];
         return patterns.some(p => p.test(content));
       });

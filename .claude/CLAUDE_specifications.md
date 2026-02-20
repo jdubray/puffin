@@ -49,18 +49,16 @@ When deriving user stories, format them as:
 - Modal system routes by type string in switch-case. CSS width overrides use .modal:has(.classname) pattern. Modals use standardized API: ModalManager.show({title, content, buttons}) with button objects {label, action, primary, danger}.
 - camelCase naming convention for variables and functions. PascalCase for classes and components. kebab-case for HTML filenames and CSS classes.
 - Dropdown menus for document/definition selection follow pattern: button opens dropdown, displays list from directory scan, user selects item, content loaded and included in context. Used for GUI definitions, design documents.
+- Thread context is managed through branch history and thread isolation. Top-level prompts (parentId=null) start new threads within a branch. Thread statistics are aggregated per-thread by walking parent-child chains, not branch-wide.
+- Sprint-related features include: 4-story maximum limit to prevent token exhaustion, 10 maximum iterations default, 20 second delay between auto-continues, 3-iteration stuck detection threshold, and structured status blocks in Claude responses (✅ Complete, 🔄 In Progress, ⏳ Pending).
+- Implementation handoffs between threads include: persistent storage (no expiration), versioned summaries that auto-update on code changes, multi-hop chaining for sequential threads, and user-controlled timing with review modal before handoff.
 
 ### Architectural Decisions
+- Puffin is a management layer on top of Claude Code CLI (3CLI), not a replacement. It tracks outputs, provides context, and visualizes the development process. 3CLI remains in control of building the project.
 - Sprints are limited to maximum 4 user stories to prevent token exhaustion and maintain manageability
 - Thread context is determined by parent-child relationships in prompts: a thread root has parentId=null, and descendants follow the chain
 - Context handoff between threads uses unidirectional flow from completed thread to target thread, with handoff summaries documenting what was implemented, API contracts, and integration points
 - Multi-layer validation pattern: validation functions in src/shared/validators.js, validation logic in acceptors (sam/model.js), errors set via model.appError which triggers toast notifications
-- Statistics are aggregated per branch, not per thread, to maintain historical metrics across all work in a branch
-- UI components follow a dropdown pattern for file/document selection, populating from directory scans and enabling single or multiple selection
-- Design documents and configuration files are stored in project root directories (docs/, .puffin/), not auto-generated during runtime
-- Sprint execution uses a state machine pattern with iteration counter, delay timer, and stuck detection threshold to manage auto-continue flows
-- Handoff summaries include files modified, API contracts, integration points, and assumptions; they can be versioned and chained if multiple handoffs occur
-- Implementation scope for user stories includes primary files, read-only files, estimated LOC budget, constraints, exclusions, and visual references
 
 # Assigned Skills
 

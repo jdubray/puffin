@@ -499,6 +499,9 @@ class UserStoryRepository extends BaseRepository {
         db.prepare(insertSql).run(...insertParams)
       })
 
+      // Delete completion_summaries first (FK without CASCADE — must clean up manually)
+      db.prepare('DELETE FROM completion_summaries WHERE story_id = ?').run(id)
+
       // Delete from user_stories
       const deleteSql = 'DELETE FROM user_stories WHERE id = ?'
       this.traceQuery('DELETE', deleteSql, [id], () => {
@@ -567,6 +570,9 @@ class UserStoryRepository extends BaseRepository {
           console.log(`[SQL-TRACE] Cleaned up storyProgress for story ${id} in active sprint`)
         }
       }
+
+      // Delete completion_summaries first (FK without CASCADE — must clean up manually)
+      db.prepare('DELETE FROM completion_summaries WHERE story_id = ?').run(id)
 
       // Delete the story
       const result = db.prepare('DELETE FROM user_stories WHERE id = ?').run(id)

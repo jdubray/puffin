@@ -163,6 +163,14 @@ function setupStateHandlers(ipcMain) {
     try {
       const config = await puffinState.updateConfig(updates)
 
+      // Propagate config changes to CRE so settings like promptRepetition take effect immediately
+      try {
+        const cre = require('./cre')
+        cre.updateConfig(config)
+      } catch (creErr) {
+        console.warn('[IPC] Could not update CRE config:', creErr.message)
+      }
+
       // Regenerate CLAUDE.md base (config affects all branches)
       const state = puffinState.getState()
       const activeBranch = state.history?.activeBranch || 'specifications'

@@ -1,6 +1,6 @@
 {
   "name": "puffin",
-  "version": "0.1.0",
+  "version": "3.1.0",
   "description": "A GUI for Claude Code to help you 'clode' new projects",
   "main": "src/main/main.js",
   "scripts": {

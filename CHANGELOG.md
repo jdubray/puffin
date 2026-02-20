@@ -5,6 +5,25 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-02-20
+
+### Added
+
+- **Welcome Screen**: New startup screen shown when no project is open. Displays a recent-projects list (up to 10 entries, stored in `~/.puffin/recent-projects.json`) and an "Open Folder…" button. Previously Puffin always required a project path on the command line.
+- **Recent Projects**: `src/main/recent-projects.js` manages the recent-projects list — projects are recorded on open, surfaced on the welcome screen, and removable with an ×  button.
+- **Response Waiting Overlay**: A spinner and rotating witty phrase (18 phrases) is shown in the response area between prompt submit and the arrival of the first streaming chunk, so the UI is never blank while Claude is thinking.
+- **CRE — Prompt Repetition**: Each AI prompt sent through the CRE (`sendCrePrompt`) is optionally repeated before dispatch, giving every token bidirectional attention over the full context. Based on [arxiv 2512.14982](https://arxiv.org/abs/2512.14982). Default on; togglable per-project in Settings → CRE. Config key: `cre.promptRepetition`.
+- **CRE — Live Config Propagation**: Saving project settings now immediately calls `cre.updateConfig()` so changes (e.g. prompt repetition) take effect without restarting.
+
+### Changed
+
+- **Rate Limit Events**: "Allowed" rate-limit checks now emit only a subtle `⏱️` icon instead of a full message. Only actual rate-limit events (status ≠ `allowed`) display the type and reset countdown.
+- **App Startup Refactor**: Startup flow extracted into `initializeProject()` so the welcome-screen path and the CLI-arg path share the same initialization logic.
+
+### Fixed
+
+- **generate-assertions.js**: Missing closing backtick in `constraints` template literal caused `return` statement and closing brace to be parsed as string content, producing empty prompts.
+
 ## [3.0.4] - 2026-02-19
 
 ### Fixed

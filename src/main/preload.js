@@ -539,15 +539,34 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
-   * App lifecycle
+   * App lifecycle and project selection
    */
   app: {
-    // Called when app is ready, receives initial project info
+    // Called when app is ready; data includes { projectPath, recentProjects }
     onReady: (callback) => {
       const handler = (event, data) => callback(data)
       ipcRenderer.on('app:ready', handler)
       return () => ipcRenderer.removeListener('app:ready', handler)
-    }
+    },
+
+    // Called when a project has been initialized (after welcome screen selection)
+    onProjectReady: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('app:projectReady', handler)
+      return () => ipcRenderer.removeListener('app:projectReady', handler)
+    },
+
+    // Get list of recently opened projects
+    getRecentProjects: () => ipcRenderer.invoke('app:getRecentProjects'),
+
+    // Open a specific project by path
+    openProject: (projectPath) => ipcRenderer.invoke('app:openProject', projectPath),
+
+    // Show native folder picker and open selected project
+    browseForProject: () => ipcRenderer.invoke('app:browseForProject'),
+
+    // Remove a project from the recent list
+    removeRecentProject: (projectPath) => ipcRenderer.invoke('app:removeRecentProject', projectPath)
   },
 
   /**

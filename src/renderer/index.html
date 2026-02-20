@@ -21,6 +21,36 @@
     <img src="img/header.jpg" alt="Puffin for Claude Code">
   </div>
 
+  <!-- Welcome Screen (shown when no project is open) -->
+  <div id="welcome-screen" class="welcome-screen hidden">
+    <div class="welcome-content">
+      <div class="welcome-header">
+        <img src="img/logo.png" alt="Puffin" class="welcome-logo">
+        <div class="welcome-title-block">
+          <h1 class="welcome-title">Puffin</h1>
+          <p class="welcome-subtitle">AI-assisted development for Claude Code</p>
+        </div>
+      </div>
+
+      <div class="welcome-body">
+        <div class="welcome-section">
+          <h2 class="welcome-section-title">Recent Projects</h2>
+          <ul id="welcome-recent-list" class="welcome-recent-list">
+            <!-- Populated dynamically -->
+          </ul>
+          <p id="welcome-no-recent" class="welcome-no-recent hidden">No recent projects yet.</p>
+        </div>
+
+        <div class="welcome-actions">
+          <button id="welcome-open-btn" class="btn btn-primary welcome-open-btn">
+            <span class="welcome-open-icon">📂</span>
+            Open Folder...
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="app">
     <!-- Header -->
     <header id="header">
@@ -345,6 +375,14 @@
                     <span>Full Rebuild (instead of incremental)</span>
                   </label>
                   <small class="form-hint">Perform a complete Code Model rebuild at sprint end. More thorough but slower than incremental update.</small>
+                </div>
+
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="cre-prompt-repetition" checked>
+                    <span>Prompt Repetition</span>
+                  </label>
+                  <small class="form-hint">Repeat each AI prompt twice before sending. Improves structured output quality by giving the model bidirectional attention over the full context. Based on <a href="https://arxiv.org/abs/2512.14982" target="_blank">arxiv 2512.14982</a>. Recommended on.</small>
                 </div>
 
                 <div class="form-group">

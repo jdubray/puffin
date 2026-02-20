@@ -37,7 +37,12 @@ function getDefaultCreConfig() {
       // Whether to perform a full rebuild (--clean) vs incremental update
       // Full rebuild is more thorough but slower
       fullRebuild: false
-    }
+    },
+    // Whether to repeat prompts sent to the AI for better attention coverage.
+    // Based on "Prompt Repetition Improves Non-Reasoning LLMs" (arxiv 2512.14982):
+    // repeating the prompt lets every token attend to every other token,
+    // improving structured JSON output quality with no latency cost.
+    promptRepetition: true
   };
 }
 
@@ -99,6 +104,11 @@ function ensureCreConfig(config) {
     if (cre.sprintEnd.fullRebuild === undefined) {
       cre.sprintEnd.fullRebuild = defaults.sprintEnd.fullRebuild;
     }
+  }
+
+  // Backfill promptRepetition
+  if (cre.promptRepetition === undefined) {
+    cre.promptRepetition = defaults.promptRepetition;
   }
 
   return config;

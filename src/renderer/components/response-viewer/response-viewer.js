@@ -4,11 +4,34 @@
  * Displays Claude's responses with markdown rendering and streaming support.
  */
 
+const WAITING_PHRASES = [
+  'Consulting the weights\u2026',
+  'Counting attention heads\u2026',
+  'Parsing your intent\u2026',
+  'Warming up the transformer\u2026',
+  'Thinking very hard\u2026',
+  'Negotiating with entropy\u2026',
+  'Finding the best next token\u2026',
+  'Asking 175 billion parameters\u2026',
+  'Converting tokens to insight\u2026',
+  'Summoning the oracle\u2026',
+  'Aligning values\u2026',
+  'Pondering the imponderables\u2026',
+  'Burning through context\u2026',
+  'Converting coffee to code\u2026',
+  'Defying the null hypothesis\u2026',
+  'Reading the embedding space\u2026',
+  'Consulting the attention maps\u2026',
+  'Decoding the latent space\u2026',
+]
+
 export class ResponseViewerComponent {
   constructor(intents) {
     this.intents = intents
     this.container = null
+    this.areaContainer = null
     this.markedLoaded = false
+    this._phraseTimer = null
   }
 
   /**
@@ -16,6 +39,7 @@ export class ResponseViewerComponent {
    */
   init() {
     this.container = document.getElementById('response-content')
+    this.areaContainer = document.getElementById('response-area')
     this.subscribeToState()
   }
 
@@ -38,17 +62,94 @@ export class ResponseViewerComponent {
     // Store history state for continuation button
     this.historyState = historyState
 
-    // Priority: story derivation error > streaming response > selected prompt response > placeholder
+    // Priority: story derivation error > waiting > streaming > selected prompt response > placeholder
     if (storyDerivationState?.error) {
+      this._clearWaiting()
       this.renderStoryDerivationError(storyDerivationState.error, historyState.selectedPrompt)
+    } else if (promptState.isProcessing && !promptState.hasStreamingResponse) {
+      // Submitted but no response yet — show waiting overlay
+      this.renderWaiting()
     } else if (promptState.hasStreamingResponse) {
+      this._clearWaiting()
       this.renderStreaming(promptState.streamingResponse, activityState)
     } else if (historyState.selectedPrompt?.response) {
+      this._clearWaiting()
       this.renderResponse(historyState.selectedPrompt)
     } else if (historyState.selectedPrompt) {
+      this._clearWaiting()
       this.renderPromptOnly(historyState.selectedPrompt)
     } else {
+      this._clearWaiting()
       this.renderPlaceholder()
+    }
+  }
+
+  /**
+   * Render the waiting overlay (shown between submit and first chunk)
+   */
+  renderWaiting() {
+    // Already showing — don't re-render and interrupt the phrase cycler
+    if (this.areaContainer?.querySelector('.response-waiting')) return
+
+    // Clear any previous response content so nothing shows through the overlay
+    if (this.container) this.container.innerHTML = ''
+
+    this._stopPhraseCycler()
+
+    const startIdx = Math.floor(Math.random() * WAITING_PHRASES.length)
+    const overlay = document.createElement('div')
+    overlay.className = 'response-waiting'
+    overlay.innerHTML = `
+      <div class="response-waiting-spinner"></div>
+      <p class="response-waiting-phrase">${WAITING_PHRASES[startIdx]}</p>
+    `
+    this.areaContainer.appendChild(overlay)
+
+    // Tiny delay so the first phrase is visible before cycling starts
+    setTimeout(() => this._startPhraseCycler(startIdx), 100)
+  }
+
+  /**
+   * Remove the waiting overlay and stop phrase cycling
+   * @private
+   */
+  _clearWaiting() {
+    this._stopPhraseCycler()
+    const overlay = this.areaContainer?.querySelector('.response-waiting')
+    if (overlay) overlay.remove()
+  }
+
+  /**
+   * Cycle through witty waiting phrases
+   * @private
+   */
+  _startPhraseCycler(startIdx = 0) {
+    this._stopPhraseCycler()
+    let idx = startIdx
+
+    this._phraseTimer = setInterval(() => {
+      const el = this.areaContainer?.querySelector('.response-waiting-phrase')
+      if (!el) { this._stopPhraseCycler(); return }
+
+      idx = (idx + 1) % WAITING_PHRASES.length
+      el.classList.add('fade-out')
+      setTimeout(() => {
+        const el2 = this.areaContainer?.querySelector('.response-waiting-phrase')
+        if (el2) {
+          el2.textContent = WAITING_PHRASES[idx]
+          el2.classList.remove('fade-out')
+        }
+      }, 250)
+    }, 2800)
+  }
+
+  /**
+   * @private
+   */
+  _stopPhraseCycler() {
+    if (this._phraseTimer) {
+      clearInterval(this._phraseTimer)
+      this._phraseTimer = null
     }
   }
 

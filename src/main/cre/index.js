@@ -25,6 +25,7 @@ const storage = require('./lib/cre-storage');
 const { ensureCreConfig, getCreConfig } = require('./lib/cre-config');
 const { queryForTask, formatForPrompt } = require('./lib/context-builder');
 const { withRetry, validateAndFilter, markStaleArtifacts, detectPlanCycles } = require('./lib/cre-errors');
+const { configure: configureAiClient } = require('./lib/ai-client');
 const { PlanGenerator } = require('./plan-generator');
 const { AssertionGenerator } = require('./assertion-generator');
 const { SchemaManager } = require('./schema-manager');
@@ -129,13 +130,16 @@ async function initialize(context) {
   // Ensure CRE config defaults are present
   ensureCreConfig(config);
 
+  // Apply CRE config to the AI client (prompt repetition, etc.)
+  const creConfig = getCreConfig(config);
+  configureAiClient({ promptRepetition: creConfig.promptRepetition ?? true });
+
   // Initialize storage directories and default files
   await storage.initialize(projectRoot);
 
   ctx = { ipcMain, db, config, projectRoot, claudeService: claudeService || null };
 
   // Initialize SchemaManager
-  const creConfig = getCreConfig(config);
   schemaManager = new SchemaManager({ storage, projectRoot, config: creConfig });
 
   // Initialize CodeModel
@@ -658,4 +662,18 @@ function getConfig() {
   return getDefaultCreConfig();
 }
 
-module.exports = { initialize, shutdown, acquireProcessLock, releaseProcessLock, withProcessLock, getConfig };
+/**
+ * Update CRE with a new project config (e.g. after the user saves settings).
+ * Re-applies ai-client configuration so changes take effect immediately.
+ *
+ * @param {Object} newConfig - The full updated Puffin config object.
+ */
+function updateConfig(newConfig) {
+  if (!newConfig) return;
+  if (ctx) ctx.config = newConfig;
+  ensureCreConfig(newConfig);
+  const creConfig = getCreConfig(newConfig);
+  configureAiClient({ promptRepetition: creConfig.promptRepetition ?? true });
+}
+
+module.exports = { initialize, shutdown, updateConfig, acquireProcessLock, releaseProcessLock, withProcessLock, getConfig };

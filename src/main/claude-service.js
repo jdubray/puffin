@@ -797,20 +797,23 @@ class ClaudeService {
         break
 
       case 'rate_limit_event': {
-        // Display rate limit info in a human-readable way without interrupting the stream
         const info = json.rate_limit_info || {}
-        const status = info.status === 'allowed' ? '✅ allowed' : '⏸️ limited'
-        let msg = `\n⏱️ Rate limit check: ${status}`
-        if (info.rateLimitType) {
-          msg += ` (${info.rateLimitType.replace(/_/g, ' ')} window)`
+        if (info.status === 'allowed') {
+          // Allowed — just a subtle icon, no noise
+          onChunk('\u23f1\ufe0f')
+        } else {
+          // Actually limited — show full details so the user knows why Claude isn't responding
+          let msg = `\n⏸️ Rate limited`
+          if (info.rateLimitType) {
+            msg += ` (${info.rateLimitType.replace(/_/g, ' ')} window)`
+          }
+          if (info.resetsAt) {
+            const resetsIn = Math.ceil((new Date(info.resetsAt * 1000) - Date.now()) / 60000)
+            msg += ` — resets in ~${resetsIn} min`
+          }
+          msg += '\n'
+          onChunk(msg)
         }
-        if (info.status !== 'allowed' && info.resetsAt) {
-          const resetsDate = new Date(info.resetsAt * 1000)
-          const resetsIn = Math.ceil((resetsDate - Date.now()) / 60000)
-          msg += ` — resets in ~${resetsIn} min`
-        }
-        msg += '\n'
-        onChunk(msg)
         break
       }
 

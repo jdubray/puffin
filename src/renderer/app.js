@@ -891,36 +891,20 @@ Please provide specific file locations and line numbers where issues are found, 
       window.puffin.app.onReady(async (data) => {
         console.log('Electron app ready, project path:', data?.projectPath)
 
-        this.projectPath = data?.projectPath
-
-        // Check if Claude CLI is available
-        const claudeStatus = await window.puffin.claude.check()
-        if (claudeStatus.available) {
-          console.log('Claude CLI available:', claudeStatus.version)
+        if (data?.projectPath) {
+          // Project was provided via CLI arg — go straight to app
+          await this._startWithProject(data.projectPath)
         } else {
-          // Only log to console - the CLI check can have false negatives on Windows
-          // Actual CLI calls will show their own errors if the CLI is truly unavailable
-          console.warn('Claude CLI check returned unavailable. If claude --version works in terminal, this is a false negative.')
+          // No project yet — show welcome screen
+          this._showWelcomeScreen(data?.recentProjects || [])
         }
+      })
 
-        // Initialize app with project path
-        const projectName = this.projectPath ? this.projectPath.split(/[/\\]/).pop() : 'Unknown'
-        this.intents.initializeApp(this.projectPath, projectName)
-
-        // Security: Check for active Git hooks and warn user
-        await this.checkGitHooksSecurity()
-
-        // Load state from .puffin/ directory
-        await this.loadState()
-
-        // Initialize plugin styles (load before views to prevent flash of unstyled content)
-        await this.initPluginStyles()
-
-        // Initialize plugin component loader (loads renderer components for active plugins)
-        await this.initPluginComponentLoader()
-
-        // Initialize plugin sidebar view manager
-        await this.initPluginSidebarManager()
+      // Listen for project selected from welcome screen
+      window.puffin.app.onProjectReady(async (data) => {
+        console.log('Project selected:', data?.projectPath)
+        this._hideWelcomeScreen()
+        await this._startWithProject(data.projectPath)
       })
     } else {
       // Development mode without Electron
@@ -928,6 +912,176 @@ Please provide specific file locations and line numbers where issues are found, 
       setTimeout(() => {
         this.intents.initializeApp('/dev/test-project', 'test-project')
       }, 100)
+    }
+  }
+
+  /**
+   * Show the welcome screen with the given recent projects list.
+   * @param {Array} recentProjects
+   */
+  _showWelcomeScreen(recentProjects) {
+    const screen = document.getElementById('welcome-screen')
+    if (!screen) return
+
+    screen.classList.remove('hidden')
+
+    // Render recent projects list
+    const list = document.getElementById('welcome-recent-list')
+    const noRecent = document.getElementById('welcome-no-recent')
+
+    list.innerHTML = ''
+
+    if (recentProjects.length === 0) {
+      noRecent.classList.remove('hidden')
+    } else {
+      noRecent.classList.add('hidden')
+      recentProjects.forEach(project => {
+        const li = document.createElement('li')
+        li.className = 'welcome-recent-item'
+        li.title = project.path
+
+        li.innerHTML = `
+          <div class="welcome-recent-info">
+            <span class="welcome-recent-name">${this._escapeHtml(project.name)}</span>
+            <span class="welcome-recent-path">${this._escapeHtml(project.path)}</span>
+          </div>
+          <button class="welcome-recent-remove" title="Remove from list" data-path="${this._escapeHtml(project.path)}">✕</button>
+        `
+
+        // Open project on row click
+        li.addEventListener('click', async (e) => {
+          if (e.target.closest('.welcome-recent-remove')) return
+          await this._openProjectFromWelcome(project.path)
+        })
+
+        // Remove from list button
+        li.querySelector('.welcome-recent-remove').addEventListener('click', async (e) => {
+          e.stopPropagation()
+          await window.puffin.app.removeRecentProject(project.path)
+          li.remove()
+          if (list.children.length === 0) {
+            noRecent.classList.remove('hidden')
+          }
+        })
+
+        list.appendChild(li)
+      })
+    }
+
+    // Open folder button
+    const openBtn = document.getElementById('welcome-open-btn')
+    if (openBtn) {
+      openBtn.addEventListener('click', async () => {
+        await this._browseForProjectFromWelcome()
+      })
+    }
+  }
+
+  /**
+   * Hide the welcome screen.
+   */
+  _hideWelcomeScreen() {
+    const screen = document.getElementById('welcome-screen')
+    if (screen) screen.classList.add('hidden')
+  }
+
+  /**
+   * Open a project path from the welcome screen.
+   * @param {string} projectPath
+   */
+  async _openProjectFromWelcome(projectPath) {
+    this._setWelcomeLoading(true)
+    const result = await window.puffin.app.openProject(projectPath)
+    if (!result.success) {
+      this._setWelcomeLoading(false)
+      console.error('Failed to open project:', result.error)
+      // Show error inline in welcome screen
+      const noRecent = document.getElementById('welcome-no-recent')
+      if (noRecent) {
+        noRecent.textContent = `Could not open project: ${result.error}`
+        noRecent.classList.remove('hidden')
+      }
+    }
+    // On success, main process sends app:projectReady → _hideWelcomeScreen + _startWithProject
+  }
+
+  /**
+   * Browse for a project from the welcome screen.
+   */
+  async _browseForProjectFromWelcome() {
+    const result = await window.puffin.app.browseForProject()
+    if (result.canceled) return
+    if (!result.success) {
+      console.error('Failed to browse for project:', result.error)
+    }
+    // On success, main process sends app:projectReady
+  }
+
+  /**
+   * Show/hide a loading spinner on the welcome screen.
+   * @param {boolean} loading
+   */
+  _setWelcomeLoading(loading) {
+    const openBtn = document.getElementById('welcome-open-btn')
+    if (!openBtn) return
+    openBtn.disabled = loading
+    openBtn.textContent = loading ? 'Opening...' : '📂  Open Folder...'
+  }
+
+  /**
+   * Escape HTML special characters.
+   * @param {string} str
+   * @returns {string}
+   */
+  _escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  /**
+   * Complete app initialization for a selected project.
+   * Extracted so it can be called from both the direct-arg path and welcome screen.
+   * @param {string} projectPath
+   */
+  async _startWithProject(projectPath) {
+    this.projectPath = projectPath
+
+    // Check if Claude CLI is available
+    const claudeStatus = await window.puffin.claude.check()
+    if (claudeStatus.available) {
+      console.log('Claude CLI available:', claudeStatus.version)
+    } else {
+      console.warn('Claude CLI check returned unavailable. If claude --version works in terminal, this is a false negative.')
+    }
+
+    // Initialize app with project path
+    const projectName = this.projectPath ? this.projectPath.split(/[/\\]/).pop() : 'Unknown'
+    this.intents.initializeApp(this.projectPath, projectName)
+
+    // Security: Check for active Git hooks and warn user
+    await this.checkGitHooksSecurity()
+
+    // Load state from .puffin/ directory
+    await this.loadState()
+
+    // Initialize plugin styles (load before views to prevent flash of unstyled content)
+    await this.initPluginStyles()
+
+    // Initialize plugin component loader (loads renderer components for active plugins)
+    await this.initPluginComponentLoader()
+
+    // Initialize plugin sidebar view manager
+    await this.initPluginSidebarManager()
+
+    // Refresh git panel now that the project is open and IPC handlers are registered.
+    // The git panel initializes at startup (before project selection), so its first
+    // refreshGitState() call finds no git IPC handlers registered → hides the indicator.
+    // We must re-run it here after the project is fully initialized.
+    if (this.components?.gitPanel?.refreshGitState) {
+      this.components.gitPanel.refreshGitState().catch(() => {})
     }
   }
 

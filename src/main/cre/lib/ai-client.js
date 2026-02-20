@@ -15,6 +15,26 @@ const MODEL_COMPLEX = 'sonnet';
 /** Default model for structured extraction tasks (ambiguity analysis, assertions, intent). */
 const MODEL_EXTRACT = 'haiku';
 
+/**
+ * Module-level defaults, updated via configure().
+ * Stored here so all callers pick up config changes without re-wiring.
+ */
+let _promptRepetition = true;
+
+/**
+ * Update ai-client defaults from the current CRE config.
+ * Call this on CRE initialisation and whenever the project config changes.
+ *
+ * @param {Object} options
+ * @param {boolean} [options.promptRepetition] - Whether to repeat prompts for better attention.
+ */
+function configure(options = {}) {
+  if (options.promptRepetition !== undefined) {
+    _promptRepetition = !!options.promptRepetition;
+    console.log(`[CRE-AI] Prompt repetition ${_promptRepetition ? 'enabled' : 'disabled'}`);
+  }
+}
+
 /** Default timeout for complex AI calls (ms). */
 const TIMEOUT_COMPLEX = 120000;
 
@@ -118,7 +138,15 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
     return { success: false, data: null, error: 'claudeService not available', raw: null };
   }
 
-  const prompt = assemblePrompt(promptParts);
+  const assembled = assemblePrompt(promptParts);
+  // Prompt repetition: append a second copy so every token can attend to the full prompt.
+  // Based on "Prompt Repetition Improves Non-Reasoning LLMs" (arxiv 2512.14982).
+  const shouldRepeat = options.promptRepetition !== undefined
+    ? options.promptRepetition
+    : _promptRepetition;
+  const prompt = shouldRepeat
+    ? `${assembled}\n\n---\n\n${assembled}`
+    : assembled;
 
   try {
     console.log(`[CRE-AI] Sending ${label} (model: ${model}, timeout: ${timeout}ms)`);
@@ -189,6 +217,7 @@ async function sendCrePrompt(claudeService, promptParts, options = {}) {
 }
 
 module.exports = {
+  configure,
   assemblePrompt,
   parseJsonResponse,
   sendCrePrompt,

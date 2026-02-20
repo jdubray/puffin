@@ -249,7 +249,7 @@ QUALITY CHECKLIST (before submitting your response):
 ✓ Did I generate assertions for ALL exports mentioned in RIS?
 ✓ Did I generate 5-8 assertions (not fewer)?
 ✓ Are all paths relative to project root?
-✓ Are all assertion types valid and data shapes correct?
+✓ Are all assertion types valid and data shapes correct?`
 
   return { system, task, constraints };
 }

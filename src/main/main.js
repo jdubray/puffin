@@ -11,12 +11,16 @@ const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
 const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
+const { getRecentProjects, addRecentProject, removeRecentProject } = require('./recent-projects')
 
 // Keep a global reference of the window object
 let mainWindow = null
 
 // The directory Puffin is currently working with
 let currentProjectPath = null
+
+// Track whether project has been initialized (IPC handlers set up)
+let projectInitialized = false
 
 // Plugin system instances
 let pluginLoader = null
@@ -224,10 +228,11 @@ function createWindow() {
     mainWindow = null
   })
 
-  // Handle window ready - send project path if we have one
+  // Handle window ready — send initial state to renderer
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('app:ready', {
-      projectPath: currentProjectPath
+      projectPath: currentProjectPath,
+      recentProjects: getRecentProjects()
     })
   })
 }
@@ -248,6 +253,121 @@ async function pickDirectory() {
   }
 
   return result.filePaths[0]
+}
+
+/**
+ * Initialize a project: set up IPC handlers, load plugins, update window title.
+ * Safe to call once per session (guards against double-init).
+ * @param {string} projectPath
+ */
+async function initializeProject(projectPath) {
+  if (projectInitialized) {
+    console.warn('[App] initializeProject called but project already initialized')
+    return
+  }
+
+  console.log('Opening project:', projectPath)
+  currentProjectPath = projectPath
+  projectInitialized = true
+
+  // Record in recent projects list
+  addRecentProject(projectPath)
+
+  const projectName = path.basename(projectPath)
+
+  // Setup IPC handlers (project-scoped)
+  setupIpcHandlers(ipcMain, projectPath)
+
+  // Initialize plugin loader
+  const isDevelopment = process.env.NODE_ENV !== 'production'
+  const pluginsDir = isDevelopment
+    ? path.join(__dirname, '..', '..', 'plugins')
+    : path.join(require('os').homedir(), '.puffin', 'plugins')
+
+  pluginLoader = new PluginLoader({ pluginsDir })
+  console.log(`[Plugins] Loading from: ${pluginsDir}`)
+
+  pluginLoader.on('plugin:discovered', ({ plugin }) => {
+    console.log(`[Plugins] Discovered: ${plugin.displayName} (${plugin.name}@${plugin.version})`)
+  })
+  pluginLoader.on('plugin:validated', ({ plugin }) => {
+    console.log(`[Plugins] Validated: ${plugin.name}`)
+  })
+  pluginLoader.on('plugin:validation-failed', ({ plugin, errors }) => {
+    console.warn(`[Plugins] Validation failed for ${plugin.name}:`, errors.map(e => e.message).join('; '))
+  })
+  pluginLoader.on('plugin:loaded', ({ plugin }) => {
+    console.log(`[Plugins] Loaded: ${plugin.name}`)
+  })
+  pluginLoader.on('plugin:load-failed', ({ plugin, error }) => {
+    console.error(`[Plugins] Failed to load ${plugin.name}:`, error.message)
+  })
+  pluginLoader.on('plugins:complete', ({ loaded, failed }) => {
+    console.log(`[Plugins] Complete: ${loaded.length} loaded, ${failed.length} failed`)
+  })
+
+  setupPluginHandlers(ipcMain, pluginLoader)
+
+  historyService = new HistoryService({ getPuffinState })
+  const storyService = new StoryService({ getPuffinState })
+
+  pluginLoader.loadPlugins()
+    .then(() => {
+      pluginManager = new PluginManager({
+        loader: pluginLoader,
+        ipcMain,
+        services: {
+          history: historyService,
+          stories: storyService,
+          claudeService: getClaudeService()
+        },
+        projectPath
+      })
+
+      pluginManager.on('plugin:activated', ({ name }) => {
+        console.log(`[PluginManager] Activated: ${name}`)
+      })
+      pluginManager.on('plugin:activation-failed', ({ name, error }) => {
+        console.error(`[PluginManager] Activation failed for ${name}:`, error.message)
+      })
+      pluginManager.on('plugin:deactivated', ({ name }) => {
+        console.log(`[PluginManager] Deactivated: ${name}`)
+      })
+      pluginManager.on('plugin:enabled', ({ name }) => {
+        console.log(`[PluginManager] Enabled: ${name}`)
+      })
+      pluginManager.on('plugin:disabled', ({ name }) => {
+        console.log(`[PluginManager] Disabled: ${name}`)
+      })
+
+      setupPluginManagerHandlers(ipcMain, pluginManager, mainWindow)
+      setupViewRegistryHandlers(ipcMain, pluginManager.getViewRegistry(), mainWindow)
+      setupPluginStyleHandlers(ipcMain, pluginManager)
+      setClaudeServicePluginManager(pluginManager)
+
+      const puffinState = getPuffinState()
+      if (puffinState && pluginManager.getRegistry()) {
+        puffinState.setPluginRegistry(pluginManager.getRegistry())
+      }
+
+      return pluginManager.initialize()
+    })
+    .then(({ activated, failed, disabled }) => {
+      console.log(`[PluginManager] Initialization complete: ${activated.length} activated, ${failed.length} failed, ${disabled.length} disabled`)
+    })
+    .catch(err => {
+      console.error('[Plugins] Error during plugin initialization:', err.message)
+    })
+
+  // Update window title
+  if (mainWindow) {
+    mainWindow.setTitle(`Puffin - ${projectName}`)
+  }
+
+  // Notify renderer that the project is ready
+  if (mainWindow) {
+    mainWindow.webContents.send('app:projectReady', { projectPath })
+  }
 }
 
 /**
@@ -282,151 +402,60 @@ function getProjectPathFromArgs() {
 
 // Ready to create windows
 app.whenReady().then(async () => {
+  // Register pre-initialization IPC handlers (project selection from welcome screen)
+  ipcMain.handle('app:getRecentProjects', () => {
+    return getRecentProjects()
+  })
+
+  ipcMain.handle('app:openProject', async (event, projectPath) => {
+    if (projectInitialized) {
+      return { success: false, error: 'Project already initialized' }
+    }
+    try {
+      await initializeProject(projectPath)
+      return { success: true, projectPath }
+    } catch (err) {
+      console.error('[App] Failed to open project:', err.message)
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('app:browseForProject', async () => {
+    if (projectInitialized) {
+      return { success: false, error: 'Project already initialized' }
+    }
+    const selectedPath = await pickDirectory()
+    if (!selectedPath) {
+      return { success: false, canceled: true }
+    }
+    try {
+      await initializeProject(selectedPath)
+      return { success: true, projectPath: selectedPath }
+    } catch (err) {
+      console.error('[App] Failed to open browsed project:', err.message)
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('app:removeRecentProject', (event, projectPath) => {
+    removeRecentProject(projectPath)
+    return { success: true }
+  })
+
   // Check if project path was passed as argument
-  currentProjectPath = getProjectPathFromArgs()
-
-  // If no path provided, show directory picker
-  if (!currentProjectPath) {
-    currentProjectPath = await pickDirectory()
-  }
-
-  // If still no path (user cancelled), quit
-  if (!currentProjectPath) {
-    console.log('No project directory selected, exiting.')
-    app.quit()
-    return
-  }
-
-  console.log('Opening project:', currentProjectPath)
-
-  // Update window title with project name
-  const projectName = path.basename(currentProjectPath)
-
-  // Setup IPC handlers before creating window
-  setupIpcHandlers(ipcMain, currentProjectPath)
-
-  // Initialize plugin loader
-  // In development, load plugins from the project's plugins/ directory
-  // In production, this will use ~/.puffin/plugins/
-  const isDevelopment = process.env.NODE_ENV !== 'production'
-  const pluginsDir = isDevelopment
-    ? path.join(__dirname, '..', '..', 'plugins')
-    : path.join(require('os').homedir(), '.puffin', 'plugins')
-
-  pluginLoader = new PluginLoader({ pluginsDir })
-  console.log(`[Plugins] Loading from: ${pluginsDir}`)
-
-  // Setup plugin event logging
-  pluginLoader.on('plugin:discovered', ({ plugin }) => {
-    console.log(`[Plugins] Discovered: ${plugin.displayName} (${plugin.name}@${plugin.version})`)
-  })
-
-  pluginLoader.on('plugin:validated', ({ plugin }) => {
-    console.log(`[Plugins] Validated: ${plugin.name}`)
-  })
-
-  pluginLoader.on('plugin:validation-failed', ({ plugin, errors }) => {
-    console.warn(`[Plugins] Validation failed for ${plugin.name}:`, errors.map(e => e.message).join('; '))
-  })
-
-  pluginLoader.on('plugin:loaded', ({ plugin }) => {
-    console.log(`[Plugins] Loaded: ${plugin.name}`)
-  })
-
-  pluginLoader.on('plugin:load-failed', ({ plugin, error }) => {
-    console.error(`[Plugins] Failed to load ${plugin.name}:`, error.message)
-  })
-
-  pluginLoader.on('plugins:complete', ({ loaded, failed }) => {
-    console.log(`[Plugins] Complete: ${loaded.length} loaded, ${failed.length} failed`)
-  })
-
-  // Setup plugin IPC handlers
-  setupPluginHandlers(ipcMain, pluginLoader)
-
-  // Load plugins (non-blocking, errors are logged but don't crash app)
-  // Create history service with lazy puffinState access
-  historyService = new HistoryService({
-    getPuffinState: getPuffinState
-  })
-
-  const storyService = new StoryService({
-    getPuffinState: getPuffinState
-  })
-
-  pluginLoader.loadPlugins()
-    .then(() => {
-      // Initialize plugin manager after plugins are loaded
-      // Pass services so plugins can access them
-      pluginManager = new PluginManager({
-        loader: pluginLoader,
-        ipcMain: ipcMain,
-        services: {
-          history: historyService,
-          stories: storyService,
-          claudeService: getClaudeService()
-        },
-        projectPath: currentProjectPath
-      })
-
-      // Setup plugin manager event logging
-      pluginManager.on('plugin:activated', ({ name }) => {
-        console.log(`[PluginManager] Activated: ${name}`)
-      })
-
-      pluginManager.on('plugin:activation-failed', ({ name, error }) => {
-        console.error(`[PluginManager] Activation failed for ${name}:`, error.message)
-      })
-
-      pluginManager.on('plugin:deactivated', ({ name }) => {
-        console.log(`[PluginManager] Deactivated: ${name}`)
-      })
-
-      pluginManager.on('plugin:enabled', ({ name }) => {
-        console.log(`[PluginManager] Enabled: ${name}`)
-      })
-
-      pluginManager.on('plugin:disabled', ({ name }) => {
-        console.log(`[PluginManager] Disabled: ${name}`)
-      })
-
-      // Setup plugin manager IPC handlers
-      setupPluginManagerHandlers(ipcMain, pluginManager, mainWindow)
-
-      // Setup view registry IPC handlers
-      setupViewRegistryHandlers(ipcMain, pluginManager.getViewRegistry(), mainWindow)
-
-      // Setup plugin style handlers
-      setupPluginStyleHandlers(ipcMain, pluginManager)
-
-      // Connect plugin manager to Claude service for branch focus retrieval
-      setClaudeServicePluginManager(pluginManager)
-
-      // Connect plugin registry to PuffinState for story status events
-      const puffinState = getPuffinState()
-      if (puffinState && pluginManager.getRegistry()) {
-        puffinState.setPluginRegistry(pluginManager.getRegistry())
-      }
-
-      // Initialize and activate enabled plugins
-      return pluginManager.initialize()
-    })
-    .then(({ activated, failed, disabled }) => {
-      console.log(`[PluginManager] Initialization complete: ${activated.length} activated, ${failed.length} failed, ${disabled.length} disabled`)
-    })
-    .catch(err => {
-      console.error('[Plugins] Error during plugin initialization:', err.message)
-    })
+  const argPath = getProjectPathFromArgs()
 
   // Create the application menu
   createMenu()
 
+  // Create window immediately (shows welcome screen if no project)
   createWindow()
 
-  // Update title after window is created
-  if (mainWindow) {
-    mainWindow.setTitle(`Puffin - ${projectName}`)
+  if (argPath) {
+    // CLI arg provided — initialize project immediately (classic flow)
+    await initializeProject(argPath)
   }
+  // Otherwise: window will show welcome screen and user selects project via IPC
 
   // macOS: Re-create window when dock icon clicked
   app.on('activate', () => {

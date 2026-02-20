@@ -437,8 +437,10 @@ export class ProjectFormComponent {
     const sprintEndConfig = creConfig.sprintEnd || {}
     const creAutoRefresh = document.getElementById('cre-sprint-auto-refresh')
     const creFullRebuild = document.getElementById('cre-sprint-full-rebuild')
+    const crePromptRepetition = document.getElementById('cre-prompt-repetition')
     if (creAutoRefresh) creAutoRefresh.checked = sprintEndConfig.autoRefresh || false
     if (creFullRebuild) creFullRebuild.checked = sprintEndConfig.fullRebuild || false
+    if (crePromptRepetition) crePromptRepetition.checked = creConfig.promptRepetition !== false
   }
 
   /**
@@ -534,7 +536,8 @@ export class ProjectFormComponent {
         sprintEnd: {
           autoRefresh: this.getCheckboxValue('cre-sprint-auto-refresh'),
           fullRebuild: this.getCheckboxValue('cre-sprint-full-rebuild')
-        }
+        },
+        promptRepetition: this.getCheckboxValue('cre-prompt-repetition', true)
       }
     }
   }

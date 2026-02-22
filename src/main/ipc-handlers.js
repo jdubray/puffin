@@ -9,6 +9,7 @@ const { dialog, shell } = require('electron')
 const { marked } = require('marked')
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
 const { DeveloperProfileManager } = require('./developer-profile')
@@ -54,9 +55,13 @@ function cleanupWindowsReservedFiles() {
 }
 
 /**
- * Setup all IPC handlers
+ * Setup all IPC handlers.
+ * Safe to call before a project is selected (pass '' for initialProjectPath).
+ * Services are created immediately so handlers are available; call setIpcProjectPath()
+ * when a real project path becomes known.
+ *
  * @param {IpcMain} ipcMain - Electron IPC main process
- * @param {string} initialProjectPath - The project directory path
+ * @param {string} initialProjectPath - The project directory path (may be empty string)
  */
 function setupIpcHandlers(ipcMain, initialProjectPath) {
   projectPath = initialProjectPath
@@ -95,6 +100,23 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
 
   // Image attachment handlers
   setupImageHandlers(ipcMain)
+
+  // CRE handlers — registered early so renderer never sees "no handler registered".
+  // The handlers guard against being called before cre.initialize() sets up ctx.
+  const cre = require('./cre')
+  cre.registerHandlers(ipcMain)
+}
+
+/**
+ * Update the project path on all services after a project is selected.
+ * Call this instead of setupIpcHandlers() when the project is known at runtime.
+ *
+ * @param {string} newProjectPath - Absolute path to the project directory
+ */
+function setIpcProjectPath(newProjectPath) {
+  projectPath = newProjectPath
+  if (claudeService) claudeService.setProjectPath(newProjectPath)
+  if (gitService) gitService.setProjectPath(newProjectPath)
 }
 
 /**
@@ -2994,8 +3016,72 @@ function getClaudeService() {
   return claudeService
 }
 
+/**
+ * Register plan-file IPC handlers.
+ *
+ * Claude Code (≥ v1.x) writes plans to ~/.claude/plan/<project-slug>.md instead of
+ * returning them as response text.  These handlers let the renderer:
+ *   1. Discover the plan file written during the current planning session.
+ *   2. Copy it into docs/plans/ inside the project for version control.
+ *
+ * @param {IpcMain} ipcMain
+ */
+function setupPlanHandlers(ipcMain) {
+  /**
+   * Find the most recently modified .md file in ~/.claude/plan/ that was
+   * touched within the last 10 minutes.  Returns null when nothing is found.
+   */
+  ipcMain.handle('plan:readLatest', async () => {
+    try {
+      const planDir = path.join(os.homedir(), '.claude', 'plan')
+      if (!fs.existsSync(planDir)) return null
+
+      const entries = fs.readdirSync(planDir)
+        .filter(f => f.endsWith('.md'))
+        .map(f => {
+          const full = path.join(planDir, f)
+          const stat = fs.statSync(full)
+          return { filename: f, filePath: full, mtimeMs: stat.mtimeMs }
+        })
+        .filter(e => Date.now() - e.mtimeMs < 10 * 60 * 1000) // within 10 min
+        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+      if (entries.length === 0) return null
+
+      const best = entries[0]
+      const content = fs.readFileSync(best.filePath, 'utf8')
+      console.log(`[PLAN] Found plan file: ${best.filename} (${content.length} chars)`)
+      return { filename: best.filename, filePath: best.filePath, content }
+    } catch (err) {
+      console.error('[PLAN] readLatest error:', err.message)
+      return null
+    }
+  })
+
+  /**
+   * Write plan content to docs/plans/<filename> inside the current project.
+   * Creates the directory if it doesn't exist.
+   */
+  ipcMain.handle('plan:saveToDocs', async (event, { filename, content }) => {
+    try {
+      if (!projectPath) return { success: false, error: 'No project path set' }
+      const docsDir = path.join(projectPath, 'docs', 'plans')
+      if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true })
+      const dest = path.join(docsDir, filename)
+      fs.writeFileSync(dest, content, 'utf8')
+      console.log(`[PLAN] Saved plan to ${dest}`)
+      return { success: true, filePath: dest }
+    } catch (err) {
+      console.error('[PLAN] saveToDocs error:', err.message)
+      return { success: false, error: err.message }
+    }
+  })
+}
+
 module.exports = {
   setupIpcHandlers,
+  setupPlanHandlers,
+  setIpcProjectPath,
   setupPluginHandlers,
   setupPluginManagerHandlers,
   setupViewRegistryHandlers,

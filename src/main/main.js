@@ -9,7 +9,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
+const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 const { getRecentProjects, addRecentProject, removeRecentProject } = require('./recent-projects')
 
@@ -275,8 +275,8 @@ async function initializeProject(projectPath) {
 
   const projectName = path.basename(projectPath)
 
-  // Setup IPC handlers (project-scoped)
-  setupIpcHandlers(ipcMain, projectPath)
+  // Update project path on all IPC services (handlers were already registered at startup)
+  setIpcProjectPath(projectPath)
 
   // Initialize plugin loader
   const isDevelopment = process.env.NODE_ENV !== 'production'
@@ -444,6 +444,14 @@ app.whenReady().then(async () => {
 
   // Check if project path was passed as argument
   const argPath = getProjectPathFromArgs()
+
+  // Register ALL IPC handlers before creating the window.
+  // The renderer initializes components eagerly (before project selection) which
+  // immediately invoke IPC channels. Without pre-registration, those calls fail with
+  // "no handler registered". Handlers return graceful errors until setIpcProjectPath()
+  // is called with a real path when the user opens a project.
+  setupIpcHandlers(ipcMain, '')
+  setupPlanHandlers(ipcMain)
 
   // Create the application menu
   createMenu()

@@ -83,7 +83,18 @@ class ClaudeService {
     this._pluginManager = null // Reference to plugin manager for branch focus retrieval
     this._pendingContextUpdate = null // Queued branch focus update to include in next prompt
     this._currentBranchId = null // Track current branch for context updates
+    this._pendingQuestionTimeout = null // Auto-answer timer for AskUserQuestion
+    this._pendingQuestionToolUseId = null // Tracks which tool_use is awaiting an answer
   }
+
+  /**
+   * Milliseconds before auto-answering an unanswered AskUserQuestion.
+   * The Claude CLI (--print mode) times out waiting for tool results within a few
+   * seconds, after which it injects an error and Claude abandons the tool.
+   * Setting this just under the likely CLI threshold ensures the tool_result always
+   * arrives in time while still giving the user a chance to interact.
+   */
+  static get QUESTION_AUTO_ANSWER_DELAY_MS() { return 25000 }
 
   /**
    * Check if a CLI process is currently running
@@ -330,13 +341,33 @@ class ClaudeService {
                   streamedContent += block.text
                 } else if (block.type === 'tool_use' && block.name === 'AskUserQuestion') {
                   // Claude is asking the user a question — emit for UI handling
-                  console.log('[CLAUDE-QUESTION] AskUserQuestion detected, tool_use_id:', block.id)
+                  const questionToolUseId = block.id
+                  const questionItems = block.input?.questions || []
+                  console.log('[CLAUDE-QUESTION] AskUserQuestion detected, tool_use_id:', questionToolUseId)
+
+                  // Start auto-answer timer. The Claude CLI (--print mode) injects an
+                  // error tool_result if no response arrives within a few seconds, causing
+                  // Claude to abandon the modal and rephrase. We send default answers just
+                  // before that deadline so the conversation always continues properly.
+                  if (this._pendingQuestionTimeout) clearTimeout(this._pendingQuestionTimeout)
+                  this._pendingQuestionToolUseId = questionToolUseId
+                  this._pendingQuestionTimeout = setTimeout(() => {
+                    if (this._pendingQuestionToolUseId === questionToolUseId) {
+                      console.log('[CLAUDE-QUESTION] Auto-answering (user did not respond in time)')
+                      const autoAnswers = {}
+                      questionItems.forEach((q, qi) => {
+                        // Pick the first option as the default, or a generic fallback
+                        autoAnswers[qi] = q.options?.[0]?.label || 'No preference — please proceed with your best judgment'
+                      })
+                      this.sendAnswer(questionToolUseId, autoAnswers)
+                    }
+                  }, ClaudeService.QUESTION_AUTO_ANSWER_DELAY_MS)
+
                   if (onQuestion) {
                     onQuestion({
-                      toolUseId: block.id,
-                      questions: block.input?.questions || [],
-                      // Store process reference for answer delivery
-                      _processRef: this.currentProcess
+                      toolUseId: questionToolUseId,
+                      questions: questionItems,
+                      autoAnswerDelayMs: ClaudeService.QUESTION_AUTO_ANSWER_DELAY_MS
                     })
                   }
                   streamedContent += '\n❓'
@@ -363,9 +394,20 @@ class ClaudeService {
               console.log('[CLAUDE-DEBUG] Captured result, result field length:', json.result?.length || 0)
 
               // Detect session resume failure: CLI returns is_error with 0 turns
-              // when the session ID is stale/expired/invalid
-              if (json.is_error && json.num_turns === 0 && data.sessionId) {
+              // when the session ID is stale/expired/invalid.
+              // Also retry when the model rejects assistant prefill (e.g. claude-sonnet-4-6
+              // doesn't support prefill; can appear when --resume loads history ending in
+              // an assistant message and the model rejects the structure).
+              const isPrefillError = json.is_error && json.result &&
+                json.result.includes('assistant message prefill')
+              if (data.sessionId && (
+                (json.is_error && json.num_turns === 0) ||
+                isPrefillError
+              )) {
                 console.log('[CLAUDE-DEBUG] Session resume failed (error_during_execution) - will retry without --resume')
+                if (isPrefillError) {
+                  console.log('[CLAUDE-DEBUG] Reason: model does not support assistant prefill')
+                }
                 retryWithoutSession = true
                 // Close stdin to let the process exit
                 if (this.currentProcess?.stdin && !this.currentProcess.stdin.destroyed) {
@@ -652,6 +694,14 @@ class ClaudeService {
     if (!this.currentProcess || !this.currentProcess.stdin || this.currentProcess.stdin.destroyed) {
       console.error('[CLAUDE-ANSWER] No active process or stdin closed')
       return false
+    }
+
+    // Cancel the auto-answer timeout — user responded manually
+    if (this._pendingQuestionTimeout) {
+      clearTimeout(this._pendingQuestionTimeout)
+      this._pendingQuestionTimeout = null
+      this._pendingQuestionToolUseId = null
+      console.log('[CLAUDE-ANSWER] Cancelled auto-answer timeout (user responded)')
     }
 
     // Format answers as the tool result content string
@@ -1095,6 +1145,13 @@ ${updatedContext}
    */
   cancel() {
     this._cancelRequested = true
+
+    // Clear any pending question auto-answer timeout
+    if (this._pendingQuestionTimeout) {
+      clearTimeout(this._pendingQuestionTimeout)
+      this._pendingQuestionTimeout = null
+      this._pendingQuestionToolUseId = null
+    }
 
     if (this.currentProcess) {
       console.log('[CLAUDE-GUARD] Cancelling CLI process, PID:', this.currentProcess.pid)
@@ -2024,12 +2081,13 @@ ${content}`
             if (json.type === 'result') {
               resultData = json // Capture the full result message
               console.log('[sendPrompt] Received result message:', {
+                isError: json.is_error || false,
                 resultLength: json.result?.length || 0,
                 cost: json.total_cost_usd,
                 turns: json.num_turns,
                 sessionId: json.session_id
               })
-              if (json.result) {
+              if (json.result && !json.is_error) {
                 resultText = json.result
               }
             }
@@ -2100,6 +2158,17 @@ ${content}`
                 { duration_ms: duration, exitCode: code, ...extra })
             }
           }
+        }
+
+        // If the CLI reported an error result, surface it as a failure.
+        // Without this check, is_error results would be returned as { success: true }
+        // with the error text as the response, causing silent JSON parse failures in callers.
+        if (resultData?.is_error) {
+          const errorMsg = resultData.result || 'Claude CLI reported an error'
+          console.error('[sendPrompt] CLI returned is_error result:', errorMsg.substring(0, 200))
+          recordSendPromptMetrics(false, { error: errorMsg })
+          resolve({ success: false, error: errorMsg })
+          return
         }
 
         // When --json-schema was used, prefer the StructuredOutput tool_use data.

@@ -832,5 +832,14 @@ contextBridge.exposeInMainWorld('puffin', {
     getPlan: (args) => ipcRenderer.invoke('cre:get-plan', args),
     getRis: (args) => ipcRenderer.invoke('cre:get-ris', args),
     listRisStoryIds: () => ipcRenderer.invoke('cre:list-ris-story-ids')
+  },
+
+  /**
+   * Plan file operations
+   * Reads plans written by Claude Code to ~/.claude/plan/ and saves copies to docs/plans/
+   */
+  plan: {
+    readLatest: () => ipcRenderer.invoke('plan:readLatest'),
+    saveToDocs: (args) => ipcRenderer.invoke('plan:saveToDocs', args)
   }
 })

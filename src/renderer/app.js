@@ -2067,9 +2067,45 @@ Please provide specific file locations and line numbers where issues are found, 
         const hasContent = !!response?.content
         console.log('[SPRINT] Plan capture check - status:', sprintStatus, 'hasContent:', hasContent, 'contentLength:', response?.content?.length || 0)
 
-        if (sprintStatus === 'planning' && hasContent) {
-          console.log('[SPRINT] Capturing plan content from Claude response, length:', response.content.length)
-          this.intents.setSprintPlan(response.content)
+        if (sprintStatus === 'planning') {
+          let planContent = hasContent ? response.content : null
+
+          // If response content is empty, Claude may have written plan to ~/.claude/plan/
+          if (!planContent) {
+            console.log('[SPRINT] No response content — checking ~/.claude/plan/ for plan file')
+            try {
+              const planFile = await window.puffin.plan.readLatest()
+              if (planFile) {
+                console.log('[SPRINT] Found plan file:', planFile.filename, 'length:', planFile.content.length)
+                planContent = planFile.content
+              } else {
+                console.log('[SPRINT] No recent plan file found in ~/.claude/plan/')
+              }
+            } catch (planReadErr) {
+              console.warn('[SPRINT] Failed to read plan file:', planReadErr)
+            }
+          }
+
+          if (planContent) {
+            console.log('[SPRINT] Capturing plan content, length:', planContent.length)
+            this.intents.setSprintPlan(planContent)
+
+            // Save a copy to docs/plans/ in the project
+            try {
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)
+              const filename = `sprint-plan_${timestamp}.md`
+              const saveResult = await window.puffin.plan.saveToDocs({ filename, content: planContent })
+              if (saveResult?.success) {
+                console.log('[SPRINT] Plan saved to docs/plans/', saveResult.filePath)
+              } else {
+                console.warn('[SPRINT] Failed to save plan to docs/plans/:', saveResult?.error)
+              }
+            } catch (saveErr) {
+              console.warn('[SPRINT] Error saving plan to docs/plans/:', saveErr)
+            }
+          } else {
+            console.log('[SPRINT] No plan content to capture')
+          }
         } else if (sprintStatus && sprintStatus !== 'planning') {
           console.log('[SPRINT] Skipping plan capture - sprint status is:', sprintStatus)
         }
@@ -2132,7 +2168,8 @@ Please provide specific file locations and line numbers where issues are found, 
       console.log('[CLAUDE-QUESTION] Question received:', data.toolUseId, data.questions?.length, 'questions')
       this.intents.showModal('claude-question', {
         toolUseId: data.toolUseId,
-        questions: data.questions
+        questions: data.questions,
+        autoAnswerDelayMs: data.autoAnswerDelayMs
       })
     })
     this.claudeListeners.push(unsubQuestion)

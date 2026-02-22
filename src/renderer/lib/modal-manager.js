@@ -13,6 +13,7 @@ export class ModalManager {
     this.showToast = showToast
     this.showCodeReviewConfirmation = showCodeReviewConfirmation
     this._currentModalRender = null
+    this._cqCountdownInterval = null // Auto-answer countdown for claude-question modal
     // Transient state for pre-generated commit message
     this._pendingCommitMessage = null
     this._commitMessageGenerating = false
@@ -311,6 +312,12 @@ export class ModalManager {
     if (componentManagedModals.includes(modal.type)) {
       // Handled by their respective components which manage their own rendering
       return
+    }
+
+    // Clear any running countdown timer from a previous claude-question modal
+    if (this._cqCountdownInterval) {
+      clearInterval(this._cqCountdownInterval)
+      this._cqCountdownInterval = null
     }
 
     // Immediately clear old content to prevent stale event handlers
@@ -3352,7 +3359,7 @@ export class ModalManager {
    * @param {Object} data - { toolUseId, questions }
    */
   renderClaudeQuestion(title, content, actions, data) {
-    const { toolUseId, questions } = data || {}
+    const { toolUseId, questions, autoAnswerDelayMs } = data || {}
 
     title.textContent = 'Claude has a question'
 
@@ -3363,11 +3370,11 @@ export class ModalManager {
       return
     }
 
-    // Render each question with its options
+    // Render each question with its options, pre-selecting the first option
     const questionsHtml = questions.map((q, qi) => {
       const optionsHtml = (q.options || []).map((opt, oi) => `
         <label class="cq-option">
-          <input type="${q.multiSelect ? 'checkbox' : 'radio'}" name="cq-${qi}" value="${oi}" />
+          <input type="${q.multiSelect ? 'checkbox' : 'radio'}" name="cq-${qi}" value="${oi}" ${oi === 0 ? 'checked' : ''} />
           <div class="cq-option-content">
             <span class="cq-option-label">${this.escapeHtml(opt.label)}</span>
             ${opt.description ? `<span class="cq-option-desc">${this.escapeHtml(opt.description)}</span>` : ''}
@@ -3393,10 +3400,18 @@ export class ModalManager {
       `
     }).join('')
 
-    content.innerHTML = `<div class="claude-question-modal">${questionsHtml}</div>`
+    // Countdown bar — shown only when auto-answer is active
+    const countdownHtml = autoAnswerDelayMs
+      ? `<div class="cq-countdown" id="cq-countdown">
+           <span class="cq-countdown-label">Auto-submitting with defaults in <span id="cq-countdown-secs">${Math.ceil(autoAnswerDelayMs / 1000)}</span>s</span>
+           <div class="cq-countdown-bar"><div class="cq-countdown-fill" id="cq-countdown-fill"></div></div>
+         </div>`
+      : ''
+
+    content.innerHTML = `<div class="claude-question-modal">${countdownHtml}${questionsHtml}</div>`
 
     actions.innerHTML = `
-      <button class="btn secondary" id="cq-skip-btn">Skip</button>
+      <button class="btn secondary" id="cq-skip-btn">Use defaults</button>
       <button class="btn primary" id="cq-submit-btn">Submit Answer</button>
     `
 
@@ -3415,8 +3430,8 @@ export class ModalManager {
       })
     })
 
-    // Submit handler
-    document.getElementById('cq-submit-btn')?.addEventListener('click', () => {
+    // Collect current answers from the form
+    const collectAnswers = () => {
       const answers = {}
       questions.forEach((q, qi) => {
         const selected = content.querySelectorAll(`input[name="cq-${qi}"]:checked`)
@@ -3430,22 +3445,52 @@ export class ModalManager {
             values.push(q.options[optIndex]?.label || input.value)
           }
         })
-        answers[qi] = values.join(', ') || 'No answer provided'
+        answers[qi] = values.join(', ') || q.options?.[0]?.label || 'No preference'
       })
+      return answers
+    }
 
-      window.puffin.claude.answerQuestion({ toolUseId, answers })
+    // Submit handler
+    document.getElementById('cq-submit-btn')?.addEventListener('click', () => {
+      if (this._cqCountdownInterval) {
+        clearInterval(this._cqCountdownInterval)
+        this._cqCountdownInterval = null
+      }
+      window.puffin.claude.answerQuestion({ toolUseId, answers: collectAnswers() })
       this.intents.hideModal()
     })
 
-    // Skip handler — send empty answer so CLI continues with defaults
+    // Skip/defaults handler — sends the pre-selected (first) option defaults
     document.getElementById('cq-skip-btn')?.addEventListener('click', () => {
-      const answers = {}
-      questions.forEach((q, qi) => {
-        answers[qi] = 'Please proceed with your best judgment.'
-      })
-      window.puffin.claude.answerQuestion({ toolUseId, answers })
+      if (this._cqCountdownInterval) {
+        clearInterval(this._cqCountdownInterval)
+        this._cqCountdownInterval = null
+      }
+      window.puffin.claude.answerQuestion({ toolUseId, answers: collectAnswers() })
       this.intents.hideModal()
     })
+
+    // Countdown ticker — updates every second so user sees how long they have
+    if (autoAnswerDelayMs) {
+      const startTime = Date.now()
+      const totalMs = autoAnswerDelayMs
+      const secsEl = document.getElementById('cq-countdown-secs')
+      const fillEl = document.getElementById('cq-countdown-fill')
+      if (this._cqCountdownInterval) clearInterval(this._cqCountdownInterval)
+      this._cqCountdownInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime
+        const remaining = Math.max(0, totalMs - elapsed)
+        const secsLeft = Math.ceil(remaining / 1000)
+        if (secsEl) secsEl.textContent = secsLeft
+        if (fillEl) fillEl.style.width = `${(remaining / totalMs) * 100}%`
+        if (remaining <= 0) {
+          clearInterval(this._cqCountdownInterval)
+          this._cqCountdownInterval = null
+          // Main process auto-answers; close the modal
+          this.intents.hideModal()
+        }
+      }, 250)
+    }
   }
 
   /**

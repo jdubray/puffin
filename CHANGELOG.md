@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Tools — snip Integration**: New "Tools" section in project settings with a snip toggle. When enabled, Puffin writes a `PreToolUse` hook into `{projectPath}/.claude/settings.json` so Claude Code pipes Bash output through [snip](https://github.com/edouard-claude/snip) before it reaches the context window, reducing token usage by up to 99% on verbose commands (test runs, git log, etc.). Opt-in by design — the toggle is off by default even if snip is installed. Shows an amber warning with install instructions if snip is not found on PATH.
+
 ### Fixed
 
 - **API Prefill Error (Sonnet 4.6)**: Puffin now handles the `"This model does not support assistant message prefill"` error from `claude-sonnet-4-6`. When `--resume` loads a session whose last message is an assistant turn, the retry logic detects this error and re-submits without `--resume`, starting a fresh session transparently.

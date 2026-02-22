@@ -1115,6 +1115,16 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Sync skills and agents from .claude/skills/ and .claude/agents/ into Puffin's plugin list
+  ipcMain.handle('state:syncClaudeDirectory', async () => {
+    try {
+      const result = await puffinState.syncClaudeDirectoryPlugins()
+      return { success: true, ...result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // Assign a plugin to a branch
   ipcMain.handle('state:assignPluginToBranch', async (event, { pluginId, branchId }) => {
     try {

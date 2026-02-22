@@ -821,6 +821,18 @@ export class ProjectFormComponent {
   async loadPlugins() {
     try {
       if (window.puffin?.state?.getClaudePlugins) {
+        // Sync skills/agents from .claude/ directory first, then reload
+        if (window.puffin.state.syncClaudeDirectory) {
+          try {
+            const syncResult = await window.puffin.state.syncClaudeDirectory()
+            if (syncResult?.added?.length > 0) {
+              console.log('[PROJECT-FORM] Synced from .claude/:', syncResult.added)
+            }
+          } catch (syncErr) {
+            console.warn('[PROJECT-FORM] .claude/ sync failed (non-fatal):', syncErr.message)
+          }
+        }
+
         const result = await window.puffin.state.getClaudePlugins()
         if (result.success) {
           this.plugins = result.plugins || []

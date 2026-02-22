@@ -195,6 +195,9 @@ contextBridge.exposeInMainWorld('puffin', {
     addClaudePlugin: (source, type = 'github') =>
       ipcRenderer.invoke('state:addClaudePlugin', { source, type }),
 
+    // Sync skills/agents from .claude/skills/ and .claude/agents/ into the plugin list
+    syncClaudeDirectory: () => ipcRenderer.invoke('state:syncClaudeDirectory'),
+
     // Assign a plugin to a branch
     assignPluginToBranch: (pluginId, branchId) =>
       ipcRenderer.invoke('state:assignPluginToBranch', { pluginId, branchId }),

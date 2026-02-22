@@ -2068,6 +2068,132 @@ ${content}`
    * @param {string} type - Source type ('github', 'url', or 'local') - 'url' auto-detects
    * @returns {Promise<Object>} Result with success and plugin object
    */
+  /**
+   * Parse YAML frontmatter from a markdown string.
+   * Handles simple key: value pairs — enough for SKILL.md and agent files.
+   * @param {string} content
+   * @returns {{ frontmatter: Object, body: string }}
+   * @private
+   */
+  _parseFrontmatter(content) {
+    const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
+    if (!match) return { frontmatter: {}, body: content }
+    const fm = {}
+    for (const line of match[1].split('\n')) {
+      const colonIdx = line.indexOf(':')
+      if (colonIdx === -1) continue
+      const key = line.slice(0, colonIdx).trim()
+      const value = line.slice(colonIdx + 1).trim()
+      if (key) fm[key] = value
+    }
+    return { frontmatter: fm, body: match[2] }
+  }
+
+  /**
+   * Scan {projectPath}/.claude/skills/ and {projectPath}/.claude/agents/ and
+   * register any skills/agents not already in Puffin's plugin list.
+   *
+   * Skills:  .claude/skills/{name}/SKILL.md
+   * Agents:  .claude/agents/{name}.md
+   *
+   * Each discovered item is stored as a Puffin Claude plugin so it appears
+   * in the Config tab list and is included in CLAUDE.md skill content.
+   *
+   * @returns {Promise<{ added: string[], skipped: string[], errors: string[] }>}
+   */
+  async syncClaudeDirectoryPlugins() {
+    const added = []
+    const skipped = []
+    const errors = []
+
+    const tryInstall = async (id, name, description, skillContent, sourceLabel) => {
+      try {
+        await this.installClaudePlugin({
+          id,
+          name: name || id,
+          description: description || '',
+          version: '1.0.0',
+          source: sourceLabel,
+          skillContent
+        })
+        added.push(id)
+        console.log(`[PUFFIN-STATE] syncClaudeDir: added "${id}" from ${sourceLabel}`)
+      } catch (err) {
+        if (err.message?.includes('already installed')) {
+          skipped.push(id)
+        } else {
+          errors.push(`${id}: ${err.message}`)
+          console.warn(`[PUFFIN-STATE] syncClaudeDir: failed to install "${id}":`, err.message)
+        }
+      }
+    }
+
+    // ── Skills: .claude/skills/{name}/SKILL.md ──────────────────────────────
+    const skillsDir = path.join(this.projectPath, '.claude', 'skills')
+    try {
+      const entries = await fs.readdir(skillsDir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        const skillFile = path.join(skillsDir, entry.name, 'SKILL.md')
+        try {
+          const raw = await fs.readFile(skillFile, 'utf-8')
+          const { frontmatter, body } = this._parseFrontmatter(raw)
+          const name = frontmatter.name || entry.name
+          const description = frontmatter.description || ''
+          await tryInstall(
+            entry.name,
+            name,
+            description,
+            raw, // store the full SKILL.md content (frontmatter + body)
+            `.claude/skills/${entry.name}`
+          )
+        } catch (readErr) {
+          if (readErr.code !== 'ENOENT') {
+            errors.push(`${entry.name}: ${readErr.message}`)
+          }
+        }
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.warn('[PUFFIN-STATE] syncClaudeDir: could not read skills dir:', err.message)
+      }
+    }
+
+    // ── Agents: .claude/agents/{name}.md ────────────────────────────────────
+    const agentsDir = path.join(this.projectPath, '.claude', 'agents')
+    try {
+      const entries = await fs.readdir(agentsDir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+        const agentId = entry.name.replace(/\.md$/, '')
+        const agentFile = path.join(agentsDir, entry.name)
+        try {
+          const raw = await fs.readFile(agentFile, 'utf-8')
+          const { frontmatter } = this._parseFrontmatter(raw)
+          const name = frontmatter.name || agentId
+          const description = frontmatter.description || ''
+          await tryInstall(
+            `agent-${agentId}`,
+            `Agent: ${name}`,
+            description,
+            raw,
+            `.claude/agents/${entry.name}`
+          )
+        } catch (readErr) {
+          if (readErr.code !== 'ENOENT') {
+            errors.push(`agent-${agentId}: ${readErr.message}`)
+          }
+        }
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.warn('[PUFFIN-STATE] syncClaudeDir: could not read agents dir:', err.message)
+      }
+    }
+
+    return { added, skipped, errors }
+  }
+
   async addClaudePlugin(source, type = 'github') {
     try {
       // First validate to get metadata (this also resolves the effective type)

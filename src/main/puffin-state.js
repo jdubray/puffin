@@ -2031,8 +2031,27 @@ ${content}`
 
         return { success: true, manifest, source: cleanSource, type: effectiveType }
       } else if (effectiveType === 'local') {
-        // TODO: Implement local path validation
-        throw new Error('Local plugin installation not yet supported')
+        const localPath = path.resolve(cleanSource)
+        const pluginJsonPath = path.join(localPath, '.claude-plugin', 'plugin.json')
+
+        let pluginJson
+        try {
+          pluginJson = JSON.parse(fs.readFileSync(pluginJsonPath, 'utf8'))
+        } catch (e) {
+          throw new Error(`Could not read .claude-plugin/plugin.json at ${pluginJsonPath}: ${e.message}`)
+        }
+
+        const manifest = {
+          name: pluginJson.name || path.basename(localPath),
+          description: pluginJson.description || 'No description available',
+          version: pluginJson.version || '1.0.0',
+          author: typeof pluginJson.author === 'object'
+            ? pluginJson.author.name
+            : pluginJson.author || '',
+          icon: '🔌'
+        }
+
+        return { success: true, manifest, source: localPath, type: 'local' }
       } else {
         throw new Error(`Unknown source type: ${effectiveType}`)
       }
@@ -2091,6 +2110,34 @@ ${content}`
           author: validation.manifest.author,
           source: cleanSource,
           skillContent: skillContent
+        })
+
+        return { success: true, plugin }
+      } else if (effectiveType === 'local') {
+        const localPath = cleanSource // already resolved by validateClaudePlugin
+        const pluginName = validation.manifest.name
+        const skillPath = path.join(localPath, 'skills', pluginName, 'SKILL.md')
+
+        let skillContent = ''
+        try {
+          skillContent = fs.readFileSync(skillPath, 'utf8')
+        } catch (e) {
+          console.warn(`[PUFFIN-STATE] No SKILL.md found at ${skillPath}, installing without skill content`)
+        }
+
+        const pluginId = pluginName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+
+        const plugin = await this.installClaudePlugin({
+          id: pluginId,
+          name: pluginName,
+          description: validation.manifest.description,
+          version: validation.manifest.version,
+          author: validation.manifest.author,
+          source: localPath,
+          skillContent
         })
 
         return { success: true, plugin }

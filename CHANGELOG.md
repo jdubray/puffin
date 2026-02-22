@@ -5,6 +5,15 @@ All notable changes to Puffin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **API Prefill Error (Sonnet 4.6)**: Puffin now handles the `"This model does not support assistant message prefill"` error from `claude-sonnet-4-6`. When `--resume` loads a session whose last message is an assistant turn, the retry logic detects this error and re-submits without `--resume`, starting a fresh session transparently.
+- **sendPrompt is_error Handling**: `ClaudeService.sendPrompt()` was returning `{ success: true, response: "API Error: 400 ..." }` when the CLI reported `is_error: true`. It now returns `{ success: false, error: "..." }`, preventing silent JSON parse failures in CRE callers.
+- **AskUserQuestion Timeout**: When Claude uses `AskUserQuestion`, the CLI requires a tool result within seconds or it injects an error and rephrases the question as plain text. Puffin now auto-answers with first-option defaults after 25 seconds, ensuring the tool result always arrives in time. The modal shows a countdown bar and pre-selects the first option for each question so users can answer quickly. The timer is cancelled if the user answers manually.
+- **Plan File Relocation**: Claude Code now writes sprint plans to `~/.claude/plan/<project-slug>.md` instead of returning them as response text. The `onComplete` handler now falls back to reading the most-recently-modified plan file from `~/.claude/plan/` (touched within the last 10 minutes) when response content is empty. Found plan content is passed to `setSprintPlan` for display in the thread and saved as a timestamped copy in `docs/plans/` inside the project.
+
 ## [3.1.0] - 2026-02-20
 
 ### Added

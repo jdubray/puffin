@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Tools — snip Integration**: New "Tools" section in project settings with a snip toggle. When enabled, Puffin writes a `PreToolUse` hook into `{projectPath}/.claude/settings.json` so Claude Code pipes Bash output through [snip](https://github.com/edouard-claude/snip) before it reaches the context window, reducing token usage by up to 99% on verbose commands (test runs, git log, etc.). Opt-in by design — the toggle is off by default even if snip is installed. Shows an amber warning with install instructions if snip is not found on PATH.
+- **Config Tab — Auto-sync `.claude/` skills and agents**: Opening the Config tab now scans `.claude/skills/*/SKILL.md` and `.claude/agents/*.md` and registers any skills/agents not already in Puffin's plugin list. This makes skills and agents installed directly via Claude Code (outside of Puffin) automatically visible and manageable in the UI.
 
 ### Fixed
 
+- **Local Claude Code Plugin Installation**: Installing a plugin from a local path no longer throws "Local plugin installation not yet supported". Puffin now reads `.claude-plugin/plugin.json` and `skills/{name}/SKILL.md` directly from the filesystem.
 - **API Prefill Error (Sonnet 4.6)**: Puffin now handles the `"This model does not support assistant message prefill"` error from `claude-sonnet-4-6`. When `--resume` loads a session whose last message is an assistant turn, the retry logic detects this error and re-submits without `--resume`, starting a fresh session transparently.
 - **sendPrompt is_error Handling**: `ClaudeService.sendPrompt()` was returning `{ success: true, response: "API Error: 400 ..." }` when the CLI reported `is_error: true`. It now returns `{ success: false, error: "..." }`, preventing silent JSON parse failures in CRE callers.
 - **AskUserQuestion Timeout**: When Claude uses `AskUserQuestion`, the CLI requires a tool result within seconds or it injects an error and rephrases the question as plain text. Puffin now auto-answers with first-option defaults after 25 seconds, ensuring the tool result always arrives in time. The modal shows a countdown bar and pre-selects the first option for each question so users can answer quickly. The timer is cancelled if the user answers manually.

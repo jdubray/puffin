@@ -2125,6 +2125,10 @@ ${content}`
       // Ensure CRE config exists for older configs
       const { ensureCreConfig } = require('./cre/lib/cre-config')
       ensureCreConfig(config)
+      // Ensure tools config exists for older configs
+      if (!config.tools) {
+        config.tools = { snip: { enabled: false } }
+      }
       return config
     } catch {
       // Create default config
@@ -2150,6 +2154,9 @@ ${content}`
           content: ''
         },
         cre: require('./cre/lib/cre-config').getDefaultCreConfig(),
+        tools: {
+          snip: { enabled: false }
+        },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }

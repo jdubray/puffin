@@ -841,5 +841,13 @@ contextBridge.exposeInMainWorld('puffin', {
   plan: {
     readLatest: () => ipcRenderer.invoke('plan:readLatest'),
     saveToDocs: (args) => ipcRenderer.invoke('plan:saveToDocs', args)
+  },
+
+  /**
+   * External tool integrations
+   */
+  tools: {
+    // Check whether snip is installed on PATH; returns { installed, path? }
+    checkSnip: () => ipcRenderer.invoke('tools:checkSnip')
   }
 })

@@ -265,6 +265,18 @@ export class ProjectFormComponent {
         this.handleInputChange()
       })
     })
+
+    // Snip checkbox — check installation when user enables it
+    const snipCheckbox = document.getElementById('tools-snip-enabled')
+    if (snipCheckbox) {
+      snipCheckbox.addEventListener('change', () => {
+        if (snipCheckbox.checked) this._checkSnipInstalled()
+        else {
+          const warning = document.getElementById('snip-not-found-warning')
+          if (warning) warning.style.display = 'none'
+        }
+      })
+    }
   }
 
   /**
@@ -441,6 +453,28 @@ export class ProjectFormComponent {
     if (creAutoRefresh) creAutoRefresh.checked = sprintEndConfig.autoRefresh || false
     if (creFullRebuild) creFullRebuild.checked = sprintEndConfig.fullRebuild || false
     if (crePromptRepetition) crePromptRepetition.checked = creConfig.promptRepetition !== false
+
+    // Tools — snip
+    const snipEnabled = config.tools?.snip?.enabled || false
+    const snipCheckbox = document.getElementById('tools-snip-enabled')
+    if (snipCheckbox) {
+      snipCheckbox.checked = snipEnabled
+      if (snipEnabled) this._checkSnipInstalled()
+    }
+  }
+
+  /**
+   * Check if snip is installed on PATH and show/hide the warning banner.
+   * @private
+   */
+  async _checkSnipInstalled() {
+    try {
+      const result = await window.puffin.tools.checkSnip()
+      const warning = document.getElementById('snip-not-found-warning')
+      if (warning) warning.style.display = result.installed ? 'none' : 'block'
+    } catch {
+      // Non-fatal — leave warning hidden
+    }
   }
 
   /**
@@ -538,6 +572,11 @@ export class ProjectFormComponent {
           fullRebuild: this.getCheckboxValue('cre-sprint-full-rebuild')
         },
         promptRepetition: this.getCheckboxValue('cre-prompt-repetition', true)
+      },
+      tools: {
+        snip: {
+          enabled: this.getCheckboxValue('tools-snip-enabled')
+        }
       }
     }
   }

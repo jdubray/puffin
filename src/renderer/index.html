@@ -393,6 +393,25 @@
                 </div>
               </fieldset>
 
+              <fieldset class="options-fieldset">
+                <legend>Tools</legend>
+                <p class="fieldset-description">Integrate external tools into Claude Code's execution pipeline.</p>
+
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="tools-snip-enabled">
+                    <span>Enable snip — compress tool output</span>
+                  </label>
+                  <small class="form-hint">
+                    Intercepts Bash tool output and compresses it before it reaches Claude's context window, reducing token usage by up to 99% on verbose commands (test runs, git log, etc.).
+                    Requires <a href="https://github.com/edouard-claude/snip" target="_blank">snip</a> to be installed.
+                  </small>
+                  <div id="snip-not-found-warning" class="form-warning" style="display:none">
+                    snip was not found on PATH. Install it with <code>brew install edouard-claude/tap/snip</code> or download from the <a href="https://github.com/edouard-claude/snip/releases" target="_blank">releases page</a>.
+                  </div>
+                </div>
+              </fieldset>
+
               <fieldset class="options-fieldset plugins-fieldset">
                 <legend>Claude Code Plugins</legend>
                 <p class="fieldset-description">Manage skill plugins that extend Claude's capabilities. Plugins provide specialized context and instructions for specific tasks.</p>

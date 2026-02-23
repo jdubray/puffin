@@ -193,6 +193,15 @@ function setupStateHandlers(ipcMain) {
         console.warn('[IPC] Could not update CRE config:', creErr.message)
       }
 
+      // Sync snip PreToolUse hook into .claude/settings.json
+      if (projectPath) {
+        try {
+          await updateSnipHook(projectPath, !!config.tools?.snip?.enabled)
+        } catch (snipErr) {
+          console.warn('[IPC] Could not update snip hook:', snipErr.message)
+        }
+      }
+
       // Regenerate CLAUDE.md base (config affects all branches)
       const state = puffinState.getState()
       const activeBranch = state.history?.activeBranch || 'specifications'
@@ -201,6 +210,18 @@ function setupStateHandlers(ipcMain) {
       return { success: true, config }
     } catch (error) {
       return { success: false, error: error.message }
+    }
+  })
+
+  // Check whether snip is installed on PATH
+  ipcMain.handle('tools:checkSnip', async () => {
+    try {
+      const { execSync } = require('child_process')
+      const cmd = process.platform === 'win32' ? 'where snip' : 'which snip'
+      const result = execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim()
+      return { installed: true, path: result.split('\n')[0].trim() }
+    } catch {
+      return { installed: false }
     }
   })
 
@@ -1089,6 +1110,16 @@ function setupStateHandlers(ipcMain) {
     try {
       const result = await puffinState.addClaudePlugin(source, type)
       return result
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Sync skills and agents from .claude/skills/ and .claude/agents/ into Puffin's plugin list
+  ipcMain.handle('state:syncClaudeDirectory', async () => {
+    try {
+      const result = await puffinState.syncClaudeDirectoryPlugins()
+      return { success: true, ...result }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -3014,6 +3045,66 @@ function setClaudeServicePluginManager(pluginManager) {
  */
 function getClaudeService() {
   return claudeService
+}
+
+/**
+ * Add or remove the snip PreToolUse hook from {projectPath}/.claude/settings.json.
+ *
+ * Merges cleanly with any existing content — only touches the snip entry inside
+ * hooks.PreToolUse, leaving everything else (permissions, MCP servers, etc.) intact.
+ *
+ * @param {string} dir - Project root path
+ * @param {boolean} enabled - Whether to add (true) or remove (false) the hook
+ */
+async function updateSnipHook(dir, enabled) {
+  const settingsPath = path.join(dir, '.claude', 'settings.json')
+
+  // Read existing settings or start fresh
+  let settings = {}
+  try {
+    const raw = fs.readFileSync(settingsPath, 'utf8')
+    settings = JSON.parse(raw)
+  } catch {
+    // File may not exist yet — that's fine
+  }
+
+  // Ensure hooks structure exists
+  if (!settings.hooks) settings.hooks = {}
+  if (!Array.isArray(settings.hooks.PreToolUse)) settings.hooks.PreToolUse = []
+
+  const SNIP_MATCHER = 'Bash'
+  const SNIP_COMMAND = 'snip'
+
+  // Remove any existing snip entry (identified by command === 'snip')
+  settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(entry =>
+    !(entry.matcher === SNIP_MATCHER &&
+      Array.isArray(entry.hooks) &&
+      entry.hooks.some(h => h.type === 'command' && h.command === SNIP_COMMAND))
+  )
+
+  if (enabled) {
+    settings.hooks.PreToolUse.push({
+      matcher: SNIP_MATCHER,
+      hooks: [{ type: 'command', command: SNIP_COMMAND }]
+    })
+    console.log('[SNIP] PreToolUse hook added to', settingsPath)
+  } else {
+    console.log('[SNIP] PreToolUse hook removed from', settingsPath)
+  }
+
+  // Clean up empty PreToolUse array to keep settings tidy
+  if (settings.hooks.PreToolUse.length === 0) {
+    delete settings.hooks.PreToolUse
+  }
+  if (Object.keys(settings.hooks).length === 0) {
+    delete settings.hooks
+  }
+
+  // Ensure .claude/ directory exists
+  const claudeDir = path.join(dir, '.claude')
+  if (!fs.existsSync(claudeDir)) fs.mkdirSync(claudeDir, { recursive: true })
+
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8')
 }
 
 /**

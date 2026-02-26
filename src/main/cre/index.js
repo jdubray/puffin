@@ -38,7 +38,8 @@ const { Introspector } = require('./introspector');
  * @type {{ ipcMain: Electron.IpcMain, db: Object, config: Object, projectRoot: string, claudeService: Object|null } | null}
  */
 let ctx = null;
-let initialized = false;
+let initialized = false;      // true once ctx + generators are set up
+let handlersRegistered = false; // true once IPC handlers are registered (may precede initialize)
 
 /** @type {PlanGenerator|null} */
 let planGenerator = null;
@@ -120,12 +121,20 @@ async function withProcessLock(fn) {
 async function initialize(context) {
   const { ipcMain, db, config, projectRoot, claudeService } = context;
 
-  // Register IPC handlers first (even if initialization fails later).
+  // Register IPC handlers if not already registered (e.g. called early from setupIpcHandlers).
   // This ensures handlers can return proper errors instead of "no handler registered".
-  if (!initialized) {
+  if (!handlersRegistered) {
     registerHandlers(ipcMain);
-    initialized = true;
+    handlersRegistered = true;
   }
+
+  // Guard against re-initializing ctx and generators (state:init may be called multiple times).
+  if (initialized) {
+    console.log('[CRE] Already initialized, skipping ctx/generator setup');
+    return;
+  }
+  // NOTE: do NOT set initialized = true here — set it only after all generators are ready
+  // so that a failed initialize() allows retry rather than leaving null generators permanently.
 
   // Ensure CRE config defaults are present
   ensureCreConfig(config);
@@ -164,6 +173,9 @@ async function initialize(context) {
   // Initialize Introspector
   introspector = new Introspector({ codeModel, schemaManager, projectRoot, config: creConfig, claudeService: cs });
 
+  // Mark fully initialized only after all generators are ready.
+  // If anything above threw, initialized stays false so a retry can succeed.
+  initialized = true;
   console.log('[CRE] Initialized');
 }
 
@@ -188,14 +200,21 @@ async function shutdown() {
 }
 
 /**
- * Registers all 10 CRE IPC handlers.
+ * Registers all CRE IPC handlers. Idempotent — safe to call multiple times.
+ * Sets handlersRegistered on first call; subsequent calls are no-ops.
  * @param {Electron.IpcMain} ipcMain
  */
 function registerHandlers(ipcMain) {
+  if (handlersRegistered) return;
+  handlersRegistered = true;
+
   // ── Active session handlers (acquire process lock) ──────────────────
 
   ipcMain.handle('cre:generate-plan', async (_event, args) => {
     try {
+      if (!ctx || !planGenerator) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { sprintId, stories } = args;
       if (!sprintId || !stories) {
         return { success: false, error: 'sprintId and stories are required' };
@@ -232,6 +251,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:submit-answers', async (_event, args) => {
     try {
+      if (!ctx || !planGenerator) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { planId, sprintId, stories, answers } = args;
       if (!planId || !sprintId || !stories) {
         return { success: false, error: 'planId, sprintId, and stories are required' };
@@ -255,6 +277,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:refine-plan', async (_event, args) => {
     try {
+      if (!ctx || !planGenerator) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { planId, feedback } = args;
       if (!planId || !feedback) {
         return { success: false, error: 'planId and feedback are required' };
@@ -277,6 +302,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:approve-plan', async (_event, args) => {
     try {
+      if (!ctx || !planGenerator) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { planId } = args;
       if (!planId) {
         return { success: false, error: 'planId is required' };
@@ -295,6 +323,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:generate-ris', async (_event, args) => {
     try {
+      if (!ctx || !risGenerator) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { planId, storyId, sprintId, branch } = args;
       if (!planId || !storyId) {
         return { success: false, error: 'planId and storyId are required' };
@@ -318,6 +349,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:generate-assertions', async (_event, args) => {
     try {
+      if (!ctx || !assertionGenerator) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { planId, storyId, planItem, story: providedStory, assertions: providedAssertions } = args || {};
       if (!planId || !storyId) {
         return { success: false, error: 'planId and storyId are required' };
@@ -380,6 +414,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:verify-assertions', async (_event, args) => {
     try {
+      if (!ctx || !assertionGenerator) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { planId, storyId } = args || {};
       if (planId == null && storyId == null) {
         return { success: false, error: 'planId or storyId is required' };
@@ -403,6 +440,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:update-model', async (_event, args) => {
     try {
+      if (!ctx || !codeModel) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { deltas, instance: newInstance, existingFiles, branch, baseBranch } = args || {};
 
       // AC6: Introspection path — analyze git changes between branches
@@ -496,6 +536,9 @@ function registerHandlers(ipcMain) {
   // Supports both incremental (autoUpdate) and full rebuild (forceRebuild)
   ipcMain.handle('cre:refresh-model', async (_event, args) => {
     try {
+      if (!ctx || !codeModel) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { forceRebuild = false } = args || {};
       const path = require('path');
       const { ensureFresh } = require('../../h-dsl-engine/lib/freshness');
@@ -568,6 +611,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:query-model', async (_event, args) => {
     try {
+      if (!ctx || !codeModel) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { taskDescription, maxArtifacts } = args || {};
       if (!taskDescription) {
         return { success: false, error: 'taskDescription is required' };
@@ -583,6 +629,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:get-plan', async (_event, args) => {
     try {
+      if (!ctx) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { sprintId } = args;
       if (!sprintId) {
         return { success: false, error: 'sprintId is required' };
@@ -602,6 +651,9 @@ function registerHandlers(ipcMain) {
 
   ipcMain.handle('cre:get-ris', async (_event, args) => {
     try {
+      if (!ctx) {
+        return { success: false, error: 'CRE not initialized — open a project first.' };
+      }
       const { storyId, planId } = args;
       if (!storyId) {
         return { success: false, error: 'storyId is required' };
@@ -676,4 +728,4 @@ function updateConfig(newConfig) {
   configureAiClient({ promptRepetition: creConfig.promptRepetition ?? true });
 }
 
-module.exports = { initialize, shutdown, updateConfig, acquireProcessLock, releaseProcessLock, withProcessLock, getConfig };
+module.exports = { initialize, shutdown, updateConfig, registerHandlers, acquireProcessLock, releaseProcessLock, withProcessLock, getConfig };

@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AskUserQuestion Timeout**: When Claude uses `AskUserQuestion`, the CLI requires a tool result within seconds or it injects an error and rephrases the question as plain text. Puffin now auto-answers with first-option defaults after 25 seconds, ensuring the tool result always arrives in time. The modal shows a countdown bar and pre-selects the first option for each question so users can answer quickly. The timer is cancelled if the user answers manually.
 - **Plan File Relocation**: Claude Code now writes sprint plans to `~/.claude/plan/<project-slug>.md` instead of returning them as response text. The `onComplete` handler now falls back to reading the most-recently-modified plan file from `~/.claude/plan/` (touched within the last 10 minutes) when response content is empty. Found plan content is passed to `setSprintPlan` for display in the thread and saved as a timestamped copy in `docs/plans/` inside the project.
 
+## [3.1.2] - 2026-02-25
+
+### Fixed
+
+- **CRE — Handler/Init State Separation**: Split the single `initialized` flag in `src/main/cre/index.js` into two distinct flags: `handlersRegistered` (IPC handlers registered) and `initialized` (ctx + generators ready). Previously, a single flag meant handlers could appear registered before generators were actually constructed, or a failed `initialize()` would leave the module permanently marked as initialized with null generators. The `initialized` flag is now set only after all generators are successfully constructed, allowing safe retry on failure.
+- **CRE — Null Generator Guards**: All 11 CRE IPC handlers now guard against `!ctx` or the relevant null generator (`planGenerator`, `risGenerator`, `assertionGenerator`, `codeModel`) and return `{ success: false, error: 'CRE not initialized — open a project first.' }` instead of throwing an uncaught `TypeError` when invoked before a project is opened.
+- **CRE — Idempotent Handler Registration**: `registerHandlers()` is now a no-op if called more than once (via `handlersRegistered` guard), preventing duplicate `ipcMain.handle` registrations when `initialize()` is called multiple times across project switches. `registerHandlers` is also exported so `setupIpcHandlers()` in `main.js` can register handlers at startup before any project is opened.
+
 ## [3.1.0] - 2026-02-20
 
 ### Added

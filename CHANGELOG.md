@@ -9,11 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Sprint Rerun**: Archived sprints in the Sprint History panel now have a ↻ Rerun button. Clicking it restores the sprint's stories to `pending`, creates a new active sprint with `planApprovedAt` already set (skipping planning), and reopens the implementation mode selection modal. Existing RIS data is reloaded from the DB so implementation context is preserved. Stuck active sprints with no recorded progress are automatically cleared to avoid blocking the rerun.
 - **Tools — snip Integration**: New "Tools" section in project settings with a snip toggle. When enabled, Puffin writes a `PreToolUse` hook into `{projectPath}/.claude/settings.json` so Claude Code pipes Bash output through [snip](https://github.com/edouard-claude/snip) before it reaches the context window, reducing token usage by up to 99% on verbose commands (test runs, git log, etc.). Opt-in by design — the toggle is off by default even if snip is installed. Shows an amber warning with install instructions if snip is not found on PATH.
 - **Config Tab — Auto-sync `.claude/` skills and agents**: Opening the Config tab now scans `.claude/skills/*/SKILL.md` and `.claude/agents/*.md` and registers any skills/agents not already in Puffin's plugin list. This makes skills and agents installed directly via Claude Code (outside of Puffin) automatically visible and manageable in the UI.
+- **Docs — Installation Guide**: README now includes step-by-step installation instructions for Windows, macOS, and Linux covering Node.js, Claude Code CLI, authentication, and Puffin binary installation, with platform-specific troubleshooting tips.
+- **Docs — Prompt Repetition**: Added `docs/PROMPT-REPETITION.md` documenting the CRE prompt-repetition technique based on arxiv 2512.14982, including implementation details and configuration.
+- **Scripts — Fix Stuck Sprint**: Added `scripts/fix-stuck-sprint.js` and `scripts/fix-stuck-sprint.py` utility scripts to reset sprints stuck in `planning` or `in-progress` state via direct DB manipulation, useful for recovery without UI access.
 
 ### Fixed
 
+- **Sprint View — Empty Stories State**: Sprint view no longer crashes when a sprint has zero linked stories. An empty-state message is shown instead.
+- **Build Implementation Prompt — Plain-text Plan Fallback**: `buildStoryImplementationPrompt` now includes a second fallback that surfaces the plain-text `sprint.plan` field (used by rerun sprints) when no structured CRE plan response exists.
 - **Local Claude Code Plugin Installation**: Installing a plugin from a local path no longer throws "Local plugin installation not yet supported". Puffin now reads `.claude-plugin/plugin.json` and `skills/{name}/SKILL.md` directly from the filesystem.
 - **API Prefill Error (Sonnet 4.6)**: Puffin now handles the `"This model does not support assistant message prefill"` error from `claude-sonnet-4-6`. When `--resume` loads a session whose last message is an assistant turn, the retry logic detects this error and re-submits without `--resume`, starting a fresh session transparently.
 - **sendPrompt is_error Handling**: `ClaudeService.sendPrompt()` was returning `{ success: true, response: "API Error: 400 ..." }` when the CLI reported `is_error: true`. It now returns `{ success: false, error: "..." }`, preventing silent JSON parse failures in CRE callers.

@@ -819,6 +819,14 @@ export const createSprint = (stories, branchName = '') => ({
   }
 })
 
+// Load a rerun sprint (restored from history, ready for implementation mode selection)
+export const loadRerunSprint = (sprint) => ({
+  type: 'LOAD_RERUN_SPRINT',
+  payload: {
+    sprint
+  }
+})
+
 // Start sprint planning - triggers CRE planning workflow
 export const startSprintPlanning = () => ({
   type: 'START_SPRINT_PLANNING',

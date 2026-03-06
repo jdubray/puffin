@@ -32,23 +32,26 @@ You are working on the **code review thread**. Focus on:
 
 ### Conventions
 
-- IPC handler naming convention uses colon-separated format: 'feature:action' (e.g., 'toast-history:getAll', 'image:save') for all main-to-renderer process communication
-- IPC handlers use naming pattern 'channel:ACTION_NAME' (e.g., 'toast-history:getAll') for request-response calls. Renderer invokes via window.puffin.channel.actionName() preload bridge. Core handlers in puffin-state.js are the authoritative source for persisted data; plugins delegate to core rather than implementing duplicate storage
-- Plugin architecture requires plugins to implement initialize(context) and cleanup() methods; main process plugins receive context with ipcMain, app, mainWindow, config, pluginDir; renderer plugins receive ipcRenderer, document, window, config, pluginDir
-- Status naming in user stories uses 'pending', 'in-progress', 'completed', and 'archived'; consistency between database layer (StoryStatus constants) and UI layer is critical to prevent data loss
-- All IPC handlers must validate input and sanitize output; path operations must use path.resolve() and validate paths are within expected directories to prevent traversal attacks; HTML content must be escaped using escapeHtml() and attributes escaped with escapeAttr()
-- Maximum file size validation for uploads is 50MB. Enforcement must happen at IPC handler level before processing buffer, with clear error message returned to user
-- Error handling in async IPC handlers: Always return { success: boolean, error?: string, data?: any } format. Callers check result.success before accessing data. Silent failures (undefined returns) break component logic
-- Path validation pattern for security-sensitive operations: use path.resolve() to normalize paths, then validate with startsWith() check against allowed directory with separator. Apply to file deletion, temporary file cleanup, and any file system operations accepting user-provided paths
-- HTML escaping required in dynamic DOM generation: use escapeHtml() for text content and escapeAttr() for HTML attributes. Failure to escape user-provided data (branch names, note IDs, colors) enables XSS attacks via innerHTML interpolation
-- Toast notification pattern: showToast(message, type) in app.js. Toast interception for persistence should occur within showToast method, not require separate manual logging calls. All toast types (success, error, warning, info) must be intercepted automatically
-- JSON parse error handling in event handlers should provide user-facing feedback via toast notifications, not silent failures. Silent failures mask data corruption or invalid state transmission
-- Date serialization in JSON requires explicit ISO string conversion. Date objects become 'Invalid Date' after JSON round-trip. Backend must serialize dates as ISO strings; frontend parses with new Date(dateString)
-- Modal content CSS width overrides use '.modal:has(.classname)' pattern for conditional styling. Avoids deep specificity chains and makes modal styling modular based on content type
-- Plugin architecture uses file system (.puffin/ directory) as interface between core and plugins; plugins delegate to core IPC handlers via puffin-state.js rather than implementing parallel storage logic
-- HTML escaping required for all user-provided data before DOM insertion; use escapeHtml() for text content and escapeAttr() for HTML attributes to prevent XSS vulnerabilities
-- Date format validation must use YYYY-MM-DD regex pattern (/^\d{4}-\d{2}-\d{2}$/) before creating records; prevents silent failures in date-based operations like note scheduling
-- IPC response format consistency: handlers return {success: boolean, data/result/error: ...}; renderers must check success flag before accessing data to prevent silent failures
+- IPC channel naming convention is 'namespace:action' format (e.g., 'toast-history:getAll', 'designer-plugin:listDesigns'). Plugin operations use window.puffin.namespace.action() exposed in preload
+- All user-generated or user-controlled content inserted into DOM must be HTML-escaped using escapeHtml() for text content and escapeAttr() for HTML attributes. Includes note text, branch names, file paths, and data-* attributes
+- New SAM action types for state persistence must be added to persistActions whitelist array in state-persistence.js. If action type not in whitelist, persist() returns early and no database write occurs
+- Display capacity limits (e.g., max notes per day cell, max attachments shown) should be defined as module-level constants, not hardcoded integers scattered across code, to maintain sync across views and prevent off-by-one issues
+- Async methods that call async IPC handlers should properly await results. Methods marked async should not contain only synchronous operations. Use persisted object data for operations like copy/duplicate, not unsaved form input values
+- Story status values use hyphenated format: 'pending', 'in-progress', 'completed' (never underscore variants). Status changes synchronized atomically via transactions. Completed stories changed from 'implemented' to 'completed' for consistency
+- Custom error classes follow naming pattern {Condition}Error with mandatory `code` property and context fields (e.g., DuplicateNameError has code:'DUPLICATE_NAME', duplicateName, existingFilename)
+- Path validation for file system operations: Use `path.resolve()` for normalization, then validate with `startsWith(expectedPath + path.sep)` to prevent traversal. Log security warnings for blocked attempts
+- File size validation for all uploads/clipboard operations: Enforce maximum limits (e.g., 50MB) before processing. Return error response instead of silently truncating or rejecting mid-operation
+- Drag-and-drop UX: Set `dropEffect = 'none'` for invalid targets so browser shows 'not-allowed' cursor. Only call `preventDefault()` on valid drop conditions. Provide visual feedback during drag via ghost/preview
+
+### Architectural Decisions
+
+- Single source of truth pattern: When duplicate implementations exist for same concern (e.g., storage, API handlers), consolidate to one authoritative source in core rather than maintain parallel implementations in plugins
+- Plugin delegation pattern: Plugins should delegate to core IPC handlers for persistence operations rather than implementing their own storage logic. Prevents sync issues and maintains single database record
+- Defense-in-depth for input limits: Maximum limits (e.g., max notes per day, max attachments) should be enforced at backend persistence layer in addition to frontend validation to prevent data integrity issues
+- Automatic interception pattern: Cross-cutting concerns like toast logging should be automatically intercepted at creation point (showToast method) without requiring manual calls. No manual intervention required for persistence
+- IPC channel naming uses colon-separator format: {domain}:{action} (e.g., `toast-history:getAll`, `toast-history:add`). All IPC handlers return standardized response: `{success: boolean, data/result/designs/toasts: any, error: string?}`
+- Cache invalidation strategy: Invalidate cache via `invalidateCache(types)` AFTER database commits complete, not during writes. Next read lazy-loads from SQLite. Service layer callbacks trigger invalidation
+- SAM pattern enforcement: Pending flags must be cleared via model actions (acceptors), NOT on transient state copy received in render callback. Modal manager pre-generates data asynchronously to avoid blocking panel render
 
 # Assigned Skills
 

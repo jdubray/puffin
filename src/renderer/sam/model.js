@@ -2371,6 +2371,48 @@ export const approvePlanAcceptor = model => proposal => {
   }
 }
 
+// Load a rerun sprint from history — restores it as the active sprint and shows
+// the implementation mode selection modal (CRE data already exists, skip planning)
+export const loadRerunSprintAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_RERUN_SPRINT') {
+    const { sprint } = proposal.payload
+    if (!sprint) return
+
+    // Set as active sprint (planApprovedAt already set by backend)
+    model.activeSprint = {
+      ...sprint,
+      status: sprint.status || 'created',
+      storyProgress: sprint.storyProgress || {},
+      risMap: sprint.risMap || {},
+      implementationMode: null // Always start fresh so modal appears
+    }
+
+    // Sync story statuses in the backlog to 'pending'
+    if (sprint.stories && sprint.stories.length > 0) {
+      sprint.stories.forEach(sprintStory => {
+        const backlogStory = model.userStories.find(s => s.id === sprintStory.id)
+        if (backlogStory) {
+          backlogStory.status = 'pending'
+        } else {
+          // Story was restored by backend — add it to the in-memory backlog
+          model.userStories.push({ ...sprintStory, status: 'pending' })
+        }
+      })
+    }
+
+    // Show implementation mode selection modal
+    model.modal = {
+      type: 'implementation-mode-selection',
+      data: {}
+    }
+
+    // Switch to prompt view
+    model.currentView = 'prompt'
+
+    console.log('[RERUN] Sprint loaded for rerun, implementation mode modal shown')
+  }
+}
+
 // Valid implementation modes
 const VALID_IMPLEMENTATION_MODES = ['automated', 'human']
 
@@ -3854,6 +3896,19 @@ ${planPrompt.response.content}
 
 `
     }
+  } else if (sprint?.plan) {
+    // Second fallback: use plain-text plan stored on sprint (e.g. rerun sprints)
+    planIncluded = true
+    prompt += `
+### Approved Implementation Plan
+
+The following plan was approved for this sprint. Please follow this guidance:
+
+${sprint.plan}
+
+---
+
+`
   }
 
   prompt += `
@@ -4192,6 +4247,7 @@ export const acceptors = [
   clearSprintWithDetailsAcceptor,
   deleteSprintAcceptor,
   approvePlanAcceptor,
+  loadRerunSprintAcceptor,
   selectImplementationModeAcceptor,
   startAutomatedImplementationAcceptor,
   orchestrationStoryStartedAcceptor,

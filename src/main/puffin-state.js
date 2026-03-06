@@ -3063,6 +3063,112 @@ ${content}`
   }
 
   /**
+   * Rerun an archived sprint by restoring its stories and creating a new active sprint
+   * with planApprovedAt set (so implementation mode modal appears immediately).
+   *
+   * @param {string} archivedSprintId - ID of the sprint in sprint_history to rerun
+   * @returns {Object} Newly created sprint with stories
+   */
+  async rerunSprint(archivedSprintId, branchId = null) {
+    if (!this.database.isInitialized() || !this.database.sprints) {
+      throw new Error('Database not initialized - cannot rerun sprint')
+    }
+
+    // Clear any stuck active sprints that have no real story progress.
+    // Multiple stuck sprints can accumulate from failed rerun attempts, so we
+    // check ALL active sprints (not just the most recent via findActive()).
+    // If any has real progress, reject — the user must close it manually.
+    const allActive = this.database.sprints.findAllActive()
+    for (const existingActive of allActive) {
+      const progress = existingActive.storyProgress || {}
+      const hasRealProgress = Object.values(progress).some(
+        p => p?.status === 'in-progress' || p?.status === 'completed'
+      )
+      if (hasRealProgress) {
+        throw new Error(
+          `Cannot rerun: "${existingActive.title}" is already active with progress. Close it first.`
+        )
+      }
+      // Stuck/empty sprint with no progress — delete it to make room
+      console.log(`[RERUN] Removing stuck active sprint "${existingActive.title}" (${existingActive.id}) — no progress recorded`)
+      this.database.sprints.delete(existingActive.id)
+    }
+
+    // Load the archived sprint (inline stories from migration 003)
+    const archived = this.database.sprints.findArchivedWithStories(
+      archivedSprintId,
+      this.database.userStories
+    )
+    if (!archived) {
+      throw new Error(`Archived sprint not found: ${archivedSprintId}`)
+    }
+
+    const stories = archived.stories || []
+    if (stories.length === 0) {
+      throw new Error('Archived sprint has no stories to rerun')
+    }
+
+    // Restore each story to user_stories table with 'pending' status
+    const storyIds = []
+    for (const story of stories) {
+      const storyId = story.id
+      if (!storyId) {
+        console.warn('[RERUN] Skipping story with missing id:', story?.title || '(unknown)')
+        continue
+      }
+      const inActive = this.database.userStories.findById(storyId)
+      // Assign branch to unassigned stories (e.g. process/checklist sprints)
+      const assignBranch = branchId && !story.branchId ? { branchId } : {}
+      if (inActive) {
+        // Already in user_stories — reset status to pending, assign branch if missing
+        this.database.userStories.update(storyId, {
+          status: 'pending',
+          assertionResults: null,
+          completionSummary: null,
+          ...(branchId && !inActive.branchId ? { branchId } : {})
+        })
+      } else {
+        const inArchived = this.database.userStories.findArchivedById(storyId)
+        if (inArchived) {
+          // Restore from archived_stories, then reset assertion results
+          this.database.userStories.restore(storyId, 'pending')
+          this.database.userStories.update(storyId, {
+            assertionResults: null,
+            completionSummary: null,
+            ...(branchId && !inArchived.branchId ? { branchId } : {})
+          })
+        } else {
+          // Only exists in inline sprint_history data — upsert to avoid UNIQUE conflicts
+          this.database.userStories.upsert({
+            ...story,
+            ...assignBranch,
+            status: 'pending',
+            assertionResults: null,
+            completionSummary: null,
+            archivedAt: null
+          })
+        }
+      }
+      storyIds.push(storyId)
+    }
+
+    // Create new sprint with planApprovedAt set so implementation mode modal appears
+    const now = new Date().toISOString()
+    const newSprint = this.database.sprints.create({
+      id: this.generateId(),
+      title: archived.title || 'Rerun Sprint',
+      description: archived.description || '',
+      status: 'created',
+      plan: archived.plan || null,
+      planApprovedAt: now,
+      createdAt: now
+    }, storyIds)
+
+    this.invalidateCache(['activeSprint', 'userStories'])
+    return newSprint
+  }
+
+  /**
    * Update sprint story progress
    * @param {string} storyId - Story ID
    * @param {string} branchType - Branch type (ui, backend, fullstack)

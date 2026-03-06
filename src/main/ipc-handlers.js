@@ -538,6 +538,17 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Rerun an archived sprint — restores stories and creates a new sprint with planApprovedAt set
+  ipcMain.handle('state:rerunSprint', async (event, archivedSprintId, branchId) => {
+    try {
+      const sprint = await puffinState.rerunSprint(archivedSprintId, branchId)
+      return { success: true, sprint }
+    } catch (error) {
+      console.error('[IPC] state:rerunSprint error:', error.message)
+      return { success: false, error: error.message }
+    }
+  })
+
   // Delete sprint without archiving (for zero-progress sprints)
   // Returns all stories to pending status
   ipcMain.handle('state:deleteSprint', async (event, sprintId) => {

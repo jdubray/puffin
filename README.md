@@ -155,6 +155,122 @@ Your Project/
 
 > **📖 First time using Puffin?** Check out the [User Manual](docs/USER_MANUAL.md) for a complete walkthrough of features, workflows, and best practices.
 
+---
+
+### Installing from a Pre-Built Binary
+
+Download the latest release from the [Releases page](https://github.com/jdubray/puffin/releases) and follow the platform-specific instructions below.
+
+#### Windows
+
+**1. Install Node.js**
+
+Download and run the **LTS installer** from [nodejs.org](https://nodejs.org). During installation, make sure the option to add Node.js to PATH is checked. After installation, **reboot your machine** — Puffin reads PATH from the system environment, and changes only take effect after a reboot.
+
+Verify in a new PowerShell window:
+```powershell
+node --version   # v18 or later
+npm --version
+```
+
+**2. Install Claude Code CLI**
+
+Using the official PowerShell installer (run in a standard PowerShell window — Administrator not required):
+```powershell
+# See https://docs.anthropic.com/en/docs/claude-code for the official install command
+```
+
+Or using npm:
+```powershell
+npm install -g @anthropic-ai/claude-code
+```
+
+After installation, open a **new** PowerShell window and verify:
+```powershell
+claude --version
+```
+
+If `claude` is not found, try rebooting. The PowerShell installer adds to user PATH, which only propagates to GUI apps after a session restart.
+
+**3. Authenticate**
+```powershell
+claude auth login
+```
+
+**4. Install Puffin**
+
+Download `Puffin-Setup-*.exe` from the Releases page and run the installer. Launch Puffin from the Start menu or desktop shortcut.
+
+> **Troubleshooting:** If Puffin opens but nothing works, open PowerShell and run `where claude`. If it is not found, Claude Code is not on your system PATH. Rebooting usually fixes this. If the issue persists, reinstall Claude Code via npm after confirming `node` is working.
+
+---
+
+#### macOS
+
+**1. Install Node.js**
+
+Using Homebrew (recommended):
+```bash
+brew install node
+```
+Or download the macOS installer from [nodejs.org](https://nodejs.org).
+
+**2. Install Claude Code CLI**
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+**3. Authenticate**
+```bash
+claude auth login
+```
+
+**4. Install Puffin**
+
+Download `Puffin-*.dmg` from the Releases page, open it, and drag Puffin to Applications.
+
+On first launch, macOS may show a security warning. Go to **System Settings > Privacy & Security** and click **Open Anyway**.
+
+> **Troubleshooting:** If `claude` works in Terminal but not in Puffin, your shell profile may export PATH in a way GUI apps do not inherit. Create a symlink in a system location:
+> ```bash
+> sudo ln -s $(which claude) /usr/local/bin/claude
+> ```
+
+---
+
+#### Linux
+
+**1. Install Node.js 18+**
+
+```bash
+# Ubuntu / Debian
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Fedora / RHEL
+sudo dnf install nodejs npm
+```
+
+**2. Install Claude Code CLI**
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+**3. Authenticate**
+```bash
+claude auth login
+```
+
+**4. Install Puffin**
+
+Download `Puffin-*.AppImage` from the Releases page, make it executable, and run it:
+```bash
+chmod +x Puffin-*.AppImage
+./Puffin-*.AppImage
+```
+
+---
+
 ### Step 1: Authenticate Claude CLI
 
 Before using Puffin, authenticate Claude Code CLI in your terminal:

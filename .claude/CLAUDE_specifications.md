@@ -55,10 +55,8 @@ When deriving user stories, format them as:
 
 ### Architectural Decisions
 - Puffin is a management layer on top of Claude Code CLI (3CLI), not a replacement. It tracks outputs, provides context, and visualizes the development process. 3CLI remains in control of building the project.
-- Sprints are limited to maximum 4 user stories to prevent token exhaustion and maintain manageability
-- Thread context is determined by parent-child relationships in prompts: a thread root has parentId=null, and descendants follow the chain
-- Context handoff between threads uses unidirectional flow from completed thread to target thread, with handoff summaries documenting what was implemented, API contracts, and integration points
-- Multi-layer validation pattern: validation functions in src/shared/validators.js, validation logic in acceptors (sam/model.js), errors set via model.appError which triggers toast notifications
+- Sprints are limited to maximum 4 user stories to prevent token exhaustion and maintain manageability. Validation prevents user selection of more than 4 stories at sprint creation (enforced, not just warned).
+- Threads are implicit structures defined by prompt parent-child ancestry (parentId chains). Thread root has parentId==null; collecting all thread prompts requires walking to root then BFS collecting descendants. All thread-scoped features (stats, handoffs, defects) must filter/aggregate only prompts belonging to current thread ancestry.
 
 # Assigned Skills
 

@@ -39,25 +39,21 @@ Be thorough in testing and consider edge cases.
 
 ### Conventions
 
-- IPC handler naming: Renderer invokes window.puffin.state.* for core state operations and window.puffin.plugins.invoke(pluginName, action) for plugin operations. Main process uses ipcMain.handle(channel, handler) for request-response patterns.
-- State property naming inconsistency: Code uses both 'in_progress' (underscore) and 'in-progress' (hyphen) for story status values. Must standardize to 'in-progress' throughout codebase to avoid filtering failures.
-- Async handler re-entry protection: Async event handlers (handleSprintPlanning, handleRerunRequest) called from onStateChange need guard flags to prevent re-entry when handler calls state-changing intents. Pattern: _handlingSprintPlanning flag set during execution, cleared in finally().
-- Component managed modals list: Modal manager maintains whitelist of modal types it manages. New modal types must be added to componentManagedModals array or manager will clear content instead of letting component render.
-- SAM pending state flags (e.g., _pendingSprintPlanning) must be cleared via action dispatch, not mutated directly. Use guard flags (_handlingSprintPlanning) to prevent re-entry when async handlers trigger state changes.
-- Sprint history UI: tiles display sprint date as title, loaded on Backlog view focus and via refresh button. Each sprint filters backlog stories; sprint data includes title, closedAt/createdAt dates, and storyIds array.
-- Modal CSS width overrides use pattern .modal:has(.classname) for conditional styling. Avoids deep specificity chains and makes modal styling modular based on content type.
-- Plugin name consistency critical: designer-plugin vs 'designer' vs 'designer-plugin'. Must use exact plugin name everywhere: history-tree.js, project-form.js, modal-manager.js, prompt-editor.js. Wrong name causes plugin IPC invoke to fail silently.
-- IPC handler naming follows pattern: 'component:action' or 'feature:action' (e.g., 'designer-plugin:listDesigns', 'metrics:componentStats'). Main process exposes via window.puffin.* in preload.
-- Date serialization issue with JSON: Date objects become 'Invalid Date' after JSON round-trip. Must explicitly serialize dates as ISO strings in backend, then parse with new Date(dateString) on frontend.
-- Modal type registration required: New modal types must be added to componentManagedModals array in modal-manager.js or modal manager clears content instead of letting component render.
-- IPC response format variance: Backend returns {success, data} but frontend sometimes expects direct array. Must always check for {success, result/designs/design} wrapper or use data extraction helper.
-- View focus-triggered refresh pattern: Components should refresh data when coming into focus (onActivate) rather than on init. Handles timing issues where backend resources aren't ready yet.
-- Plugin list refresh pattern: instead of caching plugin/design lists, read from disk on each user interaction (dropdown click, view focus). This ensures fresh data and eliminates race conditions between plugin updates and UI state.
-- Story status uses hyphen 'in-progress' not underscore 'in_progress'. Inconsistency in one location (line 2257 for branch status) caused filtering failures. Must standardize throughout codebase.
-- Modal backdrop opacity should be nearly opaque (0.85 or higher) not translucent. Use solid color with opacity (e.g., #000000 with opacity: 0.85) for consistent dark overlay. Modal should use flex-direction: column for vertical layout.
+- Auto-continue feature must default to disabled (enabled: false). Only explicit user actions (Continue button click) should trigger continuation. Automatic continuation enabled by default causes infinite CLI respawning loops when generation completes naturally with fewer turns than maxTurnsLimit.
+- IPC handlers return standardized response format: { success: boolean, data/result/designs?: any, error?: string }. Callers must check success flag and extract the appropriate property (data, result, or designs depending on handler). Never assume response structure is the raw data—always destructure the envelope.
+- Dropdown menus positioning: use left: 0 to align dropdown items to the left of the button and extend rightward. Using right: 0 causes items to clip outside container boundaries on right side of UI. Dropdown should always stay within parent container viewport.
 
 ### Architectural Decisions
-- Plugin architecture uses file system (.puffin/gui-definitions/ and .puffin/claude-plugins/) as primary store; core SAM and plugins communicate via IPC and file I/O, not shared in-memory state. Plugin state is ephemeral and reloaded from disk on each interaction.
+
+- Async state handlers (handleSprintPlanning, handleRerunRequest, handleContinueRequest) called from onStateChange must use guard flags to prevent re-entry conditions that cause state change churn and UI freezes. Pattern: if (state._pending && !this._handling) { this._handling = true; handler().finally(() => this._handling = false) }
+- Plugin↔Core communication should be file-system based through shared directories (e.g., .puffin/gui-definitions/ for designer). Plugins and core should not share state objects. Core knows nothing about plugin internals; plugins manage their own state and IPC handlers. This ensures proper separation of concerns and plugin independence.
+
+### Bug Patterns
+
+- Reading offsetLeft/offsetTop from DOM elements after DOM re-creation returns 0. When renderCanvas() removes and recreates DOM elements, their position values become stale. Solution: read position and size values from data model (this.elements) before calling renderCanvas().
+- IPC calls to load state/initialize components that depend on database access fail if called during init() before database is ready. Database initialization happens after plugin loading but before LOAD_STATE action. Solution: defer IPC calls requiring database to LOAD_STATE action handler or view focus events.
+- IPC handler invocation fails silently when plugin name doesn't exactly match registered name. Example: 'designer' vs 'designer-plugin', 'listClaudePlugins' vs 'getClaudePlugins'. Plugin names are case-sensitive and must match across: invoke calls, manifest registration, IPC handler paths, and view registration.
+- State flags (e.g., _pendingSprintPlanning, stuckDetection.isStuck) that persist across sessions cause stale state to trigger handlers incorrectly on restart. Solution: explicitly reset persistent flags in loadStateAcceptor when loading saved state. Flags should only trigger once per session, not persist across app restarts.
 
 # Assigned Skills
 

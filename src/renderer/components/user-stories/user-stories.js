@@ -519,6 +519,7 @@ export class UserStoriesComponent {
         <div class="sprint-card-footer">
           <span class="sprint-card-count">${storyCount} ${storyCount === 1 ? 'story' : 'stories'}</span>
           <a href="#" class="sprint-plan-link" data-sprint-id="${sprint.id}" title="View sprint plan">Plan</a>
+          <button class="sprint-rerun-btn" data-sprint-id="${sprint.id}" title="Rerun this sprint from implementation mode selection">&#8635; Rerun</button>
           <span class="sprint-card-status" aria-label="${this.getStatusLabel(statusClass)}">${this.getStatusLabel(statusClass)}</span>
         </div>
       </div>
@@ -650,6 +651,18 @@ export class UserStoriesComponent {
           }
         } catch (err) {
           console.error('[USER-STORIES] Failed to load plan:', err)
+        }
+      })
+    })
+
+    // Rerun button handler
+    this.sprintTilesList.querySelectorAll('.sprint-rerun-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const sprintId = btn.dataset.sprintId
+        if (this.intents.startSprintRerun) {
+          await this.intents.startSprintRerun(sprintId)
         }
       })
     })

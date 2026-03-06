@@ -42,18 +42,25 @@ window.puffin.channel.onEvent(callback)
 ## Branch Memory (auto-extracted)
 
 ### Conventions
-- Puffin uses a modular plugin architecture where each plugin follows the pattern: puffin-plugin.json manifest, main.js for IPC handlers and file I/O, and renderer.js/components for UI. Plugins register views, actions, and IPC channels through the manifest.
-- Database operations use atomic transactions via immediateTransaction() wrapper to ensure data consistency. All multi-step database operations (sprint creation, story status updates, sprint closure) must complete within a single transaction or rollback completely.
-- State management follows a SAM (Simple Application Model) pattern with Actions (intent creators), Acceptors (modify model state), and side effects via state-persistence layer. Changes flow: UI action → action creator → acceptor updates model → state-persistence calls IPC → main process updates database.
-- Cache is treated as optimization, not requirement. All CRUD operations query SQLite first, populate cache from results, and work correctly even if cache is empty or stale. Cache invalidation happens after successful database commits.
-- Inspection assertions are stored as JSON columns in the user_stories table. Each story contains inspection_assertions array (containing assertion definitions) and assertion_results (containing evaluation outcomes). Assertions are automatically generated when stories are created based on acceptance criteria patterns.
-- All IPC communication from renderer to main process uses promise-based async/await pattern. Handlers are registered with context.registerIpcHandler() and invoked via window.puffin.* preload API which bridges to electron ipcRenderer.
-- File operations are always async using fs.promises API. Plugin storage is project-scoped and located in .puffin/ directory. Writes use atomic pattern: write to temp file then rename to ensure no partial writes on failure.
-- UI components use vanilla JavaScript class pattern with lifecycle methods: constructor(element, options), init(), onActivate(), onDeactivate(), onDestroy(). Parent component receives context via options.context containing storage, logging, and events API.
-- Toast notifications follow two patterns: app-wide via window.puffin.state or local ToastManager class for plugin-scoped notifications. Toast data includes: id (UUID), timestamp (ISO 8601), message, type (success/error/info/warning), and optional source field.
-- Error handling distinguishes between different error types: DatabaseError, RecordNotFoundError, TransactionError, ActiveSprintExistsError, InvalidStoryIdsError. Custom errors inherit from base Error class and include code property for programmatic handling.
-- Git operations are available via window.puffin.git preload API with methods: stageFiles(), commit(message), getStatus(). Git integration is optional - operations fail gracefully if not in git repository or if git unavailable.
-- Modal dialogs use ModalManager from renderer/lib/modal-manager.js with standardized API: ModalManager.show({title, content, buttons}) where buttons are {label, action, primary, danger} objects. Modals support confirmation workflows with optional inline error messages.
-- No time estimates should ever be given for task completion - focus on what needs to be done and the work required, not how long it will take. Avoid phrases like 'quick fix', 'will take X minutes', or similar time predictions.
-- SAM action payload structure: actions include inspectionAssertions field when persisting user stories. Model acceptors copy payload fields directly. State-persistence layer intercepts UPDATE_USER_STORY and related actions to trigger IPC handlers.
-- IPC handler naming: state:ACTION_NAME for state mutations, cre:ACTION_NAME for CRE plugin calls, plugins.invoke() for plugin-specific handlers. Preload bridge exposes methods at window.puffin.* with snake_case channel names.
+
+- Custom error classes follow naming pattern {Condition}Error with code property and context fields (e.g., DuplicateNameError has code:'DUPLICATE_NAME', duplicateName, existingFilename). Used for specific error cases like InvalidStoryIdsError, ActiveSprintExistsError.
+- IPC handlers wrap repository/service calls with try-catch, returning {success: boolean, data/result/designs: any, error: string?}. Errors are logged and returned with user-friendly messages. Renderer layer handles error responses by checking success flag.
+- Repository methods document transaction behavior in JSDoc. Multi-step operations note that they use transactions and will rollback on failure. Custom error types are documented in method signatures.
+- Test files use .test.js suffix and mirror source directory structure. Tests document acceptance criteria and transaction behavior. Test organization follows: setup, execution, assertion pattern with descriptive test names.
+- Preload bridge exposes IPC handlers as 'window.puffin.*' namespaced APIs with convenience methods. Plugin APIs exposed as 'window.puffin.plugins.{pluginName}.{handler}' or via 'window.puffin.plugins.invoke()'.
+- Modal types routed by string in switch-case in modal-manager.js. CSS width overrides use '.modal:has(.classname)' pattern. JSDoc describes data flow in render methods.
+
+### Architectural Decisions
+
+- Service layer (e.g., SprintService) wraps repository operations with transaction handling, validation, and callbacks. Repository methods perform validation before transactions (fail-fast approach). Callbacks trigger cache invalidation and UI updates after successful commits.
+- Cache invalidation happens via invalidateCache(types) after successful database commits, not during writes. Cache lazy-loads from SQLite on next read. Service layer callbacks trigger invalidation. This separates data consistency from performance optimization.
+- Assertion data (inspectionAssertions, assertionResults) preserved through sprint lifecycle via database columns. Assertions included in sprint archive operations. Assertion evaluation triggered when story marked complete, with results stored in user_stories table.
+- Read accessors (getUserStories, getActiveSprint) query SQLite first as source of truth, update cache on success, fall back to cache only if SQLite fails. Empty cache does not cause operation failure.
+- All multi-step database operations use 'immediateTransaction()' for atomicity. Transactions acquire write locks immediately, preventing SQLITE_BUSY errors. Repository methods throw on failure; automatic rollback on exception.
+- Assertion evaluation and generation triggered during story lifecycle: auto-generation on story creation from criteria, auto-evaluation on story completion. Results persisted to database and synchronized through sprint archive.
+
+### Bug Patterns
+- Stale in-memory cache causes data inconsistency. If cache is not invalidated after database writes, subsequent reads return outdated data. Solution: invalidateCache() after transaction commits, forcing next read to query SQLite.
+- Partial failures in multi-step operations leave data in inconsistent state. Without transactions, if step 2 of 3 fails, step 1 changes persist. Solution: wrap all related operations in immediateTransaction() which rolls back all on any failure.
+- Foreign key constraints without ON DELETE CASCADE or explicit cleanup in delete() methods cause orphaned references. When stories deleted, they remain in sprint_stories table. Solution: explicitly DELETE from junction tables or include CASCADE in migration. Also needed in story deletion to clean sprint references.
+- Empty array [] is truthy in JavaScript. Status lookups using fallback pattern (a || b) return [] and never check fallback. Solution: use .length > 0 checks or ensure arrays are populated before persisting.

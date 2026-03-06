@@ -1276,7 +1276,7 @@ Please provide specific file locations and line numbers where issues are found, 
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'startSprintPlanning', 'crePlanReady', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
+      'createSprint', 'loadRerunSprint', 'startSprintPlanning', 'crePlanReady', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
       'approvePlan', 'approvePlanWithCre', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan', 'submitPlanAnswers',
       'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'clearPendingCrePlanning', 'clearPendingCreAnswers', 'clearPendingCreIteration', 'deleteSprint',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
@@ -1406,6 +1406,7 @@ Please provide specific file locations and line numbers where issues are found, 
 
           // Sprint actions
           ['CREATE_SPRINT', actions.createSprint],
+          ['LOAD_RERUN_SPRINT', actions.loadRerunSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['CRE_PLAN_READY', actions.crePlanReady],
           ['CRE_PLANNING_COMPLETE', actions.crePlanningComplete],
@@ -1534,6 +1535,44 @@ Please provide specific file locations and line numbers where issues are found, 
     window.__puffin_intents = this.intents
 
     this.wrapIntentsForDebugging()
+
+    // Add custom async intent: rerun an archived sprint from history
+    this.intents.startSprintRerun = async (archivedSprintId) => {
+      try {
+        this.showToast({ type: 'info', title: 'Preparing sprint rerun...', duration: 3000 })
+        const activeBranch = this.state?.history?.activeBranch || null
+        const result = await window.puffin.state.rerunSprint(archivedSprintId, activeBranch)
+        if (!result.success) {
+          this.showToast({ type: 'error', title: 'Failed to rerun sprint', message: result.error })
+          return
+        }
+
+        const sprint = result.sprint
+
+        // Restore risMap from DB for each story so buildStoryImplementationPrompt has context
+        const storyIds = (sprint.stories || []).map(s => s.id)
+        if (storyIds.length > 0) {
+          const risMap = {}
+          for (const storyId of storyIds) {
+            try {
+              const risResult = await window.puffin.cre.getRis({ storyId })
+              if (risResult.success && risResult.data) {
+                // DB stores content in `content` column; acceptors/buildPrompt expect `markdown`
+                risMap[storyId] = { ...risResult.data, markdown: risResult.data.content }
+              }
+            } catch (e) {
+              console.warn('[RERUN] Could not fetch RIS for story:', storyId, e.message)
+            }
+          }
+          sprint.risMap = risMap
+        }
+
+        this.intents.loadRerunSprint(sprint)
+      } catch (error) {
+        console.error('[RERUN] Failed to rerun sprint:', error)
+        this.showToast({ type: 'error', title: 'Failed to rerun sprint', message: error.message })
+      }
+    }
   }
 
   /**
@@ -2604,6 +2643,15 @@ Please provide specific file locations and line numbers where issues are found, 
     const sprintProgress = state.sprintProgress
     const backlogStories = state.userStories || []
     if (storiesContainer && sprint.stories) {
+      if (sprint.stories.length === 0) {
+        storiesContainer.innerHTML = `
+          <div class="sprint-empty-state">
+            <p class="text-muted">No stories linked to this sprint</p>
+            <p class="text-small">Close this sprint and try again, or add stories from the Backlog</p>
+          </div>
+        `
+        if (progressSection) progressSection.classList.add('hidden')
+      } else {
       // Show branch buttons after plan is approved (status becomes 'in-progress' or 'implementing')
       const showBranchButtons = sprint.status === 'in-progress' || sprint.status === 'implementing'
       const storyProgress = sprint.storyProgress || {}
@@ -2856,6 +2904,7 @@ Please provide specific file locations and line numbers where issues are found, 
         }
       }
 
+      } // end else (sprint.stories.length > 0)
     }
 
     // Update action buttons based on status

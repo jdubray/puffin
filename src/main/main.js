@@ -9,8 +9,9 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
+const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, setupWebserverHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
+const websiteServer = require('./website-server')
 const { getRecentProjects, addRecentProject, removeRecentProject } = require('./recent-projects')
 
 // Keep a global reference of the window object
@@ -278,11 +279,14 @@ async function initializeProject(projectPath) {
   // Update project path on all IPC services (handlers were already registered at startup)
   setIpcProjectPath(projectPath)
 
-  // Initialize plugin loader
-  const isDevelopment = process.env.NODE_ENV !== 'production'
-  const pluginsDir = isDevelopment
-    ? path.join(__dirname, '..', '..', 'plugins')
-    : path.join(require('os').homedir(), '.puffin', 'plugins')
+  // Initialize plugin loader.
+  // In packaged builds, built-in plugins are bundled inside the ASAR at
+  // app.getAppPath()/plugins. In development, they live at the repo root /plugins.
+  // Use app.isPackaged (Electron's official flag) rather than NODE_ENV, which
+  // electron-builder does not guarantee to set at runtime.
+  const pluginsDir = app.isPackaged
+    ? path.join(app.getAppPath(), 'plugins')
+    : path.join(__dirname, '..', '..', 'plugins')
 
   pluginLoader = new PluginLoader({ pluginsDir })
   console.log(`[Plugins] Loading from: ${pluginsDir}`)
@@ -452,6 +456,7 @@ app.whenReady().then(async () => {
   // is called with a real path when the user opens a project.
   setupIpcHandlers(ipcMain, '')
   setupPlanHandlers(ipcMain)
+  setupWebserverHandlers(ipcMain)
 
   // Create the application menu
   createMenu()
@@ -480,8 +485,13 @@ app.on('window-all-closed', () => {
   }
 })
 
-// Cleanup plugins before app exits
+// Cleanup plugins and web server before app exits
 app.on('before-quit', async (event) => {
+  // Stop the website server if running
+  try {
+    await websiteServer.getInstance().stop()
+  } catch (_) { /* ignore */ }
+
   if (pluginManager && !pluginManager.shuttingDown) {
     event.preventDefault()
     try {

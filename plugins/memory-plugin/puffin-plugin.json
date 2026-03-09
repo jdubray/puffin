@@ -2,7 +2,7 @@
   "name": "memory-plugin",
   "version": "1.0.0",
   "displayName": "Branch Memory",
-  "description": "Extracts and persists domain-level knowledge from branch conversations using LLM-powered analysis",
+  "description": "Displays Claude Code's native /memory entries stored per branch in .claude/CLAUDE_{branch}.md",
   "main": "index.js",
   "author": "Puffin",
   "license": "MIT",
@@ -20,16 +20,13 @@
   },
   "extensionPoints": {
     "actions": [
-      "memoryMemorize",
       "memoryGetBranch",
       "memoryClearBranch"
     ],
     "ipcHandlers": [
-      "memory-plugin:memorize",
-      "memory-plugin:getBranchMemory",
-      "memory-plugin:clearBranchMemory",
-      "memory-plugin:listBranches",
-      "memory-plugin:runMaintenance"
+      "memory-plugin:list-branches",
+      "memory-plugin:get-branch-memory",
+      "memory-plugin:clear-branch-memory"
     ],
     "components": [
       "MemoryView"
@@ -50,24 +47,7 @@
     "menus": {},
     "configuration": {
       "title": "Memory Plugin Settings",
-      "properties": {
-        "memory.model": {
-          "type": "string",
-          "enum": ["haiku", "sonnet"],
-          "default": "haiku",
-          "description": "Model for LLM extraction (haiku is faster/cheaper)"
-        },
-        "memory.autoMemorize": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically memorize after each conversation"
-        },
-        "memory.maxPromptsPerExtraction": {
-          "type": "number",
-          "default": 50,
-          "description": "Maximum prompts to process per extraction"
-        }
-      }
+      "properties": {}
     }
   },
   "activationEvents": [

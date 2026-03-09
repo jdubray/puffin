@@ -76,6 +76,12 @@ class PuffinApp {
 
     // Toast container reference
     this.toastContainer = null
+
+    // Website Edition server management flags
+    this._webserverStarting = false
+    this._webserverRunning = false
+    this._webserverPort = null
+    this._websiteUrlPanelBound = false
   }
 
   /**
@@ -2099,6 +2105,11 @@ Please provide specific file locations and line numbers where issues are found, 
         console.error('[SAM-ERROR] completeResponse failed:', err)
       }
 
+      // Refresh Website Edition URL panel after each response (new/modified files may have appeared)
+      if (this.state?.config?.websiteEdition) {
+        this._refreshWebsiteUrlPanel().catch(() => {})
+      }
+
       // Capture sprint plan content if we're in planning mode
       try {
         const currentState = this.state
@@ -2291,6 +2302,9 @@ Please provide specific file locations and line numbers where issues are found, 
    * Handle state changes
    */
   onStateChange({ state, changed }) {
+    // Apply edition-specific UI gating
+    this.applyWebsiteEdition(state)
+
     // Update debug tab visibility based on config
     this.updateDebugTabVisibility(state)
 
@@ -4158,6 +4172,172 @@ Please provide specific file locations and line numbers where issues are found, 
       }
     }
 
+  }
+
+  /**
+   * Apply or remove the website-edition class on <body> based on config.
+   * This drives all CSS gating for the Website Edition flag.
+   * Also starts/stops the preview server and binds the URL panel.
+   */
+  applyWebsiteEdition(state) {
+    const enabled = state.config?.websiteEdition || false
+    const port = state.config?.websitePort || 5000
+    const servePath = state.config?.websiteServePath ?? 'dist'
+    document.body.classList.toggle('website-edition', enabled)
+
+    // If a gated view is currently active, redirect to prompt view
+    if (enabled) {
+      const gatedViews = ['user-stories', 'cli-output']
+      const currentView = state.ui?.currentView
+      if (gatedViews.includes(currentView)) {
+        this.intents.switchView('prompt')
+      }
+    }
+
+    // Manage preview server and URL panel.
+    // Guard: only start the server after config has loaded from disk (createdAt is set).
+    // Without this, the initial empty state triggers a start on the wrong port (default),
+    // which blocks the real start when the loaded config arrives.
+    const configLoaded = !!state.config?.createdAt
+    if (enabled && configLoaded && window.puffin?.webserver) {
+      this._ensureWebserverRunning(port, servePath)
+      this._bindWebsiteUrlPanel()
+    } else if (!enabled && window.puffin?.webserver) {
+      this._stopWebserverIfRunning()
+    }
+  }
+
+  /**
+   * Start the preview server if not already running on the correct port/path.
+   * @param {number} port
+   * @param {string} servePath
+   */
+  _ensureWebserverRunning(port, servePath = 'dist') {
+    if (this._webserverStarting) return
+    // Skip the async status check if we already confirmed the server is running on this port
+    if (this._webserverPort === port && this._webserverRunning) return
+    this._webserverStarting = true
+    window.puffin.webserver.status().then(status => {
+      if (status.running && status.port === port) {
+        this._webserverStarting = false
+        this._webserverRunning = true
+        this._webserverPort = port
+        this._updateWebserverStatusBadge(status)
+        this._refreshWebsiteUrlPanel()
+        return
+      }
+      return window.puffin.webserver.start(port, servePath)
+    }).then(result => {
+      if (result) {
+        if (result.success) {
+          console.log(`[WebServer] Preview server started at ${result.url}`)
+          this._webserverRunning = true
+          this._webserverPort = result.port
+          this._updateWebserverStatusBadge({ running: true, port: result.port, url: result.url })
+          this._refreshWebsiteUrlPanel()
+        } else {
+          console.warn('[WebServer] Failed to start:', result.error)
+          this._webserverRunning = false
+          this._updateWebserverStatusBadge({ running: false })
+        }
+      }
+      this._webserverStarting = false
+    }).catch(err => {
+      console.error('[WebServer] Error:', err)
+      this._webserverStarting = false
+      this._webserverRunning = false
+    })
+  }
+
+  /**
+   * Stop the preview server if it is running.
+   */
+  _stopWebserverIfRunning() {
+    window.puffin.webserver.status().then(status => {
+      if (status.running) {
+        return window.puffin.webserver.stop()
+      }
+    }).then(() => {
+      this._webserverRunning = false
+      this._webserverPort = null
+      this._updateWebserverStatusBadge({ running: false })
+    }).catch(() => {})
+  }
+
+  /**
+   * Update the server status badge in the URL panel.
+   * @param {{ running: boolean, port?: number, url?: string }} status
+   */
+  _updateWebserverStatusBadge(status) {
+    const badge = document.getElementById('website-server-status')
+    if (!badge) return
+    if (status.running) {
+      badge.textContent = `localhost:${status.port}`
+      badge.className = 'website-server-status running'
+    } else {
+      badge.textContent = 'stopped'
+      badge.className = 'website-server-status stopped'
+    }
+  }
+
+  /**
+   * Bind the refresh button in the URL panel (idempotent — only binds once).
+   */
+  _bindWebsiteUrlPanel() {
+    if (this._websiteUrlPanelBound) return
+    this._websiteUrlPanelBound = true
+    const btn = document.getElementById('website-url-refresh-btn')
+    if (btn) {
+      btn.addEventListener('click', () => this._refreshWebsiteUrlPanel())
+    }
+  }
+
+  /**
+   * Refresh the Website Edition URL panel with a site map (two-level link tree).
+   * Reads the project's index.html → extracts navigation links → follows one level deeper.
+   */
+  async _refreshWebsiteUrlPanel() {
+    const list = document.getElementById('website-url-list')
+    if (!list || !window.puffin?.webserver) return
+
+    try {
+      const result = await window.puffin.webserver.siteMap()
+
+      if (!result.success || !result.pages?.length) {
+        list.innerHTML = '<p class="website-url-empty">No pages found.<br>Build the site first, or add an index.html.</p>'
+        return
+      }
+
+      const safeUrl = (url) => url.replace(/"/g, '%22')
+
+      list.innerHTML = result.pages.map(page => {
+        let html = `<button class="website-url-item" data-url="${safeUrl(page.url)}" title="Open in browser">` +
+          `<span class="website-url-item-path">${page.label}</span>` +
+          `</button>`
+
+        if (page.children?.length > 0) {
+          html += '<div class="website-url-children">'
+          html += page.children.map(child =>
+            `<button class="website-url-item website-url-child" data-url="${safeUrl(child.url)}" title="Open in browser">` +
+            `<span class="website-url-item-path">${child.label}</span>` +
+            `</button>`
+          ).join('')
+          html += '</div>'
+        }
+
+        return html
+      }).join('')
+
+      // Bind click handlers to open URLs in the system browser
+      list.querySelectorAll('[data-url]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const url = btn.getAttribute('data-url')
+          if (url && window.puffin?.webserver) window.puffin.webserver.openUrl(url)
+        })
+      })
+    } catch (err) {
+      console.error('[WebsitePanel] Site map failed:', err)
+    }
   }
 
   /**

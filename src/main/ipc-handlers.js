@@ -19,6 +19,7 @@ const { AssertionEvaluator } = require('./evaluators/assertion-evaluator')
 const { AssertionGenerator } = require('./generators/assertion-generator')
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
+const websiteServer = require('./website-server')
 
 let puffinState = null
 let claudeService = null
@@ -3180,6 +3181,68 @@ function setupPlanHandlers(ipcMain) {
   })
 }
 
+/**
+ * Register IPC handlers for the Website Edition static server.
+ * Safe to call at startup — handlers return errors until a project is initialized.
+ * @param {Electron.IpcMain} ipcMain
+ */
+function setupWebserverHandlers(ipcMain) {
+  const server = websiteServer.getInstance()
+
+  ipcMain.handle('webserver:start', async (event, { port, servePath } = {}) => {
+    try {
+      if (!projectPath) return { success: false, error: 'No project open' }
+      const usePort = port || 5000
+      const useServePath = servePath ?? 'dist'
+      const result = await server.start(projectPath, usePort, useServePath)
+      console.log(`[WebServer] Started on port ${result.port}, serving ${projectPath}/${useServePath}`)
+      return { success: true, ...result }
+    } catch (err) {
+      console.error('[WebServer] Start failed:', err.message)
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('webserver:openUrl', async (event, url) => {
+    try {
+      await shell.openExternal(url)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('webserver:stop', async () => {
+    try {
+      await server.stop()
+      console.log('[WebServer] Stopped')
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('webserver:status', () => {
+    return {
+      success: true,
+      running: server.isRunning(),
+      port: server.getPort(),
+      url: server.getUrl()
+    }
+  })
+
+  // Build a site map by parsing index.html links (two levels deep).
+  ipcMain.handle('webserver:siteMap', () => {
+    try {
+      if (!projectPath) return { success: false, error: 'No project open', pages: [] }
+      const result = server.buildSiteMap(projectPath)
+      return { success: true, ...result }
+    } catch (err) {
+      return { success: false, error: err.message, pages: [] }
+    }
+  })
+}
+
 module.exports = {
   setupIpcHandlers,
   setupPlanHandlers,
@@ -3188,6 +3251,7 @@ module.exports = {
   setupPluginManagerHandlers,
   setupViewRegistryHandlers,
   setupPluginStyleHandlers,
+  setupWebserverHandlers,
   getPuffinState,
   getClaudeService,
   setClaudeServicePluginManager,

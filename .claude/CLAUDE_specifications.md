@@ -35,28 +35,24 @@ When deriving user stories, format them as:
 
 ### Conventions
 
-- User stories follow a standardized format: title, 'As a..., I want..., so that...' description, and acceptance criteria list
-- Implementation plans include: architecture analysis, technical approach, file changes, risk assessment, and complexity rating (Low/Medium/High)
-- IPC channels are prefixed with feature names (e.g., 'design-doc:load-content'), following a feature-name:action pattern
-- User-facing error messages use clear, concise language indicating what went wrong and what action the user should take
-- Acceptance criteria define success conditions and must be verifiable; they guide both implementation and testing
-- File path references in code use pattern 'file_path:line_number' to enable easy navigation to source
-- Defect detection uses keyword scanning on user prompt content (not Claude responses) to count problem reports per thread
-- State mutations must go through SAM actions, never mutating this.state.* directly in handlers (transient copy). All changes dispatched via action creators, which update model through acceptors.
-- File operations use async fs.promises API. Plugin storage scoped to .puffin/ directory. File writes use atomic pattern: write to temp, then rename to prevent partial writes on failure.
-- Error handling distinguishes error types (DatabaseError, RecordNotFoundError, TransactionError, etc.) inheriting from base Error with code property. Errors propagated via model.appError triggering toast notifications.
-- UI components use vanilla JavaScript class pattern with lifecycle methods: constructor(element, options), init(), onActivate(), onDeactivate(), onDestroy(). Parent context passed via options.context containing storage, logging, events API.
-- Modal system routes by type string in switch-case. CSS width overrides use .modal:has(.classname) pattern. Modals use standardized API: ModalManager.show({title, content, buttons}) with button objects {label, action, primary, danger}.
-- camelCase naming convention for variables and functions. PascalCase for classes and components. kebab-case for HTML filenames and CSS classes.
-- Dropdown menus for document/definition selection follow pattern: button opens dropdown, displays list from directory scan, user selects item, content loaded and included in context. Used for GUI definitions, design documents.
-- Thread context is managed through branch history and thread isolation. Top-level prompts (parentId=null) start new threads within a branch. Thread statistics are aggregated per-thread by walking parent-child chains, not branch-wide.
-- Sprint-related features include: 4-story maximum limit to prevent token exhaustion, 10 maximum iterations default, 20 second delay between auto-continues, 3-iteration stuck detection threshold, and structured status blocks in Claude responses (✅ Complete, 🔄 In Progress, ⏳ Pending).
-- Implementation handoffs between threads include: persistent storage (no expiration), versioned summaries that auto-update on code changes, multi-hop chaining for sequential threads, and user-controlled timing with review modal before handoff.
+- User story format evolving to include implementation precision fields: implementationScope (primaryFiles, readOnlyFiles, estimatedLOC), constraints, exclusions, phases, and visual references. These help Claude generate focused, manageable code within explicit boundaries and reduce ambiguity.
+- Stats tracking aggregates per-branch, including: turns, cost (USD), duration, created date (thread root), defect count. Defects measured from user prompts containing keywords (bug, defect, error, issue, problem, broken, wrong, incorrect, doesn't work, not working, failed, failing, fix); case-insensitive; one count per prompt.
+- IPC handler naming follows 'service:operation' pattern (e.g., 'git:createBranch', 'claude:sendPrompt', 'plugins:enable'). Plugin IPC uses 'plugin:${pluginName}:${channel}' format.
+- SAM pattern implementation: Actions dispatch → Acceptors mutate model → State computes derived values → Components render. Validation occurs at acceptor layer; errors set via model.appError for toast display.
+- Configuration discovery from project directories: Design documents from docs/, UI definitions from .puffin/, guidelines from .puffin/ui-guidelines.md. Directories scanned on-demand when dropdown opens, not via file watchers.
 
 ### Architectural Decisions
-- Puffin is a management layer on top of Claude Code CLI (3CLI), not a replacement. It tracks outputs, provides context, and visualizes the development process. 3CLI remains in control of building the project.
-- Sprints are limited to maximum 4 user stories to prevent token exhaustion and maintain manageability. Validation prevents user selection of more than 4 stories at sprint creation (enforced, not just warned).
-- Threads are implicit structures defined by prompt parent-child ancestry (parentId chains). Thread root has parentId==null; collecting all thread prompts requires walking to root then BFS collecting descendants. All thread-scoped features (stats, handoffs, defects) must filter/aggregate only prompts belonging to current thread ancestry.
+
+- Thread isolation via implicit parent-child relationships, mitigated by user-controlled unidirectional handoffs. Context Handoff System: unidirectional, user-controlled (manual 'Handoff Ready' button), never automatic. Handoffs persist indefinitely, auto-update when code changes, can be versioned as work refines, and support multi-hop chains (A→B→C) via sequential handoff summaries. Enables focus without losing cross-thread context.
+- Composable prompt context: Prompts assemble contextual elements (GUI definitions, design documents, user stories, handoff summaries) dynamically. Context varies by thread type and use case. Central to Puffin's context management philosophy.
+- Delayed automation trigger with user intercept: When automated continuation needed (e.g., 'Complete implementation'), configurable delay allows user to provide new direction before trigger fires. Preserves user agency in otherwise automated workflows.
+- Sprint model with multi-thread branching: Sprints contain 1-4 user stories; each story has implementation branches (UI, Backend, FullStack). Features spanning multiple implementation areas use handoff system for context continuation.
+
+### Bug Patterns
+
+- Token exhaustion risk when sprints exceed 4 stories or when prompt context includes unmanaged artifacts (full conversations, large documents). Mitigation: hard limits on story count, selective document inclusion.
+- Stats aggregation incorrectly uses branch-level data instead of thread-level. Switching between threads in same branch loses previous thread's context unless explicitly handed off.
+- Context loss in multi-part features: when work spans UI and Backend, completing one half does not automatically continue to the other. Requires manual handoff or users lose implementation context across thread boundaries.
 
 # Assigned Skills
 
@@ -374,3 +370,5 @@ Your analysis should include:
 - **Be Practical**: Focus on information that helps modify or extend the feature
 - **Be Objective**: Note both strengths and weaknesses without judgment
 
+
+<!-- puffin:generated-end -->

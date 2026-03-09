@@ -116,21 +116,20 @@ Main call-to-action button with primary styling
 ## Branch Memory (auto-extracted)
 
 ### Conventions
-- Plugin architecture uses naming convention '*-plugin' for plugin directories. Plugins export module with 'name', 'initialize(context)', and 'cleanup()' methods. Main process plugins access ipcMain, app, mainWindow, config, pluginDir. Renderer plugins access ipcRenderer, document, window, config, pluginDir via preload.
-- IPC communication uses channel naming pattern 'featureName:methodName'. All IPC handlers in main process must validate input. Preload script exposes APIs via window.puffin namespace with nested structure like window.puffin.github, window.puffin.git, window.puffin.file.
-- SAM (State-Action-Model) pattern: actions defined in actions.js, acceptors in model.js, state computed in state.js, rendering in components. Actions must be registered in app.js both in actionNames array and component.actions array to be available as intents.
-- Modal system uses centralized ModalManager.show() for displaying modals. Modal types handled in modal-manager.js with dedicated render methods. Two-step modals implemented as state transitions within single modal showing different content based on step property.
-- CSS naming uses kebab-case for class names. Component-specific styles prefixed with component name (e.g., .git-panel-*, .handoff-*, .branch-select-*). Views managed via 'view' classes and display controlled via active/inactive states.
-- User stories workflow: stories persisted in .puffin/user-stories.json. Story updates should update individual stories rather than rewriting entire file to prevent data loss. State-persistence loops through stories and calls updateUserStory IPC handler for each.
-- Handoff context display: use banner component above prompt input with dismissible design, showing source branch/thread info and summary. Banner persists until dismissed or new thread created, signaling context will be injected into next prompt.
-- File operations modal UX: use native save/open dialogs via IPC handlers (dialog:showSaveDialog, dialog:showOpenDialog), return file paths or canceled status. Markdown file save defaults to 'response.md' with filters for .md, .txt, all files.
-- Toast notifications for async operations: use window.puffin.state.showToast() with message, type (success/error/info/warning), optional duration. Toast dismissed on navigation/view switch unless persistent flag set.
-- Modal component event flow: modal triggers action via button.click handler, action updates SAM model state, SAM render callback updates modal content, user confirms action which may trigger navigation or additional modal step.
-- Copy/paste markdown functionality: 'Copy MD' button uses navigator.clipboard.writeText() for client-side copy (works immediately), 'Save MD' button uses file:saveMarkdown IPC handler to show native save dialog and write to filesystem.
-- Tool emoji mapping: use single emoji per tool type (Read=📖, Edit=✏️, Write=📝, Grep/Glob=🔍, Bash=💻, WebFetch=🌐, WebSearch=🔎, Task=🤖, NotebookEdit=📓, TodoWrite=📋, default=⚙️). Display emoji-only in stream (no 'Tool:' text), with tooltip on hover and active animation state.
-- Component event delegation: add event listeners in bindEvents() method during init, remove in destroy() method. Use data attributes (data-action, data-id) for declarative event routing instead of direct element references to enable dynamic content.
-- SAM actions must be registered in app.js in TWO places: (1) actionNames array for action name collection, (2) component.actions object for intent function creation. Missing either registration causes 'intent not found' errors when components try to call intents.
-- Modal types must be registered in modal-manager.js switch-case with a dedicated renderXxx() method. Unknown modal types log 'Unknown modal type: xxx' and display 'Loading' indefinitely. Each new modal type requires both registration and renderer implementation.
+
+- IPC handler naming: 'service:operation' format (e.g., git:createBranch, claude:sendPrompt, github:connectWithPAT, file:saveMarkdown).
+- Preload bridge pattern: all renderer↔main communication routed through window.puffin.* namespace exposed in preload.js for security isolation.
+
+### Architectural Decisions
+
+- Two-place SAM action registration: actions must be added to BOTH actionNames array AND component.actions object. Missing either causes intent-not-found errors.
+- state-persistence.js uses whitelist-based action filtering. New action types MUST be added to BOTH persistActions array AND handler condition block. Missing either causes silent failure.
+- Modal system uses centralized modal-manager.js singleton with type-based switch-case routing by modal type string stored in model.activeModal.
+
+### Bug Patterns
+
+- Infinite state-action loops: when acceptors dispatch the same action they process or trigger recursive state changes, create infinite loops. Verify acceptors avoid re-triggering their own actions.
+- Intent-not-found errors: caused by missing SAM action registration in app.js. Check both actionNames array and component.actions object present. Typical fix: add to both registration locations.
 
 # Assigned Skills
 
@@ -178,3 +177,5 @@ Interpret creatively and make unexpected choices that feel genuinely designed fo
 **IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
 
 Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+
+<!-- puffin:generated-end -->

@@ -32,26 +32,33 @@ You are working on the **code review thread**. Focus on:
 
 ### Conventions
 
-- IPC channel naming convention is 'namespace:action' format (e.g., 'toast-history:getAll', 'designer-plugin:listDesigns'). Plugin operations use window.puffin.namespace.action() exposed in preload
-- All user-generated or user-controlled content inserted into DOM must be HTML-escaped using escapeHtml() for text content and escapeAttr() for HTML attributes. Includes note text, branch names, file paths, and data-* attributes
-- New SAM action types for state persistence must be added to persistActions whitelist array in state-persistence.js. If action type not in whitelist, persist() returns early and no database write occurs
-- Display capacity limits (e.g., max notes per day cell, max attachments shown) should be defined as module-level constants, not hardcoded integers scattered across code, to maintain sync across views and prevent off-by-one issues
-- Async methods that call async IPC handlers should properly await results. Methods marked async should not contain only synchronous operations. Use persisted object data for operations like copy/duplicate, not unsaved form input values
-- Story status values use hyphenated format: 'pending', 'in-progress', 'completed' (never underscore variants). Status changes synchronized atomically via transactions. Completed stories changed from 'implemented' to 'completed' for consistency
-- Custom error classes follow naming pattern {Condition}Error with mandatory `code` property and context fields (e.g., DuplicateNameError has code:'DUPLICATE_NAME', duplicateName, existingFilename)
-- Path validation for file system operations: Use `path.resolve()` for normalization, then validate with `startsWith(expectedPath + path.sep)` to prevent traversal. Log security warnings for blocked attempts
-- File size validation for all uploads/clipboard operations: Enforce maximum limits (e.g., 50MB) before processing. Return error response instead of silently truncating or rejecting mid-operation
-- Drag-and-drop UX: Set `dropEffect = 'none'` for invalid targets so browser shows 'not-allowed' cursor. Only call `preventDefault()` on valid drop conditions. Provide visual feedback during drag via ghost/preview
+- HTML escaping required for all user-provided content rendered in DOM - use escapeHtml() for text content and escapeAttr() for attribute values to prevent XSS
+- User story status naming convention: use 'completed' for finished stories (not 'implemented') - applies consistently across database, model, and UI layers
+- Toast records contain: id (unique), timestamp, message, type (success/error/warning/info), and optional metadata
+- Drag-and-drop operations follow browser conventions: set dropEffect='none' for invalid targets, preventDefault() only for valid drops, provide visual feedback with ghost/preview images
+- IPC handler naming follows namespace:actionName pattern (e.g., 'toast-history:getAll', 'state:saveGuiDefinition'). Channel names are case-sensitive and must match exactly in plugin invocation.
+- IPC handlers use consistent error response format: { success: false, error: 'message' } for failures to enable consistent error handling in renderer components
+- Logging uses '[COMPONENT] message:' format with component prefix for debugging and trace visibility
+- Modal types must be registered in componentManagedModals list in modal-manager.js for proper lifecycle handling; unregistered modals show 'Loading...'
+- IPC handler response format standardized to { success: boolean, data?: any, error?: string }. All handlers must check result.success before using data; missing checks cause silent failures.
+- SAM action persistence requires two-step registration: new action types must be added to BOTH the persistActions whitelist array AND the handler condition block. Missing either causes silent persistence failure.
+- Form state must be dispatched as SAM actions for persistence: direct mutations of form values don't trigger state-persistence. Always dispatch action changes through SAM intents to ensure database writes.
+- Component event listener lifecycle management: event listeners must be removed in destroy/cleanup methods. Missing cleanup causes memory leaks and stale handlers when components re-initialize.
+- Path validation for temp file operations must use path.resolve() for normalization, then check startsWith() against temp directory path with path separator
+- File size and count limits must be enforced as module-level constants: MAX_IMAGE_SIZE (50MB), MAX_NOTES_PER_DAY (5); limits should be defined once and referenced throughout
 
 ### Architectural Decisions
 
-- Single source of truth pattern: When duplicate implementations exist for same concern (e.g., storage, API handlers), consolidate to one authoritative source in core rather than maintain parallel implementations in plugins
-- Plugin delegation pattern: Plugins should delegate to core IPC handlers for persistence operations rather than implementing their own storage logic. Prevents sync issues and maintains single database record
-- Defense-in-depth for input limits: Maximum limits (e.g., max notes per day, max attachments) should be enforced at backend persistence layer in addition to frontend validation to prevent data integrity issues
-- Automatic interception pattern: Cross-cutting concerns like toast logging should be automatically intercepted at creation point (showToast method) without requiring manual calls. No manual intervention required for persistence
-- IPC channel naming uses colon-separator format: {domain}:{action} (e.g., `toast-history:getAll`, `toast-history:add`). All IPC handlers return standardized response: `{success: boolean, data/result/designs/toasts: any, error: string?}`
-- Cache invalidation strategy: Invalidate cache via `invalidateCache(types)` AFTER database commits complete, not during writes. Next read lazy-loads from SQLite. Service layer callbacks trigger invalidation
-- SAM pattern enforcement: Pending flags must be cleared via model actions (acceptors), NOT on transient state copy received in render callback. Modal manager pre-generates data asynchronously to avoid blocking panel render
+- SAM (State-Action-Model) pattern is used for state management with acceptors enforcing business rules and preventing direct state mutation. Async handlers must use guard flags to prevent re-entry conditions.
+- IPC handlers return standardized response envelope to enable graceful error handling across renderer-main boundary
+- Plugin architecture delegates storage operations to core IPC handlers rather than implementing own file I/O to maintain single source of truth
+- File system operations require path validation to prevent path traversal attacks - use path.resolve() and startsWith() checks to ensure files are within allowed directory
+- Validation occurs at both frontend (UX) and backend (security) layers as defense-in-depth to enforce limits even if frontend is bypassed
+- Automatic state persistence middleware intercepts whitelisted SAM action types and persists to database without explicit handler code
+- Single source of truth pattern for shared services: duplicate implementations (like toast history) must consolidate to core service with plugins delegating via IPC
+- Storage operations must be centralized in puffin-state.js/core IPC handlers as single source of truth; plugins should delegate storage through core IPC rather than implementing duplicate file I/O
+- Toast creation should be automatically intercepted and logged in showToast() method; no manual persistence calls required at call sites
+- Business logic constraints (like MAX_NOTES_PER_DAY, MAX_IMAGE_SIZE) must be enforced at backend layer for defense-in-depth, not just frontend validation
 
 # Assigned Skills
 
@@ -277,3 +284,5 @@ Issues that should be fixed but may not cause immediate problems.
 - **Be Fair**: Don't flag pre-existing issues or stylistic preferences
 - **Be Helpful**: Explain why something is a problem, not just that it is
 
+
+<!-- puffin:generated-end -->

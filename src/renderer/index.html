@@ -350,6 +350,26 @@
 
                 <div class="form-group">
                   <label class="checkbox-label">
+                    <input type="checkbox" id="website-edition-checkbox">
+                    <span>Website Edition</span>
+                  </label>
+                  <small class="form-hint">Hides software-development features (sprint panel, backlog, CLI output, code model, outcomes, context, and document analysis) for web-only projects.</small>
+                </div>
+
+                <div class="form-group" id="website-port-group" style="display:none">
+                  <label for="website-port-input">Preview Server Port</label>
+                  <input type="number" id="website-port-input" class="form-control" min="1024" max="65535" value="5000" style="width:120px">
+                  <small class="form-hint">Port for the local static file server (default 5000).</small>
+                </div>
+
+                <div class="form-group" id="website-serve-path-group" style="display:none">
+                  <label for="website-serve-path-input">Build Output Path</label>
+                  <input type="text" id="website-serve-path-input" class="form-control" value="dist" style="width:200px" placeholder="dist">
+                  <small class="form-hint">Subdirectory to serve (relative to project root). Default: dist</small>
+                </div>
+
+                <div class="form-group">
+                  <label class="checkbox-label">
                     <input type="checkbox" id="debug-mode-checkbox">
                     <span>Enable Debug Mode</span>
                   </label>
@@ -486,6 +506,18 @@
                       <p class="text-small">Select stories from the Backlog to start a sprint</p>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <!-- Website Edition URL Panel (hidden in normal mode, shown in Website Edition) -->
+              <div id="website-url-panel" class="website-url-panel" style="display:none">
+                <div class="website-url-header">
+                  <h3 class="website-url-title">Pages</h3>
+                  <div id="website-server-status" class="website-server-status"></div>
+                  <button id="website-url-refresh-btn" class="website-url-refresh-btn" title="Refresh file list">&#8635;</button>
+                </div>
+                <div id="website-url-list" class="website-url-list">
+                  <p class="website-url-empty">No pages found.<br>Build the site first, or add an index.html.</p>
                 </div>
               </div>
             </aside>

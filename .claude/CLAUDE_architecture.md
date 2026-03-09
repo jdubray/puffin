@@ -367,24 +367,31 @@ puffin/
 
 ### Conventions
 
-- IPC channel naming uses fully qualified format `plugin:<name>:<channel>` for unambiguous identification across the plugin ecosystem. This prevents namespace collisions and improves discoverability.
-- GUI definitions use nested JSON format with metadata for both serialization and RLM queryability. This enables consistent querying across RLM contexts while maintaining human-readable structure.
-- Thread sharing system enforces three-tier visibility model: Private, Team, Public with inheritance. Access control is fine-grained on threads and prompts. Visibility is managed centrally through the permission system.
-- User stories are organized in three-tier hierarchy: Personal → Team → Organization, with rich metadata including owner, assignees, collaborators, visibility, and audit trails. Template system supports feature, bug, and design review templates.
-- Code Model artifact classification differentiates artifact types (service, component, utility, config, etc.) and tracks dependency kinds beyond imports (calls, inheritance, composition) for richer architectural queries.
-- Tiered model selection for RLM agents: Opus for orchestrator/specialist agents that require sophisticated reasoning, Haiku for recursive sub-calls that are parallelizable and simple. This balances capability with cost and latency.
-- CSP directives in Electron app use allowlist approach. img-src requires explicit directives for 'self', file:, and data: to support same-origin, local filesystem, and base64-encoded data URLs respectively.
-- Plugin storage pattern: Plugins own their data storage within `.puffin/plugins/{pluginName}/` namespace. User-scoped storage for multi-user scenarios uses `.puffin/users/{userId}/`. h-DSL Code Model data stored in `.puffin/cre/` with schema.json and instance files. Storage and lifecycle managed by PluginContext with file-based persistence, enabling portable and self-contained features.
-- GUI definition metadata stored as JSON files containing name, definition content, createdAt, lastModifiedAt timestamps. Enables audit trail and versioning within plugin storage.
-- IPC handler naming follows pattern `component:action` or `feature:action` (e.g., `designer-plugin:listDesigns`, `metrics:componentStats`). Main process exposes handlers via `window.puffin.*` in preload.
+- SAM pattern requires action registration in TWO places: (1) actionNames array for action collection, (2) component.actions object for intent function binding. Missing either location causes 'intent not found' errors.
+- Model selection strategy for RLM agents: Opus for orchestrator and specialist agents, Haiku for recursive sub-calls and lightweight operations to optimize cost and performance.
+- CSP uses allowlist-based directives (img-src, script-src, etc.). img-src directive must explicitly include `data:` to allow base64-encoded inline images. Default allowlist does not permit data: URLs.
+- Plugin context provides sandboxed API for plugins with storage, logging, and IPC handler registration capabilities
+- IPC handlers return graceful errors when called before project initialization or required services are available
+- GUI definitions stored as nested JSON with consistent metadata fields (name, elements, definition, createdAt, lastModifiedAt timestamps) for audit trail and queryability by reasoning agents.
+- Plugin data storage follows pattern .puffin/plugins/{pluginName}/ for self-contained plugin state, separate from core Puffin application state.
 
 ### Architectural Decisions
-- Multi-user Puffin architecture follows a three-phase progression: Phase 1 (Local Multi-User Foundation) with user-scoped file storage at `.puffin/users/{userId}/` and enhanced SAM pattern with user context, Phase 2 (Hybrid Backend Integration) with GraphQL API and WebSocket-based collaboration, Phase 3 (Enterprise Features) with advanced permissions and analytics. Each phase builds on the previous without breaking existing functionality (progressive enhancement).
-- Multi-user architecture adopts Local-First design where primary data remains local and backend provides sync and collaboration via GraphQL API with real-time subscriptions. This pattern applies to all multi-user features.
-- Designer Plugin storage uses plugin namespace (`.puffin/plugins/designer/designs/`) rather than core Puffin state directory. This makes the designer feature self-contained, portable, and aligns with the existing plugin infrastructure pattern.
-- GUI definitions use nested JSON with metadata (name, definition, createdAt, lastModifiedAt) for serialization and RLM queryability. This enables rich context capture for prompt composition while maintaining portability.
-- RLM (Recursive Language Model) execution uses smart parallelization with dependency detection for parallel sub-calls, but performs result aggregation only after all sub-calls complete before responding. This ensures consistent context and ordering.
-- RLM agent model selection is tiered: Opus for orchestrator and specialist agents (complex reasoning), Haiku for recursive sub-calls (efficiency and cost). This tiered approach balances capability with performance and cost constraints.
+
+- Multi-user architecture follows progressive enhancement in three phases: Phase 1 (user-scoped local storage at .puffin/users/{userId}/ with enhanced SAM), Phase 2 (hybrid backend integration with GraphQL/WebSockets), Phase 3 (enterprise features). Each phase maintains local-first approach with backend providing sync and collaboration.
+- Plugin features own storage in namespaced plugin directories (e.g., `.puffin/plugins/designer/designs/`) rather than core state for portability and self-containment. GUI definitions specifically migrate from core PuffinState to this structure (ADR-022).
+- User-scoped storage in multi-user architecture uses directory hierarchy `.puffin/users/{userId}/` with three-tier story organization (Personal → Team → Organization) while maintaining local-first operation with backend sync.
+- Context Vault for long-context reasoning uses four-domain hierarchy: specifications, codebase-index, traceability, history, and active-context to support RLM parallel execution and dependency detection (ADR-024).
+- Multi-select GUI definitions enabled in prompt context composition; multiple designs can be included for complex features (ADR-023).
+- Long-context reasoning uses REPL-based external environment over direct injection or RAG for stateful Claude interaction (ADR-021).
+- IPC channels use fully qualified naming pattern `plugin:<name>:<channel>` for unambiguous channel identification across plugin system (ADR-029).
+- LLM model selection: Claude Opus for orchestrator and specialist agents; Claude Haiku for recursive sub-calls in RLM loops (ADR-030).
+
+### Bug Patterns
+
+- h-DSL Code Model has limited artifact classification: all 302 artifacts classified as `kind: module` with no differentiation between services, components, utilities, or config files. Only `imports` dependencies tracked; other relationship types (calls, depends-on, etc.) not yet modeled.
+- MCP tools become unavailable if server config is added/modified mid-session; requires session restart for client to spawn and initialize server because Claude Code reads server config at session initialization only.
+- Electron CSP policies block data URLs and inline resources by default; must explicitly add sources to directives to allow resource types
+- Feature migration from core state to plugin storage requires updating directory namespace and storage layer to maintain portability guarantee
 
 # Assigned Skills
 
@@ -486,3 +493,5 @@ Your architectural analysis must include:
 - **Be Practical**: Design for the current codebase, not an ideal hypothetical one.
 - **Be Complete**: Cover all aspects of implementation, not just the happy path.
 
+
+<!-- puffin:generated-end -->

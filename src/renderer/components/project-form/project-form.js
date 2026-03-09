@@ -266,6 +266,25 @@ export class ProjectFormComponent {
       })
     })
 
+    // Website Edition checkbox — toggle port + serve path field visibility
+    const websiteEditionCheckbox = document.getElementById('website-edition-checkbox')
+    const websitePortGroup = document.getElementById('website-port-group')
+    const websiteServePathGroup = document.getElementById('website-serve-path-group')
+    if (websiteEditionCheckbox) {
+      websiteEditionCheckbox.addEventListener('change', () => {
+        const show = websiteEditionCheckbox.checked
+        if (websitePortGroup) websitePortGroup.style.display = show ? '' : 'none'
+        if (websiteServePathGroup) websiteServePathGroup.style.display = show ? '' : 'none'
+      })
+    }
+
+    // Port input — use `input` event so the value is captured as the user types,
+    // not only on blur. The generic `change` loop may miss in-flight edits.
+    const websitePortInput = document.getElementById('website-port-input')
+    if (websitePortInput) {
+      websitePortInput.addEventListener('input', () => this.handleInputChange())
+    }
+
     // Snip checkbox — check installation when user enables it
     const snipCheckbox = document.getElementById('tools-snip-enabled')
     if (snipCheckbox) {
@@ -440,6 +459,20 @@ export class ProjectFormComponent {
     this.assumptions = config.assumptions || []
     this.renderAssumptions()
 
+    // Website Edition
+    const websiteEditionCheckbox = document.getElementById('website-edition-checkbox')
+    if (websiteEditionCheckbox) websiteEditionCheckbox.checked = config.websiteEdition || false
+
+    // Website Edition port
+    const websitePortInput = document.getElementById('website-port-input')
+    const websitePortGroup = document.getElementById('website-port-group')
+    if (websitePortInput) websitePortInput.value = config.websitePort || 5000
+    if (websitePortGroup) websitePortGroup.style.display = config.websiteEdition ? '' : 'none'
+    const websiteServePathInput = document.getElementById('website-serve-path-input')
+    const websiteServePathGroup = document.getElementById('website-serve-path-group')
+    if (websiteServePathInput) websiteServePathInput.value = config.websiteServePath ?? 'dist'
+    if (websiteServePathGroup) websiteServePathGroup.style.display = config.websiteEdition ? '' : 'none'
+
     // Debug Mode
     const debugCheckbox = document.getElementById('debug-mode-checkbox')
     if (debugCheckbox) debugCheckbox.checked = config.debugMode || false
@@ -565,6 +598,9 @@ export class ProjectFormComponent {
         language: this.getElementValue('coding-standard-language', 'none'),
         content: this.getElementValue('coding-standard-content', '')
       },
+      websiteEdition: this.getCheckboxValue('website-edition-checkbox'),
+      websitePort: parseInt(this.getElementValue('website-port-input', '5000'), 10) || 5000,
+      websiteServePath: this.getElementValue('website-serve-path-input', 'dist').trim() || 'dist',
       debugMode: this.getCheckboxValue('debug-mode-checkbox'),
       cre: {
         sprintEnd: {

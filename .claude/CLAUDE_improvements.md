@@ -43,8 +43,10 @@ You are working on the **improvements thread**. Focus on:
 ### Architectural Decisions
 - Agents are stored in `.puffin/agents/` (NOT `.claude/agents/`) to prevent Claude Code auto-discovery. Puffin manages agents explicitly with per-branch assignment, providing predictable control and acting as a whitelist/permission system.
 - Marker syntax changed from /@puffin: ... // to /@puffin: ... @/ for symmetry and to avoid JavaScript comment conflicts. This affects document parsing across the codebase.
-- Document modification uses structured <<<CHANGE>>> block format with FIND/REPLACE operations applied programmatically rather than requesting complete document returns (which get truncated). Includes 5 fuzzy matching strategies for whitespace handling.
+- Document modification uses structured <<<CHANGE>>> block format with FIND/REPLACE operations applied programmatically via DocumentMerger with fuzzy matching (5 different strategies) instead of requesting complete document returns (which get truncated).
 - Sprint history stores story IDs as references (not copies), allowing live status resolution. Implementation plans are strictly sprint-scoped, not inherited across sprint reassignments. When viewing historical sprints, story status reflects current data.
 - RICE FACT framework (Role, Instruction, Context, Example, Format, Aim, Constraints, Tone) used for branch implementation prompts. Each branch type (UI, backend, fullstack) has tailored guidance across all 8 dimensions.
 - Agent content inclusion in CLAUDE.md is callback-driven (getAgentContent parameter). Agents are appended per-branch after branch-specific content, with UI components for agent management still pending.
 - Sprint history persists separately from active sprints in `.puffin/sprint-history.json`, storing sprint metadata (title, description, status, timestamp) and story IDs as references (not copies) to maintain live status resolution across historical views.
+
+<!-- puffin:generated-end -->

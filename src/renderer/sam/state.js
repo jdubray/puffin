@@ -156,6 +156,7 @@ function computeConfigState(model) {
     defaultModel: config.defaultModel || 'sonnet',
     options: config.options || {},
     uxStyle: config.uxStyle || {},
+    websiteEdition: config.websiteEdition || false,
     debugMode: config.debugMode || false,
     createdAt: config.createdAt,
     updatedAt: config.updatedAt

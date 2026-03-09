@@ -12868,3 +12868,172 @@
 @keyframes welcome-spin {
   to { transform: rotate(360deg); }
 }
+
+/* ─── Website Edition gating ─────────────────────────────────────────────── */
+/*
+ * All elements hidden in Website Edition are controlled purely by CSS so that
+ * the toggle is instantaneous and requires no page reload.
+ * The body.website-edition class is applied/removed by applyWebsiteEdition()
+ * in app.js whenever the config state changes.
+ */
+
+/* Sprint panel (left swimlane) — make it visible again in Website Edition,
+   swap sprint panel for the URL panel */
+body.website-edition .swimlane-left {
+  visibility: visible !important;
+}
+
+body.website-edition #sprint-context-panel {
+  display: none !important;
+}
+
+body.website-edition #website-url-panel {
+  display: flex !important;
+}
+
+/* ─── Website URL Panel ───────────────────────────────────────────────────── */
+
+.website-url-panel {
+  display: none; /* shown only in website-edition via CSS above */
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0.75rem 0.5rem;
+  gap: 0.5rem;
+}
+
+.website-url-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.website-url-title {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.website-server-status {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.website-server-status.running {
+  background: rgba(40, 167, 69, 0.15);
+  color: #28a745;
+}
+
+.website-server-status.stopped {
+  background: rgba(220, 53, 69, 0.1);
+  color: var(--text-muted);
+}
+
+.website-url-refresh-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  border-radius: 3px;
+  transition: color 0.15s;
+}
+
+.website-url-refresh-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.website-url-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.website-url-empty {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 2rem;
+  line-height: 1.5;
+}
+
+.website-url-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.35rem 0.4rem;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.1s;
+  /* reset button styles */
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+}
+
+.website-url-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.website-url-item-path {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  word-break: break-all;
+  font-weight: 500;
+}
+
+.website-url-item-meta {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.website-url-children {
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--border-color);
+  margin-left: 0.4rem;
+}
+
+.website-url-child .website-url-item-path {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* Prompt toolbar: derive stories button and Include GUI dropdown */
+body.website-edition #derive-stories-btn {
+  display: none !important;
+}
+body.website-edition #include-gui-dropdown {
+  display: none !important;
+}
+
+/* Built-in nav tabs */
+body.website-edition .nav-btn[data-view="user-stories"],
+body.website-edition .nav-btn[data-view="cli-output"] {
+  display: none !important;
+}
+
+/* Plugin nav buttons gated in Website Edition */
+body.website-edition .plugin-nav-btn[data-plugin-name="claude-config-plugin"],
+body.website-edition .plugin-nav-btn[data-plugin-name="hdsl-viewer-plugin"],
+body.website-edition .plugin-nav-btn[data-plugin-name="outcome-lifecycle-plugin"],
+body.website-edition .plugin-nav-btn[data-plugin-name="rlm-document-plugin"] {
+  display: none !important;
+}

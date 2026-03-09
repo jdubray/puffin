@@ -853,5 +853,25 @@ contextBridge.exposeInMainWorld('puffin', {
   tools: {
     // Check whether snip is installed on PATH; returns { installed, path? }
     checkSnip: () => ipcRenderer.invoke('tools:checkSnip')
+  },
+
+  /**
+   * Website Edition static server
+   */
+  webserver: {
+    // Start the server; port and servePath optional (defaults: 5000, 'dist')
+    start: (port, servePath) => ipcRenderer.invoke('webserver:start', { port, servePath }),
+
+    // Stop the server
+    stop: () => ipcRenderer.invoke('webserver:stop'),
+
+    // Get current status: { running, port, url }
+    status: () => ipcRenderer.invoke('webserver:status'),
+
+    // Build a two-level site map from the project's index.html links
+    siteMap: () => ipcRenderer.invoke('webserver:siteMap'),
+
+    // Open a URL in the system default browser (not Electron)
+    openUrl: (url) => ipcRenderer.invoke('webserver:openUrl', url)
   }
 })

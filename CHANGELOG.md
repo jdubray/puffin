@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.5] - 2026-03-08
+
 ### Added
 
 - **Website Edition**: Puffin is now available as a web-based edition, accessible directly from a browser without installing the desktop application.
+- **Website Edition — Preview Server**: A built-in static HTTP server (`website-server.js`) serves the project's `dist/` folder on a configurable port (default 5000). Managed automatically via `webserver:start/stop/status/siteMap/openUrl` IPC handlers and `window.puffin.webserver.*` preload bridge. The server starts when the Website Edition flag is enabled and stops on app quit.
 - **Installation Packages Include Plugins**: The Windows, macOS, and Linux installation packages now bundle the built-in plugins (stats, memory, outcomes, Excalidraw), so plugins are available immediately after install without a separate setup step.
 - **Sprint Rerun**: Archived sprints in the Sprint History panel now have a ↻ Rerun button. Clicking it restores the sprint's stories to `pending`, creates a new active sprint with `planApprovedAt` already set (skipping planning), and reopens the implementation mode selection modal. Existing RIS data is reloaded from the DB so implementation context is preserved. Stuck active sprints with no recorded progress are automatically cleared to avoid blocking the rerun.
 - **Tools — snip Integration**: New "Tools" section in project settings with a snip toggle. When enabled, Puffin writes a `PreToolUse` hook into `{projectPath}/.claude/settings.json` so Claude Code pipes Bash output through [snip](https://github.com/edouard-claude/snip) before it reaches the context window, reducing token usage by up to 99% on verbose commands (test runs, git log, etc.). Opt-in by design — the toggle is off by default even if snip is installed. Shows an amber warning with install instructions if snip is not found on PATH.
@@ -17,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs — Installation Guide**: README now includes step-by-step installation instructions for Windows, macOS, and Linux covering Node.js, Claude Code CLI, authentication, and Puffin binary installation, with platform-specific troubleshooting tips.
 - **Docs — Prompt Repetition**: Added `docs/PROMPT-REPETITION.md` documenting the CRE prompt-repetition technique based on arxiv 2512.14982, including implementation details and configuration.
 - **Scripts — Fix Stuck Sprint**: Added `scripts/fix-stuck-sprint.js` and `scripts/fix-stuck-sprint.py` utility scripts to reset sprints stuck in `planning` or `in-progress` state via direct DB manipulation, useful for recovery without UI access.
+
+### Changed
+
+- **Memory Plugin — Native Claude Memory Reader**: Refactored memory plugin to read Claude Code's native `/memory` entries stored in `.claude/CLAUDE_{branch}.md` files, replacing the previous LLM-powered extraction approach. Simplified IPC handlers to `memory-plugin:list-branches`, `memory-plugin:get-branch-memory`, and `memory-plugin:clear-branch-memory`.
+- **Plugin Loader — Packaged Build Detection**: Plugin directory resolution now uses `app.isPackaged` (Electron's official flag) instead of `NODE_ENV !== 'production'`. In packaged builds, built-in plugins are resolved from `app.getAppPath()/plugins` inside the ASAR; in development they remain at the repo root `/plugins`.
 
 ### Fixed
 

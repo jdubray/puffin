@@ -9,7 +9,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, setupWebserverHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
+const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, setupWebserverHandlers, setupSpeechHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 const websiteServer = require('./website-server')
 const { getRecentProjects, addRecentProject, removeRecentProject } = require('./recent-projects')
@@ -457,6 +457,7 @@ app.whenReady().then(async () => {
   setupIpcHandlers(ipcMain, '')
   setupPlanHandlers(ipcMain)
   setupWebserverHandlers(ipcMain)
+  setupSpeechHandlers(ipcMain)
 
   // Create the application menu
   createMenu()
@@ -543,5 +544,19 @@ app.on('web-contents-created', (event, contents) => {
     if (parsedUrl.origin !== 'file://') {
       event.preventDefault()
     }
+  })
+})
+
+// Grant microphone permission for Web Speech API
+app.on('web-contents-created', (event, contents) => {
+  contents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true)
+    } else {
+      callback(false)
+    }
+  })
+  contents.session.setPermissionCheckHandler((webContents, permission) => {
+    return permission === 'media'
   })
 })

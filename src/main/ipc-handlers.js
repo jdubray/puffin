@@ -20,6 +20,8 @@ const { AssertionGenerator } = require('./generators/assertion-generator')
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
+const speechService = require('./speech-service')
+const puppeteerMcpService = require('./puppeteer-mcp-service')
 
 let puffinState = null
 let claudeService = null
@@ -101,6 +103,9 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
 
   // Image attachment handlers
   setupImageHandlers(ipcMain)
+
+  // Puppeteer Visual Loop handlers (Website Edition)
+  setupPuppeteerHandlers(ipcMain)
 
   // CRE handlers — registered early so renderer never sees "no handler registered".
   // The handlers guard against being called before cre.initialize() sets up ctx.
@@ -1516,6 +1521,18 @@ function setupClaudeHandlers(ipcMain) {
         codeModificationAllowed
       }
 
+      // Puppeteer Visual Loop: inject MCP config + prompt suffix when active
+      if (data.puppeteerLoop && projectPath) {
+        const configPath = puppeteerMcpService.getConfigPath(projectPath)
+        if (fs.existsSync(configPath)) {
+          submitData.mcpConfigPath = configPath
+          const port = data.puppeteerPort || 5000
+          submitData.prompt = (submitData.prompt || '') + `\n\n---\n[VISUAL FEEDBACK LOOP ACTIVE]\n\nAfter making any code changes:\n1. Use puppeteer_navigate to open http://localhost:${port}/ (or the relevant page path).\n2. Use puppeteer_screenshot to capture the rendered output.\n3. Compare the screenshot against the stated goal above.\n4. If there are visual discrepancies (layout, colour, text, alignment), fix them and screenshot again.\n5. Repeat until the output matches the intent, or you have made 3 correction attempts.\n\nFocus only on what is visible in the screenshot.`
+        } else {
+          console.warn('[Puppeteer] Visual loop requested but MCP config not found — call puppeteer:setup first')
+        }
+      }
+
       // Safe send helper — renderer frame may be disposed during long CLI sessions
       const safeSend = (channel, data) => {
         try {
@@ -1528,6 +1545,11 @@ function setupClaudeHandlers(ipcMain) {
           }
         }
       }
+
+      // Puppeteer Visual Loop state (scoped to this submit call)
+      let puppeteerScreenshotCount = 0
+      let puppeteerAwaitingVerdict = false // screenshot tool_use seen, waiting for tool_result
+      let puppeteerVerdictReady = false    // tool_result received, next assistant text = verdict
 
       await claudeService.submit(
         submitData,
@@ -1542,6 +1564,46 @@ function setupClaudeHandlers(ipcMain) {
         // On raw JSON line (for CLI Output view)
         (jsonLine) => {
           safeSend('claude:raw', jsonLine)
+
+          // Puppeteer Visual Loop: track screenshot count and verdict
+          if (data.puppeteerLoop) {
+            try {
+              const json = JSON.parse(jsonLine)
+              if (json.type === 'assistant' && json.message?.content) {
+                for (const block of json.message.content) {
+                  if (block.type === 'tool_use' && block.name?.includes('puppeteer_screenshot')) {
+                    puppeteerScreenshotCount++
+                    safeSend('claude:puppeteer-screenshot', { count: puppeteerScreenshotCount })
+                    puppeteerAwaitingVerdict = true
+                  }
+                }
+                // If a screenshot tool result was received on the previous turn,
+                // the text in this assistant message is Claude's visual verdict.
+                if (puppeteerVerdictReady) {
+                  const verdict = json.message.content
+                    .filter(b => b.type === 'text')
+                    .map(b => b.text)
+                    .join('')
+                  if (verdict.length > 0) {
+                    safeSend('claude:puppeteer-verdict', { verdict })
+                    puppeteerVerdictReady = false
+                  }
+                }
+              }
+              // The tool_result for a screenshot arrives in a 'user' message;
+              // the *next* assistant message after that contains the verdict.
+              if (json.type === 'user' && puppeteerAwaitingVerdict && json.message?.content) {
+                const hasScreenshotResult = json.message.content.some(b =>
+                  b.type === 'tool_result' && Array.isArray(b.content) &&
+                  b.content.some(c => c.tool_name?.includes('puppeteer_screenshot'))
+                )
+                if (hasScreenshotResult) {
+                  puppeteerVerdictReady = true
+                  puppeteerAwaitingVerdict = false
+                }
+              }
+            } catch { /* non-JSON lines ignored */ }
+          }
         },
         // On full prompt built (for debug view)
         (fullPrompt) => {
@@ -3243,6 +3305,73 @@ function setupWebserverHandlers(ipcMain) {
   })
 }
 
+/**
+ * Register IPC handlers for the Puppeteer Visual Feedback Loop (Website Edition).
+ * Manages the project-scoped MCP config that Claude reads via --mcp-config.
+ * @param {Electron.IpcMain} ipcMain
+ */
+function setupPuppeteerHandlers(ipcMain) {
+  // Write .puffin/mcp-puppeteer.json so the loop can be activated
+  ipcMain.handle('puppeteer:setup', async (event, { projectPath: reqPath } = {}) => {
+    try {
+      const resolvedPath = reqPath || projectPath
+      if (!resolvedPath) return { success: false, error: 'No project open' }
+      const { configPath } = puppeteerMcpService.setup(resolvedPath)
+      return { success: true, configPath }
+    } catch (err) {
+      console.error('[Puppeteer] Setup failed:', err.message)
+      return { success: false, error: err.message }
+    }
+  })
+
+  // Check whether the MCP config file exists (fast, no subprocess)
+  ipcMain.handle('puppeteer:check', (event, { projectPath: reqPath } = {}) => {
+    try {
+      const resolvedPath = reqPath || projectPath
+      if (!resolvedPath) return { success: true, configured: false }
+      const configured = puppeteerMcpService.isSetup(resolvedPath)
+      return { success: true, configured }
+    } catch (err) {
+      return { success: false, configured: false, error: err.message }
+    }
+  })
+}
+
+/**
+ * Register IPC handlers for speech-to-text (Whisper API).
+ * @param {Electron.IpcMain} ipcMain
+ */
+function setupSpeechHandlers(ipcMain) {
+  const service = speechService.getInstance()
+
+  /**
+   * Transcribe audio — expects { audioData: number[] } (Uint8Array serialised as plain array).
+   * Reads speechApiKey and speechApiUrl from the loaded project config.
+   */
+  ipcMain.handle('speech:transcribe', async (event, { audioData } = {}) => {
+    try {
+      if (!audioData?.length) return { success: false, error: 'No audio data received' }
+
+      const config = puffinState ? puffinState.getState()?.config : null
+      const apiKey = config?.speechApiKey?.trim()
+      const apiUrl = config?.speechApiUrl?.trim() || undefined
+      const model = config?.speechModel?.trim() || undefined
+
+      if (!apiKey) {
+        return { success: false, error: 'No Speech API key. Add it in Project Settings → Voice Input.' }
+      }
+
+      const buffer = Buffer.from(audioData)
+      const text = await service.transcribe(buffer, apiKey, apiUrl, model)
+      console.log(`[Speech] Transcribed ${buffer.length} bytes → "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`)
+      return { success: true, text }
+    } catch (err) {
+      console.error('[Speech] Transcription error:', err.message)
+      return { success: false, error: err.message }
+    }
+  })
+}
+
 module.exports = {
   setupIpcHandlers,
   setupPlanHandlers,
@@ -3252,6 +3381,7 @@ module.exports = {
   setupViewRegistryHandlers,
   setupPluginStyleHandlers,
   setupWebserverHandlers,
+  setupSpeechHandlers,
   getPuffinState,
   getClaudeService,
   setClaudeServicePluginManager,

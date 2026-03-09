@@ -142,6 +142,9 @@ export const initialModel = {
   sidebarVisible: true,
   modal: null,
 
+  // Website Edition — Visual Feedback Loop (ephemeral, not persisted)
+  puppeteerLoop: false,
+
   // UI Guidelines specific UI state
   activeGuidelinesTab: 'guidelines', // 'guidelines', 'stylesheets', 'tokens', 'patterns'
   activeGuidelinesSection: 'layout', // 'layout', 'typography', 'colors', 'components', 'interactions'
@@ -4150,6 +4153,16 @@ export const completeImplementationJourneyAcceptor = model => proposal => {
 }
 
 /**
+ * Toggle the Puppeteer Visual Feedback Loop on/off.
+ * Ephemeral — resets to false on page reload.
+ */
+export const setPuppeteerLoopAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_PUPPETEER_LOOP') {
+    model.puppeteerLoop = !!proposal.payload.enabled
+  }
+}
+
+/**
  * All acceptors combined
  */
 export const acceptors = [
@@ -4325,5 +4338,8 @@ export const acceptors = [
   // Debug
   storeDebugPromptAcceptor,
   clearDebugPromptAcceptor,
-  setDebugModeAcceptor
+  setDebugModeAcceptor,
+
+  // Website Edition — Puppeteer Visual Loop
+  setPuppeteerLoopAcceptor
 ]

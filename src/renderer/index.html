@@ -378,6 +378,33 @@
               </fieldset>
 
               <fieldset class="options-fieldset">
+                <legend>Voice Input</legend>
+                <p class="fieldset-description">Dictate prompts using your microphone. Requires an OpenAI-compatible Speech-to-Text API key.</p>
+
+                <div class="form-group">
+                  <label for="speech-api-key-input">Speech API Key</label>
+                  <input type="password" id="speech-api-key-input" class="form-control" placeholder="sk-…" autocomplete="off">
+                  <small class="form-hint">OpenAI API key (or compatible service). Used only for audio transcription.</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="speech-model-select">Model</label>
+                  <select id="speech-model-select" class="form-control" style="width:auto">
+                    <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe (recommended)</option>
+                    <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
+                    <option value="whisper-1">whisper-1</option>
+                  </select>
+                  <small class="form-hint">gpt-4o-mini-transcribe is faster and cheaper than whisper-1.</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="speech-api-url-input">API Endpoint <span class="label-optional">(optional)</span></label>
+                  <input type="text" id="speech-api-url-input" class="form-control" placeholder="https://api.openai.com/v1/audio/transcriptions">
+                  <small class="form-hint">Leave blank to use OpenAI. Set to a local Whisper-compatible endpoint for offline use.</small>
+                </div>
+              </fieldset>
+
+              <fieldset class="options-fieldset">
                 <legend>Central Reasoning Engine (CRE)</legend>
                 <p class="fieldset-description">Configure the h-DSL Code Model update behavior during sprint execution.</p>
 
@@ -514,6 +541,11 @@
                 <div class="website-url-header">
                   <h3 class="website-url-title">Pages</h3>
                   <div id="website-server-status" class="website-server-status"></div>
+                  <span class="puppeteer-loop-btn-wrap">
+                    <button id="puppeteer-loop-btn" class="puppeteer-loop-btn" title="Visual Feedback Loop — Claude screenshots the preview after each change">&#128247;</button>
+                    <span id="puppeteer-screenshot-badge" class="puppeteer-screenshot-badge" style="display:none"></span>
+                  </span>
+                  <span id="puppeteer-loop-status" class="puppeteer-loop-status"></span>
                   <button id="website-url-refresh-btn" class="website-url-refresh-btn" title="Refresh file list">&#8635;</button>
                 </div>
                 <div id="website-url-list" class="website-url-list">
@@ -580,6 +612,14 @@
                     Create New Thread
                   </button>
                   <button id="cancel-prompt-btn" class="btn secondary hidden">Cancel</button>
+                  <button id="mic-btn" class="mic-btn" title="Voice input (speech-to-text)" style="display:none;">
+                    <svg class="mic-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" fill="currentColor"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                  </button>
                   <button id="submit-prompt-btn" class="btn primary">
                     <span class="btn-text">Send</span>
                     <span class="btn-loading hidden">...</span>

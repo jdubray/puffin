@@ -1305,7 +1305,9 @@ Please provide specific file locations and line numbers where issues are found, 
       // Active implementation story
       'clearActiveImplementationStory',
       // Synthetic CRE prompt entries
-      'addSyntheticPrompt'
+      'addSyntheticPrompt',
+      // Website Edition — Puppeteer Visual Loop
+      'setPuppeteerLoop'
     ]
 
     const samResult = SAM({
@@ -1478,7 +1480,9 @@ Please provide specific file locations and line numbers where issues are found, 
           // Active implementation story
           ['CLEAR_ACTIVE_IMPLEMENTATION_STORY', actions.clearActiveImplementationStory],
           // Synthetic CRE prompt entries
-          ['ADD_SYNTHETIC_PROMPT', actions.addSyntheticPrompt]
+          ['ADD_SYNTHETIC_PROMPT', actions.addSyntheticPrompt],
+          // Website Edition — Puppeteer Visual Loop
+          ['SET_PUPPETEER_LOOP', actions.setPuppeteerLoop]
         ],
         acceptors: [
           ...appFsm.acceptors,
@@ -2095,6 +2099,11 @@ Please provide specific file locations and line numbers where issues are found, 
         exitCode: response?.exitCode,
         sessionId: response?.sessionId
       })
+
+      // Reset screenshot badge after session ends; verdict label stays until next toggle
+      if (this.state?.puppeteerLoop) {
+        this._updateScreenshotBadge(0)
+      }
 
       const filesModified = this.activityTracker.getFilesModified()
       console.log('[SAM-DEBUG] filesModified at completion:', filesModified.length, 'files')
@@ -4205,6 +4214,13 @@ Please provide specific file locations and line numbers where issues are found, 
     } else if (!enabled && window.puffin?.webserver) {
       this._stopWebserverIfRunning()
     }
+
+    // Sync visual loop button and status label with model
+    const loopBtn = document.getElementById('puppeteer-loop-btn')
+    if (loopBtn) {
+      loopBtn.classList.toggle('active', !!state.puppeteerLoop)
+    }
+    this._updatePuppeteerLoopStatus(!!state.puppeteerLoop)
   }
 
   /**
@@ -4281,15 +4297,126 @@ Please provide specific file locations and line numbers where issues are found, 
   }
 
   /**
-   * Bind the refresh button in the URL panel (idempotent — only binds once).
+   * Bind the refresh and visual-loop toggle buttons in the URL panel (idempotent).
    */
   _bindWebsiteUrlPanel() {
     if (this._websiteUrlPanelBound) return
     this._websiteUrlPanelBound = true
-    const btn = document.getElementById('website-url-refresh-btn')
-    if (btn) {
-      btn.addEventListener('click', () => this._refreshWebsiteUrlPanel())
+
+    const refreshBtn = document.getElementById('website-url-refresh-btn')
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => this._refreshWebsiteUrlPanel())
     }
+
+    const loopBtn = document.getElementById('puppeteer-loop-btn')
+    if (loopBtn) {
+      loopBtn.addEventListener('click', () => this._togglePuppeteerLoop())
+    }
+
+    // Subscribe to screenshot count and verdict events from main process
+    if (window.puffin?.puppeteer?.onScreenshot) {
+      window.puffin.puppeteer.onScreenshot(({ count }) => {
+        this._updateScreenshotBadge(count)
+      })
+    }
+    if (window.puffin?.puppeteer?.onVerdict) {
+      window.puffin.puppeteer.onVerdict(({ verdict }) => {
+        this._updatePuppeteerVerdict(verdict)
+      })
+    }
+  }
+
+  /**
+   * Toggle the Puppeteer Visual Feedback Loop on or off.
+   * On first enable: writes the MCP config file to .puffin/mcp-puppeteer.json.
+   */
+  async _togglePuppeteerLoop() {
+    const enabled = !this.state?.puppeteerLoop
+
+    if (enabled && !this._puppeteerConfigured) {
+      const projectPath = this.state?.projectPath
+      if (!projectPath) return
+
+      const result = await window.puffin.puppeteer.setup(projectPath)
+      if (!result.success) {
+        this.showToast({ type: 'error', title: 'Puppeteer setup failed', message: result.error })
+        return
+      }
+      this._puppeteerConfigured = true
+    }
+
+    this.intents.setPuppeteerLoop(enabled)
+
+    // Immediate button feedback (SAM render will also sync on next tick)
+    const btn = document.getElementById('puppeteer-loop-btn')
+    if (btn) btn.classList.toggle('active', enabled)
+
+    // Update the inline status label
+    this._updatePuppeteerLoopStatus(enabled)
+
+    // Toast so the user always knows what state they're in
+    if (enabled) {
+      this.showToast({
+        type: 'success',
+        title: 'Visual Loop ON',
+        message: 'Claude will screenshot localhost after each change.',
+        duration: 3000
+      })
+    } else {
+      this.showToast({
+        type: 'info',
+        title: 'Visual Loop OFF',
+        duration: 2000
+      })
+    }
+  }
+
+  /**
+   * Update the inline Visual Loop status label inside the website URL panel header.
+   * @param {boolean} enabled
+   */
+  _updatePuppeteerLoopStatus(enabled) {
+    const label = document.getElementById('puppeteer-loop-status')
+    if (!label) return
+    label.textContent = enabled ? 'Visual Loop ON' : ''
+    label.classList.toggle('active', enabled)
+    if (!enabled) {
+      this._updateScreenshotBadge(0)
+    }
+  }
+
+  /**
+   * Update the screenshot count badge on the camera button.
+   * @param {number} count - 0 hides the badge
+   */
+  _updateScreenshotBadge(count) {
+    const badge = document.getElementById('puppeteer-screenshot-badge')
+    if (!badge) return
+    if (count > 0) {
+      badge.textContent = count
+      badge.style.display = ''
+    } else {
+      badge.style.display = 'none'
+    }
+  }
+
+  /**
+   * Show Claude's visual verdict (after screenshot analysis) in the status label.
+   * Truncates to one line and prefixes with a sentiment emoji.
+   * @param {string} verdict
+   */
+  _updatePuppeteerVerdict(verdict) {
+    const label = document.getElementById('puppeteer-loop-status')
+    if (!label) return
+    const lower = verdict.toLowerCase()
+    const isOk = /\b(good|looks good|clean|success|perfect|correct|nicely|well|aligned|working)\b/.test(lower)
+    const isWarn = /\b(fix|issue|wrong|incorrect|doesn't|misalign|problem|off|bad|broken|error)\b/.test(lower)
+    const prefix = isOk ? '✅ ' : isWarn ? '⚠️ ' : '📸 '
+    // Keep only the first sentence and cap at 55 chars
+    const firstSentence = verdict.split(/[.!?\n]/)[0].trim()
+    const display = firstSentence.length > 55 ? firstSentence.slice(0, 52) + '…' : firstSentence
+    label.textContent = prefix + display
+    label.classList.add('active')
   }
 
   /**

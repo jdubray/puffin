@@ -873,5 +873,28 @@ contextBridge.exposeInMainWorld('puffin', {
 
     // Open a URL in the system default browser (not Electron)
     openUrl: (url) => ipcRenderer.invoke('webserver:openUrl', url)
+  },
+
+  /**
+   * Puppeteer Visual Feedback Loop (Website Edition)
+   * Sets up a project-scoped MCP config so Claude can screenshot the preview server.
+   */
+  puppeteer: {
+    // Write .puffin/mcp-puppeteer.json; call once before enabling the loop
+    setup: (projectPath) => ipcRenderer.invoke('puppeteer:setup', { projectPath }),
+    // Check whether the config file already exists for the given project
+    check: (projectPath) => ipcRenderer.invoke('puppeteer:check', { projectPath }),
+    // Fires when Claude takes a screenshot: { count }
+    onScreenshot: (cb) => ipcRenderer.on('claude:puppeteer-screenshot', (e, data) => cb(data)),
+    // Fires when Claude emits a verdict after analysing a screenshot: { verdict }
+    onVerdict: (cb) => ipcRenderer.on('claude:puppeteer-verdict', (e, data) => cb(data))
+  },
+
+  /**
+   * Speech-to-text (Whisper API via main process)
+   */
+  speech: {
+    // Transcribe audio. audioData is a plain Array of bytes (Uint8Array serialised).
+    transcribe: (audioData) => ipcRenderer.invoke('speech:transcribe', { audioData })
   }
 })

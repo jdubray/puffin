@@ -285,6 +285,21 @@ export class ProjectFormComponent {
       websitePortInput.addEventListener('input', () => this.handleInputChange())
     }
 
+    // Speech / voice input fields — must trigger auto-save on every keystroke / change
+    // so the API key is persisted before the user clicks the mic button.
+    const speechApiKeyInput = document.getElementById('speech-api-key-input')
+    if (speechApiKeyInput) {
+      speechApiKeyInput.addEventListener('input', () => this.handleInputChange())
+    }
+    const speechModelSelect = document.getElementById('speech-model-select')
+    if (speechModelSelect) {
+      speechModelSelect.addEventListener('change', () => this.handleInputChange())
+    }
+    const speechApiUrlInput = document.getElementById('speech-api-url-input')
+    if (speechApiUrlInput) {
+      speechApiUrlInput.addEventListener('input', () => this.handleInputChange())
+    }
+
     // Snip checkbox — check installation when user enables it
     const snipCheckbox = document.getElementById('tools-snip-enabled')
     if (snipCheckbox) {
@@ -473,6 +488,14 @@ export class ProjectFormComponent {
     if (websiteServePathInput) websiteServePathInput.value = config.websiteServePath ?? 'dist'
     if (websiteServePathGroup) websiteServePathGroup.style.display = config.websiteEdition ? '' : 'none'
 
+    // Voice input
+    const speechApiKeyInput = document.getElementById('speech-api-key-input')
+    const speechModelSelect = document.getElementById('speech-model-select')
+    const speechApiUrlInput = document.getElementById('speech-api-url-input')
+    if (speechApiKeyInput) speechApiKeyInput.value = config.speechApiKey || ''
+    if (speechModelSelect) speechModelSelect.value = config.speechModel || 'gpt-4o-mini-transcribe'
+    if (speechApiUrlInput) speechApiUrlInput.value = config.speechApiUrl || ''
+
     // Debug Mode
     const debugCheckbox = document.getElementById('debug-mode-checkbox')
     if (debugCheckbox) debugCheckbox.checked = config.debugMode || false
@@ -601,6 +624,9 @@ export class ProjectFormComponent {
       websiteEdition: this.getCheckboxValue('website-edition-checkbox'),
       websitePort: parseInt(this.getElementValue('website-port-input', '5000'), 10) || 5000,
       websiteServePath: this.getElementValue('website-serve-path-input', 'dist').trim() || 'dist',
+      speechApiKey: this.getElementValue('speech-api-key-input', '').trim(),
+      speechModel: this.getElementValue('speech-model-select', 'gpt-4o-mini-transcribe'),
+      speechApiUrl: this.getElementValue('speech-api-url-input', '').trim(),
       debugMode: this.getCheckboxValue('debug-mode-checkbox'),
       cre: {
         sprintEnd: {

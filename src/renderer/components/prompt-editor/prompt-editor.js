@@ -43,6 +43,12 @@ export class PromptEditorComponent {
     this.supportedImageExtensions = ['.png', '.jpg', '.jpeg', '.webp']
     // Track whether the current prompt session has written/edited files
     this._writtenFileCount = 0
+    // Speech / voice input state
+    this._mediaRecorder = null
+    this._audioChunks = []
+    this._isListening = false
+    this._isTranscribing = false
+    this.micBtn = null
   }
 
   /**
@@ -69,11 +75,17 @@ export class PromptEditorComponent {
     // Clear prompt button (X)
     this.clearPromptBtn = document.getElementById('clear-prompt-btn')
 
+    // Microphone button
+    this.micBtn = document.getElementById('mic-btn')
+
     // Initialize image attachment UI
     this.initImageAttachmentUI()
 
     this.bindEvents()
     this.subscribeToState()
+
+    // Show mic button if getUserMedia is available (checked without prompting for permission)
+    this._initVoiceInput()
 
     // Initialize image service
     this.initImageService()
@@ -251,6 +263,11 @@ export class PromptEditorComponent {
       this.clearPromptBtn.addEventListener('click', () => {
         this.clearPrompt()
       })
+    }
+
+    // Microphone button — toggle voice recording
+    if (this.micBtn) {
+      this.micBtn.addEventListener('click', () => this._toggleVoiceInput())
     }
 
     // Cancel button
@@ -1212,7 +1229,10 @@ export class PromptEditorComponent {
         // Handoff context from another thread
         handoffContext: handoffContext,
         model: selectedModel,
-        maxTurns: 40 // Max turns per request
+        maxTurns: 40, // Max turns per request
+        // Puppeteer Visual Feedback Loop (Website Edition)
+        puppeteerLoop: !!state.puppeteerLoop,
+        puppeteerPort: state.config?.websitePort || 5000
       })
 
       // Note: Debug prompt is now captured via onFullPrompt callback from main process
@@ -2254,10 +2274,130 @@ ${config.instruction}
 ${prompt}`
   }
 
+  // ── Voice Input (MediaRecorder + Whisper API) ───────────────────────
+
+  /**
+   * Show the mic button if getUserMedia is available.
+   * The API key check happens at click time, not init time.
+   */
+  _initVoiceInput() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      console.log('[Speech] getUserMedia not available')
+      return
+    }
+    if (this.micBtn) this.micBtn.style.display = ''
+  }
+
+  /**
+   * Toggle recording on / off.
+   * If already recording, stops and sends audio for transcription.
+   */
+  async _toggleVoiceInput() {
+    if (this._isTranscribing) return // ignore clicks while transcribing
+
+    if (this._isListening) {
+      // Stop recording — onstop handler will kick off transcription
+      if (this._mediaRecorder) this._mediaRecorder.stop()
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      this._audioChunks = []
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm'
+
+      this._mediaRecorder = new MediaRecorder(stream, { mimeType })
+
+      this._mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) this._audioChunks.push(e.data)
+      }
+
+      this._mediaRecorder.onstop = async () => {
+        // Release mic immediately
+        stream.getTracks().forEach(t => t.stop())
+        this._setMicState(false)
+
+        if (this._audioChunks.length === 0) return
+
+        this._setMicTranscribing(true)
+        try {
+          const blob = new Blob(this._audioChunks, { type: mimeType })
+          const arrayBuffer = await blob.arrayBuffer()
+          // Serialise as plain array for IPC transfer
+          const audioData = Array.from(new Uint8Array(arrayBuffer))
+
+          const result = await window.puffin.speech.transcribe(audioData)
+
+          if (result.success && result.text) {
+            // Insert transcribed text at the current cursor position
+            const start = this.textarea.selectionStart
+            const end = this.textarea.selectionEnd
+            const before = this.textarea.value.substring(0, start)
+            const after = this.textarea.value.substring(end)
+            // Add a trailing space for convenience if needed
+            const insert = result.text + (result.text.endsWith(' ') ? '' : ' ')
+            this.textarea.value = before + insert + after
+            // Move cursor to end of inserted text
+            const newPos = start + insert.length
+            this.textarea.setSelectionRange(newPos, newPos)
+            this.textarea.dispatchEvent(new Event('input', { bubbles: true }))
+            this.textarea.focus()
+          } else if (result.error) {
+            console.error('[Speech] Transcription failed:', result.error)
+            window.puffinApp?.showToast?.({ message: `Voice input: ${result.error}`, type: 'error', duration: 5000 })
+          }
+        } catch (err) {
+          console.error('[Speech] Transcription error:', err)
+        } finally {
+          this._setMicTranscribing(false)
+        }
+      }
+
+      this._mediaRecorder.start()
+      this._setMicState(true)
+    } catch (err) {
+      console.error('[Speech] Mic access error:', err)
+      this._setMicState(false)
+      if (err.name === 'NotAllowedError') {
+        window.puffinApp?.showToast?.({ message: 'Microphone permission denied.', type: 'error', duration: 4000 })
+      }
+    }
+  }
+
+  /**
+   * Update mic button recording state.
+   * @param {boolean} listening
+   */
+  _setMicState(listening) {
+    this._isListening = listening
+    if (this.micBtn) {
+      this.micBtn.classList.toggle('listening', listening)
+      this.micBtn.title = listening ? 'Stop recording' : 'Voice input (speech-to-text)'
+    }
+  }
+
+  /**
+   * Update mic button transcribing state (spinner while waiting for API).
+   * @param {boolean} transcribing
+   */
+  _setMicTranscribing(transcribing) {
+    this._isTranscribing = transcribing
+    if (this.micBtn) {
+      this.micBtn.classList.toggle('transcribing', transcribing)
+      this.micBtn.title = transcribing ? 'Transcribing…' : 'Voice input (speech-to-text)'
+      this.micBtn.disabled = transcribing
+    }
+  }
+
   /**
    * Cleanup
    */
   destroy() {
-    // Remove event listeners if needed
+    if (this._mediaRecorder && this._isListening) {
+      this._mediaRecorder.stop()
+    }
   }
 }

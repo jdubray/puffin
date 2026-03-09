@@ -1504,3 +1504,9 @@ export const toggleSprintSummary = () => ({
     timestamp: Date.now()
   }
 })
+
+// Enable or disable the Puppeteer Visual Feedback Loop (Website Edition)
+export const setPuppeteerLoop = (enabled) => ({
+  type: 'SET_PUPPETEER_LOOP',
+  payload: { enabled }
+})

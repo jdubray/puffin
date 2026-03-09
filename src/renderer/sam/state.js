@@ -122,7 +122,10 @@ export function computeState(model) {
     debug: model.debug || {
       lastPrompt: null,
       enabled: false
-    }
+    },
+
+    // Website Edition — Puppeteer Visual Feedback Loop (ephemeral, session-only)
+    puppeteerLoop: model.puppeteerLoop || false
   }
 }
 
@@ -146,8 +149,9 @@ function computeAppState(model) {
 function computeConfigState(model) {
   const config = model.config || {}
 
-  // Return the full config object to ensure all fields are persisted
+  // Return the full config object — spread all fields so nothing is lost during persistence
   return {
+    ...config,
     name: config.name || '',
     description: config.description || '',
     assumptions: config.assumptions || [],
@@ -157,9 +161,7 @@ function computeConfigState(model) {
     options: config.options || {},
     uxStyle: config.uxStyle || {},
     websiteEdition: config.websiteEdition || false,
-    debugMode: config.debugMode || false,
-    createdAt: config.createdAt,
-    updatedAt: config.updatedAt
+    debugMode: config.debugMode || false
   }
 }
 

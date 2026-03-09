@@ -2564,18 +2564,69 @@
   order: 2;
 }
 
-.prompt-actions #submit-prompt-btn {
+.prompt-actions .mic-btn {
   order: 3;
   margin-left: auto;
+}
+
+.prompt-actions #submit-prompt-btn {
+  order: 4;
   margin-right: 1rem;
 }
 
+/* Microphone button */
+.mic-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.mic-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.mic-btn.listening {
+  background: var(--color-error, #dc3545);
+  border-color: var(--color-error, #dc3545);
+  color: #fff;
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+}
+
+.mic-btn.transcribing {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-primary, #6c5ce7);
+  color: var(--accent-primary, #6c5ce7);
+  cursor: wait;
+  animation: mic-pulse-accent 1s ease-in-out infinite;
+}
+
+@keyframes mic-pulse-accent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .prompt-actions #include-gui-btn {
-  order: 4;
+  order: 5;
 }
 
 .prompt-actions #include-docs-btn {
-  order: 5;
+  order: 6;
 }
 
 .prompt-actions #include-docs-btn.active {
@@ -12952,6 +13003,67 @@ body.website-edition #website-url-panel {
 .website-url-refresh-btn:hover {
   color: var(--text-primary);
   background: var(--bg-tertiary);
+}
+
+/* Wrapper keeps button + badge positioned together */
+.puppeteer-loop-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Screenshot count bubble */
+.puppeteer-screenshot-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: #4caf50;
+  color: #fff;
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Puppeteer Visual Feedback Loop toggle button */
+.puppeteer-loop-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.puppeteer-loop-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.puppeteer-loop-btn.active {
+  color: #4caf50;
+  background: rgba(76, 175, 80, 0.12);
+}
+
+/* Inline status label shown next to the camera button when loop is active */
+.puppeteer-loop-status {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: transparent;
+  flex: 1; /* push refresh btn to the right */
+}
+
+.puppeteer-loop-status.active {
+  color: #4caf50;
 }
 
 .website-url-list {

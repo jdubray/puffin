@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Voice Input — Speech-to-Text**: A microphone button in the prompt editor lets users dictate prompts using the browser's `MediaRecorder` API. Recorded audio is sent to an OpenAI-compatible Whisper endpoint (`SpeechService` in `src/main/speech-service.js`) and the transcription is inserted into the prompt textarea. API key, endpoint URL, and model are configurable in Project Settings → Voice Input. Defaults to `gpt-4o-mini-transcribe` on OpenAI's transcription API but supports any OpenAI-compatible provider (e.g. Azure, local Whisper). No additional npm dependencies — multipart form-data is built manually using Node.js built-ins.
+- **Website Edition — Visual Feedback Loop (Puppeteer)**: A camera toggle button in the Website URL panel enables an automated visual feedback loop for Website Edition projects. When active, each submitted prompt is augmented with instructions for Claude to use a Puppeteer MCP server to screenshot the running preview server (`localhost:5000`), compare the output against the stated goal, and self-correct — up to 3 attempts per prompt — without the user manually pasting screenshots. `PuppeteerMcpService` (`src/main/puppeteer-mcp-service.js`) writes a `.puffin/mcp-puppeteer.json` config file on first enable and passes `--mcp-config` to the Claude CLI on every submit while the loop is active. Toggle is ephemeral (per-session, not persisted). Requires `@modelcontextprotocol/server-puppeteer` resolvable via `npx`.
+
 ## [3.2.5] - 2026-03-08
 
 ### Added

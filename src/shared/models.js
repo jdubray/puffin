@@ -1,33 +1,25 @@
 /**
- * Available Claude models for Puffin
+ * Available models for Puffin (local LLM / deepagents mode)
  *
- * These are the models available through Claude Code CLI.
- * Users can select a default model in settings and override per-thread.
+ * Models are fetched dynamically from Ollama at startup via the
+ * `claude:getModels` IPC handler (src/main/ipc-handlers.js).
+ * This file is reference documentation only — it is not imported at runtime.
+ *
+ * Model IDs use the `ollama:<name>` format understood by init_chat_model()
+ * in the deepagents CLI shim. The active model is controlled by:
+ *   - DEEPAGENTS_MODEL env var (default shown below)
+ *   - User selection in the UI (persisted to localStorage as 'puffin-default-model')
  */
 
-export const CLAUDE_MODELS = [
+// Example model list (actual list comes from Ollama /api/tags at runtime)
+export const LOCAL_MODELS_EXAMPLE = [
   {
-    id: 'opus',
-    name: 'Claude Opus',
-    description: 'Most capable, best for complex tasks',
-    tier: 'premium'
-  },
-  {
-    id: 'sonnet',
-    name: 'Claude Sonnet',
-    description: 'Balanced performance and speed',
-    tier: 'standard'
-  },
-  {
-    id: 'haiku',
-    name: 'Claude Haiku',
-    description: 'Fast and lightweight',
-    tier: 'fast'
+    id: 'ollama:qwen2.5:14b-instruct-q5_K_M',
+    name: 'qwen2.5:14b-instruct-q5_K_M',
+    description: '~9GB',
+    tier: 'default'
   }
 ]
 
-// Default model for new projects
-export const DEFAULT_MODEL = 'opus'
-
-// Model for quick operations (title generation, etc.)
-export const FAST_MODEL = 'haiku'
+// Fallback used when Ollama is unreachable (mirrors DEEPAGENTS_MODEL env var default)
+export const DEFAULT_MODEL = 'ollama:qwen2.5:14b-instruct-q5_K_M'

@@ -1749,6 +1749,27 @@ function setupClaudeHandlers(ipcMain) {
       return { success: false, error: error.message }
     }
   })
+
+  ipcMain.handle('claude:getModels', async () => {
+    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434'
+    const defaultModel = process.env.DEEPAGENTS_MODEL || 'ollama:qwen3:8b'
+
+    try {
+      const resp = await fetch(`${ollamaHost}/api/tags`)
+      const data = await resp.json()
+      const models = (data.models || []).map(m => ({
+        id: `ollama:${m.name}`,
+        name: m.name,
+        description: `${(m.size / 1e9).toFixed(1)}GB`
+      }))
+      return { models, default: defaultModel }
+    } catch {
+      return {
+        models: [{ id: defaultModel, name: defaultModel.replace('ollama:', ''), description: 'default' }],
+        default: defaultModel
+      }
+    }
+  })
 }
 
 /**

@@ -52,6 +52,11 @@ const DISPLAY_LIMITS = {
   FILES_MODIFIED: 10
 }
 
+// Default model for quick one-shot calls (handoff, story summary).
+// Set by loadModels() once Ollama responds; falls back to empty string
+// so the agent CLI uses its own DEEPAGENTS_MODEL env var default.
+let _fastModel = ''
+
 /**
  * Main application class
  */
@@ -866,6 +871,43 @@ Please provide specific file locations and line numbers where issues are found, 
   }
 
   /**
+   * Fetch available models from Ollama and populate both model dropdowns.
+   * Falls back gracefully if Ollama is unreachable.
+   */
+  async loadModels() {
+    if (!window.puffin?.claude?.getModels) return
+    try {
+      const { models, default: defaultModel } = await window.puffin.claude.getModels()
+      _fastModel = defaultModel
+
+      const saved = localStorage.getItem('puffin-default-model')
+      const selectedId = (saved && models.find(m => m.id === saved)) ? saved : defaultModel
+
+      const optionsHtml = models.map(m =>
+        `<option value="${m.id}"${m.id === selectedId ? ' selected' : ''}>${m.name} — ${m.description}</option>`
+      ).join('\n')
+
+      for (const id of ['thread-model', 'default-model']) {
+        const el = document.getElementById(id)
+        if (el) el.innerHTML = optionsHtml
+      }
+
+      // Persist selection when settings dropdown changes
+      const settingsEl = document.getElementById('default-model')
+      if (settingsEl) {
+        settingsEl.addEventListener('change', () => {
+          localStorage.setItem('puffin-default-model', settingsEl.value)
+          const threadEl = document.getElementById('thread-model')
+          if (threadEl) threadEl.value = settingsEl.value
+          _fastModel = settingsEl.value
+        })
+      }
+    } catch (err) {
+      console.warn('[loadModels] Failed to fetch models:', err)
+    }
+  }
+
+  /**
    * Initialize the application
    */
   async init() {
@@ -873,6 +915,9 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Clean up any leftover overlays from previous sessions
     this.cleanupLeftoverOverlays()
+
+    // Populate model dropdowns from Ollama
+    this.loadModels()
 
     // Initialize SAM with FSMs
     this.initSAM()
@@ -4696,7 +4741,7 @@ Keep it concise but informative. Use markdown formatting.`
 
       // Call Claude API
       const response = await window.puffin.claude.sendPrompt(handoffPrompt, {
-        model: 'haiku',
+        model: _fastModel,
         maxTurns: 1
       })
 
@@ -6357,7 +6402,7 @@ Respond with ONLY a JSON object (no markdown, no code fences):
 }`
 
       const result = await window.puffin.claude.sendPrompt(summaryPrompt, {
-        model: 'haiku',
+        model: _fastModel,
         maxTurns: 1,
         timeout: 30000
       })

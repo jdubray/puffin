@@ -32,4 +32,4 @@ projects/*.json
 !projects/.gitkeep
 
 test-dsl/
-tmp/
+tmp/start-with-deepagents.sh

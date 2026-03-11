@@ -350,7 +350,9 @@ contextBridge.exposeInMainWorld('puffin', {
     generateTitle: (content) => ipcRenderer.invoke('claude:generateTitle', content),
 
     // Send a simple prompt and get a response (non-streaming)
-    sendPrompt: (prompt, options = {}) => ipcRenderer.invoke('claude:sendPrompt', prompt, options)
+    sendPrompt: (prompt, options = {}) => ipcRenderer.invoke('claude:sendPrompt', prompt, options),
+
+    getModels: () => ipcRenderer.invoke('claude:getModels')
   },
 
   /**

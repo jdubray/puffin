@@ -70,7 +70,11 @@
       "Bash(powershell -Command:*)",
       "Bash(powershell -File -:*)",
       "Bash(head:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(claude:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh api:*)",
+      "Bash(npm info:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

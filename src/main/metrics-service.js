@@ -55,8 +55,16 @@ class MetricsService extends EventEmitter {
     this.insertStmt = null // Legacy: writes to metrics_events (kept during transition)
     this.insertPromptStmt = null // New: writes to prompt_metrics
     this._flushing = false
+    this._shutdownStarted = false
     this._initializeStatements()
     this._startBatchTimer()
+
+    // Default 'error' event handler — prevents Node.js from throwing unhandled
+    // EventEmitter errors as uncaught exceptions when _flushBatch() fails (e.g.
+    // database closed before the metrics flush timer fires).
+    this.on('error', (err) => {
+      console.error('[METRICS] Error event (non-fatal):', err && err.error ? err.error.message : err)
+    })
   }
 
   /**
@@ -557,6 +565,13 @@ class MetricsService extends EventEmitter {
    */
   async shutdown() {
     try {
+      this._shutdownStarted = true
+      // Null out prepared statements BEFORE stopping the timer so that any
+      // concurrent timer callback that is already past the db.open check will
+      // hit the null-guard in _flushBatch() and exit cleanly instead of running
+      // a statement against a closing/closed connection.
+      this.insertStmt = null
+      this.insertPromptStmt = null
       this._stopBatchTimer()
       this._flushBatch()
       this.emit('shutdown')

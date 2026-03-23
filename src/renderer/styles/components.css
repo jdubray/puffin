@@ -13005,6 +13005,101 @@ body.website-edition #website-url-panel {
   background: var(--bg-tertiary);
 }
 
+/* /btw sidebar note panel */
+.btw-panel {
+  margin: 0 0 8px 0;
+  border: 1px solid rgba(74, 144, 180, 0.4);
+  border-radius: 6px;
+  background: rgba(74, 144, 180, 0.07);
+  overflow: hidden;
+}
+
+.btw-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 4px;
+  border-bottom: 1px solid rgba(74, 144, 180, 0.2);
+}
+
+.btw-panel-icon {
+  font-size: 0.85rem;
+}
+
+.btw-panel-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #4a90b4;
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.btw-panel-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 0 2px;
+  line-height: 1;
+  border-radius: 3px;
+  transition: color 0.1s, background 0.1s;
+}
+
+.btw-panel-dismiss:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.btw-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.btw-input {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.btw-input:focus {
+  border-color: #4a90b4;
+}
+
+.btw-submit {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #4a90b4;
+  font-size: 0.9rem;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: color 0.1s, background 0.1s;
+}
+
+.btw-submit:hover {
+  background: rgba(74, 144, 180, 0.15);
+}
+
+.btw-answer {
+  padding: 0 10px 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  border-top: 1px solid rgba(74, 144, 180, 0.2);
+  margin-top: 0;
+  padding-top: 8px;
+}
+
 /* Wrapper keeps button + badge positioned together */
 .puppeteer-loop-btn-wrap {
   position: relative;

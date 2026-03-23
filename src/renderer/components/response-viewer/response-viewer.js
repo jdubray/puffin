@@ -105,6 +105,9 @@ export class ResponseViewerComponent {
     `
     this.areaContainer.appendChild(overlay)
 
+    // Scroll to top so the spinner is immediately visible regardless of prior scroll position
+    this.areaContainer.scrollTop = 0
+
     // Tiny delay so the first phrase is visible before cycling starts
     setTimeout(() => this._startPhraseCycler(startIdx), 100)
   }

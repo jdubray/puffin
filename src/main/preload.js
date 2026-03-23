@@ -301,6 +301,9 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('claude:question', handler)
     },
 
+    // Ephemeral /btw side question — answered from session context, not shown in history
+    btwAsk: (data) => ipcRenderer.invoke('claude:btw-ask', data),
+
     // Send answer to a pending question
     answerQuestion: (data) => ipcRenderer.invoke('claude:answer', data),
 

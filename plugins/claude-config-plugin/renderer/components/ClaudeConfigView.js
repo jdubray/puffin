@@ -63,6 +63,7 @@ export class ClaudeConfigView {
     this.proposal = null
     this.showingDiff = false
     this.isProcessingPrompt = false
+    this.isRewriting = false
 
     // Section management state
     this.selectedSection = null
@@ -151,6 +152,7 @@ export class ClaudeConfigView {
           </div>
           <div class="config-actions">
             <button id="add-section-btn" class="btn small" title="Add new section" aria-label="Add new section">+ Section</button>
+            <button id="rewrite-config-btn" class="btn small" title="Ask Claude to condense this file" aria-label="Rewrite" ${this.isRewriting || !this.content ? 'disabled' : ''}>${this.isRewriting ? 'Rewriting...' : 'Rewrite'}</button>
             <button id="refresh-config-btn" class="btn small" title="Refresh configuration" aria-label="Refresh">Refresh</button>
           </div>
         </div>
@@ -737,6 +739,11 @@ Add guidelines for this branch..."
         }
       })
     }
+
+    // Rewrite button
+    this.container.querySelector('#rewrite-config-btn')?.addEventListener('click', () => {
+      this.rewrite()
+    })
 
     // Refresh button
     this.container.querySelector('#refresh-config-btn')?.addEventListener('click', () => {
@@ -1625,6 +1632,92 @@ Generate a CLAUDE.md context file based on this request. Output ONLY the markdow
       console.error('[ClaudeConfigView] Failed to send prompt:', err)
       this.showNotification(`Failed to generate: ${err.message}`, 'error')
       this.isProcessingPrompt = false
+      this.render()
+    }
+  }
+
+  /**
+   * Ask Claude to rewrite the current context file more concisely.
+   *
+   * Large CLAUDE.md files (100KB+) cause Claude Code to freeze because the
+   * entire file is prepended to every prompt, bloating the context window.
+   * This sends the file to Claude and asks it to condense the content while
+   * preserving all key information, then shows the result as a diff for review.
+   */
+  async rewrite() {
+    if (!this.content || this.content.trim().length === 0) {
+      this.showNotification('No content to rewrite', 'error')
+      return
+    }
+
+    const sizeKb = Math.round(this.content.length / 1024)
+    const contextDisplay = this.selectedContext ? formatContextName(this.selectedContext) : 'context'
+
+    this.isRewriting = true
+    this.render()
+
+    try {
+      const fullPrompt = `You are rewriting a CLAUDE.md context file to make it more concise without losing any important information.
+
+IMPORTANT: Do NOT use any tools. Do NOT read files. Process the content below DIRECTLY.
+
+CLAUDE.md files are injected at the start of every Claude Code prompt. When they are too large (this one is ${sizeKb}KB), they consume too much of the context window and cause performance issues.
+
+YOUR TASK:
+Rewrite the following CLAUDE.md content to be as concise as possible while:
+- Preserving ALL important rules, conventions, and architectural decisions
+- Keeping ALL section headings (## Branch Focus, ## Conventions, etc.)
+- Converting verbose paragraphs into tight bullet points
+- Removing redundant explanations, examples, and repetition
+- Keeping code snippets ONLY if they are essential (remove illustrative ones)
+- Targeting 30-50% reduction in size
+
+OUTPUT: Only the rewritten markdown content, no explanations, no preamble, no code block wrapper.
+
+CURRENT CONTENT (${sizeKb}KB):
+${this.content}`
+
+      const result = await window.puffin.claude.sendPrompt(fullPrompt, {
+        model: 'sonnet',
+        maxTurns: 5,
+        timeout: 120000
+      })
+
+      if (result.success && result.response) {
+        let rewritten = result.response.trim()
+        // Strip markdown code block wrappers if Claude added them
+        if (rewritten.startsWith('```markdown')) {
+          rewritten = rewritten.slice('```markdown'.length)
+        } else if (rewritten.startsWith('```')) {
+          rewritten = rewritten.slice(3)
+        }
+        if (rewritten.endsWith('```')) {
+          rewritten = rewritten.slice(0, -3)
+        }
+        rewritten = rewritten.trim()
+
+        const originalKb = Math.round(this.content.length / 1024)
+        const rewrittenKb = Math.round(rewritten.length / 1024)
+        const reduction = Math.round((1 - rewritten.length / this.content.length) * 100)
+
+        this.proposal = {
+          success: true,
+          summary: `Rewritten ${contextDisplay}: ${originalKb}KB → ${rewrittenKb}KB (${reduction}% reduction)`,
+          proposedContent: rewritten,
+          diff: this.generateSimpleDiff(this.content, rewritten)
+        }
+        this.showingDiff = true
+        this.isRewriting = false
+        this.render()
+      } else {
+        this.showNotification(result.error || 'Rewrite failed', 'error')
+        this.isRewriting = false
+        this.render()
+      }
+    } catch (err) {
+      console.error('[ClaudeConfigView] Rewrite failed:', err)
+      this.showNotification(`Rewrite failed: ${err.message}`, 'error')
+      this.isRewriting = false
       this.render()
     }
   }

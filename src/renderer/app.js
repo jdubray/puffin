@@ -2233,6 +2233,9 @@ Please provide specific file locations and line numbers where issues are found, 
     })
     this.claudeListeners.push(unsubQuestion)
 
+    // Bind the /btw panel on first Claude init (idempotent)
+    this._bindBtwPanel()
+
     // Story derivation - stories derived
     const unsubStoriesDerived = window.puffin.claude.onStoriesDerived((data) => {
       console.log('[STORY-DERIVATION] Stories derived event received')
@@ -4368,6 +4371,91 @@ Please provide specific file locations and line numbers where issues are found, 
         title: 'Visual Loop OFF',
         duration: 2000
       })
+    }
+  }
+
+  /**
+   * Bind the /btw quick-question panel (idempotent).
+   * The panel opens when the user types /btw <question> in the prompt and submits,
+   * or can be shown directly for an ephemeral side question.
+   */
+  _bindBtwPanel() {
+    if (this._btwPanelBound) return
+    this._btwPanelBound = true
+
+    const dismissBtn = document.getElementById('btw-panel-dismiss')
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => this._closeBtwPanel())
+    }
+
+    const submitBtn = document.getElementById('btw-submit')
+    const input = document.getElementById('btw-input')
+    if (submitBtn) submitBtn.addEventListener('click', () => this._submitBtwQuestion())
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          this._submitBtwQuestion()
+        }
+        if (e.key === 'Escape') this._closeBtwPanel()
+      })
+    }
+  }
+
+  /** Open the /btw panel and focus the input. */
+  _openBtwPanel() {
+    const panel = document.getElementById('btw-panel')
+    const answer = document.getElementById('btw-answer')
+    if (!panel) return
+    if (answer) answer.style.display = 'none'
+    panel.style.display = ''
+    document.getElementById('btw-input')?.focus()
+  }
+
+  /** Close and reset the /btw panel. */
+  _closeBtwPanel() {
+    const panel = document.getElementById('btw-panel')
+    const input = document.getElementById('btw-input')
+    const answer = document.getElementById('btw-answer')
+    if (panel) panel.style.display = 'none'
+    if (input) input.value = ''
+    if (answer) { answer.textContent = ''; answer.style.display = 'none' }
+  }
+
+  /**
+   * Submit the /btw question: make an ephemeral one-shot call using the current
+   * session's context. The answer is shown in the panel, never added to history.
+   */
+  async _submitBtwQuestion() {
+    const input = document.getElementById('btw-input')
+    const answer = document.getElementById('btw-answer')
+    const submitBtn = document.getElementById('btw-submit')
+    if (!input || !answer) return
+
+    const question = input.value.trim()
+    if (!question) return
+
+    // Reuse the prompt-editor's session ID logic so the question has conversation context
+    const sessionId = this.components?.promptEditor?.getLastSessionId?.(this.state) || null
+
+    // Show loading state
+    input.disabled = true
+    if (submitBtn) submitBtn.disabled = true
+    answer.textContent = '...'
+    answer.style.display = ''
+
+    try {
+      const result = await window.puffin.claude.btwAsk({ question, sessionId })
+      if (result.success && result.response) {
+        answer.textContent = result.response
+      } else {
+        answer.textContent = result.error || 'No answer received.'
+      }
+    } catch (err) {
+      answer.textContent = `Error: ${err.message}`
+    } finally {
+      input.disabled = false
+      if (submitBtn) submitBtn.disabled = false
     }
   }
 

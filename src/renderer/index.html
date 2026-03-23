@@ -576,6 +576,19 @@
                 <div class="prompt-separator-handle"></div>
               </div>
               <div class="prompt-area" id="prompt-area">
+                <!-- /btw ephemeral side question panel — type a quick question, get an answer without adding to history -->
+                <div id="btw-panel" class="btw-panel" style="display:none" aria-live="polite">
+                  <div class="btw-panel-header">
+                    <span class="btw-panel-icon">💬</span>
+                    <span class="btw-panel-label">Quick question</span>
+                    <button id="btw-panel-dismiss" class="btw-panel-dismiss" title="Dismiss">&#x2715;</button>
+                  </div>
+                  <div class="btw-input-row">
+                    <input id="btw-input" class="btw-input" type="text" placeholder="Ask a quick question... (Enter to send)" autocomplete="off" />
+                    <button id="btw-submit" class="btw-submit" title="Ask">&#10148;</button>
+                  </div>
+                  <div id="btw-answer" class="btw-answer" style="display:none"></div>
+                </div>
                 <div class="prompt-input-wrapper">
                   <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
                   <button id="clear-prompt-btn" class="clear-prompt-btn" title="Clear prompt" style="display:none;">

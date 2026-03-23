@@ -1087,6 +1087,22 @@ export class PromptEditorComponent {
   async submit() {
     const content = this.textarea.value.trim()
 
+    // /btw <question> — ephemeral side question, not added to history
+    if (content.startsWith('/btw ') || content === '/btw') {
+      const question = content.slice(5).trim()
+      this.textarea.value = ''
+      this.textarea.dispatchEvent(new Event('input'))
+      if (question && window.puffinApp?._openBtwPanel) {
+        window.puffinApp._openBtwPanel()
+        const input = document.getElementById('btw-input')
+        if (input) {
+          input.value = question
+          window.puffinApp._submitBtwQuestion()
+        }
+      }
+      return
+    }
+
     // Get current state from window
     const state = window.puffinApp?.state
     if (!state) return

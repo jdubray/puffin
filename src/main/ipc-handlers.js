@@ -1637,6 +1637,25 @@ function setupClaudeHandlers(ipcMain) {
     return claudeService.sendAnswer(toolUseId, answers)
   })
 
+  // /btw ephemeral side question — one-shot, no tools, answered from existing session context.
+  // The exchange is NOT shown in Puffin's conversation view; the answer is displayed ephemerally.
+  ipcMain.handle('claude:btw-ask', async (event, { question, sessionId }) => {
+    if (!question?.trim()) return { success: false, error: 'Empty question' }
+    if (!projectPath) return { success: false, error: 'No project open' }
+
+    // Prefix the question so Claude knows this is a side query and should reply briefly.
+    const prompt = `[btw — side question, answer briefly without using any tools]\n\n${question.trim()}`
+
+    const result = await claudeService.sendPrompt(prompt, {
+      projectPath,
+      sessionId: sessionId || null, // resume session for context
+      disableTools: true,           // no file access — answers from context only
+      maxTurns: 1,
+      model: null                   // inherits default model
+    })
+    return result
+  })
+
   // Derive user stories from a prompt
   ipcMain.on('claude:deriveStories', async (event, data) => {
     console.log('[IPC] claude:deriveStories received')

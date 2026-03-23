@@ -746,8 +746,10 @@ class ClaudeService {
     // Limit turns to prevent runaway processes
     args.push('--max-turns', String(data.maxTurns || '40'))
 
-    // Auto-accept edits to avoid permission prompts
-    args.push('--permission-mode', 'acceptEdits')
+    // Permission mode: bypass all prompts when puppeteer loop is active (user opted in),
+    // otherwise only auto-accept file edits.
+    const permissionMode = data.mcpConfigPath ? 'bypassPermissions' : 'acceptEdits'
+    args.push('--permission-mode', permissionMode)
 
     // Add model if specified
     if (data.model) {
@@ -771,6 +773,11 @@ class ClaudeService {
 
     // Prompt will be passed via stdin as stream-json
     args.push('-')
+
+    // Puppeteer Visual Loop: load project-scoped MCP config with browser tools
+    if (data.mcpConfigPath) {
+      args.push('--mcp-config', data.mcpConfigPath)
+    }
 
     return args
   }
@@ -867,11 +874,19 @@ class ClaudeService {
         break
       }
 
+      case 'notification':
+        // Claude Code /btw-style notification — non-blocking sidebar message
+        if (json.message) {
+          onChunk(`\n💬 ${json.message}\n`)
+        }
+        break
+
       default:
         // Unknown message type, log it
         console.log('Unknown stream message type:', json.type)
     }
   }
+
 
   /**
    * Build the prompt with optional context
@@ -2014,9 +2029,14 @@ ${content}`
         console.log('[sendPrompt] Using --json-schema, maxTurns bumped to:', maxTurns)
       }
 
+      // Resume an existing session for context (e.g. /btw side questions)
+      if (options.sessionId) {
+        args.push('--resume', options.sessionId)
+      }
+
       args.push('-') // stdin prompt (must be last)
 
-      const cwd = this.projectPath || process.cwd()
+      const cwd = options.projectPath || this.projectPath || process.cwd()
       const spawnOptions = this.getSpawnOptions(cwd)
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
 

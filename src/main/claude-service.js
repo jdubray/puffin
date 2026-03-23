@@ -88,6 +88,16 @@ class ClaudeService {
   }
 
   /**
+   * Returns [cmd, ...prefixArgs] for spawning the agent.
+   * Reads PUFFIN_AGENT_CMD env var; falls back to ['claude'].
+   * Example: PUFFIN_AGENT_CMD="python /path/to/deepagents_cli.py"
+   */
+  get agentCmd() {
+    const envCmd = process.env.PUFFIN_AGENT_CMD
+    return envCmd ? envCmd.trim().split(/\s+/) : ['claude']
+  }
+
+  /**
    * Milliseconds before auto-answering an unanswered AskUserQuestion.
    * The Claude CLI (--print mode) times out waiting for tool results within a few
    * seconds, after which it injects an error and Claude abandons the tool.
@@ -277,14 +287,15 @@ class ClaudeService {
       // Build CLI arguments (without prompt - we'll pass via stdin)
       const args = this.buildArgs(data)
 
-      console.log('Spawning Claude CLI:', 'claude', args)
+      const [agentExe, ...agentPrefixArgs] = this.agentCmd
+      console.log('Spawning agent:', agentExe, [...agentPrefixArgs, ...args])
       console.log('Working directory:', cwd)
       console.log('Prompt length:', prompt.length)
 
-      // Spawn the Claude CLI process with stdin for prompt
+      // Spawn the agent process with stdin for prompt
       const spawnOptions = this.getSpawnOptions(cwd)
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
-      this.currentProcess = spawn('claude', args, spawnOptions)
+      this.currentProcess = spawn(agentExe, [...agentPrefixArgs, ...args], spawnOptions)
 
       let fullOutput = ''
       let streamedContent = '' // Accumulate ALL streamed assistant text
@@ -1432,7 +1443,8 @@ ${updatedContext}
    */
   async isAvailable() {
     return new Promise((resolve) => {
-      const check = spawn('claude', ['--version'], this.getSpawnOptions())
+      const [agentExe, ...agentPrefixArgs] = this.agentCmd
+      const check = spawn(agentExe, [...agentPrefixArgs, '--version'], this.getSpawnOptions())
 
       check.on('close', (code) => {
         resolve(code === 0)
@@ -1456,7 +1468,8 @@ ${updatedContext}
    */
   async getVersion() {
     return new Promise((resolve) => {
-      const proc = spawn('claude', ['--version'], this.getSpawnOptions())
+      const [agentExe, ...agentPrefixArgs] = this.agentCmd
+      const proc = spawn(agentExe, [...agentPrefixArgs, '--version'], this.getSpawnOptions())
       let output = ''
 
       proc.stdout.on('data', (chunk) => {
@@ -1574,7 +1587,8 @@ Guidelines:
         '-'
       ]
 
-      progress(`Spawning claude with args: ${args.join(' ')}`)
+      const [agentExe, ...agentPrefixArgs] = this.agentCmd
+      progress(`Spawning agent with args: ${[...agentPrefixArgs, ...args].join(' ')}`)
       progress(`Working directory: ${cwd}`)
       progress(`Prompt length: ${fullPrompt.length} chars`)
 
@@ -1583,7 +1597,7 @@ Guidelines:
 
       progress(`Spawn options - shell: ${spawnOptions.shell}, platform: ${process.platform}`)
 
-      const proc = spawn('claude', args, spawnOptions)
+      const proc = spawn(agentExe, [...agentPrefixArgs, ...args], spawnOptions)
 
       if (!proc.pid) {
         progress('ERROR: Failed to spawn process - no PID')
@@ -1875,7 +1889,8 @@ ${content}`
 
       console.log('Generating title for prompt...')
 
-      const titleProcess = spawn('claude', args, spawnOptions)
+      const [agentExe, ...agentPrefixArgs] = this.agentCmd
+      const titleProcess = spawn(agentExe, [...agentPrefixArgs, ...args], spawnOptions)
 
       let output = ''
       let errorOutput = ''
@@ -2043,13 +2058,14 @@ ${content}`
       console.log('[sendPrompt] Sending prompt with model:', model, 'timeout:', timeout)
       console.log('[sendPrompt] Prompt length:', prompt.length, 'chars')
 
-      const proc = spawn('claude', args, spawnOptions)
+      const [agentExe, ...agentPrefixArgs] = this.agentCmd
+      const proc = spawn(agentExe, [...agentPrefixArgs, ...args], spawnOptions)
 
       if (!proc.pid) {
         console.error('[sendPrompt] Failed to spawn process - no PID')
         if (!lockAlreadyHeld) { this._processLock = false }
         console.log('[sendPrompt-GUARD] Process lock released (no PID)')
-        resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
+        resolve({ success: false, error: 'Failed to spawn agent process' })
         return
       }
 
@@ -2434,13 +2450,14 @@ Generate inspection assertions for each story. Output ONLY the JSON object.`
 
       progress(`Generating assertions for ${stories.length} stories with model ${selectedModel}...`)
 
-      const proc = spawn('claude', args, spawnOptions)
+      const [agentExe, ...agentPrefixArgs] = this.agentCmd
+      const proc = spawn(agentExe, [...agentPrefixArgs, ...args], spawnOptions)
 
       if (!proc.pid) {
         progress('ERROR: Failed to spawn process')
         this._processLock = false
         console.log('[ASSERTION-GEN-GUARD] Process lock released (no PID)')
-        resolve({ success: false, error: 'Failed to spawn Claude CLI process' })
+        resolve({ success: false, error: 'Failed to spawn agent process' })
         return
       }
 

@@ -11,6 +11,7 @@
    - [Project Configuration](#project-configuration)
    - [Branched Conversation Management](#branched-conversation-management)
    - [Prompt Editor & Submission](#prompt-editor--submission)
+   - [/btw Quick Question Panel](#btw-quick-question-panel)
    - [Real-Time Response Viewing](#real-time-response-viewing)
    - [Backlog Management](#backlog-management)
    - [AI-Powered Story Derivation](#ai-powered-story-derivation)
@@ -30,6 +31,8 @@
    - [Sprint Close with Git Commit](#sprint-close-with-git-commit)
    - [Sprint Management Enhancements](#sprint-management-enhancements)
    - [CLI Output Monitoring](#cli-output-monitoring)
+   - [CLAUDE.md Rewrite](#claudemd-rewrite)
+   - [Pluggable Agent Backend](#pluggable-agent-backend)
 5. [User Interface](#user-interface)
 6. [Workflows](#workflows)
 7. [Advanced Features](#advanced-features)
@@ -975,6 +978,45 @@ Compose and submit prompts to Claude with enhanced context and options.
 3. Add prompt to conversation history
 4. Spawn Claude Code CLI subprocess with full context
 5. Stream response in real-time
+
+---
+
+### /btw Quick Question Panel
+
+Ask Claude a quick question without interrupting your main conversation thread.
+
+#### How It Works
+
+Type `/btw <your question>` in the prompt editor and press **Enter**. Instead of submitting the text as a normal prompt, Puffin:
+
+1. Opens the **Quick Question** panel above the prompt input
+2. Pre-fills your question
+3. Immediately sends a one-shot request using the **current session's context**
+4. Displays the answer inline in the panel
+
+The question and answer are **never added to conversation history**. They are ephemeral — close the panel and they are gone.
+
+#### Key Properties
+
+| Property | Detail |
+|---|---|
+| **Context** | Uses the current session ID — Claude has full conversation context |
+| **Tools** | Disabled — no file access, no Bash, answers from memory only |
+| **History** | Not recorded — invisible to future prompts |
+| **Turns** | Single-turn, typically responds in 2–5 seconds |
+
+#### When to Use It
+
+- "Which file did we just add that function to?"
+- "What was the name of the migration we created earlier?"
+- "Can you remind me what the IPC handler format is?"
+- Any quick clarification you need without adding noise to the thread
+
+#### Keyboard Shortcuts
+
+- **Enter** in the input field — submit question
+- **Escape** — close the panel
+- **Dismiss ×** button — close and clear
 
 ---
 
@@ -2805,6 +2847,72 @@ When a sprint is deleted:
 - Stories are immediately available for new sprints
 - Story history and content preserved
 - No data loss except sprint association
+
+---
+
+### CLAUDE.md Rewrite
+
+Large CLAUDE.md context files (100KB+) slow down every prompt because the entire file is prepended to the context window. The **Rewrite** button in the Config tab asks Claude to condense the current context file while preserving all important content.
+
+#### How to Use
+
+1. Open the **Config** tab and navigate to the context file you want to shrink
+2. Click the **Rewrite** button (top-right of the editor toolbar)
+3. Claude rewrites the content, targeting 30–50% size reduction
+4. The result is shown as a **diff** — green lines added, red lines removed
+5. Review the diff and click **Apply** to save, or **Discard** to keep the original
+
+#### What Gets Preserved
+
+- All section headings (`## Branch Focus`, `## Conventions`, etc.)
+- Every rule, convention, and architectural decision
+- Code snippets that are essential (non-illustrative examples are removed)
+
+#### What Gets Removed
+
+- Redundant explanations and repetition
+- Verbose paragraphs that can be expressed as bullet points
+- Illustrative examples that duplicate nearby text
+
+> **Tip**: Run Rewrite periodically as your project grows. Keeping context files under 20KB noticeably improves prompt response speed.
+
+---
+
+### Pluggable Agent Backend
+
+By default Puffin spawns the `claude` CLI as its agent subprocess. You can replace it with any compatible agent by setting the `PUFFIN_AGENT_CMD` environment variable before launching Puffin.
+
+#### Configuration
+
+```bash
+# Replace Claude Code CLI with deepagents (local LLM via Ollama)
+export PUFFIN_AGENT_CMD="python /path/to/deepagents_cli.py"
+export DEEPAGENTS_MODEL="ollama:qwen2.5:14b-instruct-q5_K_M"
+export OLLAMA_HOST="http://192.168.10.55:11434"
+npm start
+```
+
+Or use the provided launch script if deepagents supplies one (`start-with-deepagents.sh`).
+
+#### Model Selection
+
+| Mode | Model Dropdown |
+|---|---|
+| `PUFFIN_AGENT_CMD` not set | Claude Opus / Sonnet / Haiku |
+| `PUFFIN_AGENT_CMD` set, Ollama reachable | Populated from Ollama `/api/tags` |
+| `PUFFIN_AGENT_CMD` set, Ollama unreachable | Falls back to `DEEPAGENTS_MODEL` default |
+
+Model selection is persisted to `localStorage` between sessions.
+
+#### Requirements for a Compatible Agent
+
+The agent subprocess must:
+- Accept `--input-format stream-json` and `--output-format stream-json` flags
+- Read prompts from stdin as newline-delimited JSON
+- Stream responses back to stdout in the same format as the Claude Code CLI
+- Support `--print` and `--max-turns` flags for one-shot calls
+
+See [deepagents](https://github.com/your-org/local-llm) for a reference implementation.
 
 ---
 

@@ -78,6 +78,18 @@ You can't "prompt along" a coding agent, just like you can't "prompt along" a de
 - **Architectural Decisions** captured and injected into future sessions
 - **Branch-specific context** with facts, conventions, and bug patterns
 - **CLAUDE.md Generation** with Code Model snippets and memory context
+- **CLAUDE.md Rewrite** — one-click AI condensation (30–50% size reduction) to keep context lean
+
+### 💬 `/btw` Quick Questions
+- Type `/btw <question>` in the prompt editor for an ephemeral side-answer
+- Answered from existing session context — no tools, no file access
+- Never added to conversation history; answer shown inline and dismissed when done
+
+### 🔌 Pluggable Agent Backend
+- Set `PUFFIN_AGENT_CMD` to replace the Claude Code CLI with any compatible subprocess
+- Zero-config fallback to `claude` when the variable is not set
+- **Local LLM support** via [deepagents](https://github.com/your-org/local-llm) + Ollama
+- **Dynamic model discovery** — model dropdowns populate from Ollama `/api/tags` at startup
 
 ### 🚀 Sprint Orchestration
 - **Automated Sprint Implementation** - Claude orchestrates entire sprints end-to-end
@@ -362,6 +374,23 @@ npm run package:linux  # Linux
 ```
 
 Packaged apps are output to `dist/` directory. Electron Builder handles code signing (requires certificates for macOS/Windows distribution).
+
+## Using a Local LLM (deepagents / Ollama)
+
+Set `PUFFIN_AGENT_CMD` to route all Claude CLI calls through a compatible agent subprocess:
+
+```bash
+export PUFFIN_AGENT_CMD="python /path/to/deepagents_cli.py"
+export DEEPAGENTS_MODEL="ollama:qwen2.5:14b-instruct-q5_K_M"
+export OLLAMA_HOST="http://192.168.10.55:11434"
+npm start
+```
+
+When `PUFFIN_AGENT_CMD` is set, the model dropdowns are populated dynamically from Ollama's `/api/tags` API and the selection is persisted across sessions. Without it, the standard Claude Opus / Sonnet / Haiku options are shown and no env vars are required.
+
+See the [deepagents](https://github.com/your-org/local-llm) repo for the CLI shim and required fixes (readline deadlock, stream-json format, async checkpointer).
+
+---
 
 ## Project Structure
 

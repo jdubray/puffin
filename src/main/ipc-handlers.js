@@ -1770,6 +1770,19 @@ function setupClaudeHandlers(ipcMain) {
   })
 
   ipcMain.handle('claude:getModels', async () => {
+    // When running standard Claude Code (no custom agent), return the built-in Claude models.
+    if (!process.env.PUFFIN_AGENT_CMD) {
+      return {
+        models: [
+          { id: 'opus', name: 'Claude Opus', description: 'Most capable' },
+          { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced' },
+          { id: 'haiku', name: 'Claude Haiku', description: 'Fast' }
+        ],
+        default: 'sonnet'
+      }
+    }
+
+    // deepagents / Ollama path
     const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434'
     const defaultModel = process.env.DEEPAGENTS_MODEL || 'ollama:qwen3:8b'
 

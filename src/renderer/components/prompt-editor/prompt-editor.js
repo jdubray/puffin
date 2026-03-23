@@ -1211,11 +1211,18 @@ export class PromptEditorComponent {
 
       // Handle thinking budget - wrap prompt and potentially upgrade model
       const thinkingBudget = this.thinkingBudgetSelect?.value || 'none'
-      let selectedModel = this.modelSelect?.value || this.defaultModel || ''
+      let selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
 
       if (thinkingBudget !== 'none') {
         finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
         console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
+
+        // Upgrade to opus for think-harder and superthink (Claude Code only — not applicable to local LLMs)
+        if ((thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') &&
+            !selectedModel.startsWith('ollama:')) {
+          selectedModel = 'opus'
+          console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
+        }
       }
 
       window.puffin.claude.submit({

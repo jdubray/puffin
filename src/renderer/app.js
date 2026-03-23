@@ -53,9 +53,9 @@ const DISPLAY_LIMITS = {
 }
 
 // Default model for quick one-shot calls (handoff, story summary).
-// Set by loadModels() once Ollama responds; falls back to empty string
-// so the agent CLI uses its own DEEPAGENTS_MODEL env var default.
-let _fastModel = ''
+// Set by loadModels() once the backend responds; defaults to 'haiku' for
+// standard Claude Code and is overridden with the Ollama default for deepagents.
+let _fastModel = 'haiku'
 
 /**
  * Main application class

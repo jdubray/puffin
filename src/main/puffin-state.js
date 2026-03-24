@@ -686,6 +686,8 @@ class PuffinState {
           try {
             db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
               .run(JSON.stringify(assertions), new Date().toISOString(), storyId)
+            // Invalidate cache so the next getUserStories() call reads the updated row
+            this.invalidateCache(['userStories'])
             console.log(`[PUFFIN-STATE] Synced ${assertions.length} assertions to user_stories for story ${storyId}`)
           } catch (syncErr) {
             console.warn(`[PUFFIN-STATE] Failed to sync assertions to user_stories: ${syncErr.message}`)

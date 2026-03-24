@@ -35,7 +35,7 @@ const { Introspector } = require('./introspector');
 
 /**
  * CRE module state — populated during initialize().
- * @type {{ ipcMain: Electron.IpcMain, db: Object, config: Object, projectRoot: string, claudeService: Object|null } | null}
+ * @type {{ ipcMain: Electron.IpcMain, db: Object, config: Object, projectRoot: string, claudeService: Object|null, puffinState: Object|null } | null}
  */
 let ctx = null;
 let initialized = false;      // true once ctx + generators are set up
@@ -119,7 +119,7 @@ async function withProcessLock(fn) {
  * @param {Object} [context.claudeService] - ClaudeService instance for process lock management.
  */
 async function initialize(context) {
-  const { ipcMain, db, config, projectRoot, claudeService } = context;
+  const { ipcMain, db, config, projectRoot, claudeService, puffinState } = context;
 
   // Register IPC handlers if not already registered (e.g. called early from setupIpcHandlers).
   // This ensures handlers can return proper errors instead of "no handler registered".
@@ -146,7 +146,7 @@ async function initialize(context) {
   // Initialize storage directories and default files
   await storage.initialize(projectRoot);
 
-  ctx = { ipcMain, db, config, projectRoot, claudeService: claudeService || null };
+  ctx = { ipcMain, db, config, projectRoot, claudeService: claudeService || null, puffinState: puffinState || null };
 
   // Initialize SchemaManager
   schemaManager = new SchemaManager({ storage, projectRoot, config: creConfig });
@@ -395,6 +395,9 @@ function registerHandlers(ipcMain) {
           if (existing) {
             ctx.db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
               .run(JSON.stringify(generated), new Date().toISOString(), storyId);
+            // Invalidate the PuffinState in-memory cache so the next getUserStories()
+            // call reads the updated row instead of serving stale inspectionAssertions: []
+            ctx.puffinState?.invalidateCache(['userStories']);
             console.log(`[CRE] Persisted ${generated.length} assertions to user_stories for story: ${storyId}`);
           } else {
             console.warn(`[CRE] Story ${storyId} not found in user_stories — assertions only in inspection_assertions table`);

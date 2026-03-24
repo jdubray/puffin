@@ -9,7 +9,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
-const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, setupWebserverHandlers, setupSpeechHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
+const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, setupWebserverHandlers, setupSpeechHandlers, setupSchedulerHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 const websiteServer = require('./website-server')
 const { getRecentProjects, addRecentProject, removeRecentProject } = require('./recent-projects')
@@ -377,6 +377,7 @@ async function initializeProject(projectPath) {
       setupViewRegistryHandlers(ipcMain, pluginManager.getViewRegistry(), mainWindow)
       setupPluginStyleHandlers(ipcMain, pluginManager)
       setClaudeServicePluginManager(pluginManager)
+      setupSchedulerHandlers(ipcMain, mainWindow)
 
       const puffinState = getPuffinState()
       if (puffinState && pluginManager.getRegistry()) {
@@ -437,7 +438,7 @@ function getProjectPathFromArgs() {
 app.whenReady().then(async () => {
   // Register pre-initialization IPC handlers (project selection from welcome screen)
   ipcMain.handle('app:getRecentProjects', () => {
-    return getRecentProjects()
+    return { success: true, projects: getRecentProjects() }
   })
 
   ipcMain.handle('app:openProject', async (event, projectPath) => {

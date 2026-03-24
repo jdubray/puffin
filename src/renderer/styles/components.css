@@ -9166,7 +9166,7 @@
 }
 
 /* User Story Review Modal */
-.modal.story-review-modal {
+.modal:has(.story-review-modal) {
   min-width: 600px;
   max-width: 800px;
 }
@@ -9961,7 +9961,7 @@
 }
 
 /* Handoff Review Modal */
-.modal.handoff-modal {
+.modal:has(.handoff-modal) {
   min-width: 550px;
   max-width: 700px;
 }
@@ -13243,4 +13243,128 @@ body.website-edition .plugin-nav-btn[data-plugin-name="hdsl-viewer-plugin"],
 body.website-edition .plugin-nav-btn[data-plugin-name="outcome-lifecycle-plugin"],
 body.website-edition .plugin-nav-btn[data-plugin-name="rlm-document-plugin"] {
   display: none !important;
+}
+
+/* ============================================================
+   Sprint Schedule Modal
+   ============================================================ */
+
+.modal:has(.sprint-schedule-modal) {
+  width: 520px;
+}
+
+.sprint-schedule-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sprint-schedule-hint {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.schedule-empty {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 0.5rem 0;
+}
+
+.schedule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.schedule-item {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.schedule-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.schedule-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  flex: 1;
+}
+
+.schedule-toggle input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.schedule-item-meta {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.schedule-item-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sprint-schedule-form {
+  border-top: 1px solid var(--border-color);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.sprint-schedule-form label {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.sprint-schedule-input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sprint-schedule-time-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.sprint-schedule-time-row label {
+  flex: 1;
+}
+
+.sprint-schedule-time-input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  width: 100%;
+  box-sizing: border-box;
 }

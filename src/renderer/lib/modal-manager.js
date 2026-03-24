@@ -386,6 +386,9 @@ export class ModalManager {
       case 'sprint-branch-create':
         this.renderSprintBranchCreate(modalTitle, modalContent, modalActions, modal.data)
         break
+      case 'sprint-schedule':
+        this.renderSprintSchedule(modalTitle, modalContent, modalActions, modal.data)
+        break
       default:
         console.warn('Unknown modal type:', modal.type)
         // Provide a way to close unknown modals
@@ -4131,6 +4134,163 @@ export class ModalManager {
         this.intents.hideModal()
         this.showToast(`Failed to create branch: ${err.message}`, 'error')
       }
+    })
+  }
+
+  /**
+   * Render the sprint schedule management modal.
+   * Allows creating, toggling, running, and deleting nightly code review schedules.
+   */
+  renderSprintSchedule(title, content, actions, data) {
+    title.textContent = 'Nightly Code Review Schedules'
+
+    const renderScheduleList = async () => {
+      const result = await window.puffin.schedule.list()
+      const schedules = result.success ? (result.data || []) : []
+
+      if (schedules.length === 0) {
+        content.querySelector('.schedule-list')?.remove()
+        const emptyEl = content.querySelector('.schedule-empty')
+        if (emptyEl) emptyEl.style.display = ''
+      } else {
+        const emptyEl = content.querySelector('.schedule-empty')
+        if (emptyEl) emptyEl.style.display = 'none'
+
+        const list = content.querySelector('.schedule-list') || (() => {
+          const el = document.createElement('ul')
+          el.className = 'schedule-list'
+          content.appendChild(el)
+          return el
+        })()
+
+        list.innerHTML = schedules.map(s => {
+          const timeStr = `${String(s.scheduledHour).padStart(2, '0')}:${String(s.scheduledMinute).padStart(2, '0')}`
+          const lastRun = s.lastRunAt
+            ? new Date(s.lastRunAt).toLocaleString()
+            : 'Never'
+          return `
+            <li class="schedule-item" data-id="${this.escapeHtml(s.id)}">
+              <div class="schedule-item-header">
+                <span class="schedule-item-title">${this.escapeHtml(s.title)}</span>
+                <span class="schedule-item-time">${this.escapeHtml(timeStr)} daily</span>
+                <label class="schedule-toggle" title="${s.enabled ? 'Disable' : 'Enable'} schedule">
+                  <input type="checkbox" class="schedule-enabled-cb" ${s.enabled ? 'checked' : ''}/>
+                  <span>${s.enabled ? 'Enabled' : 'Disabled'}</span>
+                </label>
+              </div>
+              <div class="schedule-item-meta">
+                Last run: <span class="schedule-last-run">${this.escapeHtml(lastRun)}</span>
+              </div>
+              <div class="schedule-item-actions">
+                <button class="btn secondary schedule-run-now-btn" data-id="${this.escapeHtml(s.id)}">Run Now</button>
+                <button class="btn danger schedule-delete-btn" data-id="${this.escapeHtml(s.id)}">Delete</button>
+              </div>
+            </li>
+          `
+        }).join('')
+
+        // Bind toggle handlers
+        list.querySelectorAll('.schedule-enabled-cb').forEach(cb => {
+          cb.addEventListener('change', async () => {
+            const id = cb.closest('.schedule-item').dataset.id
+            await window.puffin.schedule.update(id, { enabled: cb.checked })
+            await renderScheduleList()
+          })
+        })
+
+        // Bind run-now handlers
+        list.querySelectorAll('.schedule-run-now-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.id
+            btn.disabled = true
+            btn.textContent = 'Running...'
+            const result = await window.puffin.schedule.runNow(id)
+            if (result.success && !result.skipped) {
+              this.showToast(`Sprint created: "${result.sprint?.title}"`, 'success')
+            } else if (result.skipped) {
+              this.showToast(result.reason || result.error || 'Skipped', 'info')
+            } else {
+              this.showToast(`Error: ${result.error}`, 'error')
+            }
+            await renderScheduleList()
+          })
+        })
+
+        // Bind delete handlers
+        list.querySelectorAll('.schedule-delete-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.id
+            await window.puffin.schedule.delete(id)
+            await renderScheduleList()
+          })
+        })
+      }
+    }
+
+    content.innerHTML = `
+      <div class="sprint-schedule-modal">
+        <p class="sprint-schedule-hint">
+          Nightly schedules automatically create a code review sprint each day at the configured time,
+          selecting all pending stories.
+        </p>
+
+        <div class="sprint-schedule-empty schedule-empty">No schedules configured yet.</div>
+        <ul class="schedule-list" style="display:none"></ul>
+
+        <div class="sprint-schedule-form">
+          <h4 class="sprint-schedule-form-title">New Schedule</h4>
+          <div class="sprint-schedule-form-row">
+            <label for="sched-title">Name</label>
+            <input type="text" id="sched-title" class="sprint-schedule-input" value="Nightly Code Review" />
+          </div>
+          <div class="sprint-schedule-form-row">
+            <label for="sched-hour">Time (24h)</label>
+            <div class="sprint-schedule-time-row">
+              <input type="number" id="sched-hour" class="sprint-schedule-input sprint-schedule-time-input" min="0" max="23" value="22" />
+              <span>:</span>
+              <input type="number" id="sched-minute" class="sprint-schedule-input sprint-schedule-time-input" min="0" max="59" value="0" />
+            </div>
+          </div>
+          <button class="btn primary" id="sched-create-btn">Add Schedule</button>
+        </div>
+      </div>
+    `
+
+    // Initial render of list
+    renderScheduleList()
+
+    // Bind create button
+    content.querySelector('#sched-create-btn').addEventListener('click', async () => {
+      const titleVal = content.querySelector('#sched-title').value.trim() || 'Nightly Code Review'
+      const hour = parseInt(content.querySelector('#sched-hour').value, 10)
+      const minute = parseInt(content.querySelector('#sched-minute').value, 10)
+
+      if (isNaN(hour) || hour < 0 || hour > 23 || isNaN(minute) || minute < 0 || minute > 59) {
+        this.showToast('Invalid time — hour must be 0-23, minute 0-59', 'error')
+        return
+      }
+
+      const result = await window.puffin.schedule.create({
+        title: titleVal,
+        scheduledHour: hour,
+        scheduledMinute: minute,
+        enabled: true
+      })
+
+      if (result.success) {
+        this.showToast(`Schedule "${titleVal}" created`, 'success')
+        content.querySelector('#sched-title').value = 'Nightly Code Review'
+        content.querySelector('#sched-hour').value = '22'
+        content.querySelector('#sched-minute').value = '0'
+        await renderScheduleList()
+      } else {
+        this.showToast(`Error: ${result.error}`, 'error')
+      }
+    })
+
+    actions.innerHTML = `<button class="btn secondary" id="schedule-modal-close">Close</button>`
+    document.getElementById('schedule-modal-close')?.addEventListener('click', () => {
+      this.intents.hideModal()
     })
   }
 

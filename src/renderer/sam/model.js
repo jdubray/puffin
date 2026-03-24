@@ -1983,6 +1983,13 @@ export const createSprintAcceptor = model => proposal => {
   }
 }
 
+// Set active sprint directly — lightweight refresh without resetting full app state
+export const setActiveSprintAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_ACTIVE_SPRINT') {
+    model.activeSprint = proposal.payload.sprint || null
+  }
+}
+
 // Start sprint planning - triggers CRE planning workflow (AC1)
 export const startSprintPlanningAcceptor = model => proposal => {
   if (proposal?.type === 'START_SPRINT_PLANNING') {
@@ -2107,6 +2114,7 @@ export const crePlanningErrorAcceptor = model => proposal => {
     model._pendingCrePlanning = null
     model._pendingCreIteration = null
     model._pendingCreAnswers = null
+    model._pendingCreApproval = null   // prevent re-entry of handleCreApproval on next render pass
     model.sprintError = {
       type: 'CRE_PLANNING_FAILED',
       message: proposal.payload.error,
@@ -4249,6 +4257,7 @@ export const acceptors = [
 
   // Sprint
   createSprintAcceptor,
+  setActiveSprintAcceptor,
   startSprintPlanningAcceptor,
   crePlanReadyAcceptor,
   approvePlanWithCreAcceptor,

@@ -939,7 +939,7 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Wait for app ready signal with project path
     if (window.puffin) {
-      window.puffin.app.onReady(async (data) => {
+      this.claudeListeners.push(window.puffin.app.onReady(async (data) => {
         console.log('Electron app ready, project path:', data?.projectPath)
 
         if (data?.projectPath) {
@@ -949,14 +949,14 @@ Please provide specific file locations and line numbers where issues are found, 
           // No project yet — show welcome screen
           this._showWelcomeScreen(data?.recentProjects || [])
         }
-      })
+      }))
 
       // Listen for project selected from welcome screen
-      window.puffin.app.onProjectReady(async (data) => {
+      this.claudeListeners.push(window.puffin.app.onProjectReady(async (data) => {
         console.log('Project selected:', data?.projectPath)
         this._hideWelcomeScreen()
         await this._startWithProject(data.projectPath)
-      })
+      }))
     } else {
       // Development mode without Electron
       console.log('Running in development mode')
@@ -1262,7 +1262,7 @@ Please provide specific file locations and line numbers where issues are found, 
       }
 
       // Subscribe to plugin activated events to load styles
-      window.puffin.plugins.onPluginActivated(async (data) => {
+      this.claudeListeners.push(window.puffin.plugins.onPluginActivated(async (data) => {
         console.log('[PuffinApp] Plugin activated, loading styles:', data.name)
         const styleResult = await window.puffin.plugins.getStylePaths(data.name)
         if (styleResult.success && styleResult.styles.length > 0) {
@@ -1272,13 +1272,13 @@ Please provide specific file locations and line numbers where issues are found, 
             styleResult.pluginDir
           )
         }
-      })
+      }))
 
       // Subscribe to plugin deactivated events to remove styles
-      window.puffin.plugins.onPluginDeactivated((data) => {
+      this.claudeListeners.push(window.puffin.plugins.onPluginDeactivated((data) => {
         console.log('[PuffinApp] Plugin deactivated, removing styles:', data.name)
         this.styleInjector.removePluginStyles(data.name)
-      })
+      }))
 
       console.log('[PuffinApp] Plugin style management initialized')
     } catch (error) {
@@ -1327,7 +1327,7 @@ Please provide specific file locations and line numbers where issues are found, 
       'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
       'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Sprint actions
-      'createSprint', 'loadRerunSprint', 'startSprintPlanning', 'crePlanReady', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
+      'createSprint', 'setActiveSprint', 'loadRerunSprint', 'startSprintPlanning', 'crePlanReady', 'crePlanningComplete', 'crePlanningError', 'creIntrospectionComplete',
       'approvePlan', 'approvePlanWithCre', 'selectImplementationMode', 'startAutomatedImplementation', 'setSprintPlan', 'iterateSprintPlan', 'submitPlanAnswers',
       'clearSprint', 'clearSprintWithDetails', 'showSprintCloseModal', 'clearPendingSprintPlanning', 'clearPendingCrePlanning', 'clearPendingCreAnswers', 'clearPendingCreIteration', 'deleteSprint',
       'startSprintStoryImplementation', 'clearPendingStoryImplementation', 'completeStoryBranch',
@@ -1459,6 +1459,7 @@ Please provide specific file locations and line numbers where issues are found, 
 
           // Sprint actions
           ['CREATE_SPRINT', actions.createSprint],
+          ['SET_ACTIVE_SPRINT', actions.setActiveSprint],
           ['LOAD_RERUN_SPRINT', actions.loadRerunSprint],
           ['START_SPRINT_PLANNING', actions.startSprintPlanning],
           ['CRE_PLAN_READY', actions.crePlanReady],
@@ -1628,6 +1629,20 @@ Please provide specific file locations and line numbers where issues are found, 
         this.showToast({ type: 'error', title: 'Failed to rerun sprint', message: error.message })
       }
     }
+
+    // Add custom async intent: reload active sprint from DB without resetting full app state
+    this.intents.reloadActiveSprint = async () => {
+      try {
+        const result = await window.puffin.state.get()
+        if (result.success) {
+          this.intents.setActiveSprint(result.state.activeSprint || null)
+        } else {
+          console.warn('[SCHEDULER] reloadActiveSprint: state.get failed:', result.error)
+        }
+      } catch (error) {
+        console.error('[SCHEDULER] reloadActiveSprint error:', error)
+      }
+    }
   }
 
   /**
@@ -1727,9 +1742,6 @@ Please provide specific file locations and line numbers where issues are found, 
     document.addEventListener('keydown', (e) => {
       this.handleKeyDown(e)
     })
-
-    // Profile menu IPC handlers
-    this.setupProfileMenuHandlers()
 
     // Handoff panel event handlers
     this.setupHandoffPanelHandlers()
@@ -1895,20 +1907,6 @@ Please provide specific file locations and line numbers where issues are found, 
   }
 
   /**
-   * Setup profile menu IPC message handlers
-   */
-  setupProfileMenuHandlers() {
-    if (!window.puffin?.menu) return
-
-    window.puffin.menu.onProfileView(() => this.handleProfileAction('view'))
-    window.puffin.menu.onProfileCreate(() => this.handleProfileAction('create'))
-    window.puffin.menu.onProfileEdit(() => this.handleProfileAction('edit'))
-    window.puffin.menu.onProfileExport(() => this.handleProfileAction('export'))
-    window.puffin.menu.onProfileImport(() => this.handleProfileAction('import'))
-    window.puffin.menu.onProfileDelete(() => this.handleProfileAction('delete'))
-  }
-
-  /**
    * Handle profile menu actions
    */
   async handleProfileAction(action) {
@@ -2041,22 +2039,22 @@ Please provide specific file locations and line numbers where issues are found, 
   setupMenuListeners() {
     if (!window.puffin?.menu) return
 
-    window.puffin.menu.onProfileView(() => {
+    this.claudeListeners.push(window.puffin.menu.onProfileView(() => {
       console.log('Menu: Profile View')
       this.intents.showModal('profile-view', {})
-    })
+    }))
 
-    window.puffin.menu.onProfileCreate(() => {
+    this.claudeListeners.push(window.puffin.menu.onProfileCreate(() => {
       console.log('Menu: Profile Create')
       this.intents.showModal('profile-create', {})
-    })
+    }))
 
-    window.puffin.menu.onProfileEdit(() => {
+    this.claudeListeners.push(window.puffin.menu.onProfileEdit(() => {
       console.log('Menu: Profile Edit')
       this.intents.showModal('profile-edit', {})
-    })
+    }))
 
-    window.puffin.menu.onProfileExport(async () => {
+    this.claudeListeners.push(window.puffin.menu.onProfileExport(async () => {
       console.log('Menu: Profile Export')
       try {
         const result = await window.puffin.profile.export()
@@ -2068,9 +2066,9 @@ Please provide specific file locations and line numbers where issues are found, 
       } catch (error) {
         this.showToast('Export failed: ' + error.message, 'error')
       }
-    })
+    }))
 
-    window.puffin.menu.onProfileImport(async () => {
+    this.claudeListeners.push(window.puffin.menu.onProfileImport(async () => {
       console.log('Menu: Profile Import')
       try {
         const result = await window.puffin.profile.import()
@@ -2083,9 +2081,9 @@ Please provide specific file locations and line numbers where issues are found, 
       } catch (error) {
         this.showToast('Import failed: ' + error.message, 'error')
       }
-    })
+    }))
 
-    window.puffin.menu.onProfileDelete(async () => {
+    this.claudeListeners.push(window.puffin.menu.onProfileDelete(async () => {
       console.log('Menu: Profile Delete')
       if (confirm('Are you sure you want to delete your profile? This cannot be undone.')) {
         try {
@@ -2099,7 +2097,7 @@ Please provide specific file locations and line numbers where issues are found, 
           this.showToast('Delete failed: ' + error.message, 'error')
         }
       }
-    })
+    }))
   }
 
   /**
@@ -2366,6 +2364,55 @@ Please provide specific file locations and line numbers where issues are found, 
         })
       })
       this.claudeListeners.push(unsubStatusSync)
+    }
+
+    // Assertion evaluation events — registered once here to avoid accumulation
+    // in the render-path (updateSprintHeader is called on every SAM render cycle)
+    if (window.puffin?.state?.onAssertionEvaluationComplete) {
+      this.claudeListeners.push(
+        window.puffin.state.onAssertionEvaluationComplete((data) => {
+          const { storyId, results } = data
+          console.log('[SPRINT] Assertion evaluation complete for story:', storyId)
+          this.intents.updateStoryAssertionResults(storyId, results)
+        })
+      )
+    }
+    if (window.puffin?.state?.onAssertionEvaluationProgress) {
+      this.claudeListeners.push(
+        window.puffin.state.onAssertionEvaluationProgress((data) => {
+          const { storyId, current, total } = data
+          const panel = document.getElementById('sprint-context-panel')
+          if (!panel) return
+          const section = panel.querySelector(
+            `.story-assertions-section[data-story-id="${storyId}"]`
+          )
+          if (section) {
+            const summary = section.querySelector('.assertions-summary')
+            if (summary) {
+              summary.textContent = `Evaluating ${current}/${total}...`
+              summary.classList.add('evaluating')
+            }
+          }
+        })
+      )
+    }
+
+    // Nightly schedule auto-created sprint notification
+    if (window.puffin?.schedule?.onSprintCreated) {
+      const unsubScheduled = window.puffin.schedule.onSprintCreated(({ sprint, schedule }) => {
+        console.log('[SCHEDULER] Scheduled sprint created:', sprint?.id)
+
+        // Reload sprint state so UI reflects the new active sprint
+        this.intents.reloadActiveSprint()
+
+        this.showToast({
+          type: 'success',
+          title: 'Nightly Review Sprint Created',
+          message: `"${sprint?.title || schedule?.title}" was auto-created with your pending stories`,
+          duration: 6000
+        })
+      })
+      this.claudeListeners.push(unsubScheduled)
     }
   }
 
@@ -3257,33 +3304,6 @@ Please provide specific file locations and line numbers where issues are found, 
         }
       })
 
-      // Listen for assertion evaluation completion to update model and refresh UI
-      if (window.puffin?.state?.onAssertionEvaluationComplete) {
-        window.puffin.state.onAssertionEvaluationComplete((data) => {
-          const { storyId, results } = data
-          console.log('[SPRINT] Assertion evaluation complete for story:', storyId)
-          // Update the model with assertion results (both backlog and sprint stories)
-          // SAM render cycle will automatically refresh the sprint panel
-          this.intents.updateStoryAssertionResults(storyId, results)
-        })
-      }
-
-      // Listen for assertion evaluation progress to show spinner
-      if (window.puffin?.state?.onAssertionEvaluationProgress) {
-        window.puffin.state.onAssertionEvaluationProgress((data) => {
-          const { storyId, current, total } = data
-          const section = sprintContextPanel.querySelector(
-            `.story-assertions-section[data-story-id="${storyId}"]`
-          )
-          if (section) {
-            const summary = section.querySelector('.assertions-summary')
-            if (summary) {
-              summary.textContent = `Evaluating ${current}/${total}...`
-              summary.classList.add('evaluating')
-            }
-          }
-        })
-      }
     }
   }
 
@@ -4377,14 +4397,18 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Subscribe to screenshot count and verdict events from main process
     if (window.puffin?.puppeteer?.onScreenshot) {
-      window.puffin.puppeteer.onScreenshot(({ count }) => {
-        this._updateScreenshotBadge(count)
-      })
+      this.claudeListeners.push(
+        window.puffin.puppeteer.onScreenshot(({ count }) => {
+          this._updateScreenshotBadge(count)
+        })
+      )
     }
     if (window.puffin?.puppeteer?.onVerdict) {
-      window.puffin.puppeteer.onVerdict(({ verdict }) => {
-        this._updatePuppeteerVerdict(verdict)
-      })
+      this.claudeListeners.push(
+        window.puffin.puppeteer.onVerdict(({ verdict }) => {
+          this._updatePuppeteerVerdict(verdict)
+        })
+      )
     }
   }
 
@@ -4982,7 +5006,14 @@ Keep it concise but informative. Use markdown formatting.`
   renderMarkdown(text) {
     if (!text) return ''
 
-    return text
+    // Escape HTML special characters before regex replacement to prevent XSS
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+
+    return escaped
       // Headers
       .replace(/^### (.+)$/gm, '<h4>$1</h4>')
       .replace(/^## (.+)$/gm, '<h3>$1</h3>')

@@ -219,6 +219,24 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * Sprint schedule operations (recurring nightly code review sprints)
+   */
+  schedule: {
+    list: () => ipcRenderer.invoke('schedule:list'),
+    create: (data) => ipcRenderer.invoke('schedule:create', data),
+    update: (id, updates) => ipcRenderer.invoke('schedule:update', { id, updates }),
+    delete: (id) => ipcRenderer.invoke('schedule:delete', { id }),
+    runNow: (id) => ipcRenderer.invoke('schedule:runNow', { id }),
+
+    /** Listen for when a scheduled sprint is auto-created */
+    onSprintCreated: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('sprint:scheduled-created', handler)
+      return () => ipcRenderer.removeListener('sprint:scheduled-created', handler)
+    }
+  },
+
+  /**
    * Toast History operations
    * Store and retrieve toast notification history from .puffin/toast-history.json
    */
@@ -270,8 +288,11 @@ contextBridge.exposeInMainWorld('puffin', {
     // Cancel the current request
     cancel: () => ipcRenderer.send('claude:cancel'),
 
-    // Check if a CLI process is currently running
-    isRunning: () => ipcRenderer.invoke('claude:isRunning'),
+    // Check if a CLI process is currently running — unwraps envelope so callers get a direct boolean
+    isRunning: async () => {
+      const result = await ipcRenderer.invoke('claude:isRunning')
+      return result.running
+    },
 
     // Subscribe to streaming response chunks
     onResponse: (callback) => {
@@ -565,8 +586,11 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('app:projectReady', handler)
     },
 
-    // Get list of recently opened projects
-    getRecentProjects: () => ipcRenderer.invoke('app:getRecentProjects'),
+    // Get list of recently opened projects — unwraps envelope so callers get a direct array
+    getRecentProjects: async () => {
+      const result = await ipcRenderer.invoke('app:getRecentProjects')
+      return result.projects
+    },
 
     // Open a specific project by path
     openProject: (projectPath) => ipcRenderer.invoke('app:openProject', projectPath),
@@ -901,9 +925,17 @@ contextBridge.exposeInMainWorld('puffin', {
     // Check whether the config file already exists for the given project
     check: (projectPath) => ipcRenderer.invoke('puppeteer:check', { projectPath }),
     // Fires when Claude takes a screenshot: { count }
-    onScreenshot: (cb) => ipcRenderer.on('claude:puppeteer-screenshot', (e, data) => cb(data)),
+    onScreenshot: (cb) => {
+      const h = (e, data) => cb(data)
+      ipcRenderer.on('claude:puppeteer-screenshot', h)
+      return () => ipcRenderer.removeListener('claude:puppeteer-screenshot', h)
+    },
     // Fires when Claude emits a verdict after analysing a screenshot: { verdict }
-    onVerdict: (cb) => ipcRenderer.on('claude:puppeteer-verdict', (e, data) => cb(data))
+    onVerdict: (cb) => {
+      const h = (e, data) => cb(data)
+      ipcRenderer.on('claude:puppeteer-verdict', h)
+      return () => ipcRenderer.removeListener('claude:puppeteer-verdict', h)
+    }
   },
 
   /**

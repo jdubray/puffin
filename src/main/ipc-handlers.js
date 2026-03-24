@@ -17,7 +17,7 @@ const { GitService } = require('./git-service')
 const ClaudeMdGenerator = require('./claude-md-generator')
 const { AssertionEvaluator } = require('./evaluators/assertion-evaluator')
 const { AssertionGenerator } = require('./generators/assertion-generator')
-const { getTempImageService } = require('./services')
+const { getTempImageService, SprintSchedulerService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
 const speechService = require('./speech-service')
@@ -30,6 +30,8 @@ let gitService = null
 let claudeMdGenerator = null
 let tempImageService = null
 let projectPath = null
+let sprintScheduler = null
+let _schedulerMainWindow = null
 
 // Maximum allowed image file size (50MB)
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024
@@ -151,7 +153,8 @@ function setupStateHandlers(ipcMain) {
           db: puffinState.database.connection.getConnection(),
           config: state.config || {},
           projectRoot: projectPath,
-          claudeService
+          claudeService,
+          puffinState
         })
         // Persist CRE defaults into config.json on first init
         if (state.config?.cre) {
@@ -169,6 +172,29 @@ function setupStateHandlers(ipcMain) {
       const getSkillContent = (branchId) => puffinState.getBranchSkillContent(branchId)
       const getAgentContent = (branchId) => puffinState.getBranchAgentContent(branchId)
       await claudeMdGenerator.generateAll(state, activeBranch, getSkillContent, getAgentContent)
+
+      // Initialize sprint scheduler (non-fatal)
+      try {
+        if (puffinState.useSqlite && puffinState.sprintService) {
+          const db = puffinState.database.connection.getConnection()
+          sprintScheduler = new SprintSchedulerService({
+            db,
+            sprintService: puffinState.sprintService,
+            userStoryRepo: puffinState.database.userStories,
+            onScheduledSprintCreated: (sprint, schedule) => {
+              puffinState.invalidateCache(['activeSprint'])
+              // Notify renderer — _schedulerMainWindow is set in setupSchedulerHandlers
+              if (_schedulerMainWindow) {
+                _schedulerMainWindow.webContents.send('sprint:scheduled-created', { sprint, schedule })
+              }
+            }
+          })
+          sprintScheduler.start()
+          console.log('[SprintScheduler] Initialized and started')
+        }
+      } catch (schedulerErr) {
+        console.error('[SprintScheduler] Initialization failed (non-fatal):', schedulerErr.message)
+      }
 
       return { success: true, state }
     } catch (error) {
@@ -225,9 +251,9 @@ function setupStateHandlers(ipcMain) {
       const { execSync } = require('child_process')
       const cmd = process.platform === 'win32' ? 'where snip' : 'which snip'
       const result = execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim()
-      return { installed: true, path: result.split('\n')[0].trim() }
+      return { success: true, installed: true, path: result.split('\n')[0].trim() }
     } catch {
-      return { installed: false }
+      return { success: true, installed: false }
     }
   })
 
@@ -634,31 +660,36 @@ function setupStateHandlers(ipcMain) {
     let synced = 0
     try {
       const db = puffinState.database.connection.getConnection()
-      for (const storyId of storyIds) {
-        // Check if user_stories already has assertions
-        const row = db.prepare('SELECT inspection_assertions FROM user_stories WHERE id = ?').get(storyId)
-        if (!row) continue
-        const existing = JSON.parse(row.inspection_assertions || '[]')
-        if (existing.length > 0) continue // already has assertions
+      // Wrap the entire batch in a single transaction so partial failures roll back atomically
+      db.transaction(() => {
+        for (const storyId of storyIds) {
+          // Check if user_stories already has assertions
+          const row = db.prepare('SELECT inspection_assertions FROM user_stories WHERE id = ?').get(storyId)
+          if (!row) continue
+          const existing = JSON.parse(row.inspection_assertions || '[]')
+          if (existing.length > 0) continue // already has assertions
 
-        // Check CRE inspection_assertions table
-        const creRows = db.prepare(
-          'SELECT id, type, target, message, assertion_data FROM inspection_assertions WHERE story_id = ? ORDER BY created_at'
-        ).all(storyId)
-        if (creRows.length === 0) continue
+          // Check CRE inspection_assertions table
+          const creRows = db.prepare(
+            'SELECT id, type, target, message, assertion_data FROM inspection_assertions WHERE story_id = ? ORDER BY created_at'
+          ).all(storyId)
+          if (creRows.length === 0) continue
 
-        const assertions = creRows.map(r => ({
-          id: r.id,
-          type: r.type,
-          target: r.target,
-          message: r.message,
-          assertion: JSON.parse(r.assertion_data || '{}')
-        }))
-        db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
-          .run(JSON.stringify(assertions), new Date().toISOString(), storyId)
-        synced++
-        console.log(`[IPC] syncAssertionsFromCreTable: synced ${assertions.length} assertions for story ${storyId}`)
-      }
+          const assertions = creRows.map(r => ({
+            id: r.id,
+            type: r.type,
+            target: r.target,
+            message: r.message,
+            assertion: JSON.parse(r.assertion_data || '{}')
+          }))
+          db.prepare('UPDATE user_stories SET inspection_assertions = ?, updated_at = ? WHERE id = ?')
+            .run(JSON.stringify(assertions), new Date().toISOString(), storyId)
+          synced++
+          console.log(`[IPC] syncAssertionsFromCreTable: synced ${assertions.length} assertions for story ${storyId}`)
+        }
+      })()
+      // Invalidate in-memory cache so the next getUserStories() reads the updated rows
+      if (synced > 0) puffinState.invalidateCache(['userStories'])
       return { success: true, synced }
     } catch (error) {
       console.error('[IPC] syncAssertionsFromCreTable error:', error)
@@ -1486,20 +1517,20 @@ function setupClaudeHandlers(ipcMain) {
     try {
       const available = await claudeService.isAvailable()
       const version = available ? await claudeService.getVersion() : null
-      return { available, version }
+      return { success: true, available, version }
     } catch (error) {
       console.error('[IPC] claude:check error:', error.message)
-      return { available: false, version: null }
+      return { success: false, available: false, version: null, error: error.message }
     }
   })
 
   // Check if a CLI process is currently running
   ipcMain.handle('claude:isRunning', () => {
     try {
-      return claudeService.isProcessRunning()
+      return { success: true, running: claudeService.isProcessRunning() }
     } catch (error) {
       console.error('[IPC] claude:isRunning error:', error.message)
-      return false
+      return { success: false, running: false, error: error.message }
     }
   })
 
@@ -2531,9 +2562,13 @@ function setupGitHandlers(ipcMain) {
  * Shell operation handlers
  */
 function setupShellHandlers(ipcMain) {
-  // Open external URL in default browser
+  // Open external URL in default browser (http/https only)
   ipcMain.handle('shell:openExternal', async (event, url) => {
     try {
+      const parsed = new URL(url)
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return { success: false, error: 'Only http/https URLs are allowed' }
+      }
       await shell.openExternal(url)
       return { success: true }
     } catch (error) {
@@ -2544,7 +2579,9 @@ function setupShellHandlers(ipcMain) {
   // Markdown parsing (moved from preload to main process for sandbox compatibility)
   ipcMain.handle('markdown:parse', async (event, content, options = {}) => {
     try {
-      const html = marked.parse(content, options)
+      // Whitelist safe marked options — reject renderer overrides to prevent XSS
+      const safeOptions = { gfm: options.gfm ?? true, breaks: options.breaks ?? false }
+      const html = marked.parse(content, safeOptions)
       return { success: true, html }
     } catch (error) {
       return { success: false, error: error.message }
@@ -3345,6 +3382,10 @@ function setupWebserverHandlers(ipcMain) {
 
   ipcMain.handle('webserver:openUrl', async (event, url) => {
     try {
+      const parsed = new URL(url)
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return { success: false, error: 'Only http/https URLs are allowed' }
+      }
       await shell.openExternal(url)
       return { success: true }
     } catch (err) {
@@ -3455,6 +3496,64 @@ function setupSpeechHandlers(ipcMain) {
   })
 }
 
+/**
+ * Sprint scheduler IPC handlers.
+ * @param {IpcMain} ipcMain
+ * @param {BrowserWindow} mainWindow - Main window for pushing events to renderer
+ */
+function setupSchedulerHandlers(ipcMain, mainWindow) {
+  _schedulerMainWindow = mainWindow
+
+  ipcMain.handle('schedule:list', async () => {
+    try {
+      if (!sprintScheduler) return { success: true, data: [] }
+      return { success: true, data: sprintScheduler.list() }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('schedule:create', async (event, data) => {
+    try {
+      if (!sprintScheduler) return { success: false, error: 'Scheduler not initialized' }
+      const schedule = sprintScheduler.create(data)
+      return { success: true, data: schedule }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('schedule:update', async (event, { id, updates }) => {
+    try {
+      if (!sprintScheduler) return { success: false, error: 'Scheduler not initialized' }
+      const schedule = sprintScheduler.update(id, updates)
+      if (!schedule) return { success: false, error: 'Schedule not found' }
+      return { success: true, data: schedule }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('schedule:delete', async (event, { id }) => {
+    try {
+      if (!sprintScheduler) return { success: false, error: 'Scheduler not initialized' }
+      const deleted = sprintScheduler.delete(id)
+      return { success: deleted, error: deleted ? undefined : 'Schedule not found' }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('schedule:runNow', async (event, { id }) => {
+    try {
+      if (!sprintScheduler) return { success: false, error: 'Scheduler not initialized' }
+      return sprintScheduler.runNow(id)
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+}
+
 module.exports = {
   setupIpcHandlers,
   setupPlanHandlers,
@@ -3465,6 +3564,7 @@ module.exports = {
   setupPluginStyleHandlers,
   setupWebserverHandlers,
   setupSpeechHandlers,
+  setupSchedulerHandlers,
   getPuffinState,
   getClaudeService,
   setClaudeServicePluginManager,

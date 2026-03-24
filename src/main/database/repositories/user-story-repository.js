@@ -184,12 +184,19 @@ class UserStoryRepository extends BaseRepository {
     const db = this.getDb()
     const { orderBy = 'created_at', order = 'DESC', limit, offset } = options
 
-    let sql = `SELECT * FROM user_stories WHERE status != 'archived' ORDER BY ${orderBy} ${order}`
+    // Validate interpolated SQL values to prevent injection
+    const ALLOWED_ORDER_BY = new Set(['created_at', 'updated_at', 'title', 'status', 'priority'])
+    const safeOrderBy = ALLOWED_ORDER_BY.has(orderBy) ? orderBy : 'created_at'
+    const safeOrder = order === 'ASC' ? 'ASC' : 'DESC'
+    const safeLimit = Number.isInteger(limit) && limit > 0 ? limit : null
+    const safeOffset = Number.isInteger(offset) && offset >= 0 ? offset : null
 
-    if (limit) {
-      sql += ` LIMIT ${limit}`
-      if (offset) {
-        sql += ` OFFSET ${offset}`
+    let sql = `SELECT * FROM user_stories WHERE status != 'archived' ORDER BY ${safeOrderBy} ${safeOrder}`
+
+    if (safeLimit) {
+      sql += ` LIMIT ${safeLimit}`
+      if (safeOffset) {
+        sql += ` OFFSET ${safeOffset}`
       }
     }
 
@@ -463,7 +470,7 @@ class UserStoryRepository extends BaseRepository {
     // Move to archived_stories table
     const db = this.getDb()
 
-    return this.transaction(() => {
+    return this.immediateTransaction(() => {
       // Insert into archived_stories
       const row = this._storyToRow({
         ...existing,

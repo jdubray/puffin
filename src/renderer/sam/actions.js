@@ -819,6 +819,14 @@ export const createSprint = (stories, branchName = '') => ({
   }
 })
 
+// Set active sprint directly (used for lightweight refresh after async sprint creation)
+export const setActiveSprint = (sprint) => ({
+  type: 'SET_ACTIVE_SPRINT',
+  payload: {
+    sprint
+  }
+})
+
 // Load a rerun sprint (restored from history, ready for implementation mode selection)
 export const loadRerunSprint = (sprint) => ({
   type: 'LOAD_RERUN_SPRINT',

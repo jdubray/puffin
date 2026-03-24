@@ -1428,6 +1428,7 @@ export class UserStoriesComponent {
           <button class="btn secondary select-all-btn" ${allSelected ? 'disabled' : ''} title="${allSelected ? 'All pending stories already selected' : 'Select all pending stories'}">Select All</button>
           <button class="btn secondary clear-selection-btn">Clear All</button>
           <button class="btn primary create-sprint-btn" ${sprintBtnDisabled ? 'disabled' : ''} title="${sprintBtnTitle}">Create Sprint</button>
+          <button class="btn secondary schedule-btn" title="Manage nightly code review schedules">&#128337; Schedules</button>
         </div>
         <span class="selection-count">${this.selectedStoryIds.size} ${this.selectedStoryIds.size === 1 ? 'user story' : 'user stories'} selected</span>
       </div>
@@ -1450,6 +1451,10 @@ export class UserStoriesComponent {
       if (!sprintBtnDisabled) {
         this.createSprint()
       }
+    })
+
+    actionBar.querySelector('.schedule-btn').addEventListener('click', () => {
+      this.intents.showModal('sprint-schedule', {})
     })
   }
 
@@ -1818,7 +1823,7 @@ export class UserStoriesComponent {
     const summaryEl = assertionsSection.querySelector('.assertions-summary')
     if (summaryEl) {
       summaryEl.className = 'assertions-summary assertions-error'
-      summaryEl.innerHTML = `<span class="assertion-icon error">!</span> Error: ${errorMessage}`
+      summaryEl.innerHTML = `<span class="assertion-icon error">!</span> Error: ${this.escapeHtml(errorMessage)}`
     }
 
     // Re-show the verify button

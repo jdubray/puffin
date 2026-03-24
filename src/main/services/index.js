@@ -24,6 +24,8 @@ const {
   SUPPORTED_EXTENSIONS: SUPPORTED_IMAGE_EXTENSIONS
 } = require('./temp-image-service')
 
+const { SprintSchedulerService } = require('./sprint-scheduler-service')
+
 module.exports = {
   SprintService,
   ActiveSprintExistsError,
@@ -31,5 +33,6 @@ module.exports = {
   SprintNotFoundError,
   TempImageService,
   getTempImageService,
-  SUPPORTED_IMAGE_EXTENSIONS
+  SUPPORTED_IMAGE_EXTENSIONS,
+  SprintSchedulerService
 }

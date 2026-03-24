@@ -103,6 +103,8 @@ class RISGenerator {
       model: MODEL_COMPLEX,
       timeout: TIMEOUT_COMPLEX,
       label: 'generate-ris',
+      includeToolGuidance: false,
+      disableTools: true,
       metricsComponent: 'cre-ris',
       metricsOperation: 'generate-ris',
       storyId: userStoryId,

@@ -134,7 +134,7 @@ class MetricsService extends EventEmitter {
     }
 
     this.flushTimer = setInterval(() => {
-      if (this.batchQueue.length > 0) {
+      if (!this._shutdownStarted && this.batchQueue.length > 0) {
         this._flushBatch()
       }
     }, this.flushInterval)
@@ -566,14 +566,13 @@ class MetricsService extends EventEmitter {
   async shutdown() {
     try {
       this._shutdownStarted = true
-      // Null out prepared statements BEFORE stopping the timer so that any
-      // concurrent timer callback that is already past the db.open check will
-      // hit the null-guard in _flushBatch() and exit cleanly instead of running
-      // a statement against a closing/closed connection.
+      this._stopBatchTimer()
+      // Flush remaining events while statements are still valid
+      this._flushBatch()
+      // Now null out statements to prevent any stale use
       this.insertStmt = null
       this.insertPromptStmt = null
-      this._stopBatchTimer()
-      this._flushBatch()
+      this.batchQueue = []
       this.emit('shutdown')
     } catch (error) {
       console.error('[METRICS] Error during shutdown:', error.message)

@@ -13,6 +13,35 @@ const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandl
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 const websiteServer = require('./website-server')
 const { getRecentProjects, addRecentProject, removeRecentProject } = require('./recent-projects')
+const { shutdownMetricsService } = require('./metrics-service')
+
+/**
+ * Forward a main-process error to the renderer as a toast notification.
+ * Falls back to console.error if the window is unavailable.
+ * @param {Error|string} error
+ * @param {string} context - Short label for where the error originated
+ */
+function forwardErrorToRenderer(error, context) {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`[Main:${context}]`, message)
+  try {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('main:error', { message, context })
+    }
+  } catch (_) {
+    // Window not available — already logged above
+  }
+}
+
+// Global error handlers — catch unhandled exceptions and forward to renderer
+// as toast notifications instead of showing Electron's native error dialog.
+process.on('uncaughtException', (error) => {
+  forwardErrorToRenderer(error, 'uncaughtException')
+})
+
+process.on('unhandledRejection', (reason) => {
+  forwardErrorToRenderer(reason, 'unhandledRejection')
+})
 
 // Keep a global reference of the window object
 let mainWindow = null
@@ -486,12 +515,23 @@ app.on('window-all-closed', () => {
   }
 })
 
-// Cleanup plugins and web server before app exits
+// Cleanup plugins, metrics, CRE, and web server before app exits
 app.on('before-quit', async (event) => {
   // Stop the website server if running
   try {
     await websiteServer.getInstance().stop()
   } catch (_) { /* ignore */ }
+
+  // Shutdown metrics service (flushes pending batch, stops timer)
+  try {
+    await shutdownMetricsService()
+  } catch (_) { /* ignore — non-critical */ }
+
+  // Shutdown CRE (releases process lock)
+  try {
+    const cre = require('./cre')
+    await cre.shutdown()
+  } catch (_) { /* ignore — non-critical */ }
 
   if (pluginManager && !pluginManager.shuttingDown) {
     event.preventDefault()

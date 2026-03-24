@@ -128,6 +128,9 @@ class BaseRepository {
     if (!db) {
       throw new Error('Database not connected')
     }
+    if (!db.open) {
+      throw new Error('Database connection is not open')
+    }
     return db
   }
 

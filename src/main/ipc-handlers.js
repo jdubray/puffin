@@ -1483,14 +1483,24 @@ function setupMetricsHandlers(ipcMain) {
 function setupClaudeHandlers(ipcMain) {
   // Check if Claude CLI is available
   ipcMain.handle('claude:check', async () => {
-    const available = await claudeService.isAvailable()
-    const version = available ? await claudeService.getVersion() : null
-    return { available, version }
+    try {
+      const available = await claudeService.isAvailable()
+      const version = available ? await claudeService.getVersion() : null
+      return { available, version }
+    } catch (error) {
+      console.error('[IPC] claude:check error:', error.message)
+      return { available: false, version: null }
+    }
   })
 
   // Check if a CLI process is currently running
   ipcMain.handle('claude:isRunning', () => {
-    return claudeService.isProcessRunning()
+    try {
+      return claudeService.isProcessRunning()
+    } catch (error) {
+      console.error('[IPC] claude:isRunning error:', error.message)
+      return false
+    }
   })
 
   // Submit prompt to Claude CLI
@@ -1633,27 +1643,37 @@ function setupClaudeHandlers(ipcMain) {
 
   // Answer a question from Claude (AskUserQuestion tool response)
   ipcMain.handle('claude:answer', async (event, { toolUseId, answers }) => {
-    console.log('[IPC] claude:answer received, toolUseId:', toolUseId)
-    return claudeService.sendAnswer(toolUseId, answers)
+    try {
+      console.log('[IPC] claude:answer received, toolUseId:', toolUseId)
+      return claudeService.sendAnswer(toolUseId, answers)
+    } catch (error) {
+      console.error('[IPC] claude:answer error:', error.message)
+      return { success: false, error: error.message }
+    }
   })
 
   // /btw ephemeral side question — one-shot, no tools, answered from existing session context.
   // The exchange is NOT shown in Puffin's conversation view; the answer is displayed ephemerally.
   ipcMain.handle('claude:btw-ask', async (event, { question, sessionId }) => {
-    if (!question?.trim()) return { success: false, error: 'Empty question' }
-    if (!projectPath) return { success: false, error: 'No project open' }
+    try {
+      if (!question?.trim()) return { success: false, error: 'Empty question' }
+      if (!projectPath) return { success: false, error: 'No project open' }
 
-    // Prefix the question so Claude knows this is a side query and should reply briefly.
-    const prompt = `[btw — side question, answer briefly without using any tools]\n\n${question.trim()}`
+      // Prefix the question so Claude knows this is a side query and should reply briefly.
+      const prompt = `[btw — side question, answer briefly without using any tools]\n\n${question.trim()}`
 
-    const result = await claudeService.sendPrompt(prompt, {
-      projectPath,
-      sessionId: sessionId || null, // resume session for context
-      disableTools: true,           // no file access — answers from context only
-      maxTurns: 1,
-      model: null                   // inherits default model
-    })
-    return result
+      const result = await claudeService.sendPrompt(prompt, {
+        projectPath,
+        sessionId: sessionId || null, // resume session for context
+        disableTools: true,           // no file access — answers from context only
+        maxTurns: 1,
+        model: null                   // inherits default model
+      })
+      return result
+    } catch (error) {
+      console.error('[IPC] claude:btw-ask error:', error.message)
+      return { success: false, error: error.message }
+    }
   })
 
   // Derive user stories from a prompt
@@ -3141,8 +3161,13 @@ function setupImageHandlers(ipcMain) {
 
   // Get supported image extensions
   ipcMain.handle('image:getSupportedExtensions', async () => {
-    const { SUPPORTED_IMAGE_EXTENSIONS } = require('./services')
-    return { success: true, extensions: SUPPORTED_IMAGE_EXTENSIONS }
+    try {
+      const { SUPPORTED_IMAGE_EXTENSIONS } = require('./services')
+      return { success: true, extensions: SUPPORTED_IMAGE_EXTENSIONS }
+    } catch (error) {
+      console.error('[IPC] image:getSupportedExtensions error:', error.message)
+      return { success: false, error: error.message, extensions: [] }
+    }
   })
 }
 
@@ -3338,11 +3363,16 @@ function setupWebserverHandlers(ipcMain) {
   })
 
   ipcMain.handle('webserver:status', () => {
-    return {
-      success: true,
-      running: server.isRunning(),
-      port: server.getPort(),
-      url: server.getUrl()
+    try {
+      return {
+        success: true,
+        running: server.isRunning(),
+        port: server.getPort(),
+        url: server.getUrl()
+      }
+    } catch (error) {
+      console.error('[IPC] webserver:status error:', error.message)
+      return { success: false, error: error.message, running: false }
     }
   })
 

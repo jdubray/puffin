@@ -579,6 +579,17 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * Main process error forwarding — subscribe to receive unhandled errors as toast-worthy events
+   */
+  mainErrors: {
+    onError: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('main:error', handler)
+      return () => ipcRenderer.removeListener('main:error', handler)
+    }
+  },
+
+  /**
    * Menu event listeners (for Electron menu actions)
    */
   menu: {

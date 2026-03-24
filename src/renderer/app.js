@@ -2267,6 +2267,20 @@ Please provide specific file locations and line numbers where issues are found, 
     })
     this.claudeListeners.push(unsubError)
 
+    // Main process unhandled errors — show as toast instead of crashing
+    if (window.puffin.mainErrors) {
+      const unsubMainError = window.puffin.mainErrors.onError((data) => {
+        console.error('[MAIN-ERROR]', data.context, data.message)
+        this.showToast({
+          type: 'error',
+          title: 'Background Error',
+          message: data.message || 'An unexpected error occurred',
+          duration: 8000
+        })
+      })
+      this.claudeListeners.push(unsubMainError)
+    }
+
     // Claude asking a question (AskUserQuestion tool)
     const unsubQuestion = window.puffin.claude.onQuestion((data) => {
       console.log('[CLAUDE-QUESTION] Question received:', data.toolUseId, data.questions?.length, 'questions')

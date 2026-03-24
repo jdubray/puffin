@@ -243,6 +243,12 @@ Download `Puffin-*.dmg` from the Releases page, open it, and drag Puffin to Appl
 
 On first launch, macOS may show a security warning. Go to **System Settings > Privacy & Security** and click **Open Anyway**.
 
+> **macOS "app is damaged" error (macOS 14 Sonoma and later):** Newer versions of macOS may refuse to open Puffin and show *"Puffin is damaged and can't be opened"* instead of the usual security prompt. This is a Gatekeeper quarantine flag applied to downloaded files. Run this command in Terminal to clear it:
+> ```bash
+> xattr -cr /Applications/Puffin.app
+> ```
+> Then try launching Puffin again. You only need to do this once.
+
 > **Troubleshooting:** If `claude` works in Terminal but not in Puffin, your shell profile may export PATH in a way GUI apps do not inherit. Create a symlink in a system location:
 > ```bash
 > sudo ln -s $(which claude) /usr/local/bin/claude

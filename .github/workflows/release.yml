@@ -41,6 +41,12 @@ jobs:
           npm version $VERSION --no-git-tag-version --allow-same-version
         shell: bash
 
+      - name: Upscale icon for macOS ICNS generation
+        if: matrix.platform == 'mac'
+        run: |
+          sips -z 1024 1024 build/icon.png --out build/icon-1024.png
+          mv build/icon-1024.png build/icon.png
+
       - name: Build for ${{ matrix.platform }}
         run: npm run package -- --${{ matrix.platform }} --publish never
         env:

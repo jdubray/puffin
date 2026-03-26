@@ -41,19 +41,9 @@ jobs:
           npm version $VERSION --no-git-tag-version --allow-same-version
         shell: bash
 
-      - name: Upscale icon (Windows only)
-        if: matrix.platform == 'win'
-        shell: pwsh
-        run: |
-          Add-Type -AssemblyName System.Drawing
-          $src = [System.Drawing.Image]::FromFile("$PWD\build\icon.png")
-          $bmp = New-Object System.Drawing.Bitmap(1024, 1024)
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-          $g.DrawImage($src, 0, 0, 1024, 1024)
-          $src.Dispose(); $g.Dispose()
-          $bmp.Save("$PWD\build\icon.png", [System.Drawing.Imaging.ImageFormat]::Png)
-          $bmp.Dispose()
+      - name: Rebuild native modules for x64 (universal build)
+        if: matrix.platform == 'mac'
+        run: npx @electron/rebuild --arch=x64
 
       - name: Build for ${{ matrix.platform }}
         run: npm run package -- --${{ matrix.platform }} --publish never

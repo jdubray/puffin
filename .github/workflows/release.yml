@@ -10,7 +10,17 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout code
@@ -31,7 +41,8 @@ jobs:
           npm version $VERSION --no-git-tag-version --allow-same-version
         shell: bash
 
-      - name: Upscale icon
+      - name: Upscale icon (Windows only)
+        if: matrix.platform == 'win'
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Drawing
@@ -44,16 +55,31 @@ jobs:
           $bmp.Save("$PWD\build\icon.png", [System.Drawing.Imaging.ImageFormat]::Png)
           $bmp.Dispose()
 
-      - name: Build for Windows
-        run: npm run package -- --win --publish never
+      - name: Build for ${{ matrix.platform }}
+        run: npm run package -- --${{ matrix.platform }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
+      - name: Upload Linux artifacts
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: dist/*.AppImage
+
       - name: Upload Windows artifacts
+        if: matrix.platform == 'win'
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: dist/*.exe
+
+      - name: Upload macOS artifacts
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: dist/*.dmg
 
   release:
     needs: build
@@ -71,6 +97,9 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: artifacts/windows-build/*
+          files: |
+            artifacts/linux-build/*
+            artifacts/windows-build/*
+            artifacts/macos-build/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

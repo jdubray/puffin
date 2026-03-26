@@ -58,7 +58,6 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.png",
       "target": [
         {
           "target": "dmg",
@@ -82,8 +81,7 @@
       "language": "1033"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "build/icon.png"
+      "target": "AppImage"
     }
   }
 }

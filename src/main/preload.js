@@ -626,6 +626,11 @@ contextBridge.exposeInMainWorld('puffin', {
       const handler = () => callback()
       ipcRenderer.on('profile:delete', handler)
       return () => ipcRenderer.removeListener('profile:delete', handler)
+    },
+    onManagePlugins: (callback) => {
+      const handler = () => callback()
+      ipcRenderer.on('plugins:manage', handler)
+      return () => ipcRenderer.removeListener('plugins:manage', handler)
     }
   },
 
@@ -779,6 +784,9 @@ contextBridge.exposeInMainWorld('puffin', {
     // Complete first-run setup with list of plugin names to disable
     completeSetup: (disabledPlugins) =>
       ipcRenderer.invoke('plugins:completeSetup', { disabledPlugins }),
+
+    // Install a plugin from a local directory path
+    install: (source) => ipcRenderer.invoke('plugins:install', { source }),
 
     // Subscribe to plugin activated events (for style loading)
     onPluginActivated: (callback) => {

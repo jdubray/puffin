@@ -34,6 +34,7 @@ import { GitPanelComponent } from './components/git-panel/git-panel.js'
 
 // Plugin system
 import { FirstRunSetup } from './components/first-run-setup/first-run-setup.js'
+import { PluginManager } from './components/plugin-manager/plugin-manager.js'
 import { sidebarViewManager } from './plugins/sidebar-view-manager.js'
 import { pluginViewContainer } from './plugins/plugin-view-container.js'
 import { styleInjector } from './plugins/style-injector.js'
@@ -948,6 +949,11 @@ Please provide specific file locations and line numbers where issues are found, 
       // but we no longer depend on it.
       const data = await window.puffin.app.getInitialState()
       console.log('Electron app ready, project path:', data?.projectPath)
+
+      if (data?.openPluginsManager) {
+        const mgr = new PluginManager()
+        await mgr.show()
+      }
 
       if (data?.projectPath) {
         await this._startWithProject(data.projectPath)
@@ -2120,6 +2126,13 @@ Please provide specific file locations and line numbers where issues are found, 
         }
       }
     })
+
+    if (window.puffin.menu.onManagePlugins) {
+      window.puffin.menu.onManagePlugins(() => {
+        const mgr = new PluginManager()
+        mgr.show()
+      })
+    }
   }
 
   /**

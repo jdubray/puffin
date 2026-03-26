@@ -171,6 +171,7 @@ class PluginLoader extends EventEmitter {
 
     // Default plugin directory: ~/.puffin/plugins/
     this.pluginsDir = options.pluginsDir || path.join(os.homedir(), '.puffin', 'plugins')
+    this.extraDirs = options.extraDirs || []
 
     // Track initialization state
     this.initialized = false
@@ -251,6 +252,47 @@ class PluginLoader extends EventEmitter {
         console.log(`[PluginLoader] Plugins directory does not exist: ${this.pluginsDir}`)
       } else {
         console.error(`[PluginLoader] Error scanning plugins directory:`, err.message)
+      }
+    }
+
+    // Scan extra directories (e.g. user-installed plugins in ~/.puffin/plugins/)
+    for (const extraDir of this.extraDirs) {
+      try {
+        const extraEntries = await fs.readdir(extraDir, { withFileTypes: true })
+        for (const entry of extraEntries) {
+          if (!entry.isDirectory()) continue
+
+          const pluginDir = path.join(extraDir, entry.name)
+          const manifestPath = path.join(pluginDir, 'puffin-plugin.json')
+
+          try {
+            await fs.access(manifestPath)
+
+            const content = await fs.readFile(manifestPath, 'utf-8')
+            let manifest
+            try {
+              manifest = JSON.parse(content)
+            } catch (parseError) {
+              console.error(`[PluginLoader] Invalid JSON in ${manifestPath}:`, parseError.message)
+              continue
+            }
+
+            const plugin = new Plugin(manifest, pluginDir)
+            if (this.plugins.has(plugin.name)) continue // skip duplicates
+
+            this.plugins.set(plugin.name, plugin)
+            discovered.push(plugin)
+            this.emit('plugin:discovered', { plugin })
+          } catch (err) {
+            if (err.code !== 'ENOENT') {
+              console.error(`[PluginLoader] Error reading ${manifestPath}:`, err.message)
+            }
+          }
+        }
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          console.error(`[PluginLoader] Error scanning extra plugins directory ${extraDir}:`, err.message)
+        }
       }
     }
 

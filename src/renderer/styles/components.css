@@ -13434,3 +13434,319 @@ body.website-edition .plugin-nav-btn[data-plugin-name="rlm-document-plugin"] {
   opacity: 0.5;
   cursor: default;
 }
+
+/* ============================================================
+   Plugin Manager Modal
+   ============================================================ */
+
+.pm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  animation: pm-fadein 0.2s ease;
+}
+
+.pm-overlay.pm-fadeout {
+  animation: pm-fadeout 0.2s ease forwards;
+}
+
+@keyframes pm-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pm-fadeout {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.pm-container {
+  width: 640px;
+  max-width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary, #16213e);
+  border: 1px solid var(--border-color, #2a2a4a);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #2a2a4a);
+}
+
+.pm-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.pm-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #888);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.pm-close:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-hover, #1e2a3a);
+}
+
+.pm-tabs {
+  display: flex;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-color, #2a2a4a);
+  gap: 4px;
+}
+
+.pm-tab {
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary, #888);
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.pm-tab:hover {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.pm-tab.pm-tab-active {
+  color: var(--accent-color, #6c8ebf);
+  border-bottom-color: var(--accent-color, #6c8ebf);
+}
+
+.pm-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+.pm-panel {
+  display: none;
+  height: 100%;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.pm-panel.pm-panel-active {
+  display: block;
+}
+
+.pm-plugin-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.pm-plugin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color, #2a2a4a);
+  gap: 12px;
+}
+
+.pm-plugin-row:last-child {
+  border-bottom: none;
+}
+
+.pm-plugin-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pm-plugin-name {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.pm-plugin-version {
+  font-size: 0.72rem;
+  color: var(--text-muted, #555);
+}
+
+.pm-plugin-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #888);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pm-plugin-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.pm-plugin-status {
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.pm-status-active {
+  color: #4caf7d;
+  background: rgba(76, 175, 80, 0.12);
+}
+
+.pm-status-inactive {
+  color: var(--text-muted, #666);
+  background: var(--bg-hover, #1e2a3a);
+}
+
+/* Toggle switch */
+.pm-toggle-label {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.pm-toggle {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.pm-toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  background: var(--bg-hover, #333);
+  transition: background 0.2s;
+}
+
+.pm-toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.pm-toggle:checked + .pm-toggle-track {
+  background: var(--accent-color, #6c8ebf);
+}
+
+.pm-toggle:checked + .pm-toggle-track::after {
+  transform: translateX(16px);
+}
+
+.pm-toggle:disabled + .pm-toggle-track {
+  opacity: 0.5;
+}
+
+/* Install tab */
+.pm-install-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pm-install-help {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary, #888);
+  line-height: 1.5;
+}
+
+.pm-install-help code {
+  font-family: monospace;
+  background: var(--bg-hover, #1e2a3a);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.pm-install-row {
+  display: flex;
+  gap: 8px;
+}
+
+.pm-install-input {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-primary, #1a1a2e);
+  border: 1px solid var(--border-color, #2a2a4a);
+  border-radius: 6px;
+  color: var(--text-primary, #e0e0e0);
+  font-size: 0.85rem;
+}
+
+.pm-install-input:focus {
+  outline: none;
+  border-color: var(--accent-color, #6c8ebf);
+}
+
+.pm-install-btn {
+  padding: 8px 20px;
+  background: var(--accent-color, #6c8ebf);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pm-install-btn:hover {
+  opacity: 0.88;
+}
+
+.pm-install-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pm-install-result {
+  font-size: 0.82rem;
+  min-height: 1.2em;
+}
+
+.pm-result-success {
+  color: #4caf7d;
+}
+
+.pm-result-error {
+  color: #e57373;
+}
+
+.pm-empty {
+  padding: 24px 20px;
+  color: var(--text-secondary, #888);
+  font-size: 0.85rem;
+}

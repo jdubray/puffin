@@ -10,6 +10,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 
 // Electron apps launched from Finder/Dock on macOS inherit a minimal PATH
 // (typically just /usr/bin:/bin:/usr/sbin:/sbin), which excludes directories
@@ -80,6 +81,9 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason) => {
   forwardErrorToRenderer(reason, 'unhandledRejection')
 })
+
+// Whether to open Plugin Manager on startup (set by --plugins CLI flag)
+let openPluginsManagerOnStart = false
 
 // Keep a global reference of the window object
 let mainWindow = null
@@ -175,6 +179,16 @@ function createMenu() {
               }
             }
           ]
+        },
+        { type: 'separator' },
+        {
+          label: 'Manage Plugins...',
+          accelerator: 'CmdOrCtrl+Shift+M',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('plugins:manage')
+            }
+          }
         },
         { type: 'separator' },
         ...(isMac ? [
@@ -309,9 +323,61 @@ function createWindow() {
 ipcMain.handle('app:getInitialState', () => {
   return {
     projectPath: currentProjectPath,
-    recentProjects: getRecentProjects()
+    recentProjects: getRecentProjects(),
+    openPluginsManager: openPluginsManagerOnStart
   }
 })
+
+ipcMain.handle('plugins:install', async (event, { source }) => {
+  const fsp = require('fs').promises
+  const pathMod = require('path')
+  const osMod = require('os')
+
+  const userPluginsDir = pathMod.join(osMod.homedir(), '.puffin', 'plugins')
+
+  try {
+    // Local directory install
+    if (!source.startsWith('http://') && !source.startsWith('https://')) {
+      const src = source.replace(/^~/, osMod.homedir())
+      const stat = await fsp.stat(src)
+      if (!stat.isDirectory()) {
+        return { success: false, error: 'Source must be a directory containing puffin-plugin.json' }
+      }
+      // Verify manifest exists
+      const manifestPath = pathMod.join(src, 'puffin-plugin.json')
+      const manifestContent = await fsp.readFile(manifestPath, 'utf-8')
+      const manifest = JSON.parse(manifestContent)
+      const pluginName = manifest.name
+      if (!pluginName) return { success: false, error: 'puffin-plugin.json missing "name" field' }
+
+      const dest = pathMod.join(userPluginsDir, pluginName)
+      await fsp.mkdir(userPluginsDir, { recursive: true })
+
+      // Copy directory recursively
+      await copyDirRecursive(src, dest, fsp, pathMod)
+      return { success: true, pluginName, requiresRestart: true }
+    }
+
+    // URL install (zip download)
+    return { success: false, error: 'URL install not yet supported. Please download and unzip manually, then install from a local directory.' }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+async function copyDirRecursive(src, dest, fsp, pathMod) {
+  await fsp.mkdir(dest, { recursive: true })
+  const entries = await fsp.readdir(src, { withFileTypes: true })
+  for (const entry of entries) {
+    const srcPath = pathMod.join(src, entry.name)
+    const destPath = pathMod.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      await copyDirRecursive(srcPath, destPath, fsp, pathMod)
+    } else {
+      await fsp.copyFile(srcPath, destPath)
+    }
+  }
+}
 
 /**
  * Show directory picker dialog
@@ -363,7 +429,8 @@ async function initializeProject(projectPath) {
     ? path.join(app.getAppPath(), 'plugins')
     : path.join(__dirname, '..', '..', 'plugins')
 
-  pluginLoader = new PluginLoader({ pluginsDir })
+  const userPluginsDir = path.join(os.homedir(), '.puffin', 'plugins')
+  pluginLoader = new PluginLoader({ pluginsDir, extraDirs: [userPluginsDir] })
   console.log(`[Plugins] Loading from: ${pluginsDir}`)
 
   pluginLoader.on('plugin:discovered', ({ plugin }) => {
@@ -481,6 +548,8 @@ function getProjectPathFromArgs() {
 
 // Ready to create windows
 app.whenReady().then(async () => {
+  openPluginsManagerOnStart = app.commandLine.hasSwitch('plugins')
+
   // Register pre-initialization IPC handlers (project selection from welcome screen)
   ipcMain.handle('app:getRecentProjects', () => {
     return getRecentProjects()

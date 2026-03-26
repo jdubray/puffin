@@ -41,13 +41,6 @@ jobs:
           npm version $VERSION --no-git-tag-version --allow-same-version
         shell: bash
 
-      # For universal macOS builds, native modules (better-sqlite3, etc.) must be
-      # compiled for both arm64 (host) and x64 so electron-builder can lipo them
-      # into a universal binary. The host npm ci already built arm64; rebuild x64.
-      - name: Rebuild native modules for x64 (universal build)
-        if: matrix.platform == 'mac'
-        run: npx @electron/rebuild --arch=x64
-
       - name: Build for ${{ matrix.platform }}
         run: npm run package -- --${{ matrix.platform }} --publish never
         env:

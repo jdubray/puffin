@@ -48,16 +48,10 @@
     "files": [
       "src/**/*",
       "plugins/**/*",
-      "package.json",
-      "entitlements.mac.plist"
+      "package.json"
     ],
     "mac": {
-      "category": "public.app-category.developer-tools",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "entitlements.mac.plist",
-      "entitlementsInherit": "entitlements.mac.plist",
-      "notarize": false
+      "category": "public.app-category.developer-tools"
     },
     "win": {
       "target": "nsis"

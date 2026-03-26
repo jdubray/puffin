@@ -245,11 +245,12 @@ This opens a browser for login. **You must do this in Terminal before launching 
 
 Download `Puffin-*.dmg` from the Releases page, open it, and drag Puffin to Applications.
 
-> **macOS security warning — required one-time step:** Puffin is an open-source project and is not code-signed with an Apple Developer certificate. macOS Gatekeeper will block the app on first launch, typically showing *"Puffin is damaged and can't be opened."* This is expected. Run the following command in Terminal **before** launching Puffin:
+> **macOS security warning — required one-time setup:** Puffin is an open-source project and is not code-signed with an Apple Developer certificate. macOS Gatekeeper will block the app on first launch, typically showing *"Puffin is damaged and can't be opened."* This is expected. Run these two commands in Terminal:
 > ```bash
 > xattr -cr /Applications/Puffin.app
+> open /Applications/Puffin.app
 > ```
-> This removes the quarantine flag macOS places on downloaded files. You only need to do this once. After running it, launch Puffin normally.
+> The first removes the quarantine flag macOS places on downloaded files. The second launches the app — use this instead of double-clicking for the **first launch only**. After that, Puffin opens normally from Finder or Spotlight.
 
 > **Troubleshooting:** If you see a `spawn claude ENOENT` error, Puffin cannot find the `claude` binary. Puffin automatically adds the most common install locations (`~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin`) to its PATH, so this is usually only a problem if `claude` was installed to a non-standard location. If it still fails, create a symlink in a system location:
 > ```bash

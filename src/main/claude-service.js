@@ -1211,6 +1211,22 @@ ${updatedContext}
   getSpawnOptions(cwd = null) {
     const env = { ...process.env }
 
+    // On macOS, Electron apps don't inherit the user's full shell PATH.
+    // Ensure common install locations for the claude CLI are included.
+    if (process.platform === 'darwin') {
+      const home = require('os').homedir()
+      const extraPaths = [
+        `${home}/.local/bin`,
+        '/usr/local/bin',
+        '/opt/homebrew/bin'
+      ]
+      const currentPath = env.PATH || ''
+      const missing = extraPaths.filter(p => !currentPath.split(':').includes(p))
+      if (missing.length) {
+        env.PATH = [...missing, currentPath].join(':')
+      }
+    }
+
     // On Windows, Claude Code requires git-bash
     // Set the path if not already set and Git is in default location
     if (process.platform === 'win32' && !env.CLAUDE_CODE_GIT_BASH_PATH) {

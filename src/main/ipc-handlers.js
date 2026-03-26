@@ -30,6 +30,8 @@ let gitService = null
 let claudeMdGenerator = null
 let tempImageService = null
 let projectPath = null
+// Lazy reference to pluginManager — set by setupPluginManagerHandlers once loaded
+let pluginManagerRef = null
 
 // Maximum allowed image file size (50MB)
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024
@@ -79,6 +81,19 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
 
   // Set Git service project path
   gitService.setProjectPath(projectPath)
+
+  // Register plugins:isFirstRun early so the renderer can call it before any project
+  // loads. pluginManagerRef is null until setupPluginManagerHandlers runs; return
+  // isFirstRun: false in that case so the setup wizard is not shown prematurely.
+  ipcMain.handle('plugins:isFirstRun', async () => {
+    try {
+      if (!pluginManagerRef) return { success: true, isFirstRun: false }
+      const isFirstRun = pluginManagerRef.getStateStore().isFirstRun()
+      return { success: true, isFirstRun }
+    } catch (error) {
+      return { success: false, error: error.message, isFirstRun: false }
+    }
+  })
 
   // State handlers
   setupStateHandlers(ipcMain)
@@ -2662,6 +2677,10 @@ function setupPluginHandlers(ipcMain, pluginLoader) {
  * @param {BrowserWindow} mainWindow - Main window for sending events to renderer
  */
 function setupPluginManagerHandlers(ipcMain, pluginManager, mainWindow) {
+  // Update the module-level reference so the early-registered plugins:isFirstRun
+  // handler (in setupIpcHandlers) can access the now-ready pluginManager.
+  pluginManagerRef = pluginManager
+
   /**
    * Notify renderer of plugin lifecycle events
    * @param {string} channel - IPC channel name
@@ -2934,17 +2953,8 @@ function setupViewRegistryHandlers(ipcMain, viewRegistry, mainWindow) {
     }
   })
 
-  // Check if this is the first time the app has run (setup wizard not completed)
-  ipcMain.handle('plugins:isFirstRun', async () => {
-    try {
-      const isFirstRun = pluginManager.getStateStore().isFirstRun()
-      return { success: true, isFirstRun }
-    } catch (error) {
-      return { success: false, error: error.message, isFirstRun: false }
-    }
-  })
-
   // Complete first-run setup: disable user-unchecked plugins, mark setup done
+  // Note: plugins:isFirstRun is registered early in setupIpcHandlers (uses pluginManagerRef)
   ipcMain.handle('plugins:completeSetup', async (event, { disabledPlugins = [] } = {}) => {
     try {
       for (const name of disabledPlugins) {
@@ -3004,7 +3014,7 @@ function setupPluginStyleHandlers(ipcMain, pluginManager) {
   // Get style paths for a plugin
   ipcMain.handle('plugin:get-style-paths', async (event, pluginName) => {
     try {
-      const loader = pluginManager.getLoader()
+      const loader = pluginManager.loader
       const plugin = loader.getPlugin(pluginName)
 
       if (!plugin) {

@@ -178,6 +178,7 @@ export class ProjectFormComponent {
     this.assumptions = []
     this.pluginsList = null
     this.plugins = []
+    this.puffinPluginsList = null
     this._initialized = false // Track if form has been populated
 
     // Create debounced version of config update to prevent excessive updates during typing
@@ -194,6 +195,7 @@ export class ProjectFormComponent {
     this.form = document.getElementById('config-form')
     this.assumptionsList = document.getElementById('assumptions-list')
     this.pluginsList = document.getElementById('plugins-list')
+    this.puffinPluginsList = document.getElementById('puffin-plugins-list')
 
     if (!this.form) {
       console.error('Config form not found')
@@ -203,6 +205,7 @@ export class ProjectFormComponent {
     this.bindEvents()
     this.subscribeToState()
     this.loadPlugins()
+    this.loadPuffinPlugins()
   }
 
   /**
@@ -390,6 +393,7 @@ export class ProjectFormComponent {
       // Reload plugins now that the backend state is ready
       // This ensures plugins are displayed after the state is loaded
       this.loadPlugins()
+      this.loadPuffinPlugins()
     }
   }
 
@@ -989,6 +993,101 @@ export class ProjectFormComponent {
 
     // Bind plugin action events
     this.bindPluginEvents()
+  }
+
+  // ========================================
+  // Puffin Plugin Management Methods
+  // ========================================
+
+  /**
+   * Load Puffin built-in plugins from the plugin loader
+   */
+  async loadPuffinPlugins() {
+    if (!this.puffinPluginsList) return
+    try {
+      if (!window.puffin?.plugins?.list) return
+      const [listResult, activeResult] = await Promise.all([
+        window.puffin.plugins.list(),
+        window.puffin.plugins.listActive()
+      ])
+      if (!listResult.success) return
+      const activeNames = new Set(activeResult.success ? (activeResult.plugins || []) : [])
+      const plugins = (listResult.plugins || [])
+        .filter(p => !p.name.endsWith('.disabled'))
+        .map(p => ({ ...p, enabled: activeNames.has(p.name) }))
+      this.renderPuffinPlugins(plugins)
+    } catch (error) {
+      console.error('[ProjectForm] Failed to load Puffin plugins:', error)
+    }
+  }
+
+  /**
+   * Render the Puffin plugins list
+   * @param {Array} plugins
+   */
+  renderPuffinPlugins(plugins) {
+    if (!this.puffinPluginsList) return
+    this.puffinPluginsList.innerHTML = ''
+
+    if (plugins.length === 0) {
+      this.puffinPluginsList.innerHTML = `
+        <div class="plugins-empty-state">
+          <span class="empty-icon">🧩</span>
+          <p>No plugins found</p>
+          <p class="empty-hint">Add a plugin folder with a <code>puffin-plugin.json</code> manifest to the <code>plugins/</code> directory</p>
+        </div>`
+      return
+    }
+
+    plugins.forEach(plugin => {
+      const item = document.createElement('div')
+      item.className = `plugin-item ${plugin.enabled ? '' : 'disabled'}`
+      item.dataset.pluginName = plugin.name
+
+      const iconDiv = document.createElement('div')
+      iconDiv.className = 'plugin-item-icon'
+      iconDiv.textContent = this.validatePluginIcon(plugin.manifest?.contributes?.views?.[0]?.icon) || '🧩'
+
+      const contentWrapper = document.createElement('div')
+      contentWrapper.className = 'plugin-item-wrapper'
+      contentWrapper.innerHTML = `
+        <div class="plugin-item-content">
+          <div class="plugin-item-header">
+            <span class="plugin-item-name">${this.escapeHtml(plugin.displayName || plugin.name)}</span>
+            <span class="plugin-item-version">v${this.escapeHtml(plugin.version || '1.0.0')}</span>
+          </div>
+          <p class="plugin-item-description">${this.escapeHtml(plugin.description || '')}</p>
+        </div>
+        <div class="plugin-item-actions">
+          <button class="plugin-toggle puffin-plugin-toggle ${plugin.enabled ? 'enabled' : ''}"
+                  data-plugin-name="${this.escapeHtml(plugin.name)}"
+                  title="${plugin.enabled ? 'Disable plugin' : 'Enable plugin'}"
+                  aria-label="${plugin.enabled ? 'Disable plugin' : 'Enable plugin'}">
+            <span class="plugin-toggle-knob"></span>
+          </button>
+        </div>`
+
+      item.appendChild(iconDiv)
+      while (contentWrapper.firstChild) item.appendChild(contentWrapper.firstChild)
+      this.puffinPluginsList.appendChild(item)
+    })
+
+    this.puffinPluginsList.querySelectorAll('.puffin-plugin-toggle').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const name = e.currentTarget.dataset.pluginName
+        const isEnabled = e.currentTarget.classList.contains('enabled')
+        try {
+          if (isEnabled) {
+            await window.puffin.plugins.disable(name)
+          } else {
+            await window.puffin.plugins.enable(name)
+          }
+          await this.loadPuffinPlugins()
+        } catch (err) {
+          console.error(`[ProjectForm] Failed to toggle Puffin plugin ${name}:`, err)
+        }
+      })
+    })
   }
 
   /**

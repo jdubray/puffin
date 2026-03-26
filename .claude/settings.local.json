@@ -76,7 +76,18 @@
       "Bash(gh api:*)",
       "Bash(npm info:*)",
       "Bash(gh auth:*)",
-      "Bash(gh run:*)"
+      "Bash(gh run:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/jjdub/code/puffin/**)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\(''''name''''\\), ''''|'''', d.get\\(''''displayName''''\\), ''''|'''', d.get\\(''''description'''',''''''''\\)\\)\")",
+      "Bash(git -C /c/Users/jjdub/code/puffin/.claude/worktrees/agent-a0ba2e42 status)",
+      "Bash(git -C \"/c/Users/jjdub/code/puffin/.claude/worktrees/agent-a0ba2e42\" diff src/main/main.js)",
+      "Bash(WT=\"/c/Users/jjdub/code/puffin/.claude/worktrees/agent-a0ba2e42\")",
+      "Bash(cp \"$WT/src/main/main.js\" /c/Users/jjdub/code/puffin/src/main/main.js)",
+      "Bash(cp \"$WT/src/main/plugins/plugin-loader.js\" /c/Users/jjdub/code/puffin/src/main/plugins/plugin-loader.js)",
+      "Bash(cp \"$WT/src/main/preload.js\" /c/Users/jjdub/code/puffin/src/main/preload.js)",
+      "Bash(cp \"$WT/src/renderer/app.js\" /c/Users/jjdub/code/puffin/src/renderer/app.js)"
     ]
   },
   "enableAllProjectMcpServers": true,

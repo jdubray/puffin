@@ -866,6 +866,15 @@ export class PromptEditorComponent {
     const responseContent = document.getElementById('response-content')
     if (!responseContent) return
 
+    // BUG FIX: During the waiting state (submitted, no streaming yet) the
+    // ResponseViewerComponent shows a spinner overlay on #response-area.
+    // If we write conversation history here, it appears below the spinner
+    // and auto-scroll pushes the spinner out of view. Skip entirely until
+    // streaming begins or processing ends.
+    if (promptState.isProcessing && !promptState.hasStreamingResponse) {
+      return
+    }
+
     // Build conversation view
     const prompts = historyState.promptTree || []
 

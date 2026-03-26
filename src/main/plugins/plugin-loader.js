@@ -191,6 +191,10 @@ class PluginLoader extends EventEmitter {
    * @returns {Promise<void>}
    */
   async ensurePluginsDirectory() {
+    // Skip mkdir when plugins live inside an ASAR archive (read-only virtual fs)
+    if (this.pluginsDir.includes('.asar')) {
+      return
+    }
     try {
       await fs.mkdir(this.pluginsDir, { recursive: true })
     } catch (err) {

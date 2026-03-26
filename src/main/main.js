@@ -458,53 +458,51 @@ async function initializeProject(projectPath) {
   historyService = new HistoryService({ getPuffinState })
   const storyService = new StoryService({ getPuffinState })
 
-  pluginLoader.loadPlugins()
-    .then(() => {
-      pluginManager = new PluginManager({
-        loader: pluginLoader,
-        ipcMain,
-        services: {
-          history: historyService,
-          stories: storyService,
-          claudeService: getClaudeService()
-        },
-        projectPath
-      })
+  try {
+    await pluginLoader.loadPlugins()
 
-      pluginManager.on('plugin:activated', ({ name }) => {
-        console.log(`[PluginManager] Activated: ${name}`)
-      })
-      pluginManager.on('plugin:activation-failed', ({ name, error }) => {
-        console.error(`[PluginManager] Activation failed for ${name}:`, error.message)
-      })
-      pluginManager.on('plugin:deactivated', ({ name }) => {
-        console.log(`[PluginManager] Deactivated: ${name}`)
-      })
-      pluginManager.on('plugin:enabled', ({ name }) => {
-        console.log(`[PluginManager] Enabled: ${name}`)
-      })
-      pluginManager.on('plugin:disabled', ({ name }) => {
-        console.log(`[PluginManager] Disabled: ${name}`)
-      })
-
-      setupPluginManagerHandlers(ipcMain, pluginManager, mainWindow)
-      setupViewRegistryHandlers(ipcMain, pluginManager.getViewRegistry(), mainWindow)
-      setupPluginStyleHandlers(ipcMain, pluginManager)
-      setClaudeServicePluginManager(pluginManager)
-
-      const puffinState = getPuffinState()
-      if (puffinState && pluginManager.getRegistry()) {
-        puffinState.setPluginRegistry(pluginManager.getRegistry())
-      }
-
-      return pluginManager.initialize()
+    pluginManager = new PluginManager({
+      loader: pluginLoader,
+      ipcMain,
+      services: {
+        history: historyService,
+        stories: storyService,
+        claudeService: getClaudeService()
+      },
+      projectPath
     })
-    .then(({ activated, failed, disabled }) => {
-      console.log(`[PluginManager] Initialization complete: ${activated.length} activated, ${failed.length} failed, ${disabled.length} disabled`)
+
+    pluginManager.on('plugin:activated', ({ name }) => {
+      console.log(`[PluginManager] Activated: ${name}`)
     })
-    .catch(err => {
-      console.error('[Plugins] Error during plugin initialization:', err.message)
+    pluginManager.on('plugin:activation-failed', ({ name, error }) => {
+      console.error(`[PluginManager] Activation failed for ${name}:`, error.message)
     })
+    pluginManager.on('plugin:deactivated', ({ name }) => {
+      console.log(`[PluginManager] Deactivated: ${name}`)
+    })
+    pluginManager.on('plugin:enabled', ({ name }) => {
+      console.log(`[PluginManager] Enabled: ${name}`)
+    })
+    pluginManager.on('plugin:disabled', ({ name }) => {
+      console.log(`[PluginManager] Disabled: ${name}`)
+    })
+
+    setupPluginManagerHandlers(ipcMain, pluginManager, mainWindow)
+    setupViewRegistryHandlers(ipcMain, pluginManager.getViewRegistry(), mainWindow)
+    setupPluginStyleHandlers(ipcMain, pluginManager)
+    setClaudeServicePluginManager(pluginManager)
+
+    const puffinState = getPuffinState()
+    if (puffinState && pluginManager.getRegistry()) {
+      puffinState.setPluginRegistry(pluginManager.getRegistry())
+    }
+
+    const { activated, failed, disabled } = await pluginManager.initialize()
+    console.log(`[PluginManager] Initialization complete: ${activated.length} activated, ${failed.length} failed, ${disabled.length} disabled`)
+  } catch (err) {
+    console.error('[Plugins] Error during plugin initialization:', err.message)
+  }
 
   // Update window title
   if (mainWindow) {

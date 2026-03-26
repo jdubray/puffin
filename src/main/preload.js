@@ -770,6 +770,13 @@ contextBridge.exposeInMainWorld('puffin', {
     // Get all active plugins with styles
     getAllStylePaths: () => ipcRenderer.invoke('plugin:get-all-style-paths'),
 
+    // Check if this is the first run (setup wizard not yet completed)
+    isFirstRun: () => ipcRenderer.invoke('plugins:isFirstRun'),
+
+    // Complete first-run setup with list of plugin names to disable
+    completeSetup: (disabledPlugins) =>
+      ipcRenderer.invoke('plugins:completeSetup', { disabledPlugins }),
+
     // Subscribe to plugin activated events (for style loading)
     onPluginActivated: (callback) => {
       const handler = (event, data) => callback(data)

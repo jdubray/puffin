@@ -2933,6 +2933,29 @@ function setupViewRegistryHandlers(ipcMain, viewRegistry, mainWindow) {
       return { success: false, error: error.message }
     }
   })
+
+  // Check if this is the first time the app has run (setup wizard not completed)
+  ipcMain.handle('plugins:isFirstRun', async () => {
+    try {
+      const isFirstRun = pluginManager.getStateStore().isFirstRun()
+      return { success: true, isFirstRun }
+    } catch (error) {
+      return { success: false, error: error.message, isFirstRun: false }
+    }
+  })
+
+  // Complete first-run setup: disable user-unchecked plugins, mark setup done
+  ipcMain.handle('plugins:completeSetup', async (event, { disabledPlugins = [] } = {}) => {
+    try {
+      for (const name of disabledPlugins) {
+        await pluginManager.disablePlugin(name)
+      }
+      await pluginManager.getStateStore().markSetupComplete()
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
 }
 
 /**

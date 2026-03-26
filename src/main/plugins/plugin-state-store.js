@@ -254,6 +254,25 @@ class PluginStateStore {
   }
 
   /**
+   * Check if this is the first time the app has run (setup wizard not yet completed).
+   * Returns true when the state file never existed or setup was never marked complete.
+   * @returns {boolean}
+   */
+  isFirstRun() {
+    return !this.state?.setupComplete
+  }
+
+  /**
+   * Mark the first-run setup wizard as complete.
+   * @returns {Promise<void>}
+   */
+  async markSetupComplete() {
+    await this._ensureLoaded()
+    this.state.setupComplete = true
+    await this.save()
+  }
+
+  /**
    * Clean up states for plugins that no longer exist
    * @param {string[]} existingPlugins - List of currently installed plugin names
    * @returns {Promise<string[]>} List of removed plugin names

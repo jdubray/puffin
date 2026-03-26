@@ -33,6 +33,7 @@ import { StoryGenerationsComponent } from './components/story-generations/story-
 import { GitPanelComponent } from './components/git-panel/git-panel.js'
 
 // Plugin system
+import { FirstRunSetup } from './components/first-run-setup/first-run-setup.js'
 import { sidebarViewManager } from './plugins/sidebar-view-manager.js'
 import { pluginViewContainer } from './plugins/plugin-view-container.js'
 import { styleInjector } from './plugins/style-injector.js'
@@ -939,6 +940,9 @@ Please provide specific file locations and line numbers where issues are found, 
 
     // Wait for app ready signal with project path
     if (window.puffin) {
+      // Run first-run plugin setup if needed (before showing welcome or loading project)
+      await this._maybeShowFirstRunSetup()
+
       window.puffin.app.onReady(async (data) => {
         console.log('Electron app ready, project path:', data?.projectPath)
 
@@ -963,6 +967,22 @@ Please provide specific file locations and line numbers where issues are found, 
       setTimeout(() => {
         this.intents.initializeApp('/dev/test-project', 'test-project')
       }, 100)
+    }
+  }
+
+  /**
+   * Show the first-run plugin picker if this is the user's first launch.
+   * Awaits user confirmation before resolving, so the rest of init() is blocked
+   * until the user has made their plugin selections.
+   */
+  async _maybeShowFirstRunSetup() {
+    try {
+      const result = await window.puffin.plugins.isFirstRun()
+      if (!result?.isFirstRun) return
+      const setup = new FirstRunSetup()
+      await setup.show()
+    } catch (err) {
+      console.warn('[FirstRunSetup] Skipped due to error:', err)
     }
   }
 

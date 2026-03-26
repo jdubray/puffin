@@ -20,6 +20,7 @@ class PluginStateStore {
     this.statePath = statePath || path.join(os.homedir(), '.puffin', 'plugin-state.json')
     this.state = null
     this.loaded = false
+    this._fileExistedOnLoad = false
   }
 
   /**
@@ -31,12 +32,14 @@ class PluginStateStore {
     try {
       const content = await fs.readFile(this.statePath, 'utf-8')
       this.state = JSON.parse(content)
+      this._fileExistedOnLoad = true
       console.log('[PluginStateStore] Loaded state successfully:', JSON.stringify(this.state, null, 2))
     } catch (error) {
       if (error.code === 'ENOENT') {
         // File doesn't exist, create default state
         console.log('[PluginStateStore] State file not found, using default state')
         this.state = this._getDefaultState()
+        this._fileExistedOnLoad = false
       } else {
         console.error('[PluginStateStore] Error loading state:', error.message)
         this.state = this._getDefaultState()
@@ -255,11 +258,13 @@ class PluginStateStore {
 
   /**
    * Check if this is the first time the app has run (setup wizard not yet completed).
-   * Returns true when the state file never existed or setup was never marked complete.
+   * Only returns true when the state file did not exist before this session — existing
+   * users who already have plugin-state.json won't be shown the wizard even if they
+   * don't have a setupComplete flag.
    * @returns {boolean}
    */
   isFirstRun() {
-    return !this.state?.setupComplete
+    return !this._fileExistedOnLoad && !this.state?.setupComplete
   }
 
   /**

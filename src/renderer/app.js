@@ -943,17 +943,17 @@ Please provide specific file locations and line numbers where issues are found, 
       // Run first-run plugin setup if needed (before showing welcome or loading project)
       await this._maybeShowFirstRunSetup()
 
-      window.puffin.app.onReady(async (data) => {
-        console.log('Electron app ready, project path:', data?.projectPath)
+      // Pull initial state — renderer controls timing so there's no race condition
+      // with did-finish-load. The old onReady push is kept in main as a fallback
+      // but we no longer depend on it.
+      const data = await window.puffin.app.getInitialState()
+      console.log('Electron app ready, project path:', data?.projectPath)
 
-        if (data?.projectPath) {
-          // Project was provided via CLI arg — go straight to app
-          await this._startWithProject(data.projectPath)
-        } else {
-          // No project yet — show welcome screen
-          this._showWelcomeScreen(data?.recentProjects || [])
-        }
-      })
+      if (data?.projectPath) {
+        await this._startWithProject(data.projectPath)
+      } else {
+        this._showWelcomeScreen(data?.recentProjects || [])
+      }
 
       // Listen for project selected from welcome screen
       window.puffin.app.onProjectReady(async (data) => {

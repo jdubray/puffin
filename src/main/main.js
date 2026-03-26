@@ -296,7 +296,7 @@ function createWindow() {
     mainWindow = null
   })
 
-  // Handle window ready — send initial state to renderer
+  // Handle window ready — send initial state to renderer (kept as fallback)
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('app:ready', {
       projectPath: currentProjectPath,
@@ -304,6 +304,14 @@ function createWindow() {
     })
   })
 }
+
+// Renderer pulls initial state when it's ready — avoids race with did-finish-load push
+ipcMain.handle('app:getInitialState', () => {
+  return {
+    projectPath: currentProjectPath,
+    recentProjects: getRecentProjects()
+  }
+})
 
 /**
  * Show directory picker dialog

@@ -565,6 +565,9 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('app:projectReady', handler)
     },
 
+    // Pull initial state (projectPath + recentProjects) — renderer calls this on init
+    getInitialState: () => ipcRenderer.invoke('app:getInitialState'),
+
     // Get list of recently opened projects
     getRecentProjects: () => ipcRenderer.invoke('app:getRecentProjects'),
 

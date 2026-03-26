@@ -1000,12 +1000,23 @@ export class ProjectFormComponent {
   // ========================================
 
   /**
-   * Load Puffin built-in plugins from the plugin loader
+   * Load Puffin built-in plugins from the plugin loader.
+   * Also subscribes to plugin lifecycle events so the list refreshes
+   * when the plugin manager finishes its async startup after the renderer.
    */
   async loadPuffinPlugins() {
     if (!this.puffinPluginsList) return
+    if (!window.puffin?.plugins?.list) return
+
+    // Subscribe once to activation events so the list refreshes as plugins
+    // activate during startup (renderer often loads before discovery completes).
+    if (!this._puffinPluginListenerBound) {
+      this._puffinPluginListenerBound = true
+      window.puffin.plugins.onPluginActivated(() => this.loadPuffinPlugins())
+      window.puffin.plugins.onPluginDeactivated(() => this.loadPuffinPlugins())
+    }
+
     try {
-      if (!window.puffin?.plugins?.list) return
       const [listResult, activeResult] = await Promise.all([
         window.puffin.plugins.list(),
         window.puffin.plugins.listActive()

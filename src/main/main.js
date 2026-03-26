@@ -421,13 +421,13 @@ async function initializeProject(projectPath) {
   setIpcProjectPath(projectPath)
 
   // Initialize plugin loader.
-  // In packaged builds, plugins are extracted outside the ASAR into
-  // app.asar.unpacked/plugins so that renderer-side dynamic import() can use
-  // file:// URLs to load plugin renderer components (file:// URLs into the ASAR
-  // virtual filesystem do not work for ES module import()). In development,
-  // plugins live at the repo root /plugins.
+  // In packaged builds, plugins are deployed via electron-builder extraResources
+  // directly to Resources/plugins/ (i.e. process.resourcesPath/plugins). This
+  // keeps them on the real filesystem so renderer-side dynamic import() can use
+  // file:// URLs to load plugin renderer components. In development, plugins
+  // live at the repo root /plugins.
   const pluginsDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'plugins')
+    ? path.join(process.resourcesPath, 'plugins')
     : path.join(__dirname, '..', '..', 'plugins')
 
   const userPluginsDir = path.join(os.homedir(), '.puffin', 'plugins')

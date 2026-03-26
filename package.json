@@ -47,13 +47,14 @@
     },
     "files": [
       "src/**/*",
-      "plugins/**/*",
       "shared/**/*",
       "package.json"
     ],
     "asarUnpack": [
-      "plugins/**/*",
       "shared/**/*"
+    ],
+    "extraResources": [
+      { "from": "plugins", "to": "plugins" }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

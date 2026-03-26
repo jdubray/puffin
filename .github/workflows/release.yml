@@ -10,17 +10,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-          - os: windows-latest
-            platform: win
-          - os: macos-latest
-            platform: mac
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout code
@@ -41,16 +31,7 @@ jobs:
           npm version $VERSION --no-git-tag-version --allow-same-version
         shell: bash
 
-      - name: Upscale icon (macOS)
-        if: matrix.platform == 'mac'
-        run: sips -z 1024 1024 build/icon.png --out build/icon.png
-
-      - name: Upscale icon (Linux)
-        if: matrix.platform == 'linux'
-        run: convert build/icon.png -resize 1024x1024 build/icon.png
-
-      - name: Upscale icon (Windows)
-        if: matrix.platform == 'win'
+      - name: Upscale icon
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Drawing
@@ -63,31 +44,16 @@ jobs:
           $bmp.Save("$PWD\build\icon.png", [System.Drawing.Imaging.ImageFormat]::Png)
           $bmp.Dispose()
 
-      - name: Build for ${{ matrix.platform }}
-        run: npm run package -- --${{ matrix.platform }} --publish never
+      - name: Build for Windows
+        run: npm run package -- --win --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
-      - name: Upload Linux artifacts
-        if: matrix.platform == 'linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-build
-          path: dist/*.AppImage
-
       - name: Upload Windows artifacts
-        if: matrix.platform == 'win'
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: dist/*.exe
-
-      - name: Upload macOS artifacts
-        if: matrix.platform == 'mac'
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-build
-          path: dist/*.dmg
 
   release:
     needs: build
@@ -105,9 +71,6 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            artifacts/linux-build/*
-            artifacts/windows-build/*
-            artifacts/macos-build/*
+          files: artifacts/windows-build/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

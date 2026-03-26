@@ -71,8 +71,14 @@ function getToolEmoji(toolName) {
   return TOOL_EMOJIS[toolName] || TOOL_EMOJIS.default
 }
 
-// Import branch defaults as fallback when plugin is unavailable
-const { getDefaultBranchFocus, getCustomBranchFallback } = require('../../plugins/claude-config-plugin/branch-defaults')
+// Import branch defaults as fallback when plugin is unavailable.
+// Plugins live inside the ASAR in dev but in extraResources (Resources/plugins/)
+// in packaged builds, so the path must be resolved at runtime.
+const { app } = require('electron')
+const _pluginsDir = app.isPackaged
+  ? path.join(process.resourcesPath, 'plugins')
+  : path.join(__dirname, '..', '..', 'plugins')
+const { getDefaultBranchFocus, getCustomBranchFallback } = require(path.join(_pluginsDir, 'claude-config-plugin', 'branch-defaults'))
 
 class ClaudeService {
   constructor() {

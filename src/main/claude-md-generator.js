@@ -22,10 +22,16 @@ function sanitizeBranch(branch) {
 
 // Graceful import: memory plugin may be absent or restructured.
 // If unavailable, branch memory injection is silently disabled.
+// Plugins live inside the ASAR in dev but in extraResources (Resources/plugins/)
+// in packaged builds, so the path must be resolved at runtime.
 let parseBranchMemory = null
 let SECTIONS = null
 try {
-  const branchTemplate = require('../../plugins/memory-plugin/lib/branch-template')
+  const { app } = require('electron')
+  const pluginsDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'plugins')
+    : path.join(__dirname, '..', '..', 'plugins')
+  const branchTemplate = require(path.join(pluginsDir, 'memory-plugin', 'lib', 'branch-template'))
   parseBranchMemory = branchTemplate.parse
   SECTIONS = branchTemplate.SECTIONS
 } catch {

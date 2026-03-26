@@ -41,11 +41,27 @@ jobs:
           npm version $VERSION --no-git-tag-version --allow-same-version
         shell: bash
 
-      - name: Upscale icon for macOS ICNS generation
+      - name: Upscale icon (macOS)
         if: matrix.platform == 'mac'
+        run: sips -z 1024 1024 build/icon.png --out build/icon.png
+
+      - name: Upscale icon (Linux)
+        if: matrix.platform == 'linux'
+        run: convert build/icon.png -resize 1024x1024 build/icon.png
+
+      - name: Upscale icon (Windows)
+        if: matrix.platform == 'win'
+        shell: pwsh
         run: |
-          sips -z 1024 1024 build/icon.png --out build/icon-1024.png
-          mv build/icon-1024.png build/icon.png
+          Add-Type -AssemblyName System.Drawing
+          $src = [System.Drawing.Image]::FromFile("$PWD\build\icon.png")
+          $bmp = New-Object System.Drawing.Bitmap(1024, 1024)
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+          $g.DrawImage($src, 0, 0, 1024, 1024)
+          $src.Dispose(); $g.Dispose()
+          $bmp.Save("$PWD\build\icon.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $bmp.Dispose()
 
       - name: Build for ${{ matrix.platform }}
         run: npm run package -- --${{ matrix.platform }} --publish never

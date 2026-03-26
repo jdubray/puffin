@@ -232,24 +232,26 @@ Or download the macOS installer from [nodejs.org](https://nodejs.org).
 npm install -g @anthropic-ai/claude-code
 ```
 
-**3. Authenticate**
+**3. Authenticate — required before first launch**
+
+Open Terminal and run:
 ```bash
 claude auth login
 ```
+
+This opens a browser for login. **You must do this in Terminal before launching Puffin for the first time.** Puffin inherits the authentication automatically after that — you won't need to repeat it unless your session expires.
 
 **4. Install Puffin**
 
 Download `Puffin-*.dmg` from the Releases page, open it, and drag Puffin to Applications.
 
-On first launch, macOS may show a security warning. Go to **System Settings > Privacy & Security** and click **Open Anyway**.
-
-> **macOS "app is damaged" error (macOS 14 Sonoma and later):** Newer versions of macOS may refuse to open Puffin and show *"Puffin is damaged and can't be opened"* instead of the usual security prompt. This is a Gatekeeper quarantine flag applied to downloaded files. Run this command in Terminal to clear it:
+> **macOS security warning — required one-time step:** Puffin is an open-source project and is not code-signed with an Apple Developer certificate. macOS Gatekeeper will block the app on first launch, typically showing *"Puffin is damaged and can't be opened."* This is expected. Run the following command in Terminal **before** launching Puffin:
 > ```bash
 > xattr -cr /Applications/Puffin.app
 > ```
-> Then try launching Puffin again. You only need to do this once.
+> This removes the quarantine flag macOS places on downloaded files. You only need to do this once. After running it, launch Puffin normally.
 
-> **Troubleshooting:** If `claude` works in Terminal but not in Puffin, your shell profile may export PATH in a way GUI apps do not inherit. Create a symlink in a system location:
+> **Troubleshooting:** If you see a `spawn claude ENOENT` error, Puffin cannot find the `claude` binary. Puffin automatically adds the most common install locations (`~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin`) to its PATH, so this is usually only a problem if `claude` was installed to a non-standard location. If it still fails, create a symlink in a system location:
 > ```bash
 > sudo ln -s $(which claude) /usr/local/bin/claude
 > ```
@@ -291,20 +293,20 @@ chmod +x Puffin-*.AppImage
 
 ### Step 1: Authenticate Claude CLI
 
-Before using Puffin, authenticate Claude Code CLI in your terminal:
+Before using Puffin, install and authenticate Claude Code CLI in your terminal:
 
 ```bash
 # Install Claude Code CLI (if not already installed)
 npm install -g @anthropic-ai/claude-code
 
-# Authenticate with your Claude account
-claude auth
+# Authenticate with your Claude account — required before first launch
+claude auth login
 
 # Verify authentication
 claude --version
 ```
 
-The browser will open for login. Once authenticated, Puffin inherits this authentication automatically.
+The browser will open for login. **You must complete this step in Terminal/PowerShell before launching Puffin.** Once authenticated, Puffin inherits the session automatically — you won't need to repeat it unless your session expires.
 
 **Windows PowerShell users**: Optionally start Claude first to ensure full initialization:
 ```powershell

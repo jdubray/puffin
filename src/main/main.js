@@ -9,6 +9,44 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
+const fs = require('fs')
+
+// Electron apps launched from Finder/Dock on macOS inherit a minimal PATH
+// (typically just /usr/bin:/bin:/usr/sbin:/sbin), which excludes directories
+// where `claude` CLI is commonly installed. Augment process.env.PATH once at
+// startup so every spawn() call inherits the correct search path.
+if (process.platform !== 'win32') {
+  const home = process.env.HOME || ''
+  const extraPaths = [
+    path.join(home, '.local', 'bin'),    // pip / pipx / claude default
+    path.join(home, '.claude', 'local'), // claude self-install location
+    '/usr/local/bin',                    // Homebrew (Intel Mac) / manual installs
+    '/opt/homebrew/bin',                 // Homebrew (Apple Silicon)
+    '/usr/local/sbin',
+    '/opt/local/bin',                    // MacPorts
+  ]
+
+  // nvm: try to find the active Node version's bin directory
+  try {
+    const nvmDir = path.join(home, '.nvm', 'versions', 'node')
+    const nodeVersions = fs.readdirSync(nvmDir)
+    if (nodeVersions.length > 0) {
+      const latest = nodeVersions.sort().pop()
+      extraPaths.push(path.join(nvmDir, latest, 'bin'))
+    }
+  } catch {
+    // nvm not installed or no versions — ignore
+  }
+
+  const currentPath = process.env.PATH || ''
+  const currentPaths = new Set(currentPath.split(':'))
+  const missing = extraPaths.filter(p => !currentPaths.has(p))
+  if (missing.length > 0) {
+    process.env.PATH = currentPath + ':' + missing.join(':')
+    console.log('[PATH] Augmented PATH with:', missing.join(', '))
+  }
+}
+
 const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, setupWebserverHandlers, setupSpeechHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 const websiteServer = require('./website-server')

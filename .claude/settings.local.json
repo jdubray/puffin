@@ -74,7 +74,9 @@
       "Bash(claude:*)",
       "Bash(gh repo:*)",
       "Bash(gh api:*)",
-      "Bash(npm info:*)"
+      "Bash(npm info:*)",
+      "Bash(gh auth:*)",
+      "Bash(gh run:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

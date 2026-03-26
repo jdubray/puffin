@@ -58,6 +58,7 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "dmg",
@@ -70,7 +71,8 @@
       "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
@@ -82,7 +84,8 @@
       "language": "1033"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "build/icon.png"
     }
   }
 }

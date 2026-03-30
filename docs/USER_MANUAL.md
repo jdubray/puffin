@@ -936,6 +936,47 @@ Puffin provides five protected branches that cannot be deleted:
 - Each branch maintains its own conversation history
 - Branch switching preserves conversation context
 
+#### Co-Development Branches — Access to Other Projects
+
+Each branch can be configured to include up to **5 additional directories** alongside your main project. This lets Claude read (or read/write) sibling repositories, shared libraries, or reference codebases during the session.
+
+**Typical use cases:**
+- A `UI` branch that also reads a **shared design-system** package
+- A `Backend` branch that reads an **API spec** repo
+- A `Fullstack` branch that reads both a **frontend** and a **backend** sibling repo
+- Any branch that references a **reference implementation** without being allowed to modify it
+
+**Configuring additional directories:**
+
+1. Open the **History Tree** side panel.
+2. Right-click (or click the ⚙️ gear icon) on any branch → **Branch Settings**.
+3. In the **"Additional Directories"** section, click **"+ Add Directory"**.
+4. Enter the **path** to the directory (absolute path recommended; relative paths are resolved from the project root).
+5. Optionally enter a short **label** (e.g. "Design System", "API Spec") shown in the UI.
+6. Toggle **Read-Only** if Claude should only read files in that directory — it will not be allowed to create, edit, or delete files there.
+7. Repeat for up to 5 directories, then click **Save**.
+
+**What happens at runtime:**
+
+- When you submit a prompt on that branch, Puffin automatically appends `--add-dir <path>` to the Claude CLI invocation for each configured directory. Claude gains full tool access (Read, Grep, Glob) over those paths.
+- For **read-only** directories, a constraint block is also injected into the branch's `CLAUDE.md`:
+
+  ```
+  ## Read-Only Directory Constraint
+
+  The directory `/path/to/design-system` is available for **reference only**.
+
+  You MUST NOT create, edit, or delete any file within this path.
+  You MAY read any file using Read, Grep, or Glob.
+  ```
+
+- The constraint is regenerated automatically whenever branch settings are saved or the branch is activated.
+
+**Limits and notes:**
+- Maximum 5 additional directories per branch.
+- `--add-dir` applies only to interactive `submit()` sessions. One-shot CRE/story-derivation calls run without additional directories.
+- Relative paths are resolved against the **active project root** at call time, not the project root at save time.
+
 #### Conversation Features
 - **Hierarchical Structure**: Prompts can be replies to other prompts
 - **Prompt Counter**: See how many conversations exist per branch

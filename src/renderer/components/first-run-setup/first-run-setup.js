@@ -13,7 +13,6 @@ const DEFAULT_ENABLED = new Set([
   'toast-history-plugin',
   'document-viewer-plugin',
   'calendar',
-  'memory-plugin',
   'prompt-template-plugin',
 ])
 
@@ -100,7 +99,7 @@ export class FirstRunSetup {
       {
         label: 'Power Tools',
         description: 'Useful for advanced workflows',
-        names: ['memory-plugin', 'prompt-template-plugin', 'excalidraw-plugin',
+        names: ['prompt-template-plugin', 'excalidraw-plugin',
                 'outcome-lifecycle-plugin', 'rlm-document-plugin', 'hdsl-viewer-plugin'],
       },
     ]

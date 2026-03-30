@@ -21,7 +21,8 @@ describe('ContributionParser', () => {
         'panel',
         'statusbar',
         'toolbar',
-        'editor'
+        'editor',
+        'nav'
       ])
     })
   })

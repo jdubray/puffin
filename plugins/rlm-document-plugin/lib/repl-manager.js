@@ -457,7 +457,7 @@ class ReplManager extends EventEmitter {
    */
   hasRepl(sessionId) {
     const state = this.processes.get(sessionId)
-    return state && state.status === 'ready'
+    return !!(state && state.status === 'ready')
   }
 
   /**

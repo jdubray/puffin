@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * RLM Document Plugin - Validators Tests
  *

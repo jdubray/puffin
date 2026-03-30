@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * Document Editor Plugin Tests
  *

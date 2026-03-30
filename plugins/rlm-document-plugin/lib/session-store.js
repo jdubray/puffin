@@ -308,18 +308,29 @@ class SessionStore {
   async saveQueryResult(sessionId, result) {
     this.ensureInitialized()
 
+    // Generate an ID if not provided
+    const savedResult = {
+      ...result,
+      id: result.id || this.generateQueryId(),
+      sessionId: result.sessionId || sessionId,
+      timestamp: result.timestamp || new Date().toISOString()
+    }
+
     const resultsDir = path.join(this.sessionsDir, sessionId, STORAGE.RESULTS_DIR)
-    const resultPath = path.join(resultsDir, `${result.id}.json`)
+    await fs.mkdir(resultsDir, { recursive: true })
+    const resultPath = path.join(resultsDir, `${savedResult.id}.json`)
     const tempPath = `${resultPath}.tmp`
 
-    await fs.writeFile(tempPath, JSON.stringify(result, null, 2), 'utf-8')
+    await fs.writeFile(tempPath, JSON.stringify(savedResult, null, 2), 'utf-8')
     await fs.rename(tempPath, resultPath)
 
     // Update session stats
     const session = await this.loadSessionMetadata(sessionId)
     session.stats.queriesRun++
-    session.stats.evidenceCollected += result.evidence?.length || 0
+    session.stats.evidenceCollected += savedResult.evidence?.length || 0
     await this.saveSessionMetadata(sessionId, touchSession(session))
+
+    return savedResult
   }
 
   /**
@@ -395,15 +406,12 @@ class SessionStore {
   }
 
   /**
-   * Get buffers for a session
+   * Get the raw buffers storage object (internal use)
    * @param {string} sessionId - Session ID
-   * @returns {Promise<Object>} Buffers object
+   * @returns {Promise<Object>} Full buffers storage object
    */
-  async getBuffers(sessionId) {
-    this.ensureInitialized()
-
+  async _getBuffersObject(sessionId) {
     const buffersPath = path.join(this.sessionsDir, sessionId, STORAGE.BUFFERS_FILE)
-
     try {
       const data = await fs.readFile(buffersPath, 'utf-8')
       return JSON.parse(data)
@@ -413,22 +421,37 @@ class SessionStore {
   }
 
   /**
+   * Get buffers for a session
+   * @param {string} sessionId - Session ID
+   * @returns {Promise<Array>} Array of buffer entries
+   */
+  async getBuffers(sessionId) {
+    this.ensureInitialized()
+    const obj = await this._getBuffersObject(sessionId)
+    return obj.buffers || []
+  }
+
+  /**
    * Add a buffer entry
    * @param {string} sessionId - Session ID
    * @param {string} content - Buffer content
    * @param {string} label - Optional label
+   * @returns {Promise<Object>} The saved buffer entry
    */
   async addBuffer(sessionId, content, label = null) {
-    const buffers = await this.getBuffers(sessionId)
+    this.ensureInitialized()
+    const buffersObj = await this._getBuffersObject(sessionId)
 
-    buffers.buffers.push({
-      index: buffers.buffers.length,
+    const entry = {
+      id: `buf_${Date.now().toString(36)}_${crypto.randomBytes(2).toString('hex')}`,
+      index: buffersObj.buffers.length,
       content,
       label,
       createdAt: new Date().toISOString()
-    })
-
-    await this.saveBuffers(sessionId, buffers)
+    }
+    buffersObj.buffers.push(entry)
+    await this.saveBuffers(sessionId, buffersObj)
+    return entry
   }
 
   // ==================== Cleanup ====================
@@ -441,9 +464,8 @@ class SessionStore {
   async cleanupExpiredSessions(retentionDays = SESSION.RETENTION_DAYS) {
     this.ensureInitialized()
 
-    // Use index entries only (not full metadata) for efficiency
-    // Index entries contain state and lastAccessedAt which is all isSessionExpired needs
-    const sessions = await this.listSessions({ includeMetadata: false })
+    // Use full metadata to get accurate lastAccessedAt (index may be stale)
+    const sessions = await this.listSessions({ includeMetadata: true })
     let cleanedCount = 0
 
     for (const session of sessions) {

@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * RLM Document Plugin - Full Plugin Integration Tests
  *
@@ -416,8 +417,8 @@ Summary of the document.
 
       const stats = await sessionStore.getStorageStats()
 
-      expect(stats.sessionCount).toBe(2)
-      expect(stats.totalSize).toBeGreaterThan(0)
+      expect(stats.totalSessions).toBe(2)
+      expect(stats.activeSessions).toBeGreaterThan(0)
     })
   })
 

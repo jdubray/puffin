@@ -51,7 +51,7 @@ const AssertionResult = {
 };
 
 const { randomUUID: uuidv4 } = require('crypto');
-const { sendCrePrompt, MODEL_EXTRACT, TIMEOUT_EXTRACT } = require('./lib/ai-client');
+const { sendCrePrompt, MODEL_COMPLEX, TIMEOUT_COMPLEX } = require('./lib/ai-client');
 
 /** JSON Schema for structured assertion output. */
 const ASSERTION_SCHEMA = require('../schemas/cre-assertions.schema.json');
@@ -155,8 +155,8 @@ class AssertionGenerator {
     if (!toStore || toStore.length === 0) {
       fromAI = true;
       const aiResult = await sendCrePrompt(this._claudeService, prompt, {
-        model: MODEL_EXTRACT,
-        timeout: TIMEOUT_EXTRACT,
+        model: MODEL_COMPLEX,     // Sonnet: assertion generation needs precise path/name extraction
+        timeout: TIMEOUT_COMPLEX, // 120s — complex structured output from a RIS document
         label: 'generate-assertions',
         disableTools: true,
         metricsComponent: 'cre-assertion',

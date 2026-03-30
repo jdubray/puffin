@@ -66,6 +66,10 @@
       ]
     }
   },
+  "capabilities": {
+    "fileRead": true,
+    "fileWrite": true
+  },
   "activationEvents": [
     "onStartup"
   ],

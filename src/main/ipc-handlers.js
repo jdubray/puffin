@@ -32,6 +32,8 @@ let tempImageService = null
 let projectPath = null
 // Lazy reference to pluginManager — set by setupPluginManagerHandlers once loaded
 let pluginManagerRef = null
+// Lazy reference to pluginLoader — set by setupPluginHandlers once loaded
+let pluginLoaderRef = null
 
 // Maximum allowed image file size (50MB)
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024
@@ -82,9 +84,11 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
   // Set Git service project path
   gitService.setProjectPath(projectPath)
 
-  // Register plugins:isFirstRun early so the renderer can call it before any project
-  // loads. pluginManagerRef is null until setupPluginManagerHandlers runs; return
-  // isFirstRun: false in that case so the setup wizard is not shown prematurely.
+  // Register plugin query handlers early so the renderer can call them before any
+  // project loads (welcome screen and plugin-component-loader call these at startup).
+  // The *Ref variables are null until the real setup functions run; return safe empty
+  // defaults so callers get a valid response shape rather than an IPC error.
+
   ipcMain.handle('plugins:isFirstRun', async () => {
     try {
       if (!pluginManagerRef) return { success: true, isFirstRun: false }
@@ -92,6 +96,26 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
       return { success: true, isFirstRun }
     } catch (error) {
       return { success: false, error: error.message, isFirstRun: false }
+    }
+  })
+
+  ipcMain.handle('plugins:list', async () => {
+    try {
+      if (!pluginLoaderRef) return { success: true, plugins: [] }
+      const plugins = pluginLoaderRef.getAllPlugins().map(p => p.toJSON())
+      return { success: true, plugins }
+    } catch (error) {
+      return { success: false, error: error.message, plugins: [] }
+    }
+  })
+
+  ipcMain.handle('plugins:listActive', async () => {
+    try {
+      if (!pluginManagerRef) return { success: true, plugins: [] }
+      const activeNames = pluginManagerRef.getActivePlugins()
+      return { success: true, plugins: activeNames }
+    } catch (error) {
+      return { success: false, error: error.message, plugins: [] }
     }
   })
 
@@ -1543,7 +1567,8 @@ function setupClaudeHandlers(ipcMain) {
       const submitData = {
         ...data,
         projectPath: projectPath,
-        codeModificationAllowed
+        codeModificationAllowed,
+        additionalDirs: branch?.additionalDirs || []
       }
 
       // Puppeteer Visual Loop: inject MCP config + prompt suffix when active
@@ -2582,15 +2607,11 @@ function setupShellHandlers(ipcMain) {
  * @param {PluginLoader} pluginLoader
  */
 function setupPluginHandlers(ipcMain, pluginLoader) {
-  // Get list of all plugins
-  ipcMain.handle('plugins:list', async () => {
-    try {
-      const plugins = pluginLoader.getAllPlugins().map(p => p.toJSON())
-      return { success: true, plugins }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
+  // Update the module-level ref so the early-registered plugins:list handler
+  // (in setupIpcHandlers) now has access to the real pluginLoader.
+  pluginLoaderRef = pluginLoader
+
+  // Note: plugins:list is registered early in setupIpcHandlers via pluginLoaderRef.
 
   // Get loaded plugins only
   ipcMain.handle('plugins:listLoaded', async () => {
@@ -2723,15 +2744,7 @@ function setupPluginManagerHandlers(ipcMain, pluginManager, mainWindow) {
     }
   })
 
-  // Get active plugins
-  ipcMain.handle('plugins:listActive', async () => {
-    try {
-      const activeNames = pluginManager.getActivePlugins()
-      return { success: true, plugins: activeNames }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
+  // Note: plugins:listActive is registered early in setupIpcHandlers via pluginManagerRef.
 
   // Get plugin state (active/inactive/error)
   ipcMain.handle('plugins:getState', async (event, name) => {

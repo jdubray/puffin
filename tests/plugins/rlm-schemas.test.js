@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * RLM Document Plugin - Schemas Tests
  *

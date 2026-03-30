@@ -31,29 +31,6 @@ When deriving user stories, format them as:
 - Description: "As a [role], I want [feature] so that [benefit]"
 - Acceptance Criteria: Testable conditions for completion
 
-## Branch Memory (auto-extracted)
-
-### Conventions
-
-- User story format evolving to include implementation precision fields: implementationScope (primaryFiles, readOnlyFiles, estimatedLOC), constraints, exclusions, phases, and visual references. These help Claude generate focused, manageable code within explicit boundaries and reduce ambiguity.
-- Stats tracking aggregates per-branch, including: turns, cost (USD), duration, created date (thread root), defect count. Defects measured from user prompts containing keywords (bug, defect, error, issue, problem, broken, wrong, incorrect, doesn't work, not working, failed, failing, fix); case-insensitive; one count per prompt.
-- IPC handler naming follows 'service:operation' pattern (e.g., 'git:createBranch', 'claude:sendPrompt', 'plugins:enable'). Plugin IPC uses 'plugin:${pluginName}:${channel}' format.
-- SAM pattern implementation: Actions dispatch → Acceptors mutate model → State computes derived values → Components render. Validation occurs at acceptor layer; errors set via model.appError for toast display.
-- Configuration discovery from project directories: Design documents from docs/, UI definitions from .puffin/, guidelines from .puffin/ui-guidelines.md. Directories scanned on-demand when dropdown opens, not via file watchers.
-
-### Architectural Decisions
-
-- Thread isolation via implicit parent-child relationships, mitigated by user-controlled unidirectional handoffs. Context Handoff System: unidirectional, user-controlled (manual 'Handoff Ready' button), never automatic. Handoffs persist indefinitely, auto-update when code changes, can be versioned as work refines, and support multi-hop chains (A→B→C) via sequential handoff summaries. Enables focus without losing cross-thread context.
-- Composable prompt context: Prompts assemble contextual elements (GUI definitions, design documents, user stories, handoff summaries) dynamically. Context varies by thread type and use case. Central to Puffin's context management philosophy.
-- Delayed automation trigger with user intercept: When automated continuation needed (e.g., 'Complete implementation'), configurable delay allows user to provide new direction before trigger fires. Preserves user agency in otherwise automated workflows.
-- Sprint model with multi-thread branching: Sprints contain 1-4 user stories; each story has implementation branches (UI, Backend, FullStack). Features spanning multiple implementation areas use handoff system for context continuation.
-
-### Bug Patterns
-
-- Token exhaustion risk when sprints exceed 4 stories or when prompt context includes unmanaged artifacts (full conversations, large documents). Mitigation: hard limits on story count, selective document inclusion.
-- Stats aggregation incorrectly uses branch-level data instead of thread-level. Switching between threads in same branch loses previous thread's context unless explicitly handed off.
-- Context loss in multi-part features: when work spans UI and Backend, completing one half does not automatically continue to the other. Requires manual handoff or users lose implementation context across thread boundaries.
-
 # Assigned Skills
 
 ## Modularity Patterns

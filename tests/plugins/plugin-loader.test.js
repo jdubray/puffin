@@ -767,16 +767,16 @@ describe('Manifest Validation Error Handling', () => {
     )
 
     const loader = new PluginLoader({ pluginsDir: testDir })
-    let validatedEvent = null
+    let validatedEventState = null
     loader.on('plugin:validated', (event) => {
-      validatedEvent = event
+      validatedEventState = event.plugin.state  // capture state at emission time
     })
 
     const result = await loader.loadPlugins()
 
     assert.strictEqual(result.loaded.length, 1)
     assert.strictEqual(result.failed.length, 0)
-    assert.ok(validatedEvent, 'Should emit validated event')
-    assert.strictEqual(validatedEvent.plugin.state, 'validated')
+    assert.ok(validatedEventState !== null, 'Should emit validated event')
+    assert.strictEqual(validatedEventState, 'validated')
   })
 })

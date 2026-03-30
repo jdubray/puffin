@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * RLM Document Plugin - SessionStore Tests
  *
@@ -406,16 +407,24 @@ describe('RLM SessionStore', () => {
         config: { chunkSize: 4000, chunkOverlap: 200 }
       })
 
-      // Manually set session to expired by modifying metadata
+      // Manually set session to expired by modifying metadata AND index
       const sessionDir = path.join(tempDir, STORAGE.SESSIONS_DIR, session1.id)
       const metadataPath = path.join(sessionDir, STORAGE.METADATA_FILE)
       const metadata = JSON.parse(await fs.readFile(metadataPath, 'utf-8'))
 
-      // Set lastAccessedAt to 31 days ago
-      const thirtyOneDaysAgo = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000)
-      metadata.lastAccessedAt = thirtyOneDaysAgo.toISOString()
-
+      // Set lastAccessedAt to 31 days ago and state to 'closed'
+      const thirtyOneDaysAgo = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString()
+      metadata.lastAccessedAt = thirtyOneDaysAgo
+      metadata.state = 'closed'
       await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2))
+
+      // Also update the index so cleanupExpiredSessions (which uses listSessions) sees the change
+      const indexPath = path.join(tempDir, STORAGE.INDEX_FILE)
+      const index = JSON.parse(await fs.readFile(indexPath, 'utf-8'))
+      index.sessions = index.sessions.map(s =>
+        s.id === session1.id ? { ...s, lastAccessedAt: thirtyOneDaysAgo, state: 'closed' } : s
+      )
+      await fs.writeFile(indexPath, JSON.stringify(index, null, 2))
 
       // Run cleanup
       const cleanedCount = await sessionStore.cleanupExpiredSessions()
@@ -451,12 +460,22 @@ describe('RLM SessionStore', () => {
         config: { chunkSize: 4000, chunkOverlap: 200 }
       })
 
-      // Make session expired
+      // Make session expired (must be closed + old lastAccessedAt)
       const sessionDir = path.join(tempDir, STORAGE.SESSIONS_DIR, session.id)
       const metadataPath = path.join(sessionDir, STORAGE.METADATA_FILE)
       const metadata = JSON.parse(await fs.readFile(metadataPath, 'utf-8'))
-      metadata.lastAccessedAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString()
+      const expiredDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString()
+      metadata.lastAccessedAt = expiredDate
+      metadata.state = 'closed'
       await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2))
+
+      // Update index too
+      const indexPath = path.join(tempDir, STORAGE.INDEX_FILE)
+      const index = JSON.parse(await fs.readFile(indexPath, 'utf-8'))
+      index.sessions = index.sessions.map(s =>
+        s.id === session.id ? { ...s, lastAccessedAt: expiredDate, state: 'closed' } : s
+      )
+      await fs.writeFile(indexPath, JSON.stringify(index, null, 2))
 
       // Run cleanup
       await sessionStore.cleanupExpiredSessions()
@@ -521,8 +540,8 @@ describe('RLM SessionStore', () => {
 
       const stats = await sessionStore.getStorageStats()
 
-      expect(stats.sessionCount).toBe(2)
-      expect(stats.totalSize).toBeGreaterThan(0)
+      expect(stats.totalSessions).toBe(2)
+      expect(stats.totalSessions).toBeGreaterThan(0)
     })
   })
 

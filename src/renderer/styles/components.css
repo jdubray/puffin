@@ -7972,6 +7972,188 @@
   background: rgba(99, 102, 241, 0.3);
 }
 
+.story-assertions-link {
+  font-size: 0.6875rem;
+  background: rgba(234, 179, 8, 0.15);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+  color: #eab308;
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.story-assertions-link:hover {
+  background: rgba(234, 179, 8, 0.3);
+}
+
+/* Inspect button (compact, beside failures btn) */
+.assertions-inspect-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  padding: 0.2rem 0.45rem;
+  font-size: 0.6875rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.assertions-inspect-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+/* ===== Assertion Details Modal ===== */
+.assertion-details-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.assert-detail-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  flex-wrap: wrap;
+}
+
+.assert-stat {
+  font-weight: 600;
+}
+
+.assert-stat.passed { color: var(--success-color, #22c55e); }
+.assert-stat.failed { color: var(--error-color, #ef4444); }
+.assert-stat.pending { color: var(--text-muted); }
+.assert-stat.total { color: var(--text-secondary); }
+
+.assert-eval-time {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.assert-summary-label {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.assert-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.assert-detail-row {
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-size: 0.8125rem;
+}
+
+.assert-detail-row.passed { border-left-color: var(--success-color, #22c55e); }
+.assert-detail-row.failed { border-left-color: var(--error-color, #ef4444); }
+.assert-detail-row.error  { border-left-color: var(--warning-color, #f59e0b); }
+.assert-detail-row.pending { border-left-color: var(--border-color); }
+
+.assert-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.assertion-icon.passed { color: var(--success-color, #22c55e); font-weight: bold; }
+.assertion-icon.failed { color: var(--error-color, #ef4444); font-weight: bold; }
+.assertion-icon.error  { color: var(--warning-color, #f59e0b); font-weight: bold; }
+.assertion-icon.pending { color: var(--text-muted); }
+
+.assert-detail-type {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-tertiary, var(--hover-bg));
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-xs);
+}
+
+.assert-detail-target {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-primary);
+  word-break: break-all;
+}
+
+.assertion-status-label {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.assertion-status-label.passed { color: var(--success-color, #22c55e); }
+.assertion-status-label.failed { color: var(--error-color, #ef4444); }
+.assertion-status-label.error  { color: var(--warning-color, #f59e0b); }
+.assertion-status-label.pending { color: var(--text-muted); }
+
+.assert-detail-message {
+  margin-top: 0.25rem;
+  color: var(--text-secondary);
+}
+
+.assert-detail-criterion {
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.assert-detail-diagnostics {
+  margin-top: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--bg-primary, var(--bg-secondary));
+  border-radius: var(--radius-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.diag-row {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  align-items: flex-start;
+}
+
+.diag-label {
+  color: var(--text-muted);
+  min-width: 4.5rem;
+  flex-shrink: 0;
+}
+
+.diag-row code {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.diag-actual {
+  color: var(--error-color, #ef4444);
+}
+
+.no-assertions-msg {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  text-align: center;
+  padding: 1.5rem;
+}
+
 .story-detail-ris-bar {
   margin-bottom: 0.75rem;
 }
@@ -11372,6 +11554,82 @@
 
 .no-plugins-message a:hover {
   text-decoration: underline;
+}
+
+/* Branch settings modal — wider to fit directory rows */
+.modal:has(.branch-settings-modal) {
+  min-width: 560px;
+  max-width: 700px;
+}
+
+/* Additional Directories — branch settings */
+.additional-dirs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.additional-dir-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.additional-dir-row .dir-path {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.additional-dir-row .dir-label {
+  width: 120px;
+  flex-shrink: 0;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.dir-readonly-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dir-remove-btn {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dir-remove-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
 }
 
 .no-plugins-message .empty-icon {

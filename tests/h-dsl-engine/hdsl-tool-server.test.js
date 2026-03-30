@@ -99,10 +99,10 @@ describe('TOOLS definition', () => {
 // ---------------------------------------------------------------------------
 
 describe('handleMessage — protocol', () => {
-  it('returns parse error for invalid JSON', async () => {
+  it('returns null for invalid JSON (silently drops per JSON-RPC 2.0)', async () => {
     const r = await handleMessage('not json')
-    const parsed = JSON.parse(r)
-    assert.equal(parsed.error.code, -32700)
+    // Returns null to avoid MCP SDK Zod validation failure with id=null error responses
+    assert.equal(r, null)
   })
 
   it('handles initialize', async () => {

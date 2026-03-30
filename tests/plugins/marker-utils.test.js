@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * MarkerUtils Tests
  *
@@ -95,7 +96,10 @@ const MarkerUtils = (() => {
     if (!html) return html
     const escapedMarkerPattern = /(\/@puffin:[\s\S]*?\/\/)/g
     return html.replace(escapedMarkerPattern, (match) => {
-      const sanitizedMatch = escapeHtmlEntities(match)
+      // Strip event handler attributes (on*=) before HTML-escaping to prevent
+      // injection even in contexts where the escaped text could be reparsed.
+      const strippedMatch = match.replace(/\s*on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+      const sanitizedMatch = escapeHtmlEntities(strippedMatch)
       return `<span class="puffin-marker">${sanitizedMatch}</span>`
     })
   }

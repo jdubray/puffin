@@ -103,7 +103,7 @@ describe('Calendar Plugin', () => {
     before(async () => {
       mockContext = {
         projectPath: '/test/project',
-        log: { info: () => {}, debug: () => {}, error: () => {} },
+        log: { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} },
         registerIpcHandler: () => {},
         registerAction: () => {}
       }
@@ -159,7 +159,7 @@ describe('Calendar Plugin', () => {
     before(async () => {
       mockContext = {
         projectPath: '/test/project',
-        log: { info: () => {}, debug: () => {}, error: () => {} },
+        log: { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} },
         registeredHandlers: {},
         registerIpcHandler: function(name, handler) {
           this.registeredHandlers[name] = handler
@@ -379,6 +379,6 @@ describe('Renderer Components Index', () => {
     assert.ok(components.CalendarView)
     assert.ok(components.DayCell)
     assert.ok(components.CalendarViewComponent)
-    assert.ok(typeof components.CalendarViewComponent.mount === 'function')
+    assert.ok(typeof components.CalendarViewComponent.prototype.init === 'function')
   })
 })

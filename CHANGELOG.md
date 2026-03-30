@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.10.0] - 2026-03-30
+
+### Added
+
+- **Co-Development Branches — Per-Branch Additional Directories**: Each branch can now be configured with up to 5 extra directories that Claude CLI will have access to via `--add-dir`. Added in Branch Settings (gear icon on any branch). Each entry has an optional label, and a **Read-Only** toggle that injects a CLAUDE.md constraint block instructing Claude not to modify files in that directory. Enables workflows like a UI branch reading a shared design-system, a Backend branch reading an API spec repo, or a Fullstack branch spanning multiple sibling repositories — without giving Claude write access to reference codebases.
+
+### Fixed
+
+- **CI Builds — macOS / Linux / Windows All Platforms**: Replaced the 128×128 source icon (too small for macOS ICNS generation) with a programmatically generated 1024×1024 PNG (`scripts/generate-icon.js`, pure Node.js, no external dependencies). Removed `hardenedRuntime: true` and `entitlements` from the electron-builder macOS config — these require a valid Apple Developer signing identity and were silently failing in unsigned CI builds. Added `identity: null` to explicitly skip code signing. Added `fail-fast: false` to the release matrix so a single-platform failure no longer cancels the other platform builds.
+- **Plugin IPC Handlers Available Before Project Load**: `plugins:list` and `plugins:listActive` IPC handlers are now registered early in `setupIpcHandlers()` (before any project is opened) via module-level `pluginLoaderRef` / `pluginManagerRef` references. This fixes the welcome screen and plugin-component-loader failing to enumerate plugins at startup.
+- **SAM Package Renamed**: Updated dependency from `sam-fsm`/`sam-pattern` to the scoped `@cognitive-fab/sam-fsm`/`@cognitive-fab/sam-pattern` packages following the upstream package rename.
+
 ## [3.7.6] - 2026-03-25
 
 ### Added

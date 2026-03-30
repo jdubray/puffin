@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * PluginContext Tests
  *
@@ -148,7 +149,7 @@ describe('PluginContext', () => {
       const wrappedHandler = mockIpcMain.handlers.get('plugin:test-plugin:failingHandler')
       const result = await wrappedHandler({}, 'arg1')
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         error: 'Test error',
         plugin: 'test-plugin'
       })

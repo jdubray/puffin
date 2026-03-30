@@ -154,7 +154,7 @@ function validateViewContribution(view, path, pluginName) {
   }
 
   // Required: name
-  if (!view.name) {
+  if (view.name === null || view.name === undefined) {
     errors.push(`[${pluginName}] ${path}: Missing required property "name"`)
   } else if (typeof view.name !== 'string') {
     errors.push(`[${pluginName}] ${path}: "name" must be a string`)

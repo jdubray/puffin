@@ -229,7 +229,7 @@ class PluginStateStore {
    */
   async getAllStates() {
     await this._ensureLoaded()
-    return { ...this.state.plugins }
+    return JSON.parse(JSON.stringify(this.state.plugins))
   }
 
   /**

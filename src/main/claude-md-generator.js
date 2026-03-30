@@ -12,7 +12,6 @@ const path = require('path')
 
 /**
  * Sanitize a branch name for safe use in file paths.
- * Mirrors sanitizeBranchId from memory-plugin/lib/file-system-layer.js.
  * @param {string} branch
  * @returns {string}
  */
@@ -20,53 +19,13 @@ function sanitizeBranch(branch) {
   return branch.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
-// Graceful import: memory plugin may be absent or restructured.
-// If unavailable, branch memory injection is silently disabled.
-// Plugins live inside the ASAR in dev but in extraResources (Resources/plugins/)
-// in packaged builds, so the path must be resolved at runtime.
-let parseBranchMemory = null
-let SECTIONS = null
-try {
-  const { app } = require('electron')
-  const pluginsDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'plugins')
-    : path.join(__dirname, '..', '..', 'plugins')
-  const branchTemplate = require(path.join(pluginsDir, 'memory-plugin', 'lib', 'branch-template'))
-  parseBranchMemory = branchTemplate.parse
-  SECTIONS = branchTemplate.SECTIONS
-} catch {
-  // Memory plugin not available — branch memory features disabled
-}
-
 /**
- * Maximum total characters of branch memory content to inject into CLAUDE.md.
- * Prevents excessively large memory files from bloating the context.
- * @type {number}
- */
-const BRANCH_MEMORY_MAX_CHARS = 4000
-
-/**
- * Sentinel that marks the boundary between Puffin-generated content and
- * Claude Code's own memory additions in CLAUDE_{branch}.md / CLAUDE.md.
- *
- * Claude Code's `/memory` command appends content to the end of CLAUDE.md.
- * Everything after this sentinel belongs to Claude Code and must be
- * preserved (round-tripped back to the branch file) across regenerations
- * and branch switches.
+ * Sentinel that marks the end of Puffin-generated content in CLAUDE_{branch}.md.
+ * Users may append static notes after this marker; they are preserved across
+ * branch switches and regenerations.
  * @type {string}
  */
 const GENERATED_END_SENTINEL = '<!-- puffin:generated-end -->'
-
-/**
- * Sections to extract from branch memory, in priority order.
- * Higher-priority sections are included first when truncation is needed.
- * @type {string[]}
- */
-const INCLUDED_SECTIONS = SECTIONS ? [
-  SECTIONS.CONVENTIONS,
-  SECTIONS.ARCHITECTURAL_DECISIONS,
-  SECTIONS.BUG_PATTERNS
-] : []
 
 class ClaudeMdGenerator {
   constructor() {
@@ -257,12 +216,6 @@ class ClaudeMdGenerator {
         content = this.generateGenericBranch(branch, state)
     }
 
-    // Append filtered branch memory (Conventions, Architectural Decisions, Bug Patterns)
-    const memoryContent = await this.getBranchMemoryContent(branch)
-    if (memoryContent) {
-      content += memoryContent
-    }
-
     // Append assigned plugin skills if any are provided
     if (skillContent) {
       content += '\n' + skillContent + '\n'
@@ -271,6 +224,13 @@ class ClaudeMdGenerator {
     // Append assigned agents if any are provided
     if (agentContent) {
       content += '\n' + agentContent + '\n'
+    }
+
+    // Inject read-only constraints for any restricted additional directories
+    const branchConfig = state.history?.branches?.[branch] || {}
+    const dirConstraints = this._buildReadOnlyDirConstraints(branchConfig.additionalDirs)
+    if (dirConstraints) {
+      content += '\n' + dirConstraints + '\n'
     }
 
     // Append sentinel, then restore any Claude Code additions that were
@@ -925,80 +885,6 @@ class ClaudeMdGenerator {
   }
 
   /**
-   * Read and filter branch memory for inclusion in CLAUDE_{branch}.md.
-   *
-   * Extracts only actionable sections (Conventions, Architectural Decisions,
-   * Bug Patterns) and applies a size limit to prevent token bloat.
-   * Empty sections and boilerplate ("_No entries yet._") are excluded.
-   *
-   * @param {string} branch - Branch name (e.g. 'fullstack', 'ui')
-   * @param {number} [maxChars=BRANCH_MEMORY_MAX_CHARS] - Max characters to include
-   * @returns {Promise<string>} Formatted markdown to append, or empty string
-   */
-  async getBranchMemoryContent(branch, maxChars = BRANCH_MEMORY_MAX_CHARS) {
-    if (!this.projectPath || !parseBranchMemory) return ''
-
-    const safeBranch = sanitizeBranch(branch)
-    const memoryPath = path.join(this.projectPath, '.puffin', 'memory', 'branches', `${safeBranch}.md`)
-
-    let raw
-    try {
-      raw = await fs.readFile(memoryPath, 'utf-8')
-    } catch (err) {
-      if (err.code === 'ENOENT') return ''
-      console.warn(`[CLAUDE.md] Failed to read branch memory for ${branch}:`, err.message)
-      return ''
-    }
-
-    const parsed = parseBranchMemory(raw)
-    if (!parsed || !parsed.sections) return ''
-
-    const sectionHeadings = {
-      [SECTIONS.CONVENTIONS]: 'Conventions',
-      [SECTIONS.ARCHITECTURAL_DECISIONS]: 'Architectural Decisions',
-      [SECTIONS.BUG_PATTERNS]: 'Bug Patterns'
-    }
-
-    const blocks = []
-    let totalLength = 0
-
-    for (const sectionId of INCLUDED_SECTIONS) {
-      const items = parsed.sections[sectionId]
-      if (!items || items.length === 0) continue
-
-      const heading = sectionHeadings[sectionId]
-      const body = items.map(item => `- ${item}`).join('\n')
-      const block = `### ${heading}\n\n${body}\n`
-
-      if (totalLength + block.length > maxChars) {
-        // Include a partial block if we have room for at least the heading + 1 item
-        const firstItem = `### ${heading}\n\n- ${items[0]}\n`
-        if (totalLength + firstItem.length <= maxChars) {
-          // Add as many items as fit
-          const lines = [`### ${heading}\n`]
-          let lineLength = lines[0].length
-          for (const item of items) {
-            const line = `- ${item}\n`
-            if (totalLength + lineLength + line.length > maxChars) break
-            lines.push(line)
-            lineLength += line.length
-          }
-          blocks.push(lines.join(''))
-          totalLength += lineLength
-        }
-        break
-      }
-
-      blocks.push(block)
-      totalLength += block.length
-    }
-
-    if (blocks.length === 0) return ''
-
-    return '\n## Branch Memory (auto-extracted)\n\n' + blocks.join('\n')
-  }
-
-  /**
    * Format option value for display
    */
   formatOption(value) {
@@ -1021,6 +907,27 @@ class ClaudeMdGenerator {
       'PASCAL': 'PascalCase'
     }
     return mappings[value] || value
+  }
+
+  /**
+   * Build read-only constraint blocks for additional directories marked as read-only.
+   * Returns an empty string when there are no read-only directories.
+   * @param {Array} additionalDirs - Array of { path, label, readOnly } objects
+   * @returns {string}
+   */
+  _buildReadOnlyDirConstraints(additionalDirs = []) {
+    const readOnlyDirs = (additionalDirs || []).filter(d => d.readOnly && d.path)
+    if (readOnlyDirs.length === 0) return ''
+
+    const lines = ['## Read-Only Directories', '']
+    lines.push('The following directories are available for reference only.')
+    lines.push('**Do not create, modify, or delete any files within them.**')
+    lines.push('')
+    for (const dir of readOnlyDirs) {
+      const label = dir.label || path.basename(dir.path)
+      lines.push(`- \`${dir.path}\` *(${label})*`)
+    }
+    return lines.join('\n')
   }
 }
 

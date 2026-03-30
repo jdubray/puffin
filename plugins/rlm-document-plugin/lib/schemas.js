@@ -378,11 +378,6 @@ function touchSession(session) {
  * @returns {boolean} True if session is expired
  */
 function isSessionExpired(session, retentionDays = SESSION.RETENTION_DAYS) {
-  // Only closed sessions can expire
-  if (session.state !== SessionState.CLOSED) {
-    return false
-  }
-
   const cutoffMs = Date.now() - (retentionDays * 24 * 60 * 60 * 1000)
   const lastAccessMs = new Date(session.lastAccessedAt).getTime()
 

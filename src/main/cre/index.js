@@ -352,9 +352,25 @@ function registerHandlers(ipcMain) {
       if (!ctx || !assertionGenerator) {
         return { success: false, error: 'CRE not initialized — open a project first.' };
       }
-      const { planId, storyId, planItem, story: providedStory, assertions: providedAssertions } = args || {};
-      if (!planId || !storyId) {
-        return { success: false, error: 'planId and storyId are required' };
+      let { planId, storyId, planItem, story: providedStory, assertions: providedAssertions } = args || {};
+      if (!storyId) {
+        return { success: false, error: 'storyId is required' };
+      }
+      // planId is optional when called from the UI for manual regeneration.
+      // Fall back to the most recent plan_id associated with this story in the ris table.
+      if (!planId) {
+        try {
+          const risRow = ctx.db.prepare(
+            'SELECT plan_id FROM ris WHERE story_id = ? ORDER BY created_at DESC LIMIT 1'
+          ).get(storyId);
+          if (risRow) {
+            planId = risRow.plan_id;
+            console.log(`[CRE] cre:generate-assertions: resolved planId ${planId} from ris table for story ${storyId}`);
+          }
+        } catch (_) { /* ignore — planId may remain null */ }
+      }
+      if (!planId) {
+        return { success: false, error: 'planId is required and could not be resolved for this story' };
       }
 
       // Load story from DB if not provided by the caller

@@ -363,35 +363,509 @@ puffin/
 *Last updated: v1.1.0*
 
 
-## Branch Memory (auto-extracted)
+# Assigned Skills
 
-### Conventions
+## Code Architect
 
-- SAM pattern requires action registration in TWO places: (1) actionNames array for action collection, (2) component.actions object for intent function binding. Missing either location causes 'intent not found' errors.
-- Model selection strategy for RLM agents: Opus for orchestrator and specialist agents, Haiku for recursive sub-calls and lightweight operations to optimize cost and performance.
-- CSP uses allowlist-based directives (img-src, script-src, etc.). img-src directive must explicitly include `data:` to allow base64-encoded inline images. Default allowlist does not permit data: URLs.
-- Plugin context provides sandboxed API for plugins with storage, logging, and IPC handler registration capabilities
-- IPC handlers return graceful errors when called before project initialization or required services are available
-- GUI definitions stored as nested JSON with consistent metadata fields (name, elements, definition, createdAt, lastModifiedAt timestamps) for audit trail and queryability by reasoning agents.
-- Plugin data storage follows pattern .puffin/plugins/{pluginName}/ for self-contained plugin state, separate from core Puffin application state.
+---
+name: code-architect
+description: Designs feature architectures by analyzing existing codebase patterns and conventions, then providing comprehensive implementation blueprints.
+license: MIT
+---
 
-### Architectural Decisions
+You are a senior software architect. Your role is to deliver comprehensive, actionable architecture blueprints by deeply understanding codebases and making confident architectural decisions.
 
-- Multi-user architecture follows progressive enhancement in three phases: Phase 1 (user-scoped local storage at .puffin/users/{userId}/ with enhanced SAM), Phase 2 (hybrid backend integration with GraphQL/WebSockets), Phase 3 (enterprise features). Each phase maintains local-first approach with backend providing sync and collaboration.
-- Plugin features own storage in namespaced plugin directories (e.g., `.puffin/plugins/designer/designs/`) rather than core state for portability and self-containment. GUI definitions specifically migrate from core PuffinState to this structure (ADR-022).
-- User-scoped storage in multi-user architecture uses directory hierarchy `.puffin/users/{userId}/` with three-tier story organization (Personal → Team → Organization) while maintaining local-first operation with backend sync.
-- Context Vault for long-context reasoning uses four-domain hierarchy: specifications, codebase-index, traceability, history, and active-context to support RLM parallel execution and dependency detection (ADR-024).
-- Multi-select GUI definitions enabled in prompt context composition; multiple designs can be included for complex features (ADR-023).
-- Long-context reasoning uses REPL-based external environment over direct injection or RAG for stateful Claude interaction (ADR-021).
-- IPC channels use fully qualified naming pattern `plugin:<name>:<channel>` for unambiguous channel identification across plugin system (ADR-029).
-- LLM model selection: Claude Opus for orchestrator and specialist agents; Claude Haiku for recursive sub-calls in RLM loops (ADR-030).
+## Core Workflow
 
-### Bug Patterns
+### Phase 1: Codebase Pattern Analysis
 
-- h-DSL Code Model has limited artifact classification: all 302 artifacts classified as `kind: module` with no differentiation between services, components, utilities, or config files. Only `imports` dependencies tracked; other relationship types (calls, depends-on, etc.) not yet modeled.
-- MCP tools become unavailable if server config is added/modified mid-session; requires session restart for client to spawn and initialize server because Claude Code reads server config at session initialization only.
-- Electron CSP policies block data URLs and inline resources by default; must explicitly add sources to directives to allow resource types
-- Feature migration from core state to plugin storage requires updating directory namespace and storage layer to maintain portability guarantee
+Before designing anything, thoroughly analyze the existing codebase to extract:
+
+1. **Existing Patterns & Conventions**
+   - File organization and naming conventions
+   - Import/export patterns
+   - Error handling approaches
+   - Logging and monitoring patterns
+   - Testing conventions
+
+2. **Technology Stack**
+   - Frameworks and libraries in use
+   - Build tools and configuration
+   - Runtime environment specifics
+
+3. **Module Boundaries**
+   - How the codebase is organized into modules/packages
+   - Dependencies between modules
+   - Public vs internal APIs
+
+4. **Similar Existing Features**
+   - Find and study features similar to what you're designing
+   - Understand how they were implemented
+   - Note patterns that should be followed or improved upon
+
+### Phase 2: Architecture Design
+
+Based on your analysis, create a decisive architecture design that:
+
+- Integrates seamlessly with existing code patterns
+- Follows established conventions in the codebase
+- Is designed for testability and maintainability
+- Considers error handling and edge cases
+- Makes confident choices rather than presenting multiple vague options
+
+### Phase 3: Implementation Blueprint
+
+Provide a comprehensive implementation plan that specifies:
+
+1. **Files to Create/Modify** - Exact paths based on existing conventions
+2. **Component Responsibilities** - What each component does
+3. **Integration Points** - How new code connects to existing code
+4. **Data Flow** - How data moves through the system
+
+## Required Deliverables
+
+Your architectural analysis must include:
+
+1. **Patterns & Conventions Found**
+   - List patterns with specific file:line references
+   - Explain why these patterns should be followed
+
+2. **Architecture Decision**
+   - Clear recommendation with rationale
+   - Trade-offs considered and why you chose this approach
+
+3. **Component Design**
+   - Each component with its path, responsibilities, and dependencies
+   - Public interfaces and contracts
+
+4. **Implementation Map**
+   - Specific files and changes required
+   - Order of implementation
+
+5. **Data Flow**
+   - Entry points through transformations to output
+   - State management approach
+
+6. **Build Sequence**
+   - Phased implementation checklist
+   - Dependencies between phases
+
+7. **Critical Details**
+   - Error handling strategy
+   - State management approach
+   - Testing strategy
+   - Security considerations
+
+## Principles
+
+- **Be Decisive**: Make confident architectural choices rather than presenting multiple options. If you need clarification, ask specific questions.
+- **Be Specific**: Reference actual files, functions, and line numbers. Avoid vague descriptions.
+- **Be Practical**: Design for the current codebase, not an ideal hypothetical one.
+- **Be Complete**: Cover all aspects of implementation, not just the happy path.
+
+
+<!-- puffin:generated-end -->
+
+` marker; those additions are preserved across branch switches and regenerations.
+
+## Project Overview
+
+**Project:** puffin
+
+Puffin is an Electron-based GUI application that serves as a **management layer** on top of the Claude Code CLI (3CLI). Its primary purpose is to:
+
+1. **Track and organize** 3CLI outputs and conversations
+2. **Provide context** to 3CLI through project configuration and history
+3. **Visualize** the development process (prompts, responses, branches)
+4. **Communicate UI designs** via the GUI designer
+
+**Important**: 3CLI remains in control of building the project. Puffin is an orchestration and tracking tool, not a replacement for the CLI's capabilities.
+
+## File Access Restrictions
+
+**IMPORTANT: You must ONLY access files within this project directory.**
+
+You are NOT allowed to:
+- Read, write, or modify files outside this project
+- Access parent directories or sibling projects
+- Reference or use files from other projects on the system
+- Execute commands that affect files outside the project root
+
+All file operations must be scoped to this project directory and its subdirectories.
+
+## Coding Preferences
+
+- **Programming Style:** Hybrid (OOP + FP)
+- **Testing Approach:** Behavior-Driven Development
+- **Documentation Level:** Standard
+- **Error Handling:** Exceptions
+- **Naming Convention:** camelCase
+- **Comment Style:** JSDoc
+
+---
+
+## Branch Focus: Architecture
+
+You are working on the **architecture thread**. Focus on:
+- System design and component structure
+- Data flow and state management
+- API contracts and interfaces
+- Technology choices and trade-offs
+- Scalability and maintainability
+
+### Current Architecture
+
+# Puffin Architecture
+
+## Overview
+
+Puffin is an **Electron-based GUI management layer** that sits on top of the Claude Code CLI. It functions as an orchestration and tracking tool, not a replacement for CLI capabilities. The application uses a **clear separation between main and renderer processes** with unidirectional data flow via the **SAM (State-Action-Model) pattern**.
+
+**Key Architectural Principles:**
+- Directory-based workflow (creates `.puffin/` directory within target projects)
+- All state persisted automatically without explicit save/load
+- IPC bridge for secure main-renderer communication
+- Two FSMs control application flow (App FSM and Prompt FSM)
+- Unidirectional data flow: User Intent → Action → Model → State → View
+
+---
+
+## Process Structure
+
+### Main Process (`src/main/`)
+
+The Electron main process handles system operations and subprocess management.
+
+| File | Responsibility |
+|------|----------------|
+| `main.js` | Window creation, lifecycle, menu setup, single-instance lock |
+| `preload.js` | Secure IPC bridge via `contextBridge`, exposes `window.puffin` API |
+| `ipc-handlers.js` | Central IPC request handlers for state, Claude, file, and profile operations |
+| `claude-service.js` | Spawns Claude Code CLI subprocess, manages streaming JSON responses |
+| `puffin-state.js` | Manages `.puffin/` directory structure and file I/O |
+| `developer-profile.js` | Developer profile and GitHub OAuth Device Flow |
+| `claude-md-generator.js` | Generates branch-specific CLAUDE.md files for CLI context |
+
+### Renderer Process (`src/renderer/`)
+
+Browser runtime for UI with SAM-based state management.
+
+| Directory/File | Responsibility |
+|----------------|----------------|
+| `app.js` | Main application bootstrap, SAM initialization, event handling |
+| `sam/` | SAM pattern implementation (model, state, actions, instance) |
+| `lib/` | Support libraries (sam-pattern, sam-fsm, state-persistence, modal-manager) |
+| `components/` | UI components (prompt-editor, history-tree, gui-designer, etc.) |
+| `styles/` | CSS stylesheets |
+
+### Shared Code (`src/shared/`)
+
+| File | Contents |
+|------|----------|
+| `constants.js` | Branch types, FSM states, IPC channels, element types |
+| `models.js` | Claude model definitions (Opus, Sonnet, Haiku) |
+| `validators.js` | Input validation for prompts, branches, profiles |
+| `formatters.js` | ID generation, text truncation, tree flattening |
+
+---
+
+## Data Flow (SAM Pattern)
+
+```
+User Intent (click, input)
+    ↓
+Action (pure function → proposal)
+    ↓
+Model (acceptor validates & mutates)
+    ↓
+State (compute view representation)
+    ↓
+Render (update DOM)
+    ↓
+[View feeds back user intent]
+```
+
+### SAM Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **Actions** | `sam/actions.js` | Pure functions that create proposals |
+| **Model** | `sam/model.js` | 50+ acceptors that validate and apply proposals |
+| **State** | `sam/state.js` | Computes derived/control states for rendering |
+| **Instance** | `sam/instance.js` | Creates SAM instance with FSMs |
+
+### Flow Example - Submitting a Prompt
+
+1. User clicks "Submit" button
+2. `submitPrompt` action creates proposal
+3. `submitPromptAcceptor` validates and adds prompt to history
+4. State computes `canSubmit: false, isProcessing: true`
+5. Render disables button, shows loading indicator
+6. IPC sends to main process → Claude Service spawns CLI
+7. CLI streams JSON responses → `receiveResponseChunk` action accumulates
+8. `completeResponse` action attaches response to prompt
+9. `StatePersistence` saves to `.puffin/history.json`
+
+---
+
+## IPC Communication
+
+### Architecture
+
+Preload script exposes `window.puffin` namespace with grouped APIs:
+
+```javascript
+window.puffin = {
+  state: { init, get, updateConfig, updateHistory, ... },
+  claude: { submit, check, onResponse, onComplete, ... },
+  file: { import, export },
+  profile: { create, update, delete, ... },
+  github: { authenticate, fetchProfile, ... },
+  app: { quit, reload, ... }
+}
+```
+
+### Patterns
+
+| Pattern | Use Case | Example |
+|---------|----------|---------|
+| `invoke` | Request-response | `await window.puffin.state.init()` |
+| `send/on` | Events, streaming | `window.puffin.claude.onResponse(callback)` |
+
+### IPC Channels
+
+- `state:*` - State management (init, get, updateConfig, updateHistory, etc.)
+- `claude:*` - CLI operations (submit, response, complete, error)
+- `file:*` - Import/export operations
+- `profile:*` - Developer profile management
+- `github:*` - GitHub OAuth integration
+
+---
+
+## State Management
+
+### Model Shape
+
+```javascript
+{
+  // Application
+  initialized: boolean,
+  projectPath: string,
+  projectName: string,
+  appError: { message, timestamp } | null,
+
+  // Configuration
+  config: {
+    name, description, assumptions,
+    technicalArchitecture, dataModel,
+    defaultModel, options, uxStyle
+  },
+
+  // Prompt/History
+  currentPrompt: { content, branchId },
+  pendingPromptId: string | null,
+  streamingResponse: string,
+  history: {
+    branches: { [branchId]: { id, name, prompts } },
+    activeBranch: string,
+    activePromptId: string | null,
+    expandedThreads: {}
+  },
+
+  // Features
+  guiElements: [],
+  architecture: { content, updatedAt },
+  userStories: [],
+  storyDerivation: { status, pendingStories, ... },
+  uiGuidelines: { guidelines, designTokens, componentPatterns },
+
+  // UI State
+  currentView: string,
+  sidebarVisible: boolean,
+  modal: { type, data } | null,
+
+  // Activity Tracking
+  activity: {
+    currentTool: { name, input } | null,
+    activeTools: [],
+    filesModified: [],
+    status: 'idle' | 'thinking' | 'tool-use' | 'complete'
+  }
+}
+```
+
+### FSM States
+
+**App FSM:**
+```
+INITIALIZING → LOADING → READY ↔ PROMPTING ↔ PROCESSING
+                                              ↓
+                                            ERROR → READY
+```
+
+**Prompt FSM:**
+```
+IDLE → COMPOSING → SUBMITTED → AWAITING → COMPLETED/FAILED
+  ↑                                              │
+  └──────────────────────────────────────────────┘
+```
+
+---
+
+## Key Services
+
+### Claude Service (`claude-service.js`)
+
+- Spawns Claude CLI with project directory as cwd
+- Writes prompt to stdin, reads JSON from stdout
+- Manages session IDs for multi-turn conversations
+- Tracks tool execution and file modifications
+- Emits streaming chunks and completion events
+
+### State Persistence (`lib/state-persistence.js`)
+
+- Subscribes to SAM state changes
+- Selective persistence based on action type
+- Debounces rapid updates
+- Calls IPC handlers to save to `.puffin/` files
+
+### PuffinState (`puffin-state.js`)
+
+- Manages `.puffin/` directory structure
+- Loads/saves config, history, architecture, stories, guidelines
+- Auto-creates directories and files
+- Partial updates via object spreading
+
+### CLAUDE.md Generator (`claude-md-generator.js`)
+
+- Generates branch-specific context files
+- Injects design tokens for UI branch
+- Includes architecture for backend/architecture branches
+- Regenerates on config/branch changes
+
+---
+
+## Component Architecture
+
+Components follow a consistent pattern:
+
+```javascript
+class Component {
+  constructor(intents) {
+    this.intents = intents  // SAM action dispatchers
+  }
+
+  init() {
+    this.bindEvents()       // DOM event listeners
+    this.subscribeToState() // State change subscription
+  }
+
+  bindEvents() {
+    element.addEventListener('click', () => {
+      this.intents.someAction(data)
+    })
+  }
+
+  subscribeToState() {
+    document.addEventListener('puffin-state-change', (e) => {
+      this.render(e.detail.state)
+    })
+  }
+
+  render(state) {
+    // Update DOM based on state
+  }
+}
+```
+
+### UI Components
+
+| Component | Purpose |
+|-----------|---------|
+| `prompt-editor` | Prompt input, model selection, GUI inclusion |
+| `response-viewer` | Claude response display with markdown |
+| `history-tree` | Branch selector, prompt thread navigation |
+| `gui-designer` | Visual drag-and-drop UI mockup editor |
+| `architecture` | Architecture document editor |
+| `user-stories` | Story management and backlog |
+| `project-form` | Project configuration form |
+| `cli-output` | Raw Claude CLI JSON output |
+| `debugger` | SAM state/action debugger overlay |
+
+---
+
+## File Structure
+
+```
+puffin/
+├── src/
+│   ├── main/                    # Electron main process
+│   │   ├── main.js              # Entry point
+│   │   ├── preload.js           # IPC bridge
+│   │   ├── ipc-handlers.js      # Request handlers
+│   │   ├── claude-service.js    # CLI management
+│   │   ├── puffin-state.js      # State persistence
+│   │   ├── developer-profile.js # Profile management
+│   │   └── claude-md-generator.js
+│   │
+│   ├── renderer/                # Electron renderer
+│   │   ├── app.js               # Bootstrap
+│   │   ├── sam/                 # SAM pattern
+│   │   │   ├── instance.js
+│   │   │   ├── model.js         # 50+ acceptors
+│   │   │   ├── state.js
+│   │   │   └── actions.js
+│   │   ├── lib/                 # Support libraries
+│   │   ├── components/          # UI components
+│   │   └── styles/              # CSS
+│   │
+│   └── shared/                  # Shared code
+│       ├── constants.js
+│       ├── models.js
+│       ├── validators.js
+│       └── formatters.js
+│
+└── .puffin/                     # Per-project state
+    ├── config.json
+    ├── history.json
+    ├── architecture.md
+    ├── user-stories.json
+    ├── ui-guidelines.json
+    ├── gui-definitions/
+    └── stylesheets/
+```
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|------------|
+| Platform | Electron 33+ |
+| Frontend | Vanilla JavaScript (ES6+ modules) |
+| State Management | sam-pattern, sam-fsm |
+| Markdown | marked |
+| CLI Integration | Claude Code (subprocess) |
+| Storage | File-based JSON in `.puffin/` |
+| Security | contextBridge, nodeIntegration: false, sandbox: true |
+
+---
+
+## Design Patterns
+
+1. **SAM Pattern** - Unidirectional data flow with acceptors
+2. **FSM Lifecycle** - Explicit state machines for app and prompt states
+3. **Component-Based UI** - Self-contained components with state subscriptions
+4. **IPC for Security** - Context isolation between processes
+5. **Directory-Based State** - Single source of truth in `.puffin/`
+6. **Selective Persistence** - Only persist on relevant action types
+7. **Streaming I/O** - Real-time Claude CLI output via events
+8. **Activity Tracking** - Tool execution monitoring from CLI messages
+
+---
+
+*Last updated: v1.1.0*
+
 
 # Assigned Skills
 

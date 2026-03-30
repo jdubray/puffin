@@ -74,11 +74,26 @@ function getToolEmoji(toolName) {
 // Import branch defaults as fallback when plugin is unavailable.
 // Plugins live inside the ASAR in dev but in extraResources (Resources/plugins/)
 // in packaged builds, so the path must be resolved at runtime.
-const { app } = require('electron')
-const _pluginsDir = app.isPackaged
-  ? path.join(process.resourcesPath, 'plugins')
-  : path.join(__dirname, '..', '..', 'plugins')
-const { getDefaultBranchFocus, getCustomBranchFallback } = require(path.join(_pluginsDir, 'claude-config-plugin', 'branch-defaults'))
+let getDefaultBranchFocus, getCustomBranchFallback
+try {
+  const { app } = require('electron')
+  const _pluginsDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'plugins')
+    : path.join(__dirname, '..', '..', 'plugins')
+  const branchDefaults = require(path.join(_pluginsDir, 'claude-config-plugin', 'branch-defaults'))
+  getDefaultBranchFocus = branchDefaults.getDefaultBranchFocus
+  getCustomBranchFallback = branchDefaults.getCustomBranchFallback
+} catch {
+  // Electron not available (e.g. test environment) — try direct relative require
+  try {
+    const branchDefaults = require(path.join(__dirname, '..', '..', 'plugins', 'claude-config-plugin', 'branch-defaults'))
+    getDefaultBranchFocus = branchDefaults.getDefaultBranchFocus
+    getCustomBranchFallback = branchDefaults.getCustomBranchFallback
+  } catch {
+    getDefaultBranchFocus = () => ''
+    getCustomBranchFallback = () => ''
+  }
+}
 
 class ClaudeService {
   constructor() {
@@ -786,6 +801,15 @@ class ClaudeService {
     // Disallow specific tools (e.g., suppress AskUserQuestion in automated flows)
     if (data.disallowedTools?.length > 0) {
       args.push('--disallowedTools', ...data.disallowedTools)
+    }
+
+    // Additional directories (per-branch --add-dir support)
+    const additionalDirs = data.additionalDirs || []
+    for (const dir of additionalDirs) {
+      const resolvedPath = path.isAbsolute(dir.path)
+        ? dir.path
+        : path.resolve(data.projectPath || this.projectPath || process.cwd(), dir.path)
+      args.push('--add-dir', resolvedPath)
     }
 
     // Prompt will be passed via stdin as stream-json

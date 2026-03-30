@@ -727,6 +727,30 @@ export class HistoryTreeComponent {
             `).join('')}
           </div>
         </fieldset>
+
+        <fieldset class="branch-plugins-fieldset">
+          <legend>Additional Directories</legend>
+          <p class="fieldset-description">
+            These directories are added to every Claude session on this branch via <code>--add-dir</code>.
+            Read-only directories may be referenced but not modified.
+          </p>
+          <div id="additional-dirs-list" class="additional-dirs-list">
+            ${(branch.additionalDirs || []).map((dir, i) => `
+              <div class="additional-dir-row" data-index="${i}">
+                <input type="text" class="dir-path" placeholder="/path/to/project"
+                       value="${this.escapeHtml(dir.path)}" aria-label="Directory path">
+                <input type="text" class="dir-label" placeholder="Label (optional)"
+                       value="${this.escapeHtml(dir.label || '')}" aria-label="Directory label">
+                <label class="dir-readonly-label">
+                  <input type="checkbox" class="dir-readonly-toggle" ${dir.readOnly ? 'checked' : ''}>
+                  Read-only
+                </label>
+                <button type="button" class="dir-remove-btn" aria-label="Remove directory">×</button>
+              </div>
+            `).join('')}
+          </div>
+          <button type="button" id="add-dir-btn" class="btn-secondary btn-sm">+ Add Directory</button>
+        </fieldset>
       </div>
     `
 
@@ -769,6 +793,34 @@ export class HistoryTreeComponent {
       }
     })
 
+    // Additional directories: add row
+    document.getElementById('add-dir-btn').addEventListener('click', () => {
+      const list = document.getElementById('additional-dirs-list')
+      if (list.querySelectorAll('.additional-dir-row').length >= 5) {
+        alert('Maximum of 5 additional directories allowed')
+        return
+      }
+      const row = document.createElement('div')
+      row.className = 'additional-dir-row'
+      row.innerHTML = `
+        <input type="text" class="dir-path" placeholder="/path/to/project" aria-label="Directory path">
+        <input type="text" class="dir-label" placeholder="Label (optional)" aria-label="Directory label">
+        <label class="dir-readonly-label">
+          <input type="checkbox" class="dir-readonly-toggle">
+          Read-only
+        </label>
+        <button type="button" class="dir-remove-btn" aria-label="Remove directory">×</button>
+      `
+      row.querySelector('.dir-remove-btn').addEventListener('click', () => row.remove())
+      list.appendChild(row)
+      row.querySelector('.dir-path').focus()
+    })
+
+    // Additional directories: remove existing rows
+    document.querySelectorAll('.dir-remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => btn.closest('.additional-dir-row').remove())
+    })
+
     // Focus name input
     document.getElementById('branch-settings-name').focus()
   }
@@ -785,6 +837,15 @@ export class HistoryTreeComponent {
     const pluginCheckboxes = document.querySelectorAll('input[name="assigned-plugin"]:checked')
     const assignedPlugins = Array.from(pluginCheckboxes).map(cb => cb.value)
 
+    // Collect additional directories
+    const additionalDirs = Array.from(
+      document.querySelectorAll('#additional-dirs-list .additional-dir-row')
+    ).map(row => ({
+      path: row.querySelector('.dir-path').value.trim(),
+      label: row.querySelector('.dir-label').value.trim() || undefined,
+      readOnly: row.querySelector('.dir-readonly-toggle').checked
+    })).filter(d => d.path.length > 0)
+
     if (!name) {
       alert('Branch name is required')
       return
@@ -795,7 +856,8 @@ export class HistoryTreeComponent {
       name,
       icon,
       codeModificationAllowed,
-      assignedPlugins
+      assignedPlugins,
+      additionalDirs
     })
 
     this.intents.hideModal()

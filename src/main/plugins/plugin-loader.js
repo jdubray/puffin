@@ -45,10 +45,10 @@ class Plugin {
     this.version = manifest.version
     this.displayName = manifest.displayName
     this.description = manifest.description
-    this.main = manifest.main
+    this.main = manifest.main || null
     this.manifest = manifest
     this.directory = directory
-    this.mainPath = path.join(directory, manifest.main)
+    this.mainPath = manifest.main ? path.join(directory, manifest.main) : null
     this.state = PluginLoadState.DISCOVERED // Load state: discovered | validated | loaded | error
     this.lifecycleState = PluginLifecycleState.INACTIVE // Lifecycle state: inactive | activating | active | deactivating | activation-failed
     this.error = null
@@ -346,6 +346,7 @@ class PluginLoader extends EventEmitter {
           plugin.error = error.message
           plugin.validationErrors = [error]
           invalid.push(plugin)
+          this.failedPlugins.set(plugin.name, plugin)
           this.logValidationErrors(plugin.name, [error])
           this.emit('plugin:validation-failed', { plugin, errors: [error] })
         }
@@ -354,6 +355,7 @@ class PluginLoader extends EventEmitter {
         plugin.error = result.errors.map(e => e.message).join('; ')
         plugin.validationErrors = result.errors
         invalid.push(plugin)
+        this.failedPlugins.set(plugin.name, plugin)
         this.logValidationErrors(plugin.name, result.errors)
         this.emit('plugin:validation-failed', { plugin, errors: result.errors })
       }

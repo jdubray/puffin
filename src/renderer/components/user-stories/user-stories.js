@@ -1035,6 +1035,7 @@ export class UserStoriesComponent {
           ${story.sourcePromptId ? '<span class="story-source">Auto-extracted</span>' : ''}
           ${this.risAvailable?.has(story.id) ? `<a href="#" class="story-ris-link" data-story-id="${story.id}" title="View Refined Implementation Specification">RIS</a>` : ''}
           ${this.summaryAvailable?.has(story.id) ? `<a href="#" class="story-summary-link" data-story-id="${story.id}" title="View Completion Summary">Summary</a>` : ''}
+          ${story.status === 'completed' ? `<a href="#" class="story-assertions-link" data-story-id="${story.id}" title="View inspection assertions">Assertions</a>` : ''}
         </div>
       </div>
     `
@@ -1199,6 +1200,25 @@ export class UserStoriesComponent {
         e.stopPropagation()
         const storyId = btn.dataset.storyId
         this.showAssertionFailures(storyId)
+      })
+    })
+
+    // Inspect assertions button — opens full assertion detail modal
+    this.listContainer.querySelectorAll('.assertions-inspect-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const storyId = btn.dataset.storyId
+        this.showAssertionDetails(storyId)
+      })
+    })
+
+    // Footer "Assertions" link on completed stories
+    this.listContainer.querySelectorAll('.story-assertions-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const storyId = link.dataset.storyId
+        this.showAssertionDetails(storyId)
       })
     })
 
@@ -1717,10 +1737,44 @@ export class UserStoriesComponent {
    * Show assertion failures modal for a story
    * @param {string} storyId - The story ID
    */
+  /**
+   * Show the assertion details modal for any story — all assertions with pass/fail/pending state.
+   * Also shows on stories with zero assertions, offering a Generate button.
+   */
+  showAssertionDetails(storyId) {
+    const story = this.stories.find(s => s.id === storyId)
+    if (!story) return
+
+    this.intents.showModal('assertion-details', {
+      story,
+      onEvaluate: (id) => this.evaluateStoryAssertions(id),
+      onRegenerate: (id) => this.regenerateAssertions(id),
+      onClose: () => this.render(this.stories)
+    })
+  }
+
+  /**
+   * Trigger assertion regeneration for a story via the CRE pipeline.
+   */
+  async regenerateAssertions(storyId) {
+    try {
+      const result = await window.puffin.cre.generateAssertions({ storyId })
+      if (result?.success) {
+        window.puffinApp?.showToast('Assertions regenerated', 'success')
+      } else {
+        window.puffinApp?.showToast(result?.error || 'Failed to regenerate assertions', 'error')
+      }
+    } catch (err) {
+      console.error('[UserStories] regenerateAssertions error:', err)
+      window.puffinApp?.showToast(err.message, 'error')
+    }
+  }
+
   showAssertionFailures(storyId) {
     const story = this.stories.find(s => s.id === storyId)
     if (!story || !story.assertionResults) {
-      console.warn('[UserStories] No story or results found for:', storyId)
+      // Fallback: open details modal when no failure data is available
+      this.showAssertionDetails(storyId)
       return
     }
 
@@ -1876,22 +1930,33 @@ export class UserStoriesComponent {
       </button>
     ` : ''
 
-    // Show "View Failures" button when there are failures
+    // "View Failures" button only when there are failures
     const viewFailuresButton = hasFailures ? `
       <button class="assertions-failures-btn"
               data-story-id="${story.id}"
               title="View failure details"
               aria-label="View failure details">
-        View ${results.summary.failed} failure${results.summary.failed !== 1 ? 's' : ''}
+        ${results.summary.failed} failure${results.summary.failed !== 1 ? 's' : ''}
       </button>
     ` : ''
+
+    // "Inspect" button always visible — opens full assertion detail modal
+    const inspectButton = `
+      <button class="assertions-inspect-btn"
+              data-story-id="${story.id}"
+              title="View all assertions"
+              aria-label="View all assertions">
+        Inspect
+      </button>
+    `
 
     return `
       <div class="story-assertions ${statusClass}${hasFailures ? ' has-failures' : ''}" data-story-id="${story.id}">
         <div class="assertions-header">
-          <span class="assertions-count">${assertions.length} inspection assertion${assertions.length !== 1 ? 's' : ''}</span>
+          <span class="assertions-count">${assertions.length} assertion${assertions.length !== 1 ? 's' : ''}</span>
           ${summaryHtml}
           ${viewFailuresButton}
+          ${inspectButton}
           ${verifyButton}
         </div>
         <ul class="assertions-list ${shouldCollapse ? 'collapsed' : ''}">

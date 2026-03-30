@@ -1,165 +1,417 @@
 /**
  * SAM FSM - ES Module Wrapper
  * Wraps the UMD bundle for use in browser ES modules
+ * @cognitive-fab/sam-fsm@1.0.0
  */
 
-const tpFSM = (function() {
-  'use strict';
+const tpFSM = (function () { 'use strict';
 
-  function a(a, b) {
-    const c = n(a);
-    return c.includes(b)
-  }
+    // ISC License (ISC)
+    // Copyright 2021 Jean-Jacques Dubray
 
-  function b(b, c) {
-    return function(d, e) {
-      if (a(b, e) && l(d)) {
-        const a = async function() {
-          const a = await d.apply(this, arguments);
-          return a.__actionName = e, a.__stateMachineId = c, a
-        };
-        return a.__actionName = e, a.__stateMachineId = c, a
-      }
-      throw new Error(`addAction invalid action: ${e}`)
+    // Permission to use, copy, modify, and/or distribute this software for any purpose
+    // with or without fee is hereby granted, provided that the above copyright notice
+    // and this permission notice appear in all copies.
+
+    // THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+    // REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+    // FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+    // OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA
+    // OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+    // ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+    function checkAction(actions, action) {
+      const actionLabels = keys(actions);
+      return actionLabels.includes(action);
     }
-  }
-
-  function c({ pc0: a, actions: b, transitions: c, states: e, composite: f, pc: i = "pc", id: g, componentName: h, deterministic: j = !1, lax: l = !0, enforceAllowedTransitions: o = !1, blockUnexpectedActions: p = !1 }) {
-    const q = d(e, c), r = n(q.states), s = [a => () => {
-      const b = u(a, h, `${i}_1`), c = u(a, h, i), d = a.__actionName, e = a.__stateMachineIdForLastAction;
-      if (!l && !r.includes(c)) a.__error = `unexpected state: ${c}`;
-      else try {
-        d && b && !q.states[b].transitions.includes(d) && e === g && (a.__error = `unexpected action ${d} for state: ${c}`)
-      } catch (b) {
-        a.__error = `unexpected error: ${b.message} for action ${d} and state: ${c}`
-      }
-    }];
-    return p && s.push(a => () => {
-      const b = u(a, h, i), { transitions: c = [], guards: d = [] } = q.states[b];
-      a.__blockUnexpectedActions = !0, a.__allowedActions = m(a.__allowedActions).concat(c.filter(b => d.reduce((d, e) => (e.action || k(c)) === b ? d && e.condition(a) : d && !0, !0))), 0 === a.allowedActions().length && (a.__allowedActions = ["__EMPTY"])
-    }), f && s.push(a => () => {
-      const c = u(a, f.onState.component, f.onState.pc);
-      c !== f.onState?.label && (a.__disallowedActions = m(a.__disallowedActions).concat(n(b)))
-    }), s
-  }
-
-  function d(a, b) {
-    if (!a) {
-      let a;
-      switch (typeof b) {
-        case "object": a = s(t(b)); break;
-        default: a = s(b);
-      }
-      return a
-    }
-    return { states: a }
-  }
-
-  function e({ pc0: a, actions: b, states: c, composite: e, transitions: f, pc: g, id: h, componentName: i, deterministic: j, lax: k, enforceAllowedTransitions: l, stateDiagram: m }) {
-    const o = d(c, f), p = n(o.states);
-    b = b || o.actions;
-    const q = j ? [a => c => {
-      if (!c.__stateMachineId || c.__stateMachineId === h) {
-        const d = u(a, i, g);
-        if (!l || l && o.states[d].transitions.includes(c.__actionName)) v(a, i, `${g}_1`, d), v(a, i, g, r(b, c.__actionName)), y(m, u(a, i, g), d, c.__actionName);
-        else if (e) {
-          const g = n(w(b, f)).map(a => a === c.__actionName).reduce((a, b) => b || a, !1);
-          g && u(a, e.onState?.component, e.onState?.pc) === e.onState?.label && (a.__error = `unexpected action ${c.__actionName} for state: ${d}`)
-        } else a.__error = `unexpected action ${c.__actionName} for state: ${d}`
-      }
-    }] : p.map(a => o.states[a].acceptor);
-    return q.unshift(a => b => { a.__actionName = b.__actionName, a.__stateMachineIdForLastAction = b.__stateMachineId }, a => () => { a.__allowedActions = [], a.__disallowedActions = [] }), q
-  }
-
-  function f({ states: a, composite: b, transitions: c, pc: e, componentName: f }) {
-    const g = d(a, c), h = n(g.states), i = h.map(a => m(g.states[a].naps).map(b => ({ state: a, condition: b.condition, nextAction: b.nextAction }))).flat().map(a => b => () => {
-      if (b[e] === a.state && a.condition(b)) return a.nextAction(b), !1
+    const pushAction = (s, a) => {
+      s.push(a);
+      return s;
+    };
+    const first = arr => arr ? arr[0] : undefined;
+    const keys = (o = {}) => Object.keys(o);
+    const assign = (a, b = {}) => Object.assign(a, b);
+    const isFunction = v => typeof v === 'function';
+    const stateForAction = (actions, action) => first(actions[action]);
+    const actionsAndStatesFor = transitions => ({
+      pc0: first(transitions).from,
+      states: transitions.reduce((s, t) => assign(s, {
+        [t.from]: {
+          transitions: s[t.from] && s[t.from].transitions && first(s[t.from].transitions) ? pushAction(s[t.from].transitions, t.on) : [t.on]
+        },
+        [t.to]: s[t.to] && first(s[t.to].transitions) ? s[t.to] : {
+          transitions: t.to === t.from ? [t.on] : []
+        }
+      }), {}),
+      actions: transitions.reduce((a, t) => assign(a, {
+        [t.on]: [t.to]
+      }), {}),
+      deterministic: true,
+      enforceAllowedTransitions: true
     });
-    return b ? i.concat(b.transitions.map(a => b => () => {
-      if (b[e] === a.onState) return a.action(a.proposal.reduce((a, c) => p(a, { [c]: b[c] }), {})), !1
-    })) : i
-  }
-
-  function g({ pc0: a, actions: b, states: c, transitions: e, deterministic: f }) {
-    const g = d(c, e);
-    b = b || g.actions;
-    let h;
-    const i = n(c).map(a => (h = l(h) || l(c[a]?.transitions) && l(k(c[a].transitions)) ? void 0 : a, m(c[a].transitions).map(d => {
-      const e = m(c[a].guards).reduce((b, a) => a.action === d ? k(a.condition.toString().split("return")[1]).split(";") : b, void 0);
-      return z(a, k(b[d]), d, e)
-    }).join("\n"))).join("\n"), j = `
+    const flattenTransitions = transitions => keys(transitions).reduce((ft, t) => {
+      const state = transitions[t];
+      const actions = keys(state);
+      return ft.concat(actions.map(a => ({
+        from: t,
+        to: state[a],
+        on: a
+      })));
+    }, []);
+    function addAction(actions, id) {
+      return function (intent, action) {
+        if (checkAction(actions, action) && intent != null) {
+          const wrapped = async function () {
+            const proposal = (await intent.apply(this, arguments)) || {};
+            proposal.__actionName = action;
+            proposal.__stateMachineId = id;
+            return proposal;
+          };
+          wrapped.__actionName = action;
+          wrapped.__stateMachineId = id;
+          return wrapped;
+        }
+        throw new Error(`addAction invalid action: ${action}`);
+      };
+    }
+    const modelGetValue = (model, componentName, key = 'pc') => componentName ? isFunction(model.localState) ? model.localState(componentName)[key] : model.__components ? model.__components[componentName][key] : undefined : model[key];
+    const modelSetValue = (model, componentName, key, value) => {
+      if (componentName) {
+        if (isFunction(model.localState)) {
+          model.localState(componentName)[key] = value;
+        } else {
+          model.__components = model.__components || {};
+          model.__components[componentName] = model.__components[componentName] || {};
+          model.__components[componentName][key] = value;
+        }
+      } else {
+        model[key] = value;
+      }
+      return value;
+    };
+    function stateMachineReactor({
+      pc0,
+      actions,
+      transitions,
+      states,
+      composite,
+      pc = 'pc',
+      id,
+      componentName,
+      deterministic = false,
+      lax = true,
+      enforceAllowedTransitions = false,
+      blockUnexpectedActions = false
+    }) {
+      const specification = getStatesFrom(states, transitions);
+      const stateLabels = keys(specification.states);
+      const smr = [model => () => {
+        const previousState = modelGetValue(model, componentName, `${pc}_1`);
+        const currentState = modelGetValue(model, componentName, pc);
+        const actionName = model.__actionName;
+        const stateMachineId = model.__stateMachineIdForLastAction;
+        if (!lax && !stateLabels.includes(currentState)) {
+          model.__error = `unexpected state: ${currentState}`;
+        } else {
+          try {
+            if (actionName && previousState && !specification.states[previousState].transitions.includes(actionName)) {
+              if (stateMachineId === id) {
+                model.__error = `unexpected action ${actionName} for state: ${previousState}`;
+              }
+            }
+          } catch (e) {
+            model.__error = `unexpected error: ${e.message} for action ${actionName} and state: ${currentState}`;
+          }
+        }
+      }];
+      if (blockUnexpectedActions) {
+        smr.push(model => () => {
+          var _model$__allowedActio;
+          const currentState = modelGetValue(model, componentName, pc);
+          const {
+            transitions = [],
+            guards = []
+          } = specification.states[currentState];
+          model.__blockUnexpectedActions = true;
+          model.__allowedActions = ((_model$__allowedActio = model.__allowedActions) !== null && _model$__allowedActio !== void 0 ? _model$__allowedActio : []).concat(transitions.filter(t => guards.reduce((f, g) => g.action === '*' || (g.action || first(transitions)) === t ? f && g.condition(model) : f, true)));
+          if (model.allowedActions().length === 0) {
+            model.__allowedActions = ['__EMPTY'];
+          }
+        });
+      }
+      if (composite) {
+        smr.push(model => () => {
+          var _composite$onState;
+          const currentParentState = modelGetValue(model, composite.onState.component, composite.onState.pc);
+          if (currentParentState !== ((_composite$onState = composite.onState) === null || _composite$onState === void 0 ? void 0 : _composite$onState.label)) {
+            var _model$__disallowedAc;
+            model.__disallowedActions = (_model$__disallowedAc = model.__disallowedActions) !== null && _model$__disallowedAc !== void 0 ? _model$__disallowedAc : [].concat(keys(actions));
+          }
+        });
+      }
+      return smr;
+    }
+    function getStatesFrom(states, transitions) {
+      if (!states) {
+        let specification;
+        switch (typeof transitions) {
+          case 'object':
+            specification = actionsAndStatesFor(flattenTransitions(transitions));
+            break;
+          default:
+            specification = actionsAndStatesFor(transitions);
+        }
+        return specification;
+      } else {
+        return {
+          states
+        };
+      }
+    }
+    const actionsFor = (actions, transitions) => actions ? actions : actionsAndStatesFor(transitions).actions;
+    const step = (step = 0, value = 'other') => `${step}. ${value}`;
+    const updateRuntime = (stateMachine, currentState, previousState, action = 'other') => {
+      stateMachine.step = 1 + (stateMachine.step || 0);
+      const actionLabel = step(stateMachine.step, action);
+      if (!stateMachine.states[currentState]) {
+        stateMachine.states[currentState] = {
+          transitions: []
+        };
+      }
+      const a = stateMachine.actions[actionLabel];
+      if (a == null) {
+        stateMachine.actions[actionLabel] = [currentState];
+      } else {
+        a.indexOf(currentState) === -1 && a.push(currentState);
+      }
+      if (previousState) {
+        const p = stateMachine.states[previousState];
+        if (p != null) {
+          p.transitions.indexOf(actionLabel) === -1 && p.transitions.push(actionLabel);
+        }
+      }
+    };
+    function stateMachineAcceptors({
+      pc0,
+      actions,
+      states,
+      composite,
+      transitions,
+      pc,
+      id,
+      componentName,
+      deterministic,
+      lax,
+      enforceAllowedTransitions,
+      stateDiagram
+    }) {
+      const specification = getStatesFrom(states, transitions);
+      const stateLabels = keys(specification.states);
+      actions = actions || specification.actions;
+      const acceptors = deterministic ? [model => proposal => {
+        if (!proposal.__stateMachineId || proposal.__stateMachineId === id) {
+          const currentState = modelGetValue(model, componentName, pc);
+          if (!enforceAllowedTransitions || enforceAllowedTransitions && specification.states[currentState].transitions.includes(proposal.__actionName)) {
+            modelSetValue(model, componentName, `${pc}_1`, currentState);
+            modelSetValue(model, componentName, pc, stateForAction(actions, proposal.__actionName));
+            updateRuntime(stateDiagram, modelGetValue(model, componentName, pc), currentState, proposal.__actionName);
+          } else {
+            if (composite) {
+              var _composite$onState2, _composite$onState3, _composite$onState4;
+              const actionFromComposite = keys(actionsFor(actions, transitions)).map(action => action === proposal.__actionName).reduce((acc, v) => v || acc, false);
+              if (actionFromComposite && modelGetValue(model, (_composite$onState2 = composite.onState) === null || _composite$onState2 === void 0 ? void 0 : _composite$onState2.component, (_composite$onState3 = composite.onState) === null || _composite$onState3 === void 0 ? void 0 : _composite$onState3.pc) === ((_composite$onState4 = composite.onState) === null || _composite$onState4 === void 0 ? void 0 : _composite$onState4.label)) {
+                model.__error = `unexpected action ${proposal.__actionName} for state: ${currentState}`;
+              }
+            } else {
+              model.__error = `unexpected action ${proposal.__actionName} for state: ${currentState}`;
+            }
+          }
+        }
+      }] : stateLabels.map(label => specification.states[label].acceptor);
+      acceptors.unshift(model => proposal => {
+        model.__actionName = proposal.__actionName;
+        model.__stateMachineIdForLastAction = proposal.__stateMachineId;
+      }, model => proposal => {
+        if (model.__lastAllowedActionsReset !== proposal) {
+          model.__allowedActions = [];
+          model.__disallowedActions = [];
+          model.__lastAllowedActionsReset = proposal;
+        }
+      });
+      return acceptors;
+    }
+    function stateMachineNaps({
+      states,
+      composite,
+      transitions,
+      pc,
+      componentName
+    }) {
+      const specification = getStatesFrom(states, transitions);
+      const stateLabels = keys(specification.states);
+      const fsmNaps = stateLabels.map(state => {
+        var _specification$states, _specification$states2;
+        return (_specification$states = (_specification$states2 = specification.states[state]) === null || _specification$states2 === void 0 || (_specification$states2 = _specification$states2.naps) === null || _specification$states2 === void 0 ? void 0 : _specification$states2.map(nap => ({
+          state,
+          condition: nap.condition,
+          nextAction: nap.nextAction
+        }))) !== null && _specification$states !== void 0 ? _specification$states : [];
+      }).flat().map(predicate => state => () => {
+        if (modelGetValue(state, componentName, pc) === predicate.state && predicate.condition(state)) {
+          predicate.nextAction(state);
+          return true;
+        }
+      });
+      if (composite) {
+        return fsmNaps.concat(composite.transitions.map(t => state => () => {
+          if (modelGetValue(state, componentName, pc) === t.onState) {
+            t.action(t.proposal.reduce((o, key) => assign(o, {
+              [key]: state[key]
+            }), {}));
+            return true;
+          }
+        }));
+      }
+      return fsmNaps;
+    }
+    const gvt = (start, end, action = '', condition) => `${start} -> ${end} [label = "${action}${condition ? `\\n${condition}` : ''}"];`;
+    function renderGraphViz({
+      pc0,
+      actions,
+      states,
+      transitions,
+      deterministic
+    }) {
+      const specification = getStatesFrom(states, transitions);
+      actions = actions || specification.actions;
+      let pcEnd;
+      const graphVizTransitions = keys(states).map(state => {
+        var _states$state, _states$state2;
+        pcEnd = pcEnd == null && (((_states$state = states[state]) === null || _states$state === void 0 ? void 0 : _states$state.transitions) == null || first(states[state].transitions) == null) ? state : undefined;
+        return (_states$state2 = states[state]) === null || _states$state2 === void 0 || (_states$state2 = _states$state2.transitions) === null || _states$state2 === void 0 ? void 0 : _states$state2.map(transition => {
+          var _states$state3;
+          const condition = (_states$state3 = states[state]) === null || _states$state3 === void 0 || (_states$state3 = _states$state3.guards) === null || _states$state3 === void 0 ? void 0 : _states$state3.reduce((a, c) => {
+            if (c.action !== transition) return a;
+            const parts = c.condition.toString().split('return');
+            return parts.length > 1 ? first(parts[1]).split(';') : [c.condition.toString()];
+          }, undefined);
+          return gvt(state, first(actions[transition]), transition, condition);
+        }).join('\n');
+      }).join('\n');
+      const output = `
 digraph fsm_diagram {
 rankdir=LR;
 size="8,5"
-${a} [shape = circle margin=0 fixedsize=true width=0.33 fontcolor=black style=filled color=black label="\\n\\n\\n${a}"]
-${h ? `${h} [shape = doublecircle margin=0 style=filled fontcolor=white color=black]` : "\n"}
+${pc0} [shape = circle margin=0 fixedsize=true width=0.33 fontcolor=black style=filled color=black label="\\n\\n\\n${pc0}"]
+${pcEnd ? `${pcEnd} [shape = doublecircle margin=0 style=filled fontcolor=white color=black]` : '\n'}
 node [shape = Mrecord];
-${i}
+${graphVizTransitions}
 }
     `;
-    return j
-  }
-
-  function h(a, b, c) {
-    return b.actions = {}, b.states = { [a]: { transitions: [] } }, b.step = 0, () => g({ pc0: a, actions: b.actions, states: b.states, deterministic: c })
-  }
-
-  function i({ componentName: a, pc0: d, actions: i, transitions: j, states: k, composite: l, pc: m = "pc", deterministic: n = !1, lax: o = !0, enforceAllowedTransitions: p = !1, blockUnexpectedActions: q = !1, stateDiagram: r = {}, id: s = Date.now() + Math.floor(1e8 * Math.random()) }) {
-    return {
-      id: s,
-      initialState: b => (v(b, a, m, d), b.__actionName = void 0, b),
-      addAction: b(i, s),
-      stateMachine: c({ id: s, componentName: a, pc0: d, actions: i, states: k, composite: l, transitions: j, pc: m, deterministic: n, lax: o, enforceAllowedTransitions: p, blockUnexpectedActions: q, stateDiagram: r }),
-      acceptors: e({ id: s, componentName: a, pc0: d, actions: i, states: k, composite: l, transitions: j, pc: m, deterministic: n, lax: o, enforceAllowedTransitions: p, stateDiagram: r }),
-      naps: f({ id: s, states: k, componentName: a, composite: l, pc: m }),
-      event: a => { const b = () => ({ __actionName: a, __stateMachineId: s }); return b.__actionName = a, b.__stateMachineId = s, b },
-      stateDiagram: g({ pc0: d, actions: i, transitions: j, states: k, deterministic: n }),
-      runtimeStateDiagram: h(d, r, n)
+      return output;
     }
-  }
-
-  const j = (b, c) => (b.push(c), b);
-  const k = a => a ? a[0] : void 0;
-  const l = a => a !== void 0;
-  const m = (a = []) => a;
-  const n = (a = {}) => Object.keys(a);
-  const p = (c, a = {}) => Object.assign(c, a);
-  const q = a => "function" == typeof a;
-  const r = (a, b) => k(a[b]);
-  const s = a => ({
-    pc0: k(a).from,
-    states: a.reduce((a, b) => p(a, {
-      [b.from]: { transitions: a[b.from] && a[b.from].transitions && k(a[b.from].transitions) ? j(a[b.from].transitions, b.on) : [b.on] },
-      [b.to]: a[b.to] && k(a[b.to].transitions) ? a[b.to] : { transitions: b.to === b.from ? [b.on] : [] }
-    }), {}),
-    actions: a.reduce((b, a) => p(b, { [a.on]: [a.to] }), {}),
-    deterministic: !0,
-    enforceAllowedTransitions: !0
-  });
-  const t = a => n(a).reduce((b, c) => {
-    const d = a[c], e = n(d);
-    return b.concat(e.map(b => ({ from: c, to: d[b], on: b })))
-  }, []);
-  const u = (a, b, c = "pc") => b ? q(a.localState) ? a.localState(b)[c] : a.__components ? a.__components[b][c] : void 0 : a[c];
-  const v = (a, b, c, d) => (b ? q(a.localState) ? a.localState(b)[c] = d : a.__components = { [b]: { [c]: d } } : a[c] = d, d);
-  const w = (a, b) => a ? a : s(b).actions;
-  const x = (a = 0, b = "other") => `${a}. ${b}`;
-  const y = (b, c, d, e = "other") => {
-    b.step = 1 + (b.step || 0);
-    const f = x(b.step, e);
-    b.states[c] || (b.states[c] = { transitions: [] });
-    const g = b.actions[f];
-    if (l(g) ? -1 === g.indexOf(c) && g.push(c) : b.actions[f] = [c], d) {
-      const a = b.states[d];
-      l(a) && -1 === a.transitions.indexOf(f) && a.transitions.push(f)
+    function runTimeStateDiagram(pc0, stateDiagram, deterministic) {
+      stateDiagram.actions = {};
+      stateDiagram.states = {
+        [pc0]: {
+          transitions: []
+        }
+      };
+      stateDiagram.step = 0;
+      return () => renderGraphViz({
+        pc0,
+        actions: stateDiagram.actions,
+        states: stateDiagram.states,
+        deterministic
+      });
     }
-  };
-  const z = (a, b, c = "", d) => `${a} -> ${b} [label = "${c}${d ? `\\n${d}` : ""}"];`;
+    function fsm({
+      componentName,
+      pc0,
+      actions,
+      transitions,
+      states,
+      composite,
+      pc = 'pc',
+      deterministic = false,
+      lax = true,
+      enforceAllowedTransitions = false,
+      blockUnexpectedActions = false,
+      stateDiagram = {},
+      id = Date.now() + Math.floor(Math.random() * 100000000)
+    }) {
+      return {
+        id,
+        initialState: model => {
+          modelSetValue(model, componentName, pc, pc0);
+          model.__actionName = undefined;
+          return model;
+        },
+        addAction: addAction(actions, id),
+        stateMachine: stateMachineReactor({
+          id,
+          componentName,
+          pc0,
+          actions,
+          states,
+          composite,
+          transitions,
+          pc,
+          deterministic,
+          lax,
+          enforceAllowedTransitions,
+          blockUnexpectedActions}),
+        acceptors: stateMachineAcceptors({
+          id,
+          componentName,
+          pc0,
+          actions,
+          states,
+          composite,
+          transitions,
+          pc,
+          deterministic,
+          lax,
+          enforceAllowedTransitions,
+          stateDiagram
+        }),
+        naps: stateMachineNaps({
+          states,
+          componentName,
+          composite,
+          pc
+        }),
+        event: eventName => {
+          const action = () => ({
+            __actionName: eventName,
+            __stateMachineId: id
+          });
+          action.__actionName = eventName;
+          action.__stateMachineId = id;
+          return action;
+        },
+        stateDiagram: renderGraphViz({
+          pc0,
+          actions,
+          transitions,
+          states,
+          deterministic
+        }),
+        runtimeStateDiagram: runTimeStateDiagram(pc0, stateDiagram, deterministic)
+      };
+    }
+    fsm.flattenTransitions = flattenTransitions;
+    fsm.actionsAndStatesFor = actionsAndStatesFor;
 
-  i.flattenTransitions = t;
-  i.actionsAndStatesFor = s;
+    // ISC License (ISC)
+    // Copyright 2019 Jean-Jacques Dubray
 
-  return { fsm: i };
+    var index = {
+      fsm
+    };
+
+    return index;
+
 })();
 
 // ES Module exports

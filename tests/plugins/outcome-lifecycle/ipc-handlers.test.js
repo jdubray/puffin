@@ -67,7 +67,8 @@ describe('IPC Handlers - Registration', () => {
       'deleteLifecycle', 'listLifecycles',
       'mapStory', 'unmapStory',
       'getStoriesForLifecycle', 'getLifecyclesForStory',
-      'addDependency', 'removeDependency', 'getDag'
+      'addDependency', 'removeDependency', 'getDag',
+      'getSynthesizedDag', 'resynthesizeDag', 'resetAndReprocess'
     ]
 
     for (const channel of expected) {

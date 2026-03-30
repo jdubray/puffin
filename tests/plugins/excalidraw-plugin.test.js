@@ -661,7 +661,7 @@ describe('Excalidraw Plugin', () => {
       assert.strictEqual(manifest.contributes.views[0].order, 51)
     })
 
-    it('should declare all 9 IPC handlers in manifest', async () => {
+    it('should declare all 13 IPC handlers in manifest', async () => {
       const manifestPath = path.join(__dirname, '../../plugins/excalidraw-plugin/puffin-plugin.json')
       const manifestContent = await fs.readFile(manifestPath, 'utf-8')
       const manifest = JSON.parse(manifestContent)
@@ -675,7 +675,11 @@ describe('Excalidraw Plugin', () => {
         'excalidraw:renameDesign',
         'excalidraw:checkNameUnique',
         'excalidraw:exportDesign',
-        'excalidraw:importDesign'
+        'excalidraw:importDesign',
+        'excalidraw:buildDiagramPrompt',
+        'excalidraw:getDiagramTypes',
+        'excalidraw:generateDiagram',
+        'excalidraw:listMarkdownFiles'
       ]
 
       assert.deepStrictEqual(manifest.extensionPoints.ipcHandlers, expectedHandlers)
@@ -1165,7 +1169,7 @@ describe('ExcalidrawView Component Structure', () => {
       // Extract from the destroy method to end-of-class by looking for the method
       const destroyIdx = viewSource.indexOf('destroy()')
       assert.ok(destroyIdx > -1, 'should have destroy method')
-      const destroySection = viewSource.substring(destroyIdx, destroyIdx + 500)
+      const destroySection = viewSource.substring(destroyIdx, destroyIdx + 1200)
       assert.ok(destroySection.includes('this.elements = []'), 'should reset elements')
       assert.ok(destroySection.includes('this.definitions = []'), 'should reset definitions')
     })
@@ -1216,7 +1220,7 @@ describe('ExcalidrawView Component Structure', () => {
     })
 
     it('should render canvas placeholder', () => {
-      assert.ok(viewSource.includes('excalidraw-canvas-placeholder'))
+      assert.ok(viewSource.includes('excalidraw-loading'))
     })
 
     it('should show element count in placeholder', () => {

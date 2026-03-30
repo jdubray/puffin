@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * PluginStateStore Tests
  *

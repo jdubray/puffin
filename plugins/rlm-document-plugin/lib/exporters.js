@@ -16,6 +16,7 @@ const { EXPORT } = require('./config')
  */
 function exportJson(session, results, options = {}) {
   const { pretty = true, includeContent = false } = options
+  const safeResults = results || []
 
   const exportData = {
     exportedAt: new Date().toISOString(),
@@ -32,7 +33,7 @@ function exportJson(session, results, options = {}) {
       config: session.config,
       stats: session.stats
     },
-    results: results.map(result => ({
+    results: safeResults.map(result => ({
       id: result.id,
       query: result.query,
       strategy: result.strategy,
@@ -51,9 +52,9 @@ function exportJson(session, results, options = {}) {
       status: result.status
     })),
     summary: {
-      totalQueries: results.length,
-      totalEvidence: results.reduce((sum, r) => sum + (r.evidence?.length || 0), 0),
-      totalTokens: results.reduce((sum, r) => sum + (r.tokensUsed || 0), 0)
+      totalQueries: safeResults.length,
+      totalEvidence: safeResults.reduce((sum, r) => sum + (r.evidence?.length || 0), 0),
+      totalTokens: safeResults.reduce((sum, r) => sum + (r.tokensUsed || 0), 0)
     }
   }
 
@@ -62,6 +63,7 @@ function exportJson(session, results, options = {}) {
     : JSON.stringify(exportData)
 
   return {
+    format: 'json',
     content,
     mimeType: 'application/json',
     filename: `rlm-export-${session.id}.json`
@@ -77,6 +79,7 @@ function exportJson(session, results, options = {}) {
  */
 function exportMarkdown(session, results, options = {}) {
   const { includeMetadata = true, maxExcerptLength = 500 } = options
+  results = results || []
 
   const lines = []
 
@@ -181,6 +184,7 @@ function exportMarkdown(session, results, options = {}) {
   const content = lines.join('\n')
 
   return {
+    format: 'markdown',
     content,
     mimeType: 'text/markdown',
     filename: `rlm-export-${session.id}.md`

@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * PluginManager Tests
  *
@@ -17,9 +18,13 @@ class MockPluginLoader {
   }
 
   addPlugin(name, pluginData) {
-    this.plugins.set(name, {
+    const plugin = {
       name,
       state: 'loaded',
+      lifecycleState: 'inactive',
+      activationError: null,
+      activatedAt: null,
+      deactivatedAt: null,
       directory: `/plugins/${name}`,
       module: {
         activate: jest.fn().mockResolvedValue(undefined),
@@ -31,8 +36,19 @@ class MockPluginLoader {
         version: pluginData.version || '1.0.0',
         displayName: pluginData.displayName || name
       }),
+      setLifecycleState(state) {
+        this.lifecycleState = state
+        if (state === 'active') { this.activatedAt = new Date().toISOString(); this.activationError = null }
+        else if (state === 'inactive') { this.deactivatedAt = new Date().toISOString() }
+      },
+      setActivationError(err) {
+        this.activationError = err instanceof Error ? err.message : err
+        this.lifecycleState = 'activation_failed'
+      },
+      isActive() { return this.lifecycleState === 'active' },
       ...pluginData
-    })
+    }
+    this.plugins.set(name, plugin)
   }
 
   getPlugin(name) {

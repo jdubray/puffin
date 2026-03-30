@@ -74,7 +74,16 @@ function getDayName(day, format = 'short') {
  */
 function isToday(date) {
   const today = new Date()
-  const checkDate = typeof date === 'string' ? new Date(date) : date
+  let checkDate
+  if (typeof date === 'string') {
+    // Date-only strings (YYYY-MM-DD) are parsed as UTC midnight by default;
+    // append local noon to avoid timezone-shift to the previous day.
+    checkDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? new Date(`${date}T12:00:00`)
+      : new Date(date)
+  } else {
+    checkDate = date
+  }
   return (
     checkDate.getFullYear() === today.getFullYear() &&
     checkDate.getMonth() === today.getMonth() &&

@@ -728,6 +728,9 @@ export const updateBranchSettingsAcceptor = model => proposal => {
       if (settings.assignedPlugins !== undefined) {
         branch.assignedPlugins = settings.assignedPlugins
       }
+      if (settings.additionalDirs !== undefined) {
+        branch.additionalDirs = settings.additionalDirs
+      }
 
       console.log('[BRANCH] Updated settings for branch:', branchId, settings)
     }

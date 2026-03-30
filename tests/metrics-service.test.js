@@ -19,6 +19,7 @@ function createMockDatabase() {
   return {
     isInitialized: () => true,
     getConnection: () => ({
+      open: true,
       prepare: (sql) => mockStmt,
       transaction: (fn) => (...args) => fn(...args),
       exec: () => {}

@@ -1,6 +1,6 @@
 {
   "name": "puffin",
-  "version": "3.8.1",
+  "version": "3.10.0",
   "description": "A GUI for Claude Code to help you 'clode' new projects",
   "main": "src/main/main.js",
   "scripts": {
@@ -21,6 +21,8 @@
   "author": "jdubray",
   "license": "MIT",
   "dependencies": {
+    "@cognitive-fab/sam-fsm": "1.0.0",
+    "@cognitive-fab/sam-pattern": "^1.6.1",
     "@excalidraw/excalidraw": "^0.17.0",
     "@puffin/hdsl-types": "file:shared/hdsl-types",
     "ajv": "^8.17.1",
@@ -29,8 +31,6 @@
     "marked": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "sam-fsm": "^0.9.24",
-    "sam-pattern": "^1.5.10",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
@@ -54,23 +54,27 @@
       "shared/**/*"
     ],
     "extraResources": [
-      { "from": "plugins", "to": "plugins" }
+      {
+        "from": "plugins",
+        "to": "plugins"
+      }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png",
+      "identity": null,
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
-      ],
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      ]
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
@@ -78,11 +82,14 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "installerLanguages": ["en_US"],
+      "installerLanguages": [
+        "en_US"
+      ],
       "language": "1033"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "build/icon.png"
     }
   }
 }

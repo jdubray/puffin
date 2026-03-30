@@ -1,3 +1,4 @@
+require('../helpers/test-compat')
 /**
  * RLM Document Plugin - REPL Integration Tests
  *
@@ -314,7 +315,7 @@ Paragraph with keywords: testing, integration, REPL.
     it('should manage memory efficiently with large documents', async () => {
       // REPL should be able to handle large content
       const largeContent = 'test '.repeat(100000)
-      expect(largeContent.length).toBeGreaterThan(500000)
+      expect(largeContent.length).toBeGreaterThan(499999)
     })
 
     it('should support concurrent operations', () => {

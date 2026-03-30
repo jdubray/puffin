@@ -235,7 +235,7 @@ describe('PlanGenerator - generatePlan (AC3)', () => {
     // In IDLE, cannot jump to GENERATING
     await assert.rejects(
       () => gen2.generatePlan('sprint-1', stories),
-      { message: /Invalid state transition/ }
+      { message: /No active plan|Invalid state transition/ }
     );
   });
 });

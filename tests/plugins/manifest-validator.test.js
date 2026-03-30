@@ -65,7 +65,7 @@ describe('Manifest Schema', () => {
     const ipcHandlers = schema.properties.extensionPoints.properties.ipcHandlers
     assert.strictEqual(
       ipcHandlers.items.pattern,
-      '^[a-z][a-z0-9-]*:[a-zA-Z][a-zA-Z0-9_]*$'
+      '^[a-z][a-z0-9-]*:[a-zA-Z][a-zA-Z0-9_-]*$'
     )
   })
 
@@ -226,7 +226,7 @@ describe('Renderer Manifest Schema', () => {
 
 describe('Renderer Validation Patterns', () => {
   it('should validate renderer entry paths', () => {
-    const pattern = new RegExp('^[a-zA-Z0-9_./-]+\\.(js|mjs|ts|tsx)$')
+    const pattern = new RegExp('^[a-zA-Z0-9_][a-zA-Z0-9_./-]*\\.(js|mjs|ts|tsx)$')
     assert.ok(pattern.test('renderer/index.js'))
     assert.ok(pattern.test('src/renderer/main.tsx'))
     assert.ok(pattern.test('dist/renderer.mjs'))

@@ -359,6 +359,9 @@ export class ModalManager {
       case 'assertion-failures':
         this.renderAssertionFailures(modalTitle, modalContent, modalActions, modal.data)
         break
+      case 'assertion-details':
+        this.renderAssertionDetails(modalTitle, modalContent, modalActions, modal.data)
+        break
       case 'ris-view':
         this.renderRisView(modalTitle, modalContent, modalActions, modal.data)
         break
@@ -4131,6 +4134,121 @@ export class ModalManager {
         this.intents.hideModal()
         this.showToast(`Failed to create branch: ${err.message}`, 'error')
       }
+    })
+  }
+
+  /**
+   * Render assertion details modal — shows ALL assertions (passed, failed, pending) for a story.
+   * Provides Re-evaluate and Regenerate actions.
+   */
+  renderAssertionDetails(title, content, actions, data) {
+    const { story, onEvaluate, onRegenerate, onClose } = data || {}
+
+    if (!story) {
+      title.textContent = 'Assertions'
+      content.innerHTML = '<p>No story data available.</p>'
+      actions.innerHTML = '<button class="btn secondary" id="assert-detail-close">Close</button>'
+      document.getElementById('assert-detail-close')?.addEventListener('click', () => this.intents.hideModal())
+      return
+    }
+
+    const assertions = story.inspectionAssertions || []
+    const results = story.assertionResults
+    const resultMap = new Map()
+    if (results?.results) {
+      results.results.forEach(r => resultMap.set(r.assertionId, r))
+    }
+
+    const passed = results?.summary?.passed ?? 0
+    const failed = results?.summary?.failed ?? 0
+    const total = assertions.length
+    const evaluated = results?.summary?.total ?? 0
+    const pending = total - evaluated
+
+    title.textContent = `Inspection Assertions — ${this.escapeHtml(story.title)}`
+
+    const statusIcon = (result) => {
+      if (!result) return '<span class="assertion-icon pending" title="Not evaluated">○</span>'
+      if (result.status === 'passed') return '<span class="assertion-icon passed" title="Passed">✓</span>'
+      if (result.status === 'failed') return '<span class="assertion-icon failed" title="Failed">✗</span>'
+      return '<span class="assertion-icon error" title="Error">!</span>'
+    }
+
+    const statusLabel = (result) => {
+      if (!result) return '<span class="assertion-status-label pending">pending</span>'
+      if (result.status === 'passed') return '<span class="assertion-status-label passed">passed</span>'
+      if (result.status === 'failed') return '<span class="assertion-status-label failed">failed</span>'
+      return '<span class="assertion-status-label error">error</span>'
+    }
+
+    const typeDisplay = (type) => (type || '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+
+    const assertionsHtml = assertions.length === 0
+      ? '<p class="no-assertions-msg">No inspection assertions have been generated for this story yet.</p>'
+      : assertions.map(a => {
+          const result = resultMap.get(a.id)
+          const details = result?.details || {}
+          const rowClass = result ? result.status : 'pending'
+
+          const detailsHtml = (result && result.status !== 'passed' && (details.expected !== undefined || details.actual !== undefined || details.suggestion))
+            ? `<div class="assert-detail-diagnostics">
+                ${details.expected !== undefined ? `<div class="diag-row"><span class="diag-label">Expected:</span><code>${this.escapeHtml(String(details.expected))}</code></div>` : ''}
+                ${details.actual !== undefined ? `<div class="diag-row"><span class="diag-label">Actual:</span><code class="diag-actual">${this.escapeHtml(String(details.actual))}</code></div>` : ''}
+                ${details.suggestion ? `<div class="diag-row"><span class="diag-label">Hint:</span><span>${this.escapeHtml(details.suggestion)}</span></div>` : ''}
+              </div>`
+            : ''
+
+          return `
+            <div class="assert-detail-row ${rowClass}" data-assertion-id="${a.id}">
+              <div class="assert-detail-header">
+                ${statusIcon(result)}
+                <span class="assert-detail-type">${typeDisplay(a.type)}</span>
+                <code class="assert-detail-target" title="${this.escapeHtml(a.target)}">${this.escapeHtml(a.target)}</code>
+                ${statusLabel(result)}
+              </div>
+              <div class="assert-detail-message">${this.escapeHtml(a.message || '')}</div>
+              ${a.criterion && a.criterion !== 'general' ? `<div class="assert-detail-criterion">AC: ${this.escapeHtml(a.criterion)}</div>` : ''}
+              ${detailsHtml}
+            </div>`
+        }).join('')
+
+    content.innerHTML = `
+      <div class="assertion-details-modal">
+        <div class="assert-detail-summary">
+          ${total === 0
+            ? '<span class="assert-summary-label">No assertions generated</span>'
+            : `<span class="assert-stat passed">${passed} passed</span>
+               <span class="assert-stat failed">${failed} failed</span>
+               ${pending > 0 ? `<span class="assert-stat pending">${pending} not evaluated</span>` : ''}
+               <span class="assert-stat total">of ${total}</span>`
+          }
+          ${results?.evaluatedAt ? `<span class="assert-eval-time">Last run: ${this.formatDateTime(results.evaluatedAt)}</span>` : ''}
+        </div>
+        <div class="assert-detail-list">
+          ${assertionsHtml}
+        </div>
+      </div>`
+
+    const hasAssertions = assertions.length > 0
+    actions.innerHTML = `
+      <button class="btn secondary" id="assert-detail-close">Close</button>
+      ${hasAssertions ? `<button class="btn secondary" id="assert-detail-regen" title="Regenerate assertions from RIS">↺ Regenerate</button>` : `<button class="btn primary" id="assert-detail-regen" title="Generate assertions from RIS">Generate Assertions</button>`}
+      ${hasAssertions ? `<button class="btn primary" id="assert-detail-eval" title="Run all assertions against the codebase">▶ Evaluate</button>` : ''}
+    `
+
+    document.getElementById('assert-detail-close')?.addEventListener('click', () => {
+      if (onClose) onClose()
+      this.intents.hideModal()
+    })
+
+    document.getElementById('assert-detail-eval')?.addEventListener('click', () => {
+      if (onEvaluate) onEvaluate(story.id)
+      this.intents.hideModal()
+    })
+
+    document.getElementById('assert-detail-regen')?.addEventListener('click', () => {
+      if (onRegenerate) onRegenerate(story.id)
+      this.intents.hideModal()
     })
   }
 

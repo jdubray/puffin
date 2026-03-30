@@ -370,9 +370,9 @@ describe('StatsPlugin', () => {
       assert.strictEqual(p.metricsService, null)
     })
 
-    it('should return null from getComponentMetrics when MetricsService unavailable', async () => {
+    it('should return empty object from getComponentMetrics when MetricsService unavailable', async () => {
       const result = await plugin.getComponentMetrics()
-      assert.strictEqual(result, null)
+      assert.deepStrictEqual(result, {})
     })
 
     it('should return component metrics when MetricsService is available', async () => {
@@ -446,8 +446,8 @@ describe('StatsPlugin', () => {
       assert.ok(result.weeklyStats)
       assert.ok(result.totals)
       assert.ok(result.branches)
-      // componentMetrics should be null due to error
-      assert.strictEqual(result.componentMetrics, null)
+      // componentMetrics should be empty object due to error swallowed in getComponentMetrics
+      assert.deepStrictEqual(result.componentMetrics, {})
     })
 
     it('should clear metricsService on deactivate', async () => {

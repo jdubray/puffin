@@ -56,7 +56,8 @@ export const initialModel = {
         text: '#1a1a2e',
         error: '#f56565'
       }
-    }
+    },
+    helpMode: false
   },
 
   // Prompt state

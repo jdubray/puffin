@@ -55,25 +55,27 @@
     <!-- Header -->
     <header id="header">
       <div class="header-left">
-        <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar">
+        <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar" data-help="Show or hide the sidebar panel that contains branch and thread navigation.">
           <span class="icon">☰</span>
         </button>
         <h1 id="app-title" class="app-title">Puffin</h1>
       </div>
       <nav id="main-nav">
-        <button class="nav-btn" data-view="config">Config</button>
-        <button class="nav-btn active" data-view="prompt">Prompt</button>
+        <button class="nav-btn" data-view="config" data-help="Configure project settings, Claude guidance options, and manage plugins.">Config</button>
+        <button class="nav-btn active" data-view="prompt" data-help="Compose and send prompts to Claude Code, and view conversation responses.">Prompt</button>
         <!-- Designer is now provided by designer-plugin -->
-        <button class="nav-btn" data-view="user-stories">Backlog</button>
-        <button class="nav-btn" data-view="cli-output">CLI Output</button>
-        <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn">Debug</button>
+        <button class="nav-btn" data-view="user-stories" data-help="View and manage your user story backlog and sprint history.">Backlog</button>
+        <button class="nav-btn" data-view="cli-output" data-help="View the live Claude Code CLI output stream and raw JSON messages.">CLI Output</button>
+        <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn" data-help="View the full debug prompt that was last sent to Claude CLI.">Debug</button>
         <!-- Plugin nav buttons are inserted here dynamically -->
         <div id="plugin-nav-buttons"></div>
       </nav>
       <div class="header-right">
+        <button id="next-action-btn" class="next-action-btn" title="What should I do next?" data-help="Open the Next Action advisor — shows what you have been doing and recommends the best next step.">Next Action</button>
+        <button id="help-mode-toggle" class="help-mode-btn" title="Toggle Help Mode" data-help="Toggle help mode to show descriptive tooltips on every button so you can learn what each control does.">? Help</button>
         <div id="git-status-indicator" class="git-indicator hidden" title="Git branch status"></div>
         <span id="save-indicator" class="save-indicator hidden">●</span>
-        <button id="debugger-toggle" class="icon-btn" title="SAM Debugger (Ctrl+Shift+D)">
+        <button id="debugger-toggle" class="icon-btn" title="SAM Debugger (Ctrl+Shift+D)" data-help="Open the SAM state debugger to inspect application state and action history (Ctrl+Shift+D).">
           <span class="icon">🔍</span>
         </button>
       </div>
@@ -88,17 +90,17 @@
           <ul id="branch-list" class="branch-list">
             <!-- Branches rendered dynamically -->
           </ul>
-          <button id="add-branch-btn" class="add-btn">+ Add Branch</button>
+          <button id="add-branch-btn" class="add-btn" data-help="Create a new branch to organize your conversations by topic or feature area.">+ Add Branch</button>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-header">
             <h3>Threads</h3>
-            <button id="thread-refresh-btn" class="thread-refresh-btn" title="Refresh (process sync inbox)">↻</button>
+            <button id="thread-refresh-btn" class="thread-refresh-btn" title="Refresh (process sync inbox)" data-help="Refresh the thread list and process any pending sync inbox items.">↻</button>
           </div>
           <div class="thread-search-container">
             <input type="text" id="thread-search-input" class="thread-search-input" placeholder="Search threads...">
             <span class="thread-search-icon">🔍</span>
-            <button id="thread-search-clear" class="thread-search-clear" title="Clear search">×</button>
+            <button id="thread-search-clear" class="thread-search-clear" title="Clear search" data-help="Clear the thread search filter and show all threads.">×</button>
           </div>
           <div id="history-tree" class="history-tree">
             <!-- Threads rendered dynamically -->
@@ -121,7 +123,7 @@
           <div class="view-content">
             <div class="view-header-with-actions">
               <h2>Project Configuration</h2>
-              <button id="view-claude-config-btn" class="btn secondary small" title="View CLAUDE.md configuration file">
+              <button id="view-claude-config-btn" class="btn secondary small" title="View CLAUDE.md configuration file" data-help="View the generated CLAUDE.md context file that Puffin sends to Claude Code.">
                 <span class="btn-icon">📄</span>
                 <span class="btn-text">View CLAUDE.md</span>
               </button>
@@ -142,7 +144,7 @@
                 <div id="assumptions-list" class="list-editor">
                   <!-- Assumptions rendered dynamically -->
                 </div>
-                <button type="button" id="add-assumption-btn" class="add-btn small">+ Add Assumption</button>
+                <button type="button" id="add-assumption-btn" class="add-btn small" data-help="Add a new assumption that Claude will keep in mind when working on this project.">+ Add Assumption</button>
               </div>
 
               <div class="form-group">
@@ -431,7 +433,7 @@
                 </div>
 
                 <div class="form-group">
-                  <button type="button" id="cre-manual-refresh-btn" class="btn secondary">
+                  <button type="button" id="cre-manual-refresh-btn" class="btn secondary" data-help="Manually trigger a Code Model refresh to update the CRE's understanding of the codebase.">
                     Refresh Code Model Now
                   </button>
                   <small class="form-hint">Manually trigger Code Model refresh. Use after debugging or before committing changes.</small>
@@ -481,15 +483,15 @@
                   </div>
                 </div>
 
-                <button type="button" id="add-plugin-btn" class="btn secondary add-plugin-btn">
+                <button type="button" id="add-plugin-btn" class="btn secondary add-plugin-btn" data-help="Add a new Claude Code skill plugin to extend Claude's capabilities for this project.">
                   <span class="btn-icon">+</span>
                   Add Plugin
                 </button>
               </fieldset>
 
               <div class="form-actions">
-                <button type="button" id="generate-claude-md-btn" class="btn secondary">Generate Claude.md</button>
-                <button type="submit" class="btn primary">Save Configuration</button>
+                <button type="button" id="generate-claude-md-btn" class="btn secondary" data-help="Regenerate the CLAUDE.md context file from the current project configuration.">Generate Claude.md</button>
+                <button type="submit" class="btn primary" data-help="Save all project configuration changes to disk.">Save Configuration</button>
               </div>
             </form>
           </div>
@@ -506,7 +508,7 @@
                   <div class="sprint-title-row">
                     <h3 class="sprint-title">Sprint</h3>
                     <span id="sprint-status-badge" class="sprint-status-badge">No Sprint</span>
-                    <button id="sprint-close-btn" class="sprint-close-btn hidden" title="Close Sprint">&times;</button>
+                    <button id="sprint-close-btn" class="sprint-close-btn hidden" title="Close Sprint" data-help="Close the active sprint, run code review, and generate a completion summary.">&times;</button>
                   </div>
                 </div>
                 <!-- Sprint Progress -->
@@ -523,9 +525,9 @@
                 </div>
                 <!-- Sprint Actions -->
                 <div class="sprint-panel-actions" id="sprint-actions">
-                  <button id="sprint-plan-btn" class="btn primary hidden">Plan</button>
-                  <button id="sprint-iterate-btn" class="btn secondary hidden">Iterate on Plan</button>
-                  <button id="sprint-approve-btn" class="btn success hidden">Approve Plan</button>
+                  <button id="sprint-plan-btn" class="btn primary hidden" data-help="Generate an implementation plan for the current sprint stories using AI.">Plan</button>
+                  <button id="sprint-iterate-btn" class="btn secondary hidden" data-help="Refine and iterate on the current sprint plan before approving it.">Iterate on Plan</button>
+                  <button id="sprint-approve-btn" class="btn success hidden" data-help="Approve the current sprint plan and begin automated story implementation.">Approve Plan</button>
                 </div>
                 <!-- Orchestration Controls (for automated sprints) -->
                 <div id="orchestration-controls-container" class="hidden"></div>
@@ -551,11 +553,11 @@
                   <h3 class="website-url-title">Pages</h3>
                   <div id="website-server-status" class="website-server-status"></div>
                   <span class="puppeteer-loop-btn-wrap">
-                    <button id="puppeteer-loop-btn" class="puppeteer-loop-btn" title="Visual Feedback Loop — Claude screenshots the preview after each change">&#128247;</button>
+                    <button id="puppeteer-loop-btn" class="puppeteer-loop-btn" title="Visual Feedback Loop — Claude screenshots the preview after each change" data-help="Toggle the visual feedback loop — Claude will screenshot the preview page after each code change.">&#128247;</button>
                     <span id="puppeteer-screenshot-badge" class="puppeteer-screenshot-badge" style="display:none"></span>
                   </span>
                   <span id="puppeteer-loop-status" class="puppeteer-loop-status"></span>
-                  <button id="website-url-refresh-btn" class="website-url-refresh-btn" title="Refresh file list">&#8635;</button>
+                  <button id="website-url-refresh-btn" class="website-url-refresh-btn" title="Refresh file list" data-help="Refresh the list of built page files from the website output directory.">&#8635;</button>
                 </div>
                 <div id="website-url-list" class="website-url-list">
                   <p class="website-url-empty">No pages found.<br>Build the site first, or add an index.html.</p>
@@ -567,12 +569,12 @@
             <main class="swimlane swimlane-middle">
               <!-- Branch Tabs -->
               <div class="branch-tabs">
-                <button class="branch-tab active" data-branch="specifications">Specifications</button>
-                <button class="branch-tab" data-branch="architecture">Architecture</button>
-                <button class="branch-tab" data-branch="ui">UI</button>
-                <button class="branch-tab" data-branch="backend">Backend</button>
-                <button class="branch-tab" data-branch="deployment">Deployment</button>
-                <button class="branch-tab" data-branch="tmp">Tmp</button>
+                <button class="branch-tab active" data-branch="specifications" data-help="Switch to the Specifications branch for requirements and user stories work.">Specifications</button>
+                <button class="branch-tab" data-branch="architecture" data-help="Switch to the Architecture branch for system design and technical planning.">Architecture</button>
+                <button class="branch-tab" data-branch="ui" data-help="Switch to the UI branch for frontend and interface design work.">UI</button>
+                <button class="branch-tab" data-branch="backend" data-help="Switch to the Backend branch for server-side and API implementation work.">Backend</button>
+                <button class="branch-tab" data-branch="deployment" data-help="Switch to the Deployment branch for CI/CD and infrastructure work.">Deployment</button>
+                <button class="branch-tab" data-branch="tmp" data-help="Switch to the Tmp branch for temporary experiments and one-off tasks.">Tmp</button>
               </div>
 
               <div class="response-area" id="response-area">
@@ -590,17 +592,17 @@
                   <div class="btw-panel-header">
                     <span class="btw-panel-icon">💬</span>
                     <span class="btw-panel-label">Quick question</span>
-                    <button id="btw-panel-dismiss" class="btw-panel-dismiss" title="Dismiss">&#x2715;</button>
+                    <button id="btw-panel-dismiss" class="btw-panel-dismiss" title="Dismiss" data-help="Dismiss the quick question panel and return to the main prompt.">&#x2715;</button>
                   </div>
                   <div class="btw-input-row">
                     <input id="btw-input" class="btw-input" type="text" placeholder="Ask a quick question... (Enter to send)" autocomplete="off" />
-                    <button id="btw-submit" class="btw-submit" title="Ask">&#10148;</button>
+                    <button id="btw-submit" class="btw-submit" title="Ask" data-help="Send a quick one-off question to Claude without adding it to conversation history.">&#10148;</button>
                   </div>
                   <div id="btw-answer" class="btw-answer" style="display:none"></div>
                 </div>
                 <div class="prompt-input-wrapper">
                   <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
-                  <button id="clear-prompt-btn" class="clear-prompt-btn" title="Clear prompt" style="display:none;">
+                  <button id="clear-prompt-btn" class="clear-prompt-btn" title="Clear prompt" data-help="Clear all text from the prompt input field." style="display:none;">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     </svg>
@@ -625,14 +627,14 @@
                   </div>
                 </div>
                 <div class="prompt-actions">
-                  <button id="derive-stories-btn" class="btn outline" title="Derive user stories from conversation context" disabled>
+                  <button id="derive-stories-btn" class="btn outline" title="Derive user stories from conversation context" data-help="Analyze this conversation and automatically generate user stories for the backlog." disabled>
                     Derive Stories
                   </button>
-                  <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread">
+                  <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread" data-help="Clear the prompt and start a new conversation thread on the current branch.">
                     Create New Thread
                   </button>
-                  <button id="cancel-prompt-btn" class="btn secondary hidden">Cancel</button>
-                  <button id="mic-btn" class="mic-btn" title="Voice input (speech-to-text)" style="display:none;">
+                  <button id="cancel-prompt-btn" class="btn secondary hidden" data-help="Stop the current Claude Code process immediately.">Cancel</button>
+                  <button id="mic-btn" class="mic-btn" title="Voice input (speech-to-text)" data-help="Use your microphone to dictate a prompt via speech-to-text." style="display:none;">
                     <svg class="mic-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" fill="currentColor"/>
                       <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -640,12 +642,13 @@
                       <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     </svg>
                   </button>
-                  <button id="submit-prompt-btn" class="btn primary">
+                  <button id="whats-next-btn" class="btn outline whats-next-btn" data-help="Get AI-powered guidance on the best next action for your project.">How can I get started?</button>
+                  <button id="submit-prompt-btn" class="btn primary" data-help="Send your prompt to Claude Code and stream the response into the conversation.">
                     <span class="btn-text">Send</span>
                     <span class="btn-loading hidden">...</span>
                   </button>
                   <div class="dropdown" id="include-gui-dropdown">
-                    <button id="include-gui-btn" class="btn secondary" title="Include GUI Design">
+                    <button id="include-gui-btn" class="btn secondary" title="Include GUI Design" data-help="Attach a GUI design from the designer to include as visual context in your prompt.">
                       Include GUI ▾
                     </button>
                     <div class="dropdown-menu" id="include-gui-menu">
@@ -653,7 +656,7 @@
                     </div>
                   </div>
                   <div class="dropdown" id="include-docs-dropdown">
-                    <button id="include-docs-btn" class="btn secondary" title="Include Design Document">
+                    <button id="include-docs-btn" class="btn secondary" title="Include Design Document" data-help="Attach a design document from the docs folder to include as reference material in your prompt.">
                       Include Docs ▾
                     </button>
                     <div class="dropdown-menu" id="include-docs-menu">
@@ -717,7 +720,7 @@
                 <div class="metadata-section handoff-generate-section">
                   <h4 class="metadata-section-title">Handoff</h4>
                   <div id="handoff-generate-content" class="handoff-generate-content">
-                    <button id="generate-handoff-btn" class="btn handoff-btn handoff-btn-panel" title="Generate handoff summary from this thread">
+                    <button id="generate-handoff-btn" class="btn handoff-btn handoff-btn-panel" title="Generate handoff summary from this thread" data-help="Generate a structured handoff summary from this thread to pass context to another branch.">
                       <span class="handoff-icon">✨</span>
                       <span class="handoff-text">Generate Handoff</span>
                     </button>
@@ -731,10 +734,10 @@
                       </div>
                     </div>
                     <div class="handoff-actions-row">
-                      <button id="handoff-regenerate-btn" class="btn small secondary handoff-regenerate-btn">
+                      <button id="handoff-regenerate-btn" class="btn small secondary handoff-regenerate-btn" data-help="Regenerate the handoff summary with a fresh AI call.">
                         Regenerate
                       </button>
-                      <button id="handoff-clear-btn" class="btn small outline handoff-clear-btn">
+                      <button id="handoff-clear-btn" class="btn small outline handoff-clear-btn" data-help="Clear the generated handoff summary from this thread.">
                         Clear
                       </button>
                     </div>
@@ -762,7 +765,7 @@
                   <div class="sprint-title-row">
                     <h3 class="sprint-title">Sprint History</h3>
                     <div class="sprint-header-buttons">
-                      <button id="sprint-history-refresh-btn" class="sprint-refresh-btn" aria-label="Refresh sprint history" title="Refresh">
+                      <button id="sprint-history-refresh-btn" class="sprint-refresh-btn" aria-label="Refresh sprint history" title="Refresh" data-help="Refresh the sprint history list to show the latest sprint data.">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M21 2v6h-6"></path>
                           <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
@@ -770,7 +773,7 @@
                           <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
                         </svg>
                       </button>
-                      <button id="sprint-panel-collapse-btn" class="sprint-close-btn" aria-expanded="true" aria-label="Collapse sprint history panel" title="Collapse">
+                      <button id="sprint-panel-collapse-btn" class="sprint-close-btn" aria-expanded="true" aria-label="Collapse sprint history panel" title="Collapse" data-help="Collapse the sprint history panel to give more space to the backlog view.">
                         <span class="collapse-icon"></span>
                       </button>
                     </div>
@@ -812,7 +815,7 @@
                     <button class="filter-btn" data-status="in-progress">In Progress</button>
                     <button class="filter-btn" data-status="completed">Completed</button>
                   </div>
-                  <button id="add-story-btn" class="btn small">+ Add Story</button>
+                  <button id="add-story-btn" class="btn small" data-help="Add a new user story manually to the backlog.">+ Add Story</button>
                 </div>
                 <div id="user-stories-list" class="user-stories-list">
                   <!-- User stories rendered dynamically -->
@@ -869,8 +872,8 @@
                   <input type="checkbox" id="cli-show-system">
                   Show System
                 </label>
-                <button id="cli-clear-btn" class="btn small">Clear</button>
-                <button id="cli-export-btn" class="btn small">Export</button>
+                <button id="cli-clear-btn" class="btn small" data-help="Clear all CLI output from the current view.">Clear</button>
+                <button id="cli-export-btn" class="btn small" data-help="Export the CLI output to a file for later review.">Export</button>
               </div>
             </div>
             <div class="cli-output-body">
@@ -902,8 +905,8 @@
             <div class="debug-header">
               <h2>Debug: Last Submitted Prompt</h2>
               <div class="debug-controls">
-                <button id="debug-copy-btn" class="btn small">Copy to Clipboard</button>
-                <button id="debug-clear-btn" class="btn small secondary">Clear</button>
+                <button id="debug-copy-btn" class="btn small" data-help="Copy the full debug prompt to the clipboard for external inspection.">Copy to Clipboard</button>
+                <button id="debug-clear-btn" class="btn small secondary" data-help="Clear the debug prompt display.">Clear</button>
               </div>
             </div>
             <div class="debug-info">

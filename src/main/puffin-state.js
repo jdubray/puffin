@@ -2330,6 +2330,7 @@ ${content}`
         tools: {
           snip: { enabled: false }
         },
+        helpMode: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }

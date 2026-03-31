@@ -18,6 +18,8 @@ import { ModalManager } from './lib/modal-manager.js'
 import { StatePersistence } from './lib/state-persistence.js'
 import { ActivityTracker } from './lib/activity-tracker.js'
 import { computeSimilarityHash, generateOutputSummary } from './lib/similarity-hash.js'
+import { HelpModeController } from './lib/help-mode-controller.js'
+import { fetchWorkflowSummary } from './lib/workflow-state-tracker.js'
 
 // Components
 import { ProjectFormComponent } from './components/project-form/project-form.js'
@@ -1177,12 +1179,37 @@ Please provide specific file locations and line numbers where issues are found, 
       this.showToast.bind(this)
     )
     this.activityTracker = new ActivityTracker(this.intents, () => this.state)
+    this.helpModeController = new HelpModeController()
 
     // Initialize plugin view container
     this.pluginViewContainer.init()
 
     // Initialize style injector
     this.styleInjector.init()
+  }
+
+  /**
+   * Build a fresh workflow summary string from the current state + live git status.
+   * Intended to be called on each next-best-action button click (AC4).
+   * @returns {Promise<string>}
+   */
+  async getWorkflowSummary() {
+    return fetchWorkflowSummary(this.state)
+  }
+
+  /**
+   * Returns true if the user has any prior activity — prompts sent, stories created,
+   * or a sprint started. Used to determine the what's-next button label.
+   * @param {object} state
+   * @returns {boolean}
+   */
+  _hasAnyActivity(state) {
+    if (!state) return false
+    const branches = state.history?.raw?.branches || {}
+    const hasPrompts = Object.values(branches).some(b => b?.prompts?.length > 0)
+    const hasStories = (state.userStories?.length || 0) > 0
+    const hasSprint = !!state.activeSprint
+    return hasPrompts || hasStories || hasSprint
   }
 
   /**
@@ -1731,6 +1758,41 @@ Please provide specific file locations and line numbers where issues are found, 
     // Debugger toggle
     document.getElementById('debugger-toggle')?.addEventListener('click', () => {
       this.components.debugger.toggle()
+    })
+
+    // Next-action advisor (header button)
+    document.getElementById('next-action-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('next-action-btn')
+      if (btn) { btn.disabled = true; btn.textContent = '…' }
+      try {
+        const workflowSummary = await this.getWorkflowSummary()
+        this.intents.showModal('next-action', { workflowSummary })
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Next Action' }
+      }
+    })
+
+    // What's next button (prompt toolbar — visible in help mode only)
+    document.getElementById('whats-next-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('whats-next-btn')
+      if (btn) { btn.disabled = true; btn.textContent = '…' }
+      try {
+        const workflowSummary = await this.getWorkflowSummary()
+        this.intents.showModal('next-action', { workflowSummary })
+      } finally {
+        if (btn) {
+          btn.disabled = false
+          btn.textContent = this._hasAnyActivity(this.state)
+            ? "What should I do next?"
+            : "How can I get started?"
+        }
+      }
+    })
+
+    // Help mode toggle
+    document.getElementById('help-mode-toggle')?.addEventListener('click', () => {
+      const current = this.state?.config?.helpMode || false
+      this.intents.updateConfig({ helpMode: !current })
     })
 
     // CLAUDE.md viewer button
@@ -2406,6 +2468,24 @@ Please provide specific file locations and line numbers where issues are found, 
    * Handle state changes
    */
   onStateChange({ state, changed }) {
+    // Apply help mode body class and swap tooltips
+    const helpModeEnabled = state.config?.helpMode || false
+    document.body.classList.toggle('help-mode', helpModeEnabled)
+    this.helpModeController?.setEnabled(helpModeEnabled)
+    // Update help mode toggle button label
+    const helpBtn = document.getElementById('help-mode-toggle')
+    if (helpBtn) {
+      helpBtn.textContent = helpModeEnabled ? 'Help ON' : '? Help'
+      helpBtn.classList.toggle('active', helpModeEnabled)
+    }
+
+    // Update what's-next button label based on activity
+    const whatsNextBtn = document.getElementById('whats-next-btn')
+    if (whatsNextBtn) {
+      const hasActivity = this._hasAnyActivity(state)
+      whatsNextBtn.textContent = hasActivity ? "What should I do next?" : "How can I get started?"
+    }
+
     // Apply edition-specific UI gating
     this.applyWebsiteEdition(state)
 

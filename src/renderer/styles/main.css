@@ -170,6 +170,30 @@ a:hover {
   display: none;
 }
 
+.help-mode-btn {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.help-mode-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.help-mode-btn.active {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
 /* Main Navigation */
 #main-nav {
   display: flex;

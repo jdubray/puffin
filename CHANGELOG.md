@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.11.1] - 2026-04-03
+
+### Added
+
+- **Quick Question Button (`/btw`)**: A **💬 Quick Q** button in the prompt editor toolbar opens the ephemeral `/btw` side-panel directly, without typing the `/btw` prefix. Answers use the current session context, never enter conversation history, and the panel can be dismissed or cleared independently.
+
+### Fixed
+
+- **Test Suite — 38 pre-existing failures resolved (2573/2573 passing)**:
+  - `designer-storage.test.js`: Correct plugin path (`.disabled` suffix); rewrote all assertions from Jest (`jest.fn()`, `expect().toBe()`) to `node:assert`; corrected two wrong expectations about `sanitizeFilename` (hyphens are preserved; `'Login-Form'` does not collide with `'Login Form'`).
+  - `outcome-lifecycle/renderer.test.mjs`: Fixed import depth (`../../../../` → `../../../`, which escaped the project root); corrected truncation assertion (SVG `aria-label` and `<title>` intentionally carry the full title for accessibility — assertion now checks for the `…` ellipsis in the rendered text node).
+  - `puffin-state.test.js`: Injected an in-memory database mock (`createDatabaseMock()`) so tests run under the system Node.js without `better-sqlite3` (compiled against Electron's ABI); updated subdirectory names (`gui-designs` → `gui-definitions`); updated GUI method calls to current API (`saveGuiDesign`, `loadGuiDesign`, `listGuiDesigns`).
+
 ## [3.11.0] - 2026-04-03
 
 ### Added
@@ -17,14 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Action Card Engine**: Deterministic engine (`action-card-engine.js`) that produces a prioritised list of "next best action" cards based on workflow state, git status, and activity log — no AI calls. Each card includes a title, description, CTA label, phase badge, and a `howId` key that maps to step-by-step how-to instructions (`HOW_CONTENT`). Cards cover the full Puffin workflow: Configure → Branch → Explore → Derive Stories → Sprint → Plan → Implement → Verify → Review → Commit → Iterate, plus "no git repo" and "on main branch" reminders.
 - **Activity Log**: Persistent per-project journal of significant user actions (`activity-log.js`), stored in `localStorage` (rolling 200 entries), keyed by a hash of the project path. Tracks 23 event types across all workflow phases (prompt sent, stories derived, plan approved, assertions run, sprint closed, committed, etc.). Entries carry phase ID, human-readable label, icon, and optional detail. Provides grouped-by-phase, recent-N, and since-last-commit views for consumption by the Action Card Engine and workflow context builder.
 - **Vibe Service — Mistral Vibe CLI Integration** (`vibe-service.js`): Puffin can now drive [Mistral's Vibe CLI](https://github.com/mistralai/vibe) as an alternative agent backend. Spawns `vibe -p <prompt> --output streaming` in programmatic mode, parses newline-delimited JSON output chunk-by-chunk, and forwards text deltas to the renderer. Injects `MISTRAL_API_KEY` from project config and forces `PYTHONUNBUFFERED=1` / UTF-8 for clean streaming on all platforms. Tool-call permissions (`bash`, `write_file`, `search_replace`) are auto-set to `always` so the agent doesn't stall waiting for interactive approval. Cancel uses `taskkill /T /F` on Windows. Augments `PATH` on macOS to find `~/.local/bin` installs.
-- **Quick Question Button (`/btw`)**: A **💬 Quick Q** button in the prompt editor toolbar opens the ephemeral `/btw` side-panel directly, without the user having to type the `/btw` prefix. The panel asks Claude a one-shot question using the current session context, returns the answer inline, and never adds the exchange to conversation history. This makes the existing `/btw` feature discoverable from the toolbar.
-
-### Fixed
-
-- **Test Suite — 38 pre-existing failures resolved (2573/2573 passing)**:
-  - `designer-storage.test.js`: Updated import path for the disabled designer plugin; rewrote all assertions from Jest (`jest.fn()`, `expect().toBe()`) to `node:assert`; corrected two wrong expectations about `sanitizeFilename` (hyphens are preserved, `'Login-Form'` does not collide with `'Login Form'`).
-  - `outcome-lifecycle/renderer.test.mjs`: Fixed import path (`../../../../` → `../../../` — the previous path escaped the project root); corrected the truncation test (SVG `aria-label` and `<title>` intentionally carry the full text for accessibility; assertion now checks for the `…` ellipsis in the rendered text node).
-  - `puffin-state.test.js`: Injected an in-memory database mock (`createDatabaseMock()`) so tests run under the system Node.js without requiring `better-sqlite3` (which is compiled against Electron's ABI); updated checked directory names (`gui-designs` → `gui-definitions`); updated GUI method calls to the current API (`saveGuiDesign`, `loadGuiDesign`, `listGuiDesigns`).
 
 ## [3.10.0] - 2026-03-30
 

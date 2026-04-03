@@ -161,6 +161,23 @@ a:hover {
   font-size: 0.625rem;
 }
 
+/* CLAUDE_{branch}.md size warning — applied by app.js _updateClaudeMdSizeBadge() */
+.git-indicator.claude-md-warn {
+  border: 1.5px solid #d69e2e;
+  box-shadow: 0 0 0 1px rgba(214, 158, 46, 0.25);
+}
+
+.git-indicator.claude-md-critical {
+  border: 1.5px solid #e53e3e;
+  box-shadow: 0 0 0 1px rgba(229, 62, 62, 0.25);
+  animation: claude-md-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes claude-md-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(229, 62, 62, 0.25); }
+  50%       { box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.15); }
+}
+
 .save-indicator {
   color: var(--warning-color);
   font-size: 1.25rem;
@@ -219,6 +236,24 @@ a:hover {
 .nav-btn.active {
   background: var(--accent-primary);
   color: white;
+}
+
+/* Config button pulses when project has no name/threads/stories yet */
+.nav-btn.needs-setup {
+  color: var(--color-warning, #ecc94b);
+  animation: nav-needs-setup 2s ease-in-out infinite;
+}
+
+.nav-btn.needs-setup::after {
+  content: ' ●';
+  font-size: 0.45em;
+  vertical-align: super;
+  color: var(--color-warning, #ecc94b);
+}
+
+@keyframes nav-needs-setup {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
 }
 
 /* Main Content */
@@ -535,6 +570,19 @@ select {
 .mt-2 { margin-top: 0.5rem; }
 .mt-3 { margin-top: 0.75rem; }
 .mt-4 { margin-top: 1rem; }
+
+/* =========================================================
+   Global Tooltip  (#puffin-tooltip)
+   Created and positioned by tooltip-engine.js using position:fixed.
+   No ::after tricks — works inside overflow:hidden containers and plugins.
+   ========================================================= */
+
+/* The tooltip element itself is styled inline by tooltip-engine.js.
+   This rule only provides the cursor hint on any tooltipped element. */
+[data-tooltip],
+[data-help-active] {
+  cursor: default;
+}
 
 /* Scrollbar Styles */
 ::-webkit-scrollbar {

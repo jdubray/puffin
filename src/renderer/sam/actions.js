@@ -87,6 +87,12 @@ export const updatePromptContent = (content) => ({
   }
 })
 
+// Restore pendingPromptId after an auth retry (re-attaches response to existing history entry)
+export const setPendingPromptId = (promptId) => ({
+  type: 'SET_PENDING_PROMPT_ID',
+  payload: { promptId }
+})
+
 // Submit prompt to Claude
 export const submitPrompt = (data) => ({
   type: 'SUBMIT_PROMPT',

@@ -23,6 +23,7 @@ export class PromptEditorComponent {
     this.deriveStoriesBtn = null
     this.modelSelect = null
     this.defaultModel = '__uninitialized__' // Sentinel value - will be updated from project config on first state load
+    this.defaultProvider = 'claude' // Mirrors config.defaultProvider; updated on every state change
     // Thinking budget selector
     this.thinkingBudgetSelect = null
     // Handoff button
@@ -64,6 +65,8 @@ export class PromptEditorComponent {
     this.includeGuiMenu = document.getElementById('include-gui-menu')
     this.deriveStoriesBtn = document.getElementById('derive-stories-btn')
     this.modelSelect = document.getElementById('thread-model')
+    // Provider selector (Claude vs Mistral Vibe)
+    this.providerSelect = document.getElementById('provider-select')
     // Thinking budget selector
     this.thinkingBudgetSelect = document.getElementById('thinking-budget')
     // Handoff button
@@ -318,6 +321,13 @@ export class PromptEditorComponent {
     if (this.modelSelect) {
       this.modelSelect.addEventListener('change', () => {
         this.modelSelect.dataset.userChanged = 'true'
+      })
+    }
+
+    // Provider selector - track when user manually changes it
+    if (this.providerSelect) {
+      this.providerSelect.addEventListener('change', () => {
+        this.providerSelect.dataset.userChanged = 'true'
       })
     }
 
@@ -737,6 +747,19 @@ export class PromptEditorComponent {
         }
       }
 
+      // Always track defaultProvider from config; only update the DOM select when
+      // it hasn't been manually changed during this session (userChanged flag).
+      if (state.config?.defaultProvider) {
+        const configProvider = state.config.defaultProvider
+        if (configProvider !== this.defaultProvider) {
+          this.defaultProvider = configProvider
+          // Sync DOM select unless user has already made a per-prompt override
+          if (this.providerSelect && !this.providerSelect.dataset.userChanged) {
+            this.providerSelect.value = configProvider
+          }
+        }
+      }
+
       // Track file write count from activity state for cancel confirmation
       const writtenFiles = (state.activity?.filesModified || []).filter(f => f.action === 'write')
       this._writtenFileCount = writtenFiles.length
@@ -1120,14 +1143,21 @@ export class PromptEditorComponent {
     if (!content) return
 
     // CRITICAL: Check if a CLI process is already running
-    if (window.puffin?.claude?.isRunning) {
-      const isRunning = await window.puffin.claude.isRunning()
+    // Read provider from live state config (authoritative); DOM select can override if user explicitly changed it.
+    const configProvider = state.config?.defaultProvider || 'claude'
+    const activeProvider = (this.providerSelect?.dataset.userChanged ? this.providerSelect.value : null) || configProvider
+    console.log('[PROVIDER-DEBUG] configProvider:', configProvider, 'activeProvider:', activeProvider, 'userChanged:', this.providerSelect?.dataset.userChanged)
+    const isRunningFn = activeProvider === 'vibe'
+      ? window.puffin?.vibe?.isRunning
+      : window.puffin?.claude?.isRunning
+    if (isRunningFn) {
+      const isRunning = await isRunningFn()
       if (isRunning) {
-        console.error('[PROMPT-EDITOR] Cannot submit: CLI process already running')
+        console.error('[PROMPT-EDITOR] Cannot submit: process already running')
         window.puffinApp?.showToast?.({
           type: 'error',
           title: 'Process Already Running',
-          message: 'A Claude process is already running. Please wait for it to complete.',
+          message: 'Please wait for the current process to complete.',
           duration: 5000
         })
         return
@@ -1234,32 +1264,39 @@ export class PromptEditorComponent {
         }
       }
 
-      window.puffin.claude.submit({
-        prompt: finalPrompt,
-        branchId: state.history.activeBranch,
-        sessionId: sessionId,
-        // Only send project context for new conversations or when it's changed
-        // For resumed sessions, Claude already has the context
-        project: !isResumingSession && state.config ? {
-          name: state.config.name,
-          description: state.config.description,
-          assumptions: state.config.assumptions,
-          technicalArchitecture: state.config.technicalArchitecture,
-          dataModel: state.config.dataModel,
-          options: state.config.options,
-          architecture: state.architecture
-        } : null,
-        // User stories are always relevant - they may have been updated
-        userStories: userStories,
-        guiDescription: guiDescription,
-        // Handoff context from another thread
-        handoffContext: handoffContext,
-        model: selectedModel,
-        maxTurns: 40, // Max turns per request
-        // Puppeteer Visual Feedback Loop (Website Edition)
-        puppeteerLoop: !!state.puppeteerLoop,
-        puppeteerPort: state.config?.websitePort || 5000
-      })
+      if (activeProvider === 'vibe') {
+        this._submitViaVibe(finalPrompt)
+      } else {
+        const claudePayload = {
+          prompt: finalPrompt,
+          branchId: state.history.activeBranch,
+          sessionId: sessionId,
+          // Only send project context for new conversations or when it's changed
+          // For resumed sessions, Claude already has the context
+          project: !isResumingSession && state.config ? {
+            name: state.config.name,
+            description: state.config.description,
+            assumptions: state.config.assumptions,
+            technicalArchitecture: state.config.technicalArchitecture,
+            dataModel: state.config.dataModel,
+            options: state.config.options,
+            architecture: state.architecture
+          } : null,
+          // User stories are always relevant - they may have been updated
+          userStories: userStories,
+          guiDescription: guiDescription,
+          // Handoff context from another thread
+          handoffContext: handoffContext,
+          model: selectedModel,
+          maxTurns: 40, // Max turns per request
+          // Puppeteer Visual Feedback Loop (Website Edition)
+          puppeteerLoop: !!state.puppeteerLoop,
+          puppeteerPort: state.config?.websitePort || 5000
+        }
+        // Save for auth-retry (token expired → re-login → re-submit same payload)
+        this._lastClaudePayload = claudePayload
+        window.puffin.claude.submit(claudePayload)
+      }
 
       // Note: Debug prompt is now captured via onFullPrompt callback from main process
       // This ensures we get the complete prompt with all context
@@ -1342,14 +1379,20 @@ export class PromptEditorComponent {
     if (!state) return
 
     // CRITICAL: Check if a CLI process is already running
-    if (window.puffin?.claude?.isRunning) {
-      const isRunning = await window.puffin.claude.isRunning()
+    const configProviderNT = state.config?.defaultProvider || 'claude'
+    const activeProviderNT = (this.providerSelect?.dataset.userChanged ? this.providerSelect.value : null) || configProviderNT
+    console.log('[PROVIDER-DEBUG-NT] configProvider:', configProviderNT, 'activeProvider:', activeProviderNT)
+    const isRunningFnNT = activeProviderNT === 'vibe'
+      ? window.puffin?.vibe?.isRunning
+      : window.puffin?.claude?.isRunning
+    if (isRunningFnNT) {
+      const isRunning = await isRunningFnNT()
       if (isRunning) {
-        console.error('[PROMPT-EDITOR] Cannot submit new thread: CLI process already running')
+        console.error('[PROMPT-EDITOR] Cannot submit new thread: process already running')
         window.puffinApp?.showToast?.({
           type: 'error',
           title: 'Process Already Running',
-          message: 'A Claude process is already running. Please wait for it to complete.',
+          message: 'Please wait for the current process to complete.',
           duration: 5000
         })
         return
@@ -1392,25 +1435,29 @@ export class PromptEditorComponent {
         }
       }
 
-      window.puffin.claude.submit({
-        prompt: finalPrompt,
-        branchId: state.history.activeBranch,
-        sessionId: null, // No session resume - fresh conversation
-        // New thread gets full project context
-        project: state.config ? {
-          name: state.config.name,
-          description: state.config.description,
-          assumptions: state.config.assumptions,
-          technicalArchitecture: state.config.technicalArchitecture,
-          dataModel: state.config.dataModel,
-          options: state.config.options,
-          architecture: state.architecture
-        } : null,
-        userStories: userStories,
-        guiDescription: guiDescription,
-        model: selectedModel,
-        maxTurns: 40 // Max turns per request
-      })
+      if (activeProviderNT === 'vibe') {
+        this._submitViaVibe(finalPrompt)
+      } else {
+        window.puffin.claude.submit({
+          prompt: finalPrompt,
+          branchId: state.history.activeBranch,
+          sessionId: null, // No session resume - fresh conversation
+          // New thread gets full project context
+          project: state.config ? {
+            name: state.config.name,
+            description: state.config.description,
+            assumptions: state.config.assumptions,
+            technicalArchitecture: state.config.technicalArchitecture,
+            dataModel: state.config.dataModel,
+            options: state.config.options,
+            architecture: state.architecture
+          } : null,
+          userStories: userStories,
+          guiDescription: guiDescription,
+          model: selectedModel,
+          maxTurns: 40 // Max turns per request
+        })
+      }
 
       // Note: Debug prompt is now captured via onFullPrompt callback from main process
       // This ensures we get the complete prompt with all context
@@ -1440,8 +1487,49 @@ export class PromptEditorComponent {
 
     this.intents.cancelPrompt()
     if (window.puffin) {
-      window.puffin.claude.cancel()
+      const cancelProvider = (this.providerSelect?.dataset.userChanged ? this.providerSelect.value : null) || window.puffinApp?.state?.config?.defaultProvider || 'claude'
+      if (cancelProvider === 'vibe') {
+        window.puffin.vibe?.cancel()
+      } else {
+        window.puffin.claude.cancel()
+      }
     }
+  }
+
+  /**
+   * Submit the current prompt via the Mistral Vibe CLI.
+   * Maps vibe streaming events to the same SAM actions used by the Claude path.
+   * @param {string} prompt - The final prompt text to send.
+   */
+  _submitViaVibe(prompt) {
+    if (!window.puffin?.vibe) return
+
+    let unsubChunk, unsubComplete, unsubError
+
+    const cleanup = () => {
+      unsubChunk?.()
+      unsubComplete?.()
+      unsubError?.()
+    }
+
+    unsubChunk = window.puffin.vibe.onChunk((chunk) => {
+      this.intents.receiveResponseChunk(chunk)
+    })
+
+    unsubComplete = window.puffin.vibe.onComplete((response) => {
+      cleanup()
+      this.intents.completeResponse(
+        { content: response.content, turns: 1, exitCode: response.exitCode ?? 0, sessionId: null },
+        [] // filesModified — vibe doesn't track this
+      )
+    })
+
+    unsubError = window.puffin.vibe.onError((err) => {
+      cleanup()
+      this.intents.responseError({ message: err.error || String(err) })
+    })
+
+    window.puffin.vibe.submit({ prompt })
   }
 
   /**
@@ -1746,27 +1834,30 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Get the content of selected documents for inclusion in prompt
-   * @returns {Promise<string>} Combined document content
+   * Get document references for inclusion in prompt.
+   * Returns file paths rather than inline content so Claude reads them on demand
+   * via its Read tool, keeping prompt size small.
+   * @returns {Promise<string>} File-path reference section
    */
   async getSelectedDocumentsContent() {
     if (this.selectedDocuments.length === 0) return ''
 
-    const contents = []
+    const refs = []
     for (const filename of this.selectedDocuments) {
       try {
         const result = await window.puffin.state.loadDesignDocument(filename)
         if (result.success && result.document) {
-          const displayName = result.document.name || filename.replace(/\.md$/, '')
-          contents.push(`## ${displayName}\n\n${result.document.content}`)
+          // Use the absolute path so Claude can locate the file regardless of cwd
+          const filePath = result.document.path || `docs/${filename}`
+          refs.push(`- ${filePath}`)
         }
       } catch (error) {
-        console.error(`Failed to load document ${filename}:`, error)
+        console.error(`Failed to resolve document path for ${filename}:`, error)
       }
     }
 
-    if (contents.length === 0) return ''
-    return `\n\n---\n# Included Design Documents\n\n${contents.join('\n\n---\n\n')}\n---\n`
+    if (refs.length === 0) return ''
+    return `\n\n---\n# Design Document References\n\nThe following design documents are available for context. Read them as needed using your Read tool:\n\n${refs.join('\n')}\n---\n`
   }
 
   /**

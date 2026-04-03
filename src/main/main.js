@@ -48,7 +48,7 @@ if (process.platform !== 'win32') {
   }
 }
 
-const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, setupWebserverHandlers, setupSpeechHandlers, getPuffinState, getClaudeService, setClaudeServicePluginManager } = require('./ipc-handlers')
+const { setupIpcHandlers, setupPlanHandlers, setIpcProjectPath, setupPluginHandlers, setupPluginManagerHandlers, setupViewRegistryHandlers, setupPluginStyleHandlers, setupWebserverHandlers, setupSpeechHandlers, getPuffinState, getClaudeService, getVibeService, setClaudeServicePluginManager } = require('./ipc-handlers')
 const { PluginLoader, PluginManager, HistoryService, StoryService } = require('./plugins')
 const websiteServer = require('./website-server')
 const { getRecentProjects, addRecentProject, removeRecentProject } = require('./recent-projects')
@@ -467,7 +467,8 @@ async function initializeProject(projectPath) {
       services: {
         history: historyService,
         stories: storyService,
-        claudeService: getClaudeService()
+        claudeService: getClaudeService(),
+        vibeService: getVibeService()
       },
       projectPath
     })

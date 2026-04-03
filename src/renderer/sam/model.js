@@ -547,6 +547,14 @@ export const cancelPromptAcceptor = model => proposal => {
   }
 }
 
+export const setPendingPromptIdAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_PENDING_PROMPT_ID') {
+    model.pendingPromptId = proposal.payload.promptId
+    model.streamingResponse = ''
+    model.appError = null
+  }
+}
+
 export const rerunPromptAcceptor = model => proposal => {
   if (proposal?.type === 'RERUN_PROMPT') {
     const { promptId } = proposal.payload
@@ -4188,6 +4196,7 @@ export const acceptors = [
   completeResponseAcceptor,
   responseErrorAcceptor,
   cancelPromptAcceptor,
+  setPendingPromptIdAcceptor,
   rerunPromptAcceptor,
   clearRerunRequestAcceptor,
   requestContinueAcceptor,

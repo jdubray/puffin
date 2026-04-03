@@ -9,7 +9,7 @@
  */
 
 // SQL Tracing configuration - set to true to enable detailed query logging
-let SQL_TRACE_ENABLED = true
+let SQL_TRACE_ENABLED = false
 
 /**
  * Enable or disable SQL tracing globally

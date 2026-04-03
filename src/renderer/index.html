@@ -86,7 +86,7 @@
       <!-- Sidebar -->
       <aside id="sidebar">
         <div class="sidebar-section">
-          <h3>Branches</h3>
+          <h3 data-help="A Puffin branch is a named workspace for a feature or topic. Each branch holds its own conversation threads, keeping your work organised by concern — similar to a git branch, but for AI conversations.">Branches</h3>
           <ul id="branch-list" class="branch-list">
             <!-- Branches rendered dynamically -->
           </ul>
@@ -94,7 +94,7 @@
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-header">
-            <h3>Threads</h3>
+            <h3 data-help="A thread is one conversation with Claude — a prompt and its full response chain. Threads live inside a branch and let you keep separate chains of thought for different questions or tasks.">Threads</h3>
             <button id="thread-refresh-btn" class="thread-refresh-btn" title="Refresh (process sync inbox)" data-help="Refresh the thread list and process any pending sync inbox items.">↻</button>
           </div>
           <div class="thread-search-container">
@@ -159,14 +159,6 @@
 
               <fieldset class="options-fieldset">
                 <legend>Claude Guidance Options</legend>
-
-                <div class="form-group" style="margin-bottom: 1.5rem;">
-                  <label for="default-model">Default Model</label>
-                  <select id="default-model">
-                    <option value="">Loading models…</option>
-                  </select>
-                  <small class="form-hint">This model will be used by default. You can override per-thread when submitting.</small>
-                </div>
 
                 <div class="options-grid">
                   <div class="form-group">
@@ -374,6 +366,49 @@
                     <span>Enable Debug Mode</span>
                   </label>
                   <small class="form-hint">Shows a Debug tab with the full prompt sent to Claude CLI</small>
+                </div>
+              </fieldset>
+
+              <fieldset class="options-fieldset">
+                <legend>AI Providers</legend>
+                <p class="fieldset-description">Select which AI agent to use and configure its credentials. You can also switch provider per-prompt using the Provider selector above the prompt input.</p>
+
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                  <label for="default-provider">Default Provider</label>
+                  <select id="default-provider">
+                    <option value="claude">Claude (claude CLI)</option>
+                    <option value="vibe">Mistral Vibe (vibe CLI)</option>
+                    <option value="local">Local LLM via Ollama</option>
+                  </select>
+                </div>
+
+                <div class="form-group ai-provider-section" id="claude-provider-section">
+                  <label for="default-model">Default Model</label>
+                  <select id="default-model">
+                    <option value="">Loading models…</option>
+                  </select>
+                  <small class="form-hint">You can override per-thread using the Model selector above the prompt.</small>
+                </div>
+
+                <div class="form-group ai-provider-section" id="vibe-provider-section">
+                  <p class="fieldset-description" style="margin-top:0">Requires <code>pip install mistral-vibe</code>.</p>
+                  <label for="mistral-api-key-input">Mistral API Key</label>
+                  <input type="password" id="mistral-api-key-input" class="form-control" placeholder="…" autocomplete="off">
+                  <small class="form-hint">Your Mistral API key from console.mistral.ai. Stored in project config.</small>
+                  <small class="form-hint" style="margin-top:0.75rem;">Model is configured via <code>vibe --setup</code> in your terminal. Puffin only passes the API key.</small>
+                </div>
+
+                <div class="form-group ai-provider-section" id="local-provider-section">
+                  <p class="fieldset-description" style="margin-top:0">Runs a local model via Ollama + deepagents CLI.</p>
+                  <label for="deepagents-cmd-input">Deepagents Command</label>
+                  <input type="text" id="deepagents-cmd-input" class="form-control" placeholder="python /path/to/deepagents_cli.py">
+                  <small class="form-hint">Full command to invoke the deepagents CLI (replaces the <code>claude</code> command).</small>
+                  <label for="ollama-host-input" style="margin-top:0.75rem;">Ollama Host <span class="label-optional">(optional)</span></label>
+                  <input type="text" id="ollama-host-input" class="form-control" placeholder="http://localhost:11434" style="margin-top:0.25rem;">
+                  <small class="form-hint">Leave blank for the default local Ollama server.</small>
+                  <label for="ollama-model-input" style="margin-top:0.75rem;">Default Model <span class="label-optional">(optional)</span></label>
+                  <input type="text" id="ollama-model-input" class="form-control" placeholder="qwen3:8b" style="margin-top:0.25rem;">
+                  <small class="form-hint">Ollama model name (e.g. qwen3:8b, llama3.2).</small>
                 </div>
               </fieldset>
 
@@ -609,6 +644,14 @@
                   </button>
                 </div>
                 <div class="prompt-options">
+                  <div class="prompt-option-group">
+                    <label for="provider-select" class="prompt-select-label">Provider:</label>
+                    <select id="provider-select" class="prompt-model-select" title="Select AI provider">
+                      <option value="claude">Claude</option>
+                      <option value="vibe">Mistral Vibe</option>
+                      <option value="local">Local LLM</option>
+                    </select>
+                  </div>
                   <div class="prompt-option-group">
                     <label for="thread-model" class="prompt-select-label">Model:</label>
                     <select id="thread-model" class="prompt-model-select" title="Select model for this thread">

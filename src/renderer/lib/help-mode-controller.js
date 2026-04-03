@@ -68,19 +68,28 @@ export class HelpModeController {
     }
     this._pending = null // discard any queued microtask batch
     this._originals.forEach((originalTitle, el) => {
+      // Restore title
       if (originalTitle === '') {
         el.removeAttribute('title')
       } else {
         el.setAttribute('title', originalTitle)
       }
+      // Remove the data-help-active attribute used by the tooltip engine
+      el.removeAttribute('data-help-active')
     })
     this._originals.clear()
   }
 
-  /** Store the original title and replace with data-help content. */
+  /**
+   * Store the original title, set it back for accessibility, and also set
+   * data-help-active so the JS tooltip engine renders the nice styled tooltip.
+   */
   _swap(el) {
     if (this._originals.has(el)) return // already swapped
     this._originals.set(el, el.getAttribute('title') || '')
+    // Keep title for screen-reader / a11y (empty string removes it visually)
     el.setAttribute('title', el.dataset.help)
+    // Drive the styled tooltip engine
+    el.setAttribute('data-help-active', el.dataset.help)
   }
 }

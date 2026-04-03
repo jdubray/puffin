@@ -3809,6 +3809,7 @@ ${content}`
    * @returns {Promise<{version: number, toasts: Array}>} Toast history data
    */
   async getToastHistory() {
+    if (!this.puffinPath) return { version: 1, toasts: [] }
     const toastPath = path.join(this.puffinPath, TOAST_HISTORY_FILE)
     try {
       const data = await fs.readFile(toastPath, 'utf8')

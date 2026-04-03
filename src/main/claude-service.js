@@ -106,16 +106,30 @@ class ClaudeService {
     this._currentBranchId = null // Track current branch for context updates
     this._pendingQuestionTimeout = null // Auto-answer timer for AskUserQuestion
     this._pendingQuestionToolUseId = null // Tracks which tool_use is awaiting an answer
+    this._agentConfig = null // Project config for agent selection (set via setAgentConfig)
+  }
+
+  /**
+   * Update agent configuration from project config.
+   * Called whenever the project config is saved so the correct agent is used
+   * without requiring environment variables.
+   * @param {Object} config - Project config object
+   */
+  setAgentConfig(config) {
+    this._agentConfig = config || null
   }
 
   /**
    * Returns [cmd, ...prefixArgs] for spawning the agent.
-   * Reads PUFFIN_AGENT_CMD env var; falls back to ['claude'].
-   * Example: PUFFIN_AGENT_CMD="python /path/to/deepagents_cli.py"
+   * When provider is 'local', uses the deepagentsCmd from project config.
+   * Always falls back to ['claude'].
    */
   get agentCmd() {
-    const envCmd = process.env.PUFFIN_AGENT_CMD
-    return envCmd ? envCmd.trim().split(/\s+/) : ['claude']
+    if (this._agentConfig?.defaultProvider === 'local') {
+      const cmd = this._agentConfig?.deepagentsCmd?.trim()
+      if (cmd) return cmd.split(/\s+/)
+    }
+    return ['claude']
   }
 
   /**
@@ -257,8 +271,10 @@ class ClaudeService {
    * @param {Function} onComplete - Callback when complete
    * @param {Function} onRaw - Callback for raw JSON lines (optional)
    * @param {Function} onFullPrompt - Callback with the full built prompt (optional)
+   * @param {Function} onQuestion - Callback for AskUserQuestion tool (optional)
+   * @param {Function} onRateLimit - Callback when rate-limited with { resetsAt, rateLimitType } (optional)
    */
-  async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null, onQuestion = null) {
+  async submit(data, onChunk, onComplete, onRaw = null, onFullPrompt = null, onQuestion = null, onRateLimit = null) {
     // CRITICAL: Prevent multiple CLI instances from being spawned
     if (this.isProcessRunning()) {
       console.error('[CLAUDE-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
@@ -418,7 +434,7 @@ class ClaudeService {
               }
             }
 
-            this.handleStreamMessage(json, onChunk)
+            this.handleStreamMessage(json, onChunk, onRateLimit)
 
             // Capture final result and trigger completion immediately
             if (json.type === 'result') {
@@ -855,7 +871,7 @@ class ClaudeService {
    * Handle streaming JSON messages from CLI
    * @private
    */
-  handleStreamMessage(json, onChunk) {
+  handleStreamMessage(json, onChunk, onRateLimit = null) {
     switch (json.type) {
       case 'assistant':
         // Assistant message with content
@@ -911,6 +927,10 @@ class ClaudeService {
           }
           msg += '\n'
           onChunk(msg)
+          // Notify caller with structured rate limit info
+          if (onRateLimit) {
+            onRateLimit({ resetsAt: info.resetsAt || null, rateLimitType: info.rateLimitType || null })
+          }
         }
         break
       }

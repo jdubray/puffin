@@ -12,6 +12,7 @@ const path = require('path')
 const os = require('os')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
+const VibeService = require('./vibe-service')
 const { DeveloperProfileManager } = require('./developer-profile')
 const { GitService } = require('./git-service')
 const ClaudeMdGenerator = require('./claude-md-generator')
@@ -25,6 +26,7 @@ const puppeteerMcpService = require('./puppeteer-mcp-service')
 
 let puffinState = null
 let claudeService = null
+let vibeService = null
 let developerProfile = null
 let gitService = null
 let claudeMdGenerator = null
@@ -74,12 +76,16 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
   projectPath = initialProjectPath
   puffinState = new PuffinState()
   claudeService = new ClaudeService()
+  vibeService = new VibeService()
   developerProfile = new DeveloperProfileManager()
   gitService = new GitService()
   claudeMdGenerator = new ClaudeMdGenerator()
 
   // Set Claude CLI working directory to the project path
   claudeService.setProjectPath(projectPath)
+  
+  // Set Vibe CLI working directory to the project path
+  vibeService.setProjectPath(projectPath)
 
   // Set Git service project path
   gitService.setProjectPath(projectPath)
@@ -128,6 +134,9 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
   // Claude handlers
   setupClaudeHandlers(ipcMain)
 
+  // Vibe handlers
+  setupVibeHandlers(ipcMain)
+
   // File handlers
   setupFileHandlers(ipcMain)
 
@@ -162,6 +171,13 @@ function setIpcProjectPath(newProjectPath) {
   projectPath = newProjectPath
   if (claudeService) claudeService.setProjectPath(newProjectPath)
   if (gitService) gitService.setProjectPath(newProjectPath)
+  // Propagate existing config so agentCmd is correct from the first submission
+  if (claudeService && puffinState) {
+    try {
+      const config = puffinState.getCurrentConfig?.()
+      if (config) claudeService.setAgentConfig(config)
+    } catch { /* state not yet loaded */ }
+  }
 }
 
 /**
@@ -237,6 +253,9 @@ function setupStateHandlers(ipcMain) {
       } catch (creErr) {
         console.warn('[IPC] Could not update CRE config:', creErr.message)
       }
+
+      // Propagate agent config to ClaudeService so provider/deepagentsCmd take effect immediately
+      claudeService.setAgentConfig(config)
 
       // Sync snip PreToolUse hook into .claude/settings.json
       if (projectPath) {
@@ -1085,6 +1104,21 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Return the byte size of CLAUDE_{branch}.md for the active Puffin branch.
+  // Used by the renderer to show a size warning badge on the git indicator.
+  ipcMain.handle('state:getClaudeMdSize', async (event, branch) => {
+    try {
+      if (!projectPath || !branch) return { success: true, size: 0, exists: false }
+      const sanitized = branch.replace(/[^a-zA-Z0-9_-]/g, '_')
+      const filePath = require('path').join(projectPath, '.claude', `CLAUDE_${sanitized}.md`)
+      const stat = await require('fs').promises.stat(filePath)
+      return { success: true, size: stat.size, exists: true }
+    } catch (err) {
+      if (err.code === 'ENOENT') return { success: true, size: 0, exists: false }
+      return { success: false, error: err.message, size: 0 }
+    }
+  })
+
   // Activate a branch - swaps CLAUDE.md to branch-specific content
   ipcMain.handle('state:activateBranch', async (event, branchId) => {
     try {
@@ -1544,6 +1578,45 @@ function setupClaudeHandlers(ipcMain) {
 
   // Submit prompt to Claude CLI
   ipcMain.on('claude:submit', async (event, data) => {
+    // IPC-level provider redirect: if config says 'vibe', route there instead of Claude.
+    // This catches cases where the renderer routing logic fails to redirect.
+    const defaultProvider = puffinState.config?.defaultProvider || 'claude'
+    console.log('[IPC-GUARD] claude:submit called | config.defaultProvider:', defaultProvider)
+    if (defaultProvider === 'vibe') {
+      console.log('[IPC-GUARD] Redirecting claude:submit → vibe (config.defaultProvider=vibe)')
+      const config = puffinState.config || {}
+      const enriched = {
+        ...data,
+        apiKey: config.mistralApiKey,
+        model: config.vibeModel || 'devstral-2'
+      }
+      if (vibeService.isProcessRunning()) {
+        event.sender.send('claude:error', { message: 'A Vibe process is already running' })
+        return
+      }
+      // Fire vibe results back on claude:* channels so renderer listeners work regardless of routing path
+      vibeService.submit(
+        enriched,
+        (chunk) => {
+          try { event.sender.send('claude:response', chunk) } catch { /* frame gone */ }
+        },
+        (response) => {
+          try {
+            event.sender.send('claude:complete', {
+              content: response.content,
+              turns: 1,
+              exitCode: response.exitCode ?? 0,
+              sessionId: null,
+              filesModified: []
+            })
+          } catch { /* frame gone */ }
+        }
+      ).catch((err) => {
+        try { event.sender.send('claude:error', { message: err.message }) } catch { /* frame gone */ }
+      })
+      return
+    }
+
     // Additional guard at IPC layer - log and reject if already running
     if (claudeService.isProcessRunning()) {
       console.error('[IPC-GUARD] Rejected submit: CLI process already running')
@@ -1665,6 +1738,10 @@ function setupClaudeHandlers(ipcMain) {
             toolUseId: questionData.toolUseId,
             questions: questionData.questions
           })
+        },
+        // On rate limit event (status !== 'allowed')
+        (rateLimitData) => {
+          safeSend('claude:rateLimited', rateLimitData)
         }
       )
     } catch (error) {
@@ -1830,36 +1907,115 @@ function setupClaudeHandlers(ipcMain) {
   })
 
   ipcMain.handle('claude:getModels', async () => {
-    // When running standard Claude Code (no custom agent), return the built-in Claude models.
-    if (!process.env.PUFFIN_AGENT_CMD) {
-      return {
-        models: [
-          { id: 'opus', name: 'Claude Opus', description: 'Most capable' },
-          { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced' },
-          { id: 'haiku', name: 'Claude Haiku', description: 'Fast' }
-        ],
-        default: 'sonnet'
+    const config = puffinState?.getCurrentConfig?.() || {}
+
+    if (config.defaultProvider === 'local') {
+      const ollamaHost = config.ollamaHost?.trim() || 'http://localhost:11434'
+      const defaultModel = config.ollamaModel?.trim() || 'qwen3:8b'
+      try {
+        const resp = await fetch(`${ollamaHost}/api/tags`)
+        const data = await resp.json()
+        const models = (data.models || []).map(m => ({
+          id: m.name,
+          name: m.name,
+          description: `${(m.size / 1e9).toFixed(1)}GB`
+        }))
+        return { models: models.length ? models : [{ id: defaultModel, name: defaultModel, description: 'default' }], default: defaultModel }
+      } catch {
+        return { models: [{ id: defaultModel, name: defaultModel, description: 'default' }], default: defaultModel }
       }
     }
 
-    // deepagents / Ollama path
-    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434'
-    const defaultModel = process.env.DEEPAGENTS_MODEL || 'ollama:qwen3:8b'
+    return {
+      models: [
+        { id: 'opus', name: 'Claude Opus', description: 'Most capable' },
+        { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced' },
+        { id: 'haiku', name: 'Claude Haiku', description: 'Fast' }
+      ],
+      default: 'sonnet'
+    }
+  })
+}
+
+/**
+ * Vibe service IPC handlers
+ */
+function setupVibeHandlers(ipcMain) {
+  ipcMain.handle('vibe:check', async () => {
+    try {
+      const available = await vibeService.isAvailable()
+      return { available }
+    } catch (error) {
+      console.error('Vibe availability check failed:', error)
+      return { available: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('vibe:isRunning', () => {
+    try {
+      return vibeService.isProcessRunning()
+    } catch (error) {
+      console.error('Vibe isRunning check failed:', error)
+      return false
+    }
+  })
+
+  ipcMain.on('vibe:submit', async (event, data) => {
+    // Additional guard at IPC layer - log and reject if already running
+    if (vibeService.isProcessRunning()) {
+      console.error('[VIBE-GUARD] Attempted to submit while process is running')
+      event.sender.send('vibe:error', { error: 'A Vibe process is already running' })
+      return
+    }
+
+    // Inject API key and model from project config so the renderer does not
+    // need to handle credentials directly.
+    const config = puffinState?.getCurrentConfig?.() || {}
+    const enrichedData = {
+      ...data,
+      apiKey: config.mistralApiKey?.trim() || data.apiKey,
+      model: config.vibeModel?.trim() || data.model
+    }
 
     try {
-      const resp = await fetch(`${ollamaHost}/api/tags`)
-      const data = await resp.json()
-      const models = (data.models || []).map(m => ({
-        id: `ollama:${m.name}`,
-        name: m.name,
-        description: `${(m.size / 1e9).toFixed(1)}GB`
-      }))
-      return { models, default: defaultModel }
-    } catch {
-      return {
-        models: [{ id: defaultModel, name: defaultModel.replace('ollama:', ''), description: 'default' }],
-        default: defaultModel
-      }
+      await vibeService.submit(
+        enrichedData,
+        (chunk) => {
+          event.sender.send('vibe:chunk', chunk)
+        },
+        (response) => {
+          event.sender.send('vibe:complete', response)
+        }
+      )
+    } catch (error) {
+      console.error('Vibe submit failed:', error)
+      event.sender.send('vibe:error', { error: error.message })
+    }
+  })
+
+  ipcMain.on('vibe:cancel', () => {
+    vibeService.cancel()
+  })
+
+  ipcMain.handle('vibe:answer', async (event, { toolUseId, answers }) => {
+    try {
+      console.log('[VIBE-ANSWER] Received answer for tool_use_id:', toolUseId)
+      const success = vibeService.sendAnswer(toolUseId, answers)
+      return { success }
+    } catch (error) {
+      console.error('Vibe answer failed:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('vibe:getModels', async () => {
+    return {
+      models: [
+        { id: 'devstral-2', name: 'Devstral (latest)', description: 'Latest coding model — alias: devstral-2' },
+        { id: 'devstral-small', name: 'Devstral Small', description: 'Faster, lighter coding model — alias: devstral-small' },
+        { id: 'mistral-large-latest', name: 'Mistral Large', description: 'Most capable general model' }
+      ],
+      default: 'devstral-2'
     }
   })
 }
@@ -3246,6 +3402,14 @@ function getClaudeService() {
 }
 
 /**
+ * Get the Vibe service instance
+ * @returns {VibeService|null}
+ */
+function getVibeService() {
+  return vibeService
+}
+
+/**
  * Add or remove the snip PreToolUse hook from {projectPath}/.claude/settings.json.
  *
  * Merges cleanly with any existing content — only touches the snip entry inside
@@ -3513,6 +3677,8 @@ module.exports = {
   setupSpeechHandlers,
   getPuffinState,
   getClaudeService,
+  getVibeService,
   setClaudeServicePluginManager,
+  setupVibeHandlers,
   getMetricsService
 }

@@ -288,6 +288,35 @@ export class ProjectFormComponent {
       websitePortInput.addEventListener('input', () => this.handleInputChange())
     }
 
+    // AI Providers fields
+    const defaultProviderSelect = document.getElementById('default-provider')
+    if (defaultProviderSelect) {
+      defaultProviderSelect.addEventListener('change', () => {
+        this.handleInputChange()
+        this._syncProviderSections()
+      })
+    }
+    const mistralApiKeyInput = document.getElementById('mistral-api-key-input')
+    if (mistralApiKeyInput) {
+      mistralApiKeyInput.addEventListener('input', () => this.handleInputChange())
+    }
+    const vibeModelInput = document.getElementById('vibe-model-input')
+    if (vibeModelInput) {
+      vibeModelInput.addEventListener('input', () => this.handleInputChange())
+    }
+    const deepagentsCmdInput = document.getElementById('deepagents-cmd-input')
+    if (deepagentsCmdInput) {
+      deepagentsCmdInput.addEventListener('input', () => this.handleInputChange())
+    }
+    const ollamaHostInput = document.getElementById('ollama-host-input')
+    if (ollamaHostInput) {
+      ollamaHostInput.addEventListener('input', () => this.handleInputChange())
+    }
+    const ollamaModelInput = document.getElementById('ollama-model-input')
+    if (ollamaModelInput) {
+      ollamaModelInput.addEventListener('input', () => this.handleInputChange())
+    }
+
     // Speech / voice input fields — must trigger auto-save on every keystroke / change
     // so the API key is persisted before the user clicks the mic button.
     const speechApiKeyInput = document.getElementById('speech-api-key-input')
@@ -492,6 +521,21 @@ export class ProjectFormComponent {
     if (websiteServePathInput) websiteServePathInput.value = config.websiteServePath ?? 'dist'
     if (websiteServePathGroup) websiteServePathGroup.style.display = config.websiteEdition ? '' : 'none'
 
+    // AI Providers
+    const defaultProviderSelect = document.getElementById('default-provider')
+    if (defaultProviderSelect) defaultProviderSelect.value = config.defaultProvider || 'claude'
+    const mistralApiKeyInput = document.getElementById('mistral-api-key-input')
+    const vibeModelInput = document.getElementById('vibe-model-input')
+    const deepagentsCmdInput = document.getElementById('deepagents-cmd-input')
+    const ollamaHostInput = document.getElementById('ollama-host-input')
+    const ollamaModelInput = document.getElementById('ollama-model-input')
+    if (mistralApiKeyInput) mistralApiKeyInput.value = config.mistralApiKey || ''
+    if (vibeModelInput) vibeModelInput.value = config.vibeModel || ''
+    if (deepagentsCmdInput) deepagentsCmdInput.value = config.deepagentsCmd || ''
+    if (ollamaHostInput) ollamaHostInput.value = config.ollamaHost || ''
+    if (ollamaModelInput) ollamaModelInput.value = config.ollamaModel || ''
+    this._syncProviderSections()
+
     // Voice input
     const speechApiKeyInput = document.getElementById('speech-api-key-input')
     const speechModelSelect = document.getElementById('speech-model-select')
@@ -628,6 +672,12 @@ export class ProjectFormComponent {
       websiteEdition: this.getCheckboxValue('website-edition-checkbox'),
       websitePort: parseInt(this.getElementValue('website-port-input', '5000'), 10) || 5000,
       websiteServePath: this.getElementValue('website-serve-path-input', 'dist').trim() || 'dist',
+      defaultProvider: this.getElementValue('default-provider', 'claude'),
+      mistralApiKey: this.getElementValue('mistral-api-key-input', '').trim(),
+      vibeModel: this.getElementValue('vibe-model-input', '').trim(),
+      deepagentsCmd: this.getElementValue('deepagents-cmd-input', '').trim(),
+      ollamaHost: this.getElementValue('ollama-host-input', '').trim(),
+      ollamaModel: this.getElementValue('ollama-model-input', '').trim(),
       speechApiKey: this.getElementValue('speech-api-key-input', '').trim(),
       speechModel: this.getElementValue('speech-model-select', 'gpt-4o-mini-transcribe'),
       speechApiUrl: this.getElementValue('speech-api-url-input', '').trim(),
@@ -645,6 +695,20 @@ export class ProjectFormComponent {
         }
       }
     }
+  }
+
+  /**
+   * Show the credential section matching the currently selected provider,
+   * hide all others.
+   */
+  _syncProviderSections() {
+    const provider = document.getElementById('default-provider')?.value || 'claude'
+    const claudeSection = document.getElementById('claude-provider-section')
+    const vibeSection = document.getElementById('vibe-provider-section')
+    const localSection = document.getElementById('local-provider-section')
+    if (claudeSection) claudeSection.style.display = provider === 'claude' ? '' : 'none'
+    if (vibeSection) vibeSection.style.display = provider === 'vibe' ? '' : 'none'
+    if (localSection) localSection.style.display = provider === 'local' ? '' : 'none'
   }
 
   /**

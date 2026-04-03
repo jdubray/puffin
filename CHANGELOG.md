@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.11.0] - 2026-04-03
+
+### Added
+
+- **Help Mode Toggle**: A `?` button in the header activates Help Mode. When on, every element annotated with `[data-help]` swaps its tooltip to show descriptive contextual help text. A `MutationObserver` (`HelpModeController`) handles elements injected after activation (plugin buttons, dynamically rendered story cards) so the mode works across the entire UI without requiring re-activation. Original tooltip values are restored exactly on deactivation.
+- **Tooltip Engine**: New lightweight fixed-position tooltip renderer (`tooltip-engine.js`) that handles both `[data-tooltip]` and `[data-help-active]` attributes. Uses `position:fixed` so tooltips are never clipped by `overflow:hidden` ancestors — works in sidebars, plugin views, and modals. Activated via event delegation on document capture so it covers all current and future DOM elements including plugin-injected ones.
+- **Workflow State Tracker**: Pure-function module (`workflow-state-tracker.js`) that derives a concise multi-section workflow summary and detects the current workflow phase (0=Bootstrap through 10=Iterate) from SAM state and live git status. Used as structured context injected into AI prompts so Claude has accurate knowledge of what the user has done and where they are in the process. `fetchWorkflowContext()` convenience wrapper fetches git status and returns both the summary and phase descriptor in one async call.
+- **Action Card Engine**: Deterministic engine (`action-card-engine.js`) that produces a prioritised list of "next best action" cards based on workflow state, git status, and activity log — no AI calls. Each card includes a title, description, CTA label, phase badge, and a `howId` key that maps to step-by-step how-to instructions (`HOW_CONTENT`). Cards cover the full Puffin workflow: Configure → Branch → Explore → Derive Stories → Sprint → Plan → Implement → Verify → Review → Commit → Iterate, plus "no git repo" and "on main branch" reminders.
+- **Activity Log**: Persistent per-project journal of significant user actions (`activity-log.js`), stored in `localStorage` (rolling 200 entries), keyed by a hash of the project path. Tracks 23 event types across all workflow phases (prompt sent, stories derived, plan approved, assertions run, sprint closed, committed, etc.). Entries carry phase ID, human-readable label, icon, and optional detail. Provides grouped-by-phase, recent-N, and since-last-commit views for consumption by the Action Card Engine and workflow context builder.
+- **Vibe Service — Mistral Vibe CLI Integration** (`vibe-service.js`): Puffin can now drive [Mistral's Vibe CLI](https://github.com/mistralai/vibe) as an alternative agent backend. Spawns `vibe -p <prompt> --output streaming` in programmatic mode, parses newline-delimited JSON output chunk-by-chunk, and forwards text deltas to the renderer. Injects `MISTRAL_API_KEY` from project config and forces `PYTHONUNBUFFERED=1` / UTF-8 for clean streaming on all platforms. Tool-call permissions (`bash`, `write_file`, `search_replace`) are auto-set to `always` so the agent doesn't stall waiting for interactive approval. Cancel uses `taskkill /T /F` on Windows. Augments `PATH` on macOS to find `~/.local/bin` installs.
+
 ## [3.10.0] - 2026-03-30
 
 ### Added

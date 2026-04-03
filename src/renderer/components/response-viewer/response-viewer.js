@@ -32,6 +32,7 @@ export class ResponseViewerComponent {
     this.areaContainer = null
     this.markedLoaded = false
     this._phraseTimer = null
+    this.agentLabel = 'Claude'
   }
 
   /**
@@ -49,6 +50,8 @@ export class ResponseViewerComponent {
   subscribeToState() {
     document.addEventListener('puffin-state-change', (e) => {
       const { state } = e.detail
+      const provider = state.config?.defaultProvider || 'claude'
+      this.agentLabel = provider === 'vibe' ? 'Vibe' : provider === 'local' ? 'Local LLM' : 'Claude'
       this.render(state.prompt, state.history, state.storyDerivation, state.activity)
     })
   }
@@ -307,7 +310,7 @@ export class ResponseViewerComponent {
         <div class="prompt-content">${this.parseMarkdown(prompt.content)}</div>
       </div>
       <div class="response-display">
-        <div class="response-label">Claude</div>
+        <div class="response-label">${this.agentLabel}</div>
         <div class="response-message">${html}</div>
         <div class="response-actions">
           <button class="response-action-btn" data-action="copy-md" title="Copy markdown to clipboard">
@@ -343,7 +346,7 @@ export class ResponseViewerComponent {
         <div class="prompt-content">${this.parseMarkdown(prompt.content)}</div>
       </div>
       <div class="response-display pending">
-        <div class="response-label">Claude</div>
+        <div class="response-label">${this.agentLabel}</div>
         <p class="placeholder">Awaiting response...</p>
       </div>
     `
@@ -372,7 +375,7 @@ export class ResponseViewerComponent {
     // Also show the response if it exists (Claude's response before error)
     const responseHtml = prompt?.response?.content ? `
       <div class="response-display">
-        <div class="response-label">Claude</div>
+        <div class="response-label">${this.agentLabel}</div>
         <div class="response-message">${this.parseMarkdown(prompt.response.content)}</div>
       </div>
     ` : ''

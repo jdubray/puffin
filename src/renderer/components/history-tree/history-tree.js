@@ -173,6 +173,7 @@ export class HistoryTreeComponent {
       item.dataset.branchId = branch.id
       item.dataset.index = index
       item.draggable = true
+      item.dataset.help = `Branch "${branch.name}" \u2014 a named workspace for a feature or topic. Each branch holds its own conversation threads, keeping your work organised by concern. Click to switch. ${branch.promptCount} thread(s).`
       item.innerHTML = `
         <span class="drag-handle">⋮</span>
         <span class="icon">${this.getBranchIcon(branch.icon, branch.id)}</span>
@@ -331,6 +332,15 @@ export class HistoryTreeComponent {
       item.className = classes.join(' ')
       item.style.setProperty('--depth', prompt.depth)
       item.dataset.promptId = prompt.id
+
+      // Help-mode tooltip for threads
+      if (prompt.isStoryThread) {
+        item.dataset.help = `Story thread: "${prompt.storyTitle || prompt.preview}" \u2014 a conversation dedicated to implementing a user story. Status: ${prompt.storyStatus || 'unknown'}. Click to view.`
+      } else if (prompt.isDerivation) {
+        item.dataset.help = `Derivation thread \u2014 Claude analysed your conversation and generated user stories from it. Click to view.`
+      } else {
+        item.dataset.help = `Thread: "${prompt.preview}" \u2014 a single conversation with Claude. Click to view, right-click for options.`
+      }
 
       // Build the expand/collapse indicator for items with children
       const expandIndicator = prompt.hasChildren

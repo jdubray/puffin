@@ -167,6 +167,9 @@ contextBridge.exposeInMainWorld('puffin', {
     // Generate Claude.md file (legacy)
     generateClaudeMd: (options) => ipcRenderer.invoke('state:generateClaudeMd', options),
 
+    // Get the byte size of CLAUDE_{branch}.md for size-warning badge
+    getClaudeMdSize: (branch) => ipcRenderer.invoke('state:getClaudeMdSize', branch),
+
     // Activate branch - swaps CLAUDE.md to branch-specific content
     activateBranch: (branchId) => ipcRenderer.invoke('state:activateBranch', branchId),
 
@@ -319,6 +322,13 @@ contextBridge.exposeInMainWorld('puffin', {
       const handler = (event, fullPrompt) => callback(fullPrompt)
       ipcRenderer.on('claude:fullPrompt', handler)
       return () => ipcRenderer.removeListener('claude:fullPrompt', handler)
+    },
+
+    // Subscribe to rate limit events { resetsAt, rateLimitType }
+    onRateLimited: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('claude:rateLimited', handler)
+      return () => ipcRenderer.removeListener('claude:rateLimited', handler)
     },
 
     // User Story Derivation Operations
@@ -930,5 +940,32 @@ contextBridge.exposeInMainWorld('puffin', {
   speech: {
     // Transcribe audio. audioData is a plain Array of bytes (Uint8Array serialised).
     transcribe: (audioData) => ipcRenderer.invoke('speech:transcribe', { audioData })
+  },
+
+  /**
+   * Mistral Vibe CLI integration
+   */
+  vibe: {
+    check: () => ipcRenderer.invoke('vibe:check'),
+    isRunning: () => ipcRenderer.invoke('vibe:isRunning'),
+    getModels: () => ipcRenderer.invoke('vibe:getModels'),
+    submit: (data) => ipcRenderer.send('vibe:submit', data),
+    cancel: () => ipcRenderer.send('vibe:cancel'),
+    answer: (args) => ipcRenderer.invoke('vibe:answer', args),
+    onChunk: (cb) => {
+      const handler = (e, chunk) => cb(chunk)
+      ipcRenderer.on('vibe:chunk', handler)
+      return () => ipcRenderer.removeListener('vibe:chunk', handler)
+    },
+    onComplete: (cb) => {
+      const handler = (e, response) => cb(response)
+      ipcRenderer.on('vibe:complete', handler)
+      return () => ipcRenderer.removeListener('vibe:complete', handler)
+    },
+    onError: (cb) => {
+      const handler = (e, err) => cb(err)
+      ipcRenderer.on('vibe:error', handler)
+      return () => ipcRenderer.removeListener('vibe:error', handler)
+    }
   }
 })

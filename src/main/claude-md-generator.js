@@ -834,7 +834,7 @@ class ClaudeMdGenerator {
    * @private
    */
   _extractClaudeAdditions(content) {
-    const idx = content.indexOf(GENERATED_END_SENTINEL)
+    const idx = content.lastIndexOf(GENERATED_END_SENTINEL)
     if (idx === -1) return null
     const after = content.slice(idx + GENERATED_END_SENTINEL.length).trim()
     return after || null

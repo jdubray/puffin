@@ -448,6 +448,17 @@
       "type": "boolean",
       "default": false,
       "description": "If true, plugin won't be published to plugin registry"
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "Declares filesystem and system capabilities required by the plugin",
+      "properties": {
+        "fileRead": { "type": "boolean", "description": "Plugin reads files from the project" },
+        "fileWrite": { "type": "boolean", "description": "Plugin writes files to the project" },
+        "network": { "type": "boolean", "description": "Plugin makes network requests" },
+        "shell": { "type": "boolean", "description": "Plugin executes shell commands" }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

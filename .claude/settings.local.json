@@ -87,7 +87,11 @@
       "Bash(cp \"$WT/src/main/main.js\" /c/Users/jjdub/code/puffin/src/main/main.js)",
       "Bash(cp \"$WT/src/main/plugins/plugin-loader.js\" /c/Users/jjdub/code/puffin/src/main/plugins/plugin-loader.js)",
       "Bash(cp \"$WT/src/main/preload.js\" /c/Users/jjdub/code/puffin/src/main/preload.js)",
-      "Bash(cp \"$WT/src/renderer/app.js\" /c/Users/jjdub/code/puffin/src/renderer/app.js)"
+      "Bash(cp \"$WT/src/renderer/app.js\" /c/Users/jjdub/code/puffin/src/renderer/app.js)",
+      "Bash(do)",
+      "Bash(mistral-vibe --help)",
+      "Bash(python -m mistral_vibe --help)",
+      "Bash(\"C:/Users/jjdub/AppData/Local/Programs/Python/Python312/Scripts/vibe.exe\" --help)"
     ]
   },
   "enableAllProjectMcpServers": true,

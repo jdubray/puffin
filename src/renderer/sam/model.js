@@ -56,7 +56,8 @@ export const initialModel = {
         text: '#1a1a2e',
         error: '#f56565'
       }
-    }
+    },
+    helpMode: false
   },
 
   // Prompt state
@@ -543,6 +544,14 @@ export const cancelPromptAcceptor = model => proposal => {
   if (proposal?.type === 'CANCEL_PROMPT') {
     model.pendingPromptId = null
     model.streamingResponse = ''
+  }
+}
+
+export const setPendingPromptIdAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_PENDING_PROMPT_ID') {
+    model.pendingPromptId = proposal.payload.promptId
+    model.streamingResponse = ''
+    model.appError = null
   }
 }
 
@@ -4187,6 +4196,7 @@ export const acceptors = [
   completeResponseAcceptor,
   responseErrorAcceptor,
   cancelPromptAcceptor,
+  setPendingPromptIdAcceptor,
   rerunPromptAcceptor,
   clearRerunRequestAcceptor,
   requestContinueAcceptor,

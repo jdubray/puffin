@@ -18,6 +18,11 @@ import { ModalManager } from './lib/modal-manager.js'
 import { StatePersistence } from './lib/state-persistence.js'
 import { ActivityTracker } from './lib/activity-tracker.js'
 import { computeSimilarityHash, generateOutputSummary } from './lib/similarity-hash.js'
+import { HelpModeController } from './lib/help-mode-controller.js'
+import { fetchWorkflowContext } from './lib/workflow-state-tracker.js'
+import { ActivityLog, ActivityEventType } from './lib/activity-log.js'
+import { computeActionCards, HOW_CONTENT } from './lib/action-card-engine.js'
+import { initTooltipEngine } from './lib/tooltip-engine.js'
 
 // Components
 import { ProjectFormComponent } from './components/project-form/project-form.js'
@@ -1144,6 +1149,9 @@ Please provide specific file locations and line numbers where issues are found, 
     // Load state from .puffin/ directory
     await this.loadState()
 
+    // Redirect to Config on first open of an empty project
+    this._checkNewProjectOnboarding()
+
     // Initialize plugin styles (load before views to prevent flash of unstyled content)
     await this.initPluginStyles()
 
@@ -1160,6 +1168,13 @@ Please provide specific file locations and line numbers where issues are found, 
     if (this.components?.gitPanel?.refreshGitState) {
       this.components.gitPanel.refreshGitState().catch(() => {})
     }
+
+    // Initialize activity log for this project
+    this.activityLog.init(this.projectPath)
+    this.activityLog.record(ActivityEventType.PROJECT_OPENED, { name: projectName })
+
+    // Initial CLAUDE.md size badge check
+    this._updateClaudeMdSizeBadge().catch(() => {})
   }
 
   /**
@@ -1177,12 +1192,75 @@ Please provide specific file locations and line numbers where issues are found, 
       this.showToast.bind(this)
     )
     this.activityTracker = new ActivityTracker(this.intents, () => this.state)
+    this.helpModeController = new HelpModeController()
+    this.activityLog = new ActivityLog()
+
+    // Global fixed-position tooltip engine (reads data-tooltip + data-help-active)
+    initTooltipEngine()
+
+    // Expose HOW_CONTENT so modal-manager can access it without a circular import
+    window._puffinGuideHowContent = { HOW_CONTENT }
 
     // Initialize plugin view container
     this.pluginViewContainer.init()
 
     // Initialize style injector
     this.styleInjector.init()
+  }
+
+  /**
+   * Build a fresh workflow context (summary + detected phase + action cards) from the current state.
+   * Intended to be called on each next-best-action button click.
+   * @returns {Promise<{ summary: string, phase: object, actionCards: ActionCard[], activityLog: ActivityLog }>}
+   */
+  async getWorkflowSummary() {
+    const { summary, phase } = await fetchWorkflowContext(this.state)
+    let gitStatus = null
+    let isRepo    = true // assume true unless we learn otherwise
+    try {
+      if (window.puffin?.git?.getStatus)      gitStatus = await window.puffin.git.getStatus()
+      if (window.puffin?.git?.isRepository) {
+        const repoCheck = await window.puffin.git.isRepository()
+        isRepo = repoCheck?.isRepo !== false
+      }
+    } catch { /* ignore */ }
+    const actionCards = computeActionCards(this.state, gitStatus, this.activityLog, isRepo)
+
+    // Build branch/thread history for the journey timeline
+    const rawBranches = this.state?.history?.raw?.branches || {}
+    const branchOrder = this.state?.history?.branches || []
+    const branchHistory = branchOrder
+      .map(b => ({
+        id: b.id,
+        name: b.name,
+        threads: (rawBranches[b.id]?.prompts || [])
+          .filter(p => !p.parentId)
+          .map(p => ({
+            id:        p.id,
+            content:   p.content   || '',
+            type:      p.type      || 'prompt',
+            title:     p.title     || '',
+            createdAt: p.createdAt || null,
+          }))
+      }))
+      .filter(b => b.threads.length > 0)
+
+    return { summary, phase, actionCards, activityLog: this.activityLog, branchHistory }
+  }
+
+  /**
+   * Returns true if the user has any prior activity — prompts sent, stories created,
+   * or a sprint started. Used to determine the what's-next button label.
+   * @param {object} state
+   * @returns {boolean}
+   */
+  _hasAnyActivity(state) {
+    if (!state) return false
+    const branches = state.history?.raw?.branches || {}
+    const hasPrompts = Object.values(branches).some(b => b?.prompts?.length > 0)
+    const hasStories = (state.userStories?.length || 0) > 0
+    const hasSprint = !!state.activeSprint
+    return hasPrompts || hasStories || hasSprint
   }
 
   /**
@@ -1335,7 +1413,7 @@ Please provide specific file locations and line numbers where issues are found, 
       'updateConfig', 'updateOptions',
       'startCompose', 'updatePromptContent', 'submitPrompt',
       'receiveResponseChunk', 'completeResponse', 'responseError', 'cancelPrompt',
-      'rerunPrompt', 'clearRerunRequest',
+      'rerunPrompt', 'clearRerunRequest', 'setPendingPromptId',
       'requestContinue', 'clearContinueRequest',
       'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'updateBranchSettings', 'selectPrompt', 'clearPromptSelection',
       'toggleThreadExpanded', 'expandThreadToEnd', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
@@ -1410,6 +1488,7 @@ Please provide specific file locations and line numbers where issues are found, 
           // Rerun prompt actions
           ['RERUN_PROMPT', actions.rerunPrompt],
           ['CLEAR_RERUN_REQUEST', actions.clearRerunRequest],
+          ['SET_PENDING_PROMPT_ID', actions.setPendingPromptId],
 
           // Continue prompt actions
           ['REQUEST_CONTINUE', actions.requestContinue],
@@ -1731,6 +1810,41 @@ Please provide specific file locations and line numbers where issues are found, 
     // Debugger toggle
     document.getElementById('debugger-toggle')?.addEventListener('click', () => {
       this.components.debugger.toggle()
+    })
+
+    // Next-action advisor (header button)
+    document.getElementById('next-action-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('next-action-btn')
+      if (btn) { btn.disabled = true; btn.textContent = '…' }
+      try {
+        const { summary: workflowSummary, phase: currentPhase, actionCards, activityLog } = await this.getWorkflowSummary()
+        this.intents.showModal('next-action', { workflowSummary, currentPhase, actionCards, activityLog })
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Next Action' }
+      }
+    })
+
+    // What's next button (prompt toolbar — visible in help mode only)
+    document.getElementById('whats-next-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('whats-next-btn')
+      if (btn) { btn.disabled = true; btn.textContent = '…' }
+      try {
+        const { summary: workflowSummary, phase: currentPhase, actionCards, activityLog } = await this.getWorkflowSummary()
+        this.intents.showModal('next-action', { workflowSummary, currentPhase, actionCards, activityLog })
+      } finally {
+        if (btn) {
+          btn.disabled = false
+          btn.textContent = this._hasAnyActivity(this.state)
+            ? "What should I do next?"
+            : "How can I get started?"
+        }
+      }
+    })
+
+    // Help mode toggle
+    document.getElementById('help-mode-toggle')?.addEventListener('click', () => {
+      const current = this.state?.config?.helpMode || false
+      this.intents.updateConfig({ helpMode: !current })
     })
 
     // CLAUDE.md viewer button
@@ -2178,6 +2292,43 @@ Please provide specific file locations and line numbers where issues are found, 
         sessionId: response?.sessionId
       })
 
+      // Detect auth failure responses that come back as successful completions
+      // (Claude CLI exits 0 but content is "Not logged in · Please run /login")
+      // Only match Claude CLI-specific auth error strings, not broad keywords like "token" or "OAuth"
+      // that would false-positive on normal coding responses. Auth errors are also short messages
+      // (< 300 chars); real responses mentioning auth topics will be much longer.
+      const responseText = response?.content || ''
+      const isAuthResponse = responseText.length < 300 && /not logged in|please run \/login/i.test(responseText)
+      if (isAuthResponse) {
+        console.warn('[AUTH] Auth failure detected in response content — showing re-login modal')
+        // Treat as an error: revert the pending prompt to idle state
+        this.intents.responseError({ message: responseText })
+        this.components.cliOutput.setProcessing(false)
+
+        const activeBranch = this.state?.history?.activeBranch
+        const rawPrompts   = this.state?.history?.raw?.branches?.[activeBranch]?.prompts || []
+        const failedPrompt = [...rawPrompts].reverse().find(p => !p.response)
+        const ipcPayload   = this.components.promptEditor?._lastClaudePayload || null
+
+        this._authRetry = failedPrompt && ipcPayload
+          ? { promptId: failedPrompt.id, ipcPayload }
+          : null
+
+        this.intents.showModal('auth-expired', {
+          errorMessage: responseText,
+          onContinue: () => {
+            this.intents.hideModal()
+            if (this._authRetry) {
+              const { promptId, ipcPayload: payload } = this._authRetry
+              this._authRetry = null
+              this.intents.setPendingPromptId(promptId)
+              window.puffin.claude.submit(payload)
+            }
+          }
+        })
+        return
+      }
+
       // Reset screenshot badge after session ends; verdict label stays until next toggle
       if (this.state?.puppeteerLoop) {
         this._updateScreenshotBadge(0)
@@ -2196,6 +2347,9 @@ Please provide specific file locations and line numbers where issues are found, 
       if (this.state?.config?.websiteEdition) {
         this._refreshWebsiteUrlPanel().catch(() => {})
       }
+
+      // Recheck CLAUDE_{branch}.md size after every prompt — updates the header badge
+      this._updateClaudeMdSizeBadge().catch(() => {})
 
       // Capture sprint plan content if we're in planning mode
       try {
@@ -2289,13 +2443,42 @@ Please provide specific file locations and line numbers where issues are found, 
       this.intents.responseError(error)
       this.components.cliOutput.setProcessing(false)
 
-      // Show error toast to user
       const errorMessage = error?.message || String(error) || 'An unknown error occurred'
+
+      // Detect OAuth/authentication errors and offer a re-login flow
+      const isAuthError = /authentication_error|OAuth token|oauth token|token.*expired|Failed to authenticate/i.test(errorMessage)
+      if (isAuthError) {
+        // Find the failed prompt so we can restore pendingPromptId on retry
+        const activeBranch = this.state?.history?.activeBranch
+        const rawPrompts   = this.state?.history?.raw?.branches?.[activeBranch]?.prompts || []
+        const failedPrompt = [...rawPrompts].reverse().find(p => !p.response)
+        const ipcPayload   = this.components.promptEditor?._lastClaudePayload || null
+
+        this._authRetry = failedPrompt && ipcPayload
+          ? { promptId: failedPrompt.id, ipcPayload }
+          : null
+
+        this.intents.showModal('auth-expired', {
+          errorMessage,
+          onContinue: () => {
+            this.intents.hideModal()
+            if (this._authRetry) {
+              const { promptId, ipcPayload: payload } = this._authRetry
+              this._authRetry = null
+              this.intents.setPendingPromptId(promptId)
+              window.puffin.claude.submit(payload)
+            }
+          }
+        })
+        return
+      }
+
+      // Generic error toast
       this.showToast({
         type: 'error',
         title: 'Claude Error',
         message: errorMessage,
-        duration: 8000 // Show errors longer
+        duration: 8000
       })
     })
     this.claudeListeners.push(unsubError)
@@ -2324,6 +2507,13 @@ Please provide specific file locations and line numbers where issues are found, 
       })
     })
     this.claudeListeners.push(unsubQuestion)
+
+    // Rate limit event during active CLI session
+    const unsubRateLimit = window.puffin.claude.onRateLimited((data) => {
+      console.log('[RATE-LIMIT] Rate limited event received:', data)
+      this._handleRateLimitEvent(data)
+    })
+    this.claudeListeners.push(unsubRateLimit)
 
     // Bind the /btw panel on first Claude init (idempotent)
     this._bindBtwPanel()
@@ -2406,6 +2596,28 @@ Please provide specific file locations and line numbers where issues are found, 
    * Handle state changes
    */
   onStateChange({ state, changed }) {
+    // Track significant workflow events in the activity log
+    this._trackActivityLogEvents(state)
+    this._prevState = state
+
+    // Apply help mode body class and swap tooltips
+    const helpModeEnabled = state.config?.helpMode || false
+    document.body.classList.toggle('help-mode', helpModeEnabled)
+    this.helpModeController?.setEnabled(helpModeEnabled)
+    // Update help mode toggle button label
+    const helpBtn = document.getElementById('help-mode-toggle')
+    if (helpBtn) {
+      helpBtn.textContent = helpModeEnabled ? 'Help ON' : '? Help'
+      helpBtn.classList.toggle('active', helpModeEnabled)
+    }
+
+    // Update what's-next button label based on activity
+    const whatsNextBtn = document.getElementById('whats-next-btn')
+    if (whatsNextBtn) {
+      const hasActivity = this._hasAnyActivity(state)
+      whatsNextBtn.textContent = hasActivity ? "What should I do next?" : "How can I get started?"
+    }
+
     // Apply edition-specific UI gating
     this.applyWebsiteEdition(state)
 
@@ -2507,6 +2719,38 @@ Please provide specific file locations and line numbers where issues are found, 
           this._handlingCreApproval = false
         })
     }
+  }
+
+  /**
+   * Handle a rate limit event from the Claude CLI.
+   * If sprint orchestration is running, pauses it and shows a modal so the
+   * user can wait for tokens to reset and then continue.
+   *
+   * @param {{ resetsAt: number|null, rateLimitType: string|null }} data
+   */
+  _handleRateLimitEvent(data) {
+    const orchestration = this.state?.activeSprint?.orchestration
+    const isOrchestrating = orchestration?.status === OrchestrationStatus.RUNNING
+
+    if (!isOrchestrating) {
+      // Not in an automated sprint — nothing special to do, the chunk already
+      // showed the rate limit message in CLI output.
+      return
+    }
+
+    console.log('[RATE-LIMIT] Pausing sprint orchestration due to rate limit')
+    this.intents.pauseOrchestration()
+
+    // Collect stories completed so far for the modal
+    const sprint = this.state.activeSprint
+    const completedStoryIds = new Set(orchestration.completedStories || [])
+    const completedStories = (sprint.stories || []).filter(s => completedStoryIds.has(s.id))
+
+    this.intents.showModal('sprint-paused', {
+      resetsAt: data.resetsAt,
+      rateLimitType: data.rateLimitType,
+      completedStories
+    })
   }
 
   /**
@@ -2625,11 +2869,21 @@ Please provide specific file locations and line numbers where issues are found, 
     // Don't highlight built-in nav buttons if a plugin view is active
     const pluginViewActive = this.sidebarViewManager?.hasActivePluginView()
 
+    // Detect unconfigured project to pulse the Config button
+    const hasProject = !!(state.projectPath || state.projectName)
+    const hasThreads = Object.values(state.history?.raw?.branches || {}).some(b => b?.prompts?.length > 0)
+    const hasStories = (state.userStories || []).length > 0
+    const isUnconfigured = state.initialized && !hasProject && !hasThreads && !hasStories
+
     // Only update built-in nav buttons (not plugin nav buttons which manage their own state)
     document.querySelectorAll('.nav-btn:not(.plugin-nav-btn)').forEach(btn => {
       const view = btn.dataset.view
       // If a plugin view is active, don't mark any built-in nav as active
       btn.classList.toggle('active', !pluginViewActive && view === state.ui.currentView)
+      // Pulse Config button when project needs setup
+      if (view === 'config') {
+        btn.classList.toggle('needs-setup', isUnconfigured && state.ui.currentView !== 'config')
+      }
     })
   }
 
@@ -3613,6 +3867,11 @@ Please provide specific file locations and line numbers where issues are found, 
         return
       }
     })
+
+    // Continue after rate-limit modal dismissed
+    document.addEventListener('puffin:orchestration-resume-requested', () => {
+      setTimeout(() => this.continueOrchestrationAfterResume(), 450)
+    })
   }
 
   /**
@@ -4319,6 +4578,173 @@ Please provide specific file locations and line numbers where issues are found, 
   }
 
   /**
+   * On the very first open of a brand-new empty project, navigate to Config
+   * and show a welcome toast. Uses a per-project localStorage flag so the
+   * redirect fires exactly once and never again — even if the user hasn't
+   * set a project name yet.
+   */
+  _checkNewProjectOnboarding() {
+    const flagKey = `puffin-onboarded-${this._projectPathHash()}`
+
+    // Already seen — never redirect again for this project
+    if (localStorage.getItem(flagKey)) return
+
+    // Mark as seen immediately so restarts don't redirect
+    localStorage.setItem(flagKey, '1')
+
+    const s = this.state
+    if (!s) return
+
+    const hasName    = !!(s.config?.name?.trim())
+    const hasThreads = Object.values(s.history?.raw?.branches || {}).some(b => b?.prompts?.length > 0)
+    const hasStories = (s.userStories || []).length > 0
+
+    // Only redirect if the project is genuinely empty
+    if (!hasName && !hasThreads && !hasStories) {
+      this.intents.switchView('config')
+      setTimeout(() => {
+        this.showToast('Welcome! Fill in your project details to get started.', 'info', 5000)
+      }, 300)
+    }
+  }
+
+  /**
+   * Fast numeric hash of the project path — used for localStorage keys.
+   * @returns {number}
+   */
+  _projectPathHash() {
+    const path = this.projectPath || ''
+    let h = 0
+    for (let i = 0; i < path.length; i++) h = (h * 31 + path.charCodeAt(i)) >>> 0
+    return h
+  }
+
+  /**
+   * Compare current state against previous state and record notable workflow
+   * events to the activity log.
+   * @param {object} state - Current rendered state
+   */
+  _trackActivityLogEvents(state) {
+    if (!this.activityLog || !this.activityLog._key) return
+
+    const prev = this._prevState || {}
+    const log  = this.activityLog
+
+    // Prompt sent: processing flips to true
+    const wasProcessing = prev.app?.isProcessing || false
+    const isProcessing  = state.app?.isProcessing  || false
+    if (!wasProcessing && isProcessing) {
+      log.record(ActivityEventType.PROMPT_SENT)
+    }
+
+    // Stories added to backlog
+    const prevCount = (prev.userStories || []).length
+    const currCount = (state.userStories || []).length
+    if (currCount > prevCount) {
+      log.record(ActivityEventType.STORIES_ADDED, { count: currCount - prevCount })
+    }
+
+    // Sprint created
+    const hadSprint = !!prev.activeSprint
+    const hasSprint = !!state.activeSprint
+    if (!hadSprint && hasSprint) {
+      log.record(ActivityEventType.SPRINT_CREATED, { title: state.activeSprint?.title })
+    }
+
+    // Plan approved
+    const prevApproved = prev.activeSprint?.planApprovedAt
+    const currApproved = state.activeSprint?.planApprovedAt
+    if (!prevApproved && currApproved) {
+      log.record(ActivityEventType.PLAN_APPROVED)
+    }
+
+    // Story completed
+    const prevStories  = prev.activeSprint?.stories || []
+    const currStories  = state.activeSprint?.stories || []
+    for (const cs of currStories) {
+      if (cs.status === 'completed') {
+        const ps = prevStories.find(s => s.id === cs.id)
+        if (ps && ps.status !== 'completed') {
+          log.record(ActivityEventType.STORY_COMPLETED, { title: cs.title })
+        }
+      }
+    }
+
+    // Sprint completed / closed
+    const prevSprintStatus = prev.activeSprint?.status
+    const currSprintStatus = state.activeSprint?.status
+    if (prevSprintStatus !== 'completed' && currSprintStatus === 'completed') {
+      log.record(ActivityEventType.SPRINT_CLOSED, { title: state.activeSprint?.title })
+    }
+
+    // Code review started
+    const prevReview = prev.activeSprint?.codeReview?.status
+    const currReview = state.activeSprint?.codeReview?.status
+    if (prevReview !== 'in_progress' && currReview === 'in_progress') {
+      log.record(ActivityEventType.CODE_REVIEW_STARTED)
+    }
+
+    // Bug fix started
+    const prevBugFix = prev.activeSprint?.bugFix?.status
+    const currBugFix = state.activeSprint?.bugFix?.status
+    if (prevBugFix !== 'in_progress' && currBugFix === 'in_progress') {
+      log.record(ActivityEventType.BUG_FIX_STARTED)
+    }
+
+    // Assertions generated (any story that newly has inspection assertions)
+    for (const cs of (state.userStories || [])) {
+      if ((cs.inspectionAssertions || []).length > 0) {
+        const ps = (prev.userStories || []).find(s => s.id === cs.id)
+        if (!ps || (ps.inspectionAssertions || []).length === 0) {
+          log.record(ActivityEventType.ASSERTIONS_GENERATED)
+          break // record once per batch
+        }
+      }
+    }
+  }
+
+  /**
+   * Check the byte size of CLAUDE_{branch}.md for the active Puffin branch and
+   * apply a warning badge class to #git-status-indicator.
+   *
+   * Thresholds (matching recommended Claude Code guidance):
+   *   < 8 KB  → no badge
+   *   8–40 KB → 'claude-md-warn'  (yellow border)
+   *   > 40 KB → 'claude-md-critical' (red border)
+   */
+  async _updateClaudeMdSizeBadge() {
+    const indicator = document.getElementById('git-status-indicator')
+    if (!indicator) return
+
+    const branch = this.state?.history?.activeBranch
+    if (!branch) {
+      indicator.classList.remove('claude-md-warn', 'claude-md-critical')
+      return
+    }
+
+    try {
+      const result = await window.puffin?.state?.getClaudeMdSize?.(branch)
+      if (!result?.success || !result.exists) {
+        indicator.classList.remove('claude-md-warn', 'claude-md-critical')
+        return
+      }
+
+      const KB = result.size / 1024
+      if (KB > 40) {
+        indicator.classList.remove('claude-md-warn')
+        indicator.classList.add('claude-md-critical')
+      } else if (KB > 8) {
+        indicator.classList.remove('claude-md-critical')
+        indicator.classList.add('claude-md-warn')
+      } else {
+        indicator.classList.remove('claude-md-warn', 'claude-md-critical')
+      }
+    } catch {
+      // Non-fatal — badge just won't show
+    }
+  }
+
+  /**
    * Start the preview server if not already running on the correct port/path.
    * @param {number} port
    * @param {string} servePath
@@ -4540,6 +4966,7 @@ Please provide specific file locations and line numbers where issues are found, 
       const result = await window.puffin.claude.btwAsk({ question, sessionId })
       if (result.success && result.response) {
         answer.textContent = result.response
+        this.activityLog?.record(ActivityEventType.BTW_ASKED)
       } else {
         answer.textContent = result.error || 'No answer received.'
       }
@@ -6946,6 +7373,7 @@ If no issues are found, report:
     } else {
       // No findings - orchestration already marked complete by acceptor
       this.showToast('Code review complete: No issues found!', 'success')
+      setTimeout(() => this.intents.showSprintCloseModal(), 1500)
     }
   }
 
@@ -7182,6 +7610,7 @@ After fixing, respond with:
 
     this.intents.completeBugFixPhase(summary)
     this.showToast(`Orchestration complete! Fixed ${fixed}/${findings.length} issues.`, 'success')
+    setTimeout(() => this.intents.showSprintCloseModal(), 1500)
   }
 
   /**

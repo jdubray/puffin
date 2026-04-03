@@ -204,6 +204,7 @@ export class SidebarViewManager {
     header.appendChild(name)
 
     section.appendChild(header)
+    section.dataset.help = `Plugin section: ${view.name} \u2014 click to open the ${view.name} view. Provided by the "${view.pluginName}" plugin.`
 
     // Click handler
     section.addEventListener('click', () => {
@@ -230,6 +231,8 @@ export class SidebarViewManager {
     } else {
       button.textContent = view.name
     }
+
+    button.dataset.help = `Plugin: ${view.name} \u2014 click to open the ${view.name} plugin view. Provided by the "${view.pluginName}" plugin.`
 
     // Click handler
     button.addEventListener('click', (e) => {

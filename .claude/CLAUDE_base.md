@@ -36,3 +36,30 @@ All file operations must be scoped to this project directory and its subdirector
 - **Error Handling:** Exceptions
 - **Naming Convention:** camelCase
 - **Comment Style:** JSDoc
+
+## Coding Standards
+
+# JavaScript/TypeScript Coding Standards
+
+When reviewing or generating JavaScript/TypeScript code, follow these rules:
+
+## File Naming
+- **Source files:** Use kebab-case (e.g., `user-service.js`, `api-client.ts`)
+- **Component files:** Use kebab-case (e.g., `user-profile.js`, `data-table.tsx`)
+- **Test files:** Use `.test.js` or `.spec.js` suffix (e.g., `user-service.test.js`)
+
+## Variable Naming
+- **Variables:** camelCase (e.g., `userName`, `isActive`, `totalCount`)
+- **Constants:** UPPER_SNAKE_CASE for true constants (e.g., `MAX_RETRIES`, `API_BASE_URL`)
+- **Boolean variables:** Prefix with `is`, `has`, `can`, `should` (e.g., `isLoading`, `hasError`)
+
+## Function Naming
+- **Functions:** camelCase (e.g., `calculateTotal()`, `fetchUserData()`)
+- **Event handlers:** Prefix with `handle` or `on` (e.g., `handleClick`, `onSubmit`)
+
+## Class/Constructor Naming
+- **Classes:** PascalCase (e.g., `UserService`, `DataProcessor`, `ApiClient`)
+- **Interfaces (TS):** PascalCase (e.g., `IUserService` or `UserService`)
+
+## Private Members
+- **Private fields:** Prefix with underscore (e.g., `_privateData`, `_internalState`)

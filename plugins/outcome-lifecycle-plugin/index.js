@@ -11,7 +11,7 @@ const { DAGEngine } = require('./lib/dag-engine')
 const { computeStatus } = require('./lib/status-engine')
 const { extractOutcome } = require('./lib/outcome-parser')
 const ipcHandlers = require('./lib/ipc-handlers')
-const { ClaudeClient } = require('../memory-plugin/lib/claude-client')
+const { ClaudeClient } = require('../memory-plugin.disabled/lib/claude-client')
 const { SynthesisEngine } = require('./lib/synthesis-engine')
 
 const OutcomeLifecyclePlugin = {

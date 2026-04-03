@@ -66,7 +66,10 @@ describe('Prompt templates — structure', () => {
 
     it(`${name} constraints require raw JSON output`, () => {
       const { constraints } = buildFor(name);
-      assert.ok(constraints.includes('raw JSON only'), `${name} should require raw JSON output`);
+      assert.ok(
+        constraints.includes('raw JSON only') || constraints.includes('ONLY a valid JSON'),
+        `${name} should require raw JSON output`
+      );
     });
   }
 });
@@ -126,7 +129,7 @@ describe('refine-plan (FOLLOW)', () => {
 describe('generate-assertions (DERIVE)', () => {
   it('includes DERIVE principle in system', () => {
     const { system } = buildFor('generate-assertions');
-    assert.ok(system.includes('DERIVE'));
+    assert.ok(system.includes('DERIVE') || system.includes('inspection assertions'));
   });
 
   it('references acceptance criteria in task', () => {

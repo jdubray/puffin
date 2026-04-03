@@ -118,10 +118,10 @@ globalThis.window = {
    ========================================================================== */
 
 const { DAGRenderer } = await import(
-  '../../../../plugins/outcome-lifecycle-plugin/renderer/components/dag-renderer.js'
+  '../../../plugins/outcome-lifecycle-plugin/renderer/components/dag-renderer.js'
 )
 const { OutcomeLifecycleView, OutcomeLifecycleAPI } = await import(
-  '../../../../plugins/outcome-lifecycle-plugin/renderer/components/index.js'
+  '../../../plugins/outcome-lifecycle-plugin/renderer/components/index.js'
 )
 
 /* ==========================================================================
@@ -219,8 +219,10 @@ describe('DAGRenderer', () => {
 
     const dag = new DAGRenderer(container)
     await dag.render()
-    // Title should be truncated (maxChars = 18, so 17 chars + …)
-    assert.ok(!container.innerHTML.includes('that exceeds limit'))
+    // The visible <text> element should contain the truncation ellipsis (U+2026).
+    // Note: aria-label and SVG <title> intentionally carry the full text for
+    // accessibility — only the rendered text node is capped at maxChars.
+    assert.ok(container.innerHTML.includes('\u2026'), 'truncation ellipsis (…) should be present in the rendered SVG')
   })
 })
 

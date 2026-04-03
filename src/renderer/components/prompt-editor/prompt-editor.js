@@ -75,6 +75,9 @@ export class PromptEditorComponent {
     this.includeDocsBtn = document.getElementById('include-docs-btn')
     this.includeDocsDropdown = document.getElementById('include-docs-dropdown')
     this.includeDocsMenu = document.getElementById('include-docs-menu')
+    // Quick question (/btw) button
+    this.btwOpenBtn = document.getElementById('btw-open-btn')
+
     // Clear prompt button (X)
     this.clearPromptBtn = document.getElementById('clear-prompt-btn')
 
@@ -265,6 +268,13 @@ export class PromptEditorComponent {
     if (this.clearPromptBtn) {
       this.clearPromptBtn.addEventListener('click', () => {
         this.clearPrompt()
+      })
+    }
+
+    // Quick question (/btw) button — opens the btw panel
+    if (this.btwOpenBtn) {
+      this.btwOpenBtn.addEventListener('click', () => {
+        window.puffinApp?._openBtwPanel?.()
       })
     }
 

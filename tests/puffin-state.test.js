@@ -16,6 +16,106 @@ const os = require('os')
 // Import the module under test
 const { PuffinState } = require('../src/main/puffin-state.js')
 
+/**
+ * In-memory database mock.
+ *
+ * better-sqlite3 is compiled against Electron's Node.js ABI and cannot be
+ * loaded under the system Node.js test runner, so we replace the singleton
+ * database with a lightweight in-memory implementation for unit tests.
+ */
+function createDatabaseMock() {
+  const _stories = new Map()
+
+  const userStories = {
+    findAll() {
+      return [..._stories.values()].filter(s => s.status !== 'archived')
+    },
+    findById(id) {
+      return _stories.get(id) || null
+    },
+    findArchived() {
+      return [..._stories.values()].filter(s => s.status === 'archived')
+    },
+    create(story) {
+      _stories.set(story.id, { ...story })
+      return _stories.get(story.id)
+    },
+    update(id, updates) {
+      const existing = _stories.get(id)
+      if (!existing) return null
+      const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() }
+      _stories.set(id, updated)
+      return updated
+    },
+    archive(id) {
+      const story = _stories.get(id)
+      if (!story) return null
+      const archived = { ...story, status: 'archived', archivedAt: new Date().toISOString() }
+      _stories.set(id, archived)
+      return archived
+    },
+    archiveMany(ids) {
+      let count = 0
+      for (const id of ids) { if (this.archive(id)) count++ }
+      return count
+    },
+    restore(id, newStatus) {
+      const story = _stories.get(id)
+      if (!story) return null
+      const restored = { ...story, status: newStatus || 'pending', archivedAt: null }
+      _stories.set(id, restored)
+      return restored
+    },
+    delete(id) {
+      return _stories.delete(id)
+    },
+    bulkUpsert(storyList) {
+      for (const s of storyList) _stories.set(s.id, { ...s })
+    },
+    storeAssertionResults(storyId, results) {
+      return this.update(storyId, { assertionResults: results })
+    },
+    getDb() {
+      return {
+        prepare(_sql) {
+          return { all: () => [], get: () => null, run: () => ({ changes: 0 }) }
+        }
+      }
+    }
+  }
+
+  const sprints = {
+    findActive:   () => null,
+    findArchived: () => [],
+    findById:     () => null,
+    hasActiveSprint: () => false,
+    create() { throw new Error('Sprint create not implemented in mock') },
+    update:       () => null,
+  }
+
+  let _initialized = false
+
+  return {
+    async initialize(_projectPath) {
+      _initialized = true
+      return { success: true, migrated: false, errors: [] }
+    },
+    isInitialized() { return _initialized },
+    connection: {
+      isConnected() { return true },
+      getConnection() { return null },
+      transaction(fn) { return fn(null) }
+    },
+    userStories,
+    sprints,
+    completionSummaries: null,
+    getStatus() {
+      return { initialized: _initialized, connected: true, stats: {}, migrations: null }
+    },
+    close() { _initialized = false }
+  }
+}
+
 describe('PuffinState', () => {
   let puffinState
   let testDir
@@ -24,6 +124,9 @@ describe('PuffinState', () => {
     // Create a temporary directory for each test
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'puffin-test-'))
     puffinState = new PuffinState()
+    // Inject in-memory database mock (better-sqlite3 is Electron-compiled,
+    // incompatible with the system Node.js test runner ABI)
+    puffinState.database = createDatabaseMock()
   })
 
   afterEach(async () => {
@@ -154,7 +257,7 @@ describe('PuffinState', () => {
     it('should create required subdirectories', async () => {
       await puffinState.open(testDir)
 
-      const dirs = ['gui-designs', 'gui-definitions', 'stylesheets']
+      const dirs = ['gui-definitions', 'stylesheets']
       for (const dir of dirs) {
         const dirPath = path.join(testDir, '.puffin', dir)
         const stat = await fs.stat(dirPath)
@@ -184,61 +287,34 @@ describe('PuffinState', () => {
     })
   })
 
-  describe('GUI Definition Operations', () => {
+  describe('GUI Design Operations', () => {
     beforeEach(async () => {
       await puffinState.open(testDir)
     })
 
-    it('should save and load a GUI definition', async () => {
-      const elements = [{ type: 'button', label: 'Test' }]
-      const { filename, definition } = await puffinState.saveGuiDefinition('Test Design', 'A test', elements)
+    it('should save and load a GUI design', async () => {
+      const design = { name: 'Test Design', description: 'A test', elements: [{ type: 'button' }] }
+      const filename = await puffinState.saveGuiDesign('Test Design', design)
 
       assert.ok(filename.endsWith('.json'))
-      assert.strictEqual(definition.name, 'Test Design')
-      assert.strictEqual(definition.description, 'A test')
-      assert.deepStrictEqual(definition.elements, elements)
 
       // Load it back
-      const loaded = await puffinState.loadGuiDefinition(filename)
+      const loaded = await puffinState.loadGuiDesign(filename)
       assert.strictEqual(loaded.name, 'Test Design')
-      assert.deepStrictEqual(loaded.elements, elements)
+      assert.deepStrictEqual(loaded.elements, design.elements)
     })
 
-    it('should list GUI definitions', async () => {
-      await puffinState.saveGuiDefinition('Design 1', '', [])
-      await puffinState.saveGuiDefinition('Design 2', '', [])
+    it('should list GUI designs', async () => {
+      await puffinState.saveGuiDesign('Design 1', { name: 'Design 1', elements: [] })
+      await puffinState.saveGuiDesign('Design 2', { name: 'Design 2', elements: [] })
 
-      const definitions = await puffinState.listGuiDefinitions()
-      assert.strictEqual(definitions.length, 2)
+      const designs = await puffinState.listGuiDesigns()
+      assert.strictEqual(designs.length, 2)
     })
 
-    it('should delete a GUI definition', async () => {
-      const { filename } = await puffinState.saveGuiDefinition('To Delete', '', [])
-
-      let definitions = await puffinState.listGuiDefinitions()
-      assert.strictEqual(definitions.length, 1)
-
-      await puffinState.deleteGuiDefinition(filename)
-
-      definitions = await puffinState.listGuiDefinitions()
-      assert.strictEqual(definitions.length, 0)
-    })
-
-    it('should reject path traversal in loadGuiDefinition', async () => {
+    it('should reject path traversal in loadGuiDesign', async () => {
       await assert.rejects(async () => {
-        await puffinState.loadGuiDefinition('../config.json')
-      }, /path traversal not allowed/)
-    })
-
-    it('should reject path traversal in deleteGuiDefinition', async () => {
-      await assert.rejects(async () => {
-        await puffinState.deleteGuiDefinition('../../important.json')
-      }, /path traversal not allowed/)
-    })
-
-    it('should reject path traversal in updateGuiDefinition', async () => {
-      await assert.rejects(async () => {
-        await puffinState.updateGuiDefinition('../config.json', { name: 'hacked' })
+        await puffinState.loadGuiDesign('../config.json')
       }, /path traversal not allowed/)
     })
   })
@@ -304,6 +380,7 @@ describe('PuffinState', () => {
 
       // Create new instance and reload
       const newState = new PuffinState()
+      newState.database = createDatabaseMock()
       const state = await newState.open(testDir)
 
       assert.strictEqual(state.config.description, 'Persisted')

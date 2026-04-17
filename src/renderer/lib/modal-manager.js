@@ -4353,7 +4353,7 @@ export class ModalManager {
     title.textContent = 'Puffin Guide'
 
     // Build left-panel timeline HTML
-    const timelineHtml = this._buildTimelineHtml(branchHistory)
+    const timelineHtml = this._buildTimelineHtml(branchHistory, activityLog)
 
     // Build right-panel phase badge
     const phaseBadgeHtml = currentPhase
@@ -4451,48 +4451,93 @@ export class ModalManager {
   }
 
   /**
-   * Build the journey timeline HTML from branch/thread history.
-   * Groups threads by branch. Each thread shows its first prompt on hover.
+   * Build the journey timeline HTML from branch/thread history and activity log events.
+   * Produces a unified chronological list of threads, sprints, commits, docs, and config changes.
    * @param {Array<{id:string,name:string,threads:Array}>|null} branchHistory
+   * @param {import('./activity-log').ActivityLog|null} activityLog
    * @returns {string}
    */
-  _buildTimelineHtml(branchHistory) {
-    if (!branchHistory || branchHistory.length === 0) {
+  _buildTimelineHtml(branchHistory, activityLog) {
+    // Event types from the activity log that belong in the journey (excludes PROMPT_SENT
+    // which would duplicate threads, and BTW_ASKED which is ephemeral noise)
+    const MILESTONE_TYPES = new Set([
+      'branch_created', 'config_set',
+      'sprint_created', 'sprint_closed',
+      'spec_saved', 'doc_attached',
+      'committed',
+      'stories_derived', 'stories_added',
+      'plan_approved', 'story_completed',
+    ])
+
+    // Collect milestone events from the activity log
+    const milestoneEvents = activityLog
+      ? activityLog.getAll()
+          .filter(e => MILESTONE_TYPES.has(e.type))
+          .map(e => ({ ts: e.ts, icon: e.icon, label: e.label, tooltip: e.label, branch: null }))
+      : []
+
+    // Collect thread events from branchHistory.
+    // Only include threads with a completed response (hasResponse:true).
+    // Sort by responseTimestamp (when Claude finished answering) — most recent first.
+    const allThreadEvents = []
+    if (branchHistory) {
+      for (const branch of branchHistory) {
+        for (const thread of branch.threads) {
+          if (!thread.hasResponse) continue // skip threads without a completed reply
+          const icon = thread.type === 'story-thread' ? '📋'
+            : thread.type === 'derivation' ? '📎'
+            : '💬'
+          const rawText = thread.type === 'story-thread'
+            ? (thread.title || thread.content || 'Story thread')
+            : (thread.content || 'Thread')
+          allThreadEvents.push({
+            ts:     thread.responseTimestamp || thread.createdAt || 0,
+            icon,
+            label:  rawText,
+            tooltip: rawText,
+            branch: branch.name,
+          })
+        }
+      }
+    }
+    // 10 most recent replied threads, then re-sort oldest-first for display
+    const threadEvents = allThreadEvents
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 10)
+      .sort((a, b) => a.ts - b.ts)
+
+    // Milestone events — most recent 15, sorted oldest-first
+    const sortedMilestones = milestoneEvents
+      .sort((a, b) => a.ts - b.ts)
+      .slice(-15)
+
+    // Merge: milestones and threads, sorted chronologically
+    const allEvents = [...sortedMilestones, ...threadEvents]
+      .sort((a, b) => (a.ts || 0) - (b.ts || 0))
+
+    if (allEvents.length === 0) {
       return '<p class="pg-timeline-empty">No conversations yet. Start a thread to begin your journey.</p>'
     }
 
-    const groupsHtml = branchHistory.map(branch => {
-      const shown = branch.threads.slice(-8)
-      const threadsHtml = shown.map(thread => {
-        const icon = thread.type === 'story-thread' ? '📋'
-          : thread.type === 'derivation' ? '📎'
-          : '💬'
-        const rawText = thread.type === 'story-thread'
-          ? (thread.title || thread.content || 'Story thread')
-          : (thread.content || 'Thread')
-        const label = rawText.length > 65 ? rawText.substring(0, 65) + '…' : rawText
-        const timeAgo = thread.createdAt ? this._relativeTime(thread.createdAt) : ''
-        // Show full first prompt on native browser hover
-        const titleAttr = rawText ? ` title="${this.escapeHtml(rawText)}"` : ''
+    const shown = allEvents
 
-        return `<li class="pg-event"${titleAttr}>
-          <span class="pg-event-icon">${icon}</span>
-          <span class="pg-event-label">${this.escapeHtml(label)}</span>
-          ${timeAgo ? `<span class="pg-event-time">${timeAgo}</span>` : ''}
-        </li>`
-      }).join('')
+    const itemsHtml = shown.map(event => {
+      const rawLabel = event.label || ''
+      const label = rawLabel.length > 65 ? rawLabel.substring(0, 65) + '…' : rawLabel
+      const timeAgo = event.ts ? this._relativeTime(event.ts) : ''
+      const titleAttr = event.tooltip ? ` title="${this.escapeHtml(event.tooltip)}"` : ''
+      const branchTag = event.branch
+        ? ` <span class="pg-event-branch">🌿 ${this.escapeHtml(event.branch)}</span>`
+        : ''
 
-      return `<div class="pg-phase-group">
-        <div class="pg-phase-group-header">
-          <span class="pg-phase-group-dot"></span>
-          <span class="pg-phase-group-name">🌿 ${this.escapeHtml(branch.name)}</span>
-          <span class="pg-phase-group-count">${branch.threads.length}</span>
-        </div>
-        <ul class="pg-event-list">${threadsHtml}</ul>
-      </div>`
+      return `<li class="pg-event${event.icon ? '' : ' pg-event-no-icon'}"${titleAttr}>
+        ${event.icon ? `<span class="pg-event-icon">${event.icon}</span>` : ''}
+        <span class="pg-event-label">${this.escapeHtml(label)}${branchTag}</span>
+        ${timeAgo ? `<span class="pg-event-time">${timeAgo}</span>` : ''}
+      </li>`
     }).join('')
 
-    return `<div class="pg-timeline">${groupsHtml}</div>`
+    return `<ul class="pg-timeline pg-timeline-flat">${itemsHtml}</ul>`
   }
 
   /**

@@ -464,4 +464,27 @@ Your architectural analysis must include:
 - **Be Complete**: Cover all aspects of implementation, not just the happy path.
 
 
+---
+
+## Architecture Working Principles
+
+### 1. Think Before Designing
+- Map the current architecture before proposing change. Read `src/main/`, `src/renderer/sam/`, and the IPC surface in `preload.js`.
+- Identify which invariants the existing pattern protects (SAM unidirectionality, `.puffin/` as single source of truth, process isolation).
+- A good design respects existing invariants or justifies breaking them.
+
+### 2. Simplicity First
+- Prefer extending an existing layer over adding a new one.
+- Don't introduce new abstractions for a single caller. Three concrete implementations before a generalization.
+- Favor composition (acceptor + action + channel) over inheritance or heavy frameworks.
+
+### 3. Surgical Designs
+- Architecture changes propagate. Scope the proposal to the minimum layers that need to change.
+- Document the blast radius: which files, which contracts, which persisted state.
+- Backward-compatible migrations over breaking changes, unless the user has explicitly agreed to break.
+
+### 4. Goal-Driven Decisions
+- Every design choice traces to a concrete requirement or constraint. No "future-proofing" without a named future caller.
+- State trade-offs explicitly. Pick one; don't present three options and ask the user to decide.
+
 <!-- puffin:generated-end -->

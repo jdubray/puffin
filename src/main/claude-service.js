@@ -434,7 +434,13 @@ class ClaudeService {
               }
             }
 
-            this.handleStreamMessage(json, onChunk, onRateLimit)
+            // Once the first result has been received and onComplete fired, suppress
+            // further onChunk calls. Without this guard, a second CLI turn (e.g. a
+            // background test run that follows the main response) sends more assistant
+            // messages that trigger onResponse in the renderer, which calls setProcessing(true)
+            // — but onComplete never fires again, so setProcessing(false) is never called
+            // and the UI hangs in processing state indefinitely.
+            this.handleStreamMessage(json, completionCalled ? () => {} : onChunk, onRateLimit)
 
             // Capture final result and trigger completion immediately
             if (json.type === 'result') {

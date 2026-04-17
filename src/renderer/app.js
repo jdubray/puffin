@@ -1230,19 +1230,43 @@ Please provide specific file locations and line numbers where issues are found, 
     const rawBranches = this.state?.history?.raw?.branches || {}
     const branchOrder = this.state?.history?.branches || []
     const branchHistory = branchOrder
-      .map(b => ({
-        id: b.id,
-        name: b.name,
-        threads: (rawBranches[b.id]?.prompts || [])
-          .filter(p => !p.parentId)
-          .map(p => ({
-            id:        p.id,
-            content:   p.content   || '',
-            type:      p.type      || 'prompt',
-            title:     p.title     || '',
-            createdAt: p.createdAt || null,
-          }))
-      }))
+      .map(b => {
+        const allPrompts = rawBranches[b.id]?.prompts || []
+        // Build prompt map for ancestor traversal
+        const promptMap = {}
+        for (const p of allPrompts) promptMap[p.id] = p
+        // For each prompt, find its root ancestor
+        const rootOf = {}
+        for (const p of allPrompts) {
+          let cur = p
+          while (cur.parentId && promptMap[cur.parentId]) cur = promptMap[cur.parentId]
+          rootOf[p.id] = cur.id
+        }
+        // Compute lastActivityAt = max response.timestamp in each thread's subtree
+        // (response.timestamp is set by completeResponse action when Claude finishes)
+        const lastActivityAt = {}
+        for (const p of allPrompts) {
+          const rootId = rootOf[p.id]
+          const ts = p.response?.timestamp || p.timestamp || 0
+          if (!lastActivityAt[rootId] || ts > lastActivityAt[rootId]) lastActivityAt[rootId] = ts
+        }
+        return {
+          id: b.id,
+          name: b.name,
+          threads: allPrompts
+            .filter(p => !p.parentId)
+            .map(p => ({
+              id:                p.id,
+              content:           p.content   || '',
+              type:              p.type      || 'prompt',
+              title:             p.title     || '',
+              createdAt:         p.timestamp || null,
+              responseTimestamp: p.response?.timestamp || null,
+              lastActivityAt:    lastActivityAt[p.id] || p.timestamp || null,
+              hasResponse:       !!p.response,
+            }))
+        }
+      })
       .filter(b => b.threads.length > 0)
 
     return { summary, phase, actionCards, activityLog: this.activityLog, branchHistory }
@@ -1817,8 +1841,8 @@ Please provide specific file locations and line numbers where issues are found, 
       const btn = document.getElementById('next-action-btn')
       if (btn) { btn.disabled = true; btn.textContent = '…' }
       try {
-        const { summary: workflowSummary, phase: currentPhase, actionCards, activityLog } = await this.getWorkflowSummary()
-        this.intents.showModal('next-action', { workflowSummary, currentPhase, actionCards, activityLog })
+        const { summary: workflowSummary, phase: currentPhase, actionCards, activityLog, branchHistory } = await this.getWorkflowSummary()
+        this.intents.showModal('next-action', { workflowSummary, currentPhase, actionCards, activityLog, branchHistory })
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'Next Action' }
       }
@@ -1829,8 +1853,8 @@ Please provide specific file locations and line numbers where issues are found, 
       const btn = document.getElementById('whats-next-btn')
       if (btn) { btn.disabled = true; btn.textContent = '…' }
       try {
-        const { summary: workflowSummary, phase: currentPhase, actionCards, activityLog } = await this.getWorkflowSummary()
-        this.intents.showModal('next-action', { workflowSummary, currentPhase, actionCards, activityLog })
+        const { summary: workflowSummary, phase: currentPhase, actionCards, activityLog, branchHistory } = await this.getWorkflowSummary()
+        this.intents.showModal('next-action', { workflowSummary, currentPhase, actionCards, activityLog, branchHistory })
       } finally {
         if (btn) {
           btn.disabled = false
@@ -4569,6 +4593,12 @@ Please provide specific file locations and line numbers where issues are found, 
       this._stopWebserverIfRunning()
     }
 
+    // Keep the directory input in sync with the saved config value
+    const dirInput = document.getElementById('website-serve-dir-input')
+    if (dirInput && document.activeElement !== dirInput) {
+      dirInput.value = servePath
+    }
+
     // Sync visual loop button and status label with model
     const loopBtn = document.getElementById('puppeteer-loop-btn')
     if (loopBtn) {
@@ -4829,6 +4859,14 @@ Please provide specific file locations and line numbers where issues are found, 
       refreshBtn.addEventListener('click', () => this._refreshWebsiteUrlPanel())
     }
 
+    const dirInput = document.getElementById('website-serve-dir-input')
+    if (dirInput) {
+      dirInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); this._onServeDirChange(dirInput.value.trim()) }
+      })
+      dirInput.addEventListener('blur', () => this._onServeDirChange(dirInput.value.trim()))
+    }
+
     const loopBtn = document.getElementById('puppeteer-loop-btn')
     if (loopBtn) {
       loopBtn.addEventListener('click', () => this._togglePuppeteerLoop())
@@ -4845,6 +4883,31 @@ Please provide specific file locations and line numbers where issues are found, 
         this._updatePuppeteerVerdict(verdict)
       })
     }
+  }
+
+  /**
+   * Handle a change to the serve directory input in the URL panel.
+   * Persists the new value to config and restarts the preview server.
+   * @param {string} newDir - New serve path (empty string means project root)
+   */
+  _onServeDirChange(newDir) {
+    // Strip leading slashes (prevents path.join resolving to filesystem root on Windows).
+    // Treat '.' or '/' alone as "project root" (empty string).
+    let sanitized = newDir.replace(/^[/\\]+/, '')
+    if (sanitized === '.') sanitized = ''
+
+    // Reflect sanitized value back into the input
+    const dirInput = document.getElementById('website-serve-dir-input')
+    if (dirInput) dirInput.value = sanitized
+
+    const current = this.state?.config?.websiteServePath ?? 'dist'
+    if (sanitized === current) return
+
+    const port = this.state?.config?.websitePort || 5000
+    this.intents.updateConfig({ websiteServePath: sanitized })
+    // Force a restart by clearing the running cache for this port/path combination
+    this._webserverRunning = false
+    this._ensureWebserverRunning(port, sanitized)
   }
 
   /**

@@ -160,4 +160,26 @@ Interpret creatively and make unexpected choices that feel genuinely designed fo
 
 Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
 
+---
+
+## UI Working Principles
+
+### 1. Think Before Styling
+- Read the component + its CSS before editing. Check all states: default, hover, focus, disabled, loading, error.
+- Identify whether the issue is structural (HTML/layout) or visual (CSS tokens).
+
+### 2. Simplicity First
+- Reach for existing design tokens (`--color-*`, `--spacing-*`, `--radius-*`) before inventing values.
+- Prefer CSS over JS for visual behavior.
+- Reuse component patterns from the library; don't fork a new button variant for one page.
+
+### 3. Surgical Changes
+- Scope CSS edits to the component; don't reshape a shared stylesheet for a local need.
+- Preserve existing class names and markup structure unless the change demands otherwise.
+- Don't "harmonize" unrelated components while fixing one.
+
+### 4. Verify Visually
+- Open the feature in the running Electron window and exercise the golden path + edge cases.
+- Type checks and tests confirm code correctness, NOT visual correctness. If you can't verify the UI, say so explicitly.
+
 <!-- puffin:generated-end -->

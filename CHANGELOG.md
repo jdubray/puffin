@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.11.1] - 2026-04-03
+## [3.11.1] - 2026-04-17
 
 ### Added
 
 - **Quick Question Button (`/btw`)**: A **💬 Quick Q** button in the prompt editor toolbar opens the ephemeral `/btw` side-panel directly, without typing the `/btw` prefix. Answers use the current session context, never enter conversation history, and the panel can be dismissed or cleared independently.
+- **Token-Exhaustion Sprint Pause**: When the Claude CLI emits a `rate_limit_event`, Puffin now automatically pauses any running orchestration and surfaces a `sprint-paused` modal showing the limit type, the reset time (with minutes-until-reset countdown), and the list of user stories already completed in the sprint. The modal offers **Cancel** (stops orchestration, kills the CLI process) and **Continue** (resumes orchestration after the quota resets). Wiring: `claude-service.js` forwards a new `onRateLimit` callback → `ipc-handlers.js` emits `claude:rateLimited` → `app.js` handles the event and dispatches the modal, with a DOM `CustomEvent` (`puffin:orchestration-resume-requested`) used to decouple the modal from the app controller.
+- **Claude Opus 4.7 Model Selection**: The Opus option in the model dropdown now pins to the explicit model ID `claude-opus-4-7` rather than the unversioned `opus` alias, so Opus selections always resolve to the 4.7 release regardless of what the CLI alias maps to.
+- **Working Principles across all branch context files** (`.claude/CLAUDE_*.md`): Every branch context file (base, ui, backend, fullstack, bug-fixes, code-reviews, architecture, specifications, deployment, improvements, plugin, plugin-development, hdsl, hm3, rlm, tmp) now includes a branch-tailored **Working Principles** section built around four core principles — *Think Before Coding*, *Simplicity First*, *Surgical Changes*, *Goal-Driven Execution* — adapted to each branch's concerns (UI emphasizes visual verification, Backend emphasizes IPC contracts, Bug Fixes emphasizes root cause + proving the fix, etc.). The corrupted `CLAUDE_plugin.md` and `CLAUDE_plugin-development.md` files (which had duplicated base content appended after the sentinel) were also rewritten cleanly.
 
 ### Fixed
 

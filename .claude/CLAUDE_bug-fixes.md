@@ -550,4 +550,27 @@ Loop: View renders State → Actions propose → Model accepts/rejects → State
 Provides natural boundaries between representation, proposals, and validation.
 
 
+---
+
+## Bug-Fixing Working Principles
+
+### 1. Think Before Patching
+- Reproduce the bug first. A fix without a repro is a guess.
+- Find the root cause — don't patch a symptom three layers downstream of the real issue.
+- Read the surrounding code to understand what the original author intended, then decide whether the contract or the implementation is wrong.
+
+### 2. Simplicity First
+- The smallest diff that makes the repro pass is usually the right one.
+- Don't refactor while fixing. A bug fix isn't a cleanup.
+- Resist adding defensive checks everywhere; fix the one bad assumption.
+
+### 3. Surgical Changes
+- Change only the broken code path. Leave sibling code, imports, and formatting alone.
+- Don't rename variables or "clarify" logic in the same commit — it hides the actual fix in the diff.
+
+### 4. Prove the Fix
+- Re-run the repro. Confirm it no longer occurs.
+- Walk the adjacent paths: what else calls this code? Does the fix break any of them?
+- If possible, add a regression test. If you can't, document the repro steps in the commit message.
+
 <!-- puffin:generated-end -->

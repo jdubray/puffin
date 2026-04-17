@@ -63,3 +63,29 @@ When reviewing or generating JavaScript/TypeScript code, follow these rules:
 
 ## Private Members
 - **Private fields:** Prefix with underscore (e.g., `_privateData`, `_internalState`)
+
+---
+
+## Working Principles
+
+Apply these four principles to every change, regardless of branch.
+
+### 1. Think Before Coding
+- Understand the goal: what outcome does the user actually need?
+- Read the relevant files; map the current state before proposing a diff.
+- Identify the root cause, not just the symptom.
+
+### 2. Simplicity First
+- Prefer the smallest change that solves the problem.
+- Reuse existing patterns, helpers, and tokens — don't introduce new abstractions for a single caller.
+- No speculative features, no "just in case" parameters.
+
+### 3. Surgical Changes
+- Touch only what the task requires. Leave unrelated code alone.
+- Preserve existing formatting, naming, and file structure.
+- Don't reorder imports, reshuffle sections, or "tidy" neighbors.
+
+### 4. Goal-Driven Execution
+- Every edit must trace back to the stated goal.
+- Verify the change works end-to-end before declaring done.
+- If scope drift happens, stop and surface it — don't quietly expand.

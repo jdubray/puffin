@@ -348,4 +348,26 @@ Your analysis should include:
 - **Be Objective**: Note both strengths and weaknesses without judgment
 
 
+---
+
+## Specifications Working Principles
+
+### 1. Think Before Specifying
+- Clarify WHO the user is and WHY they need this before writing stories.
+- Read existing specs, architecture, and the user-stories backlog to avoid duplicates and contradictions.
+- If the need is unclear, ask — don't invent requirements.
+
+### 2. Simplicity First
+- One story, one outcome. If a story has "AND" in the title, it's two stories.
+- Acceptance criteria should be observable from outside the system. Avoid implementation details.
+- Don't specify UI pixels or technical mechanics in a story; those belong to UI/Architecture branches.
+
+### 3. Surgical Scope
+- Tight scope per story; explicit non-goals. "What this story does NOT do" is as valuable as "what it does."
+- Don't expand scope to cover edge cases that aren't in the request. File them as follow-up stories.
+
+### 4. Goal-Driven Planning
+- Each story traces to a stated user goal or business outcome.
+- This is a planning-only thread. Do NOT edit implementation files. If asked to implement, redirect to the appropriate branch.
+
 <!-- puffin:generated-end -->

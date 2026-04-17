@@ -1928,7 +1928,7 @@ function setupClaudeHandlers(ipcMain) {
 
     return {
       models: [
-        { id: 'opus', name: 'Claude Opus', description: 'Most capable' },
+        { id: 'claude-opus-4-7', name: 'Claude Opus', description: 'Most capable' },
         { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced' },
         { id: 'haiku', name: 'Claude Haiku', description: 'Fast' }
       ],

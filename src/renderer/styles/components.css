@@ -13272,6 +13272,36 @@ body.website-edition #website-url-panel {
   background: var(--bg-tertiary);
 }
 
+.website-serve-dir-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.25rem 0.25rem;
+  flex-shrink: 0;
+}
+
+.website-serve-dir-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.website-serve-dir-input {
+  flex: 1;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.website-serve-dir-input:focus {
+  outline: none;
+  border-color: var(--accent-color, #4a90b4);
+}
+
 /* /btw sidebar note panel */
 .btw-panel {
   margin: 0 0 8px 0;
@@ -14163,6 +14193,10 @@ body.website-edition .plugin-nav-btn[data-plugin-name="rlm-document-plugin"] {
   align-items: baseline;
 }
 
+.pg-event.pg-event-no-icon {
+  grid-template-columns: 1fr auto;
+}
+
 .pg-event-icon {
   font-size: 0.65rem;
   line-height: 1.6;
@@ -14180,6 +14214,24 @@ body.website-edition .plugin-nav-btn[data-plugin-name="rlm-document-plugin"] {
   color: var(--text-muted, var(--text-secondary));
   white-space: nowrap;
   opacity: 0.6;
+}
+
+/* Flat chronological timeline variant (no branch groups) */
+.pg-timeline-flat {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 0.2rem;
+  border-left: 2px solid rgba(108, 99, 255, 0.18);
+  padding-left: 0.75rem;
+}
+
+.pg-event-branch {
+  font-size: 0.6rem;
+  color: var(--color-primary, #6c63ff);
+  opacity: 0.7;
+  margin-left: 0.3rem;
+  white-space: nowrap;
 }
 
 /* ---------- Right panel: phase badge ---------- */

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.11.2] - 2026-04-17
+
+### Fixed
+
+- **Website-Serve Directory Input — HTML Completed**: The `website-serve-dir-input` text input (used to configure the subdirectory served by the Website Edition preview server) was half-shipped in v3.11.1: the JS listeners in `app.js` and the CSS rules in `components.css` both referenced the element, but the `<input>` markup itself was missing from `index.html`. This release adds the HTML block (`.website-serve-dir-row` with label + input) so the feature actually renders and accepts input.
+- **`_saveToastHistory` Crash on Startup**: Added a `this.puffinPath` nullcheck at the top of `PuffinState._saveToastHistory()` so the method returns silently when invoked before a project is selected. Previously, `path.join(null, TOAST_HISTORY_FILE)` would throw a `TypeError` during early lifecycle events, noisily surfacing in logs.
+- **CRE — Silenced Expected Startup Warning**: `cre:list-ris-story-ids` no longer logs `[CRE] … called before initialization` when invoked during initial state sync. This is an expected startup race (the IPC handler is registered before the project DB is attached) and the warning was misleading. The handler still returns `{ success: false, storyIds: [] }` gracefully.
+
 ## [3.11.1] - 2026-04-17
 
 ### Added

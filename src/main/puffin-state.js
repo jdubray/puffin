@@ -3832,6 +3832,7 @@ ${content}`
    * @private
    */
   async _saveToastHistory(toastHistory) {
+    if (!this.puffinPath) return // no project selected yet — skip silently
     const toastPath = path.join(this.puffinPath, TOAST_HISTORY_FILE)
     await fs.writeFile(toastPath, JSON.stringify(toastHistory, null, 2))
   }

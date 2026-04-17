@@ -700,7 +700,7 @@ function registerHandlers(ipcMain) {
   ipcMain.handle('cre:list-ris-story-ids', async () => {
     try {
       if (!ctx || !ctx.db) {
-        console.warn('[CRE] cre:list-ris-story-ids called before initialization');
+        // Called during initial state sync before project DB is ready — expected startup race, not an error
         return { success: false, storyIds: [] };
       }
       const rows = ctx.db.prepare(

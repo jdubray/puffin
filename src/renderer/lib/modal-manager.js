@@ -2009,6 +2009,10 @@ export class ModalManager {
     if (!text) return ''
 
     return text
+      // Escape HTML first to prevent XSS — AI-generated content may contain raw tags
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
       // Headers
       .replace(/^#### (.+)$/gm, '<h5>$1</h5>')
       .replace(/^### (.+)$/gm, '<h4>$1</h4>')

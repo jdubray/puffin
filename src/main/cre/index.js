@@ -699,8 +699,8 @@ function registerHandlers(ipcMain) {
   // the ephemeral sprint.risMap (which is lost on restart).
   ipcMain.handle('cre:list-ris-story-ids', async () => {
     try {
-      if (!ctx || !ctx.db) {
-        // Called during initial state sync before project DB is ready — expected startup race, not an error
+      if (!ctx || !ctx.db || !ctx.db.open) {
+        // DB not ready or connection closed (startup race, or CRE deactivated) — expected, not an error
         return { success: false, storyIds: [] };
       }
       const rows = ctx.db.prepare(

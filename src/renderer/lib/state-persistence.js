@@ -113,13 +113,11 @@ export class StatePersistence {
       'SUBMIT_PROMPT', 'COMPLETE_RESPONSE',
       'SELECT_BRANCH', 'SELECT_PROMPT', 'CREATE_BRANCH', 'DELETE_BRANCH', 'REORDER_BRANCHES',
       'UPDATE_BRANCH_SETTINGS',
-      'ADD_GUI_ELEMENT', 'UPDATE_GUI_ELEMENT', 'DELETE_GUI_ELEMENT',
-      'MOVE_GUI_ELEMENT', 'RESIZE_GUI_ELEMENT', 'CLEAR_GUI_CANVAS',
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
       'ADD_STORIES_TO_BACKLOG',
       // Sprint actions
       'CREATE_SPRINT', 'START_SPRINT_PLANNING', 'CRE_PLANNING_COMPLETE', 'CRE_PLANNING_ERROR', 'CRE_INTROSPECTION_COMPLETE',
-      'APPROVE_PLAN', 'SET_SPRINT_PLAN', 'ITERATE_SPRINT_PLAN',
+      'APPROVE_PLAN', 'SET_SPRINT_PLAN',
       'CLEAR_SPRINT', 'CLEAR_SPRINT_WITH_DETAILS', 'DELETE_SPRINT',
       'START_SPRINT_STORY_IMPLEMENTATION', 'UPDATE_SPRINT_STORY_STATUS',
       'UPDATE_SPRINT_STORY_ASSERTIONS',
@@ -129,10 +127,17 @@ export class StatePersistence {
       'FINALIZE_STORY_GENERATION', 'CREATE_IMPLEMENTATION_JOURNEY',
       'ADD_IMPLEMENTATION_INPUT', 'UPDATE_IMPLEMENTATION_JOURNEY',
       'COMPLETE_IMPLEMENTATION_JOURNEY',
-      // Story feedback actions (trigger generation tracking persistence)
-      'MARK_STORY_READY', 'UNMARK_STORY_READY', 'UPDATE_DERIVED_STORY', 'DELETE_DERIVED_STORY',
       // Thread completion (triggers journey completion)
-      'MARK_THREAD_COMPLETE', 'UNMARK_THREAD_COMPLETE'
+      'MARK_THREAD_COMPLETE', 'UNMARK_THREAD_COMPLETE',
+      // Orchestration actions
+      'SELECT_IMPLEMENTATION_MODE', 'START_AUTOMATED_IMPLEMENTATION',
+      'ORCHESTRATION_STORY_STARTED', 'ORCHESTRATION_STORY_COMPLETED',
+      'UPDATE_ORCHESTRATION_PHASE', 'PAUSE_ORCHESTRATION', 'RESUME_ORCHESTRATION', 'STOP_ORCHESTRATION',
+      // Code review actions
+      'START_CODE_REVIEW', 'ADD_CODE_REVIEW_FINDING', 'SET_CODE_REVIEW_FINDINGS',
+      'COMPLETE_CODE_REVIEW', 'UPDATE_FINDING_STATUS',
+      // Bug fix actions
+      'START_BUG_FIX_PHASE', 'START_FIXING_FINDING', 'COMPLETE_FIXING_FINDING', 'COMPLETE_BUG_FIX_PHASE'
     ]
 
     if (!persistActions.includes(normalizedType)) {
@@ -234,11 +239,10 @@ export class StatePersistence {
                 console.log('[PERSIST-DEBUG] User story added:', newestStory.id, 'result:', result)
                 // Update in-memory state with auto-generated assertions from IPC handler
                 if (result.success && result.story?.inspectionAssertions?.length > 0) {
-                  const index = state.userStories.findIndex(s => s.id === result.story.id)
-                  if (index !== -1) {
-                    state.userStories[index].inspectionAssertions = result.story.inspectionAssertions
-                    console.log('[PERSIST-DEBUG] Updated in-memory story with auto-generated assertions:', result.story.inspectionAssertions.length)
-                  }
+                  this.intents.updateUserStory(result.story.id, {
+                    inspectionAssertions: result.story.inspectionAssertions
+                  })
+                  console.log('[PERSIST-DEBUG] Dispatched UPDATE_USER_STORY with auto-generated assertions:', result.story.inspectionAssertions.length)
                 }
               } catch (e) {
                 // Story might already exist, try updating
@@ -600,11 +604,10 @@ export class StatePersistence {
           if (storiesWithGeneratedAssertions.length > 0) {
             console.log('[PERSIST-DEBUG] Updating in-memory state with', storiesWithGeneratedAssertions.length, 'stories that have generated assertions')
             for (const updatedStory of storiesWithGeneratedAssertions) {
-              const index = state.userStories.findIndex(s => s.id === updatedStory.id)
-              if (index !== -1) {
-                state.userStories[index].inspectionAssertions = updatedStory.inspectionAssertions
-                console.log('[PERSIST-DEBUG] Updated in-memory story with assertions:', updatedStory.id, updatedStory.inspectionAssertions.length)
-              }
+              this.intents.updateUserStory(updatedStory.id, {
+                inspectionAssertions: updatedStory.inspectionAssertions
+              })
+              console.log('[PERSIST-DEBUG] Dispatched UPDATE_USER_STORY with assertions:', updatedStory.id, updatedStory.inspectionAssertions.length)
             }
           }
         } else {
@@ -697,7 +700,7 @@ export class StatePersistence {
             prompt: pendingSprintImpl.promptContent,
             branchId: pendingSprintImpl.branchId,
             sessionId,
-            maxTurns: 40, // Max turns per request
+            maxTurns: 100, // Max turns per request
             project: state.config ? {
               name: state.config.name,
               description: state.config.description

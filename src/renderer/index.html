@@ -73,6 +73,7 @@
       <div class="header-right">
         <button id="next-action-btn" class="next-action-btn" title="What should I do next?" data-help="Open the Next Action advisor — shows what you have been doing and recommends the best next step.">Next Action</button>
         <button id="help-mode-toggle" class="help-mode-btn" title="Toggle Help Mode" data-help="Toggle help mode to show descriptive tooltips on every button so you can learn what each control does.">? Help</button>
+        <div id="rate-limit-widget" class="rate-limit-widget hidden" title="Claude rate limit status"></div>
         <div id="git-status-indicator" class="git-indicator hidden" title="Git branch status"></div>
         <span id="save-indicator" class="save-indicator hidden">●</span>
         <button id="debugger-toggle" class="icon-btn" title="SAM Debugger (Ctrl+Shift+D)" data-help="Open the SAM state debugger to inspect application state and action history (Ctrl+Shift+D).">
@@ -606,16 +607,6 @@
 
             <!-- Middle Swimlane: Conversation View -->
             <main class="swimlane swimlane-middle">
-              <!-- Branch Tabs -->
-              <div class="branch-tabs">
-                <button class="branch-tab active" data-branch="specifications" data-help="Switch to the Specifications branch for requirements and user stories work.">Specifications</button>
-                <button class="branch-tab" data-branch="architecture" data-help="Switch to the Architecture branch for system design and technical planning.">Architecture</button>
-                <button class="branch-tab" data-branch="ui" data-help="Switch to the UI branch for frontend and interface design work.">UI</button>
-                <button class="branch-tab" data-branch="backend" data-help="Switch to the Backend branch for server-side and API implementation work.">Backend</button>
-                <button class="branch-tab" data-branch="deployment" data-help="Switch to the Deployment branch for CI/CD and infrastructure work.">Deployment</button>
-                <button class="branch-tab" data-branch="tmp" data-help="Switch to the Tmp branch for temporary experiments and one-off tasks.">Tmp</button>
-              </div>
-
               <div class="response-area" id="response-area">
                 <div id="response-content" class="response-content">
                   <p class="placeholder">Select a thread and start a conversation with Claude...</p>
@@ -679,6 +670,9 @@
                   </button>
                   <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread" data-help="Clear the prompt and start a new conversation thread on the current branch.">
                     Create New Thread
+                  </button>
+                  <button id="review-thread-btn" class="btn outline" title="Quick sanity check on code implemented in this thread" data-help="Ask Claude to review the code implemented in this thread and flag any issues.">
+                    🔍 Review Thread
                   </button>
                   <button id="btw-open-btn" class="btn outline" title="Ask a quick question without adding to history (/btw)" data-help="Open the Quick Question panel to ask Claude a one-off question without adding it to conversation history.">
                     💬 Quick Q

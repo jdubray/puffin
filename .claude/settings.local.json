@@ -91,7 +91,8 @@
       "Bash(do)",
       "Bash(mistral-vibe --help)",
       "Bash(python -m mistral_vibe --help)",
-      "Bash(\"C:/Users/jjdub/AppData/Local/Programs/Python/Python312/Scripts/vibe.exe\" --help)"
+      "Bash(\"C:/Users/jjdub/AppData/Local/Programs/Python/Python312/Scripts/vibe.exe\" --help)",
+      "Bash(npm test:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

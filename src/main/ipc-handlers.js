@@ -1784,7 +1784,8 @@ function setupClaudeHandlers(ipcMain) {
         sessionId: sessionId || null, // resume session for context
         disableTools: true,           // no file access — answers from context only
         maxTurns: 1,
-        model: null                   // inherits default model
+        model: null,                  // inherits default model
+        allowConcurrent: true         // safe: one-shot --print, no tools, separate proc
       })
       return result
     } catch (error) {
@@ -2730,6 +2731,20 @@ function setupShellHandlers(ipcMain) {
   // Open external URL in default browser
   ipcMain.handle('shell:openExternal', async (event, url) => {
     try {
+      if (typeof url !== 'string') {
+        return { success: false, error: 'URL must be a string' }
+      }
+      let parsed
+      try {
+        parsed = new URL(url)
+      } catch {
+        return { success: false, error: 'Invalid URL' }
+      }
+      // Restrict to safe remote schemes; block file:, javascript:, data:, etc.
+      const allowedProtocols = new Set(['http:', 'https:', 'mailto:'])
+      if (!allowedProtocols.has(parsed.protocol)) {
+        return { success: false, error: `Protocol not allowed: ${parsed.protocol}` }
+      }
       await shell.openExternal(url)
       return { success: true }
     } catch (error) {
@@ -3518,9 +3533,20 @@ function setupPlanHandlers(ipcMain) {
   ipcMain.handle('plan:saveToDocs', async (event, { filename, content }) => {
     try {
       if (!projectPath) return { success: false, error: 'No project path set' }
+      if (!filename || typeof filename !== 'string') {
+        return { success: false, error: 'Invalid filename' }
+      }
+      // Reject any path separators or traversal sequences; only allow a bare filename.
+      if (/[\\/]/.test(filename) || filename.includes('..') || path.isAbsolute(filename)) {
+        return { success: false, error: 'Filename must not contain path separators' }
+      }
       const docsDir = path.join(projectPath, 'docs', 'plans')
       if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true })
-      const dest = path.join(docsDir, filename)
+      const dest = path.resolve(docsDir, filename)
+      const resolvedDocsDir = path.resolve(docsDir)
+      if (dest !== resolvedDocsDir && !dest.startsWith(resolvedDocsDir + path.sep)) {
+        return { success: false, error: 'Resolved path escapes plans directory' }
+      }
       fs.writeFileSync(dest, content, 'utf8')
       console.log(`[PLAN] Saved plan to ${dest}`)
       return { success: true, filePath: dest }

@@ -294,11 +294,37 @@ export class GitPanelComponent {
     const hasChanges = this.status?.hasChanges
     const statusClass = hasChanges ? 'has-changes' : 'clean'
 
+    // Build per-type counts for unstaged/untracked files
+    const typeCounts = {}
+    const unstaged = this.status?.files?.unstaged || []
+    const untracked = this.status?.files?.untracked || []
+    for (const f of unstaged) {
+      typeCounts[f.status] = (typeCounts[f.status] || 0) + 1
+    }
+    if (untracked.length > 0) {
+      typeCounts['untracked'] = (typeCounts['untracked'] || 0) + untracked.length
+    }
+
+    const badgeConfig = {
+      modified:  { color: '#ecc94b', title: 'modified' },
+      deleted:   { color: '#f56565', title: 'deleted' },
+      untracked: { color: '#718096', title: 'untracked' },
+      added:     { color: '#48bb78', title: 'added (unstaged)' },
+    }
+
+    const badgesHtml = Object.entries(typeCounts)
+      .filter(([, count]) => count > 0)
+      .map(([type, count]) => {
+        const cfg = badgeConfig[type] || { color: '#a0aec0', title: type }
+        return `<span class="git-status-badge" style="background:${cfg.color}" title="${count} ${cfg.title}">${count}</span>`
+      })
+      .join('')
+
     this.statusIndicator.className = `git-indicator ${statusClass}`
     this.statusIndicator.innerHTML = `
       <span class="git-branch-icon">⎇</span>
       <span class="git-branch-name">${this.escapeHtml(this.currentBranch)}</span>
-      ${hasChanges ? '<span class="git-changes-dot" title="Uncommitted changes">●</span>' : ''}
+      ${badgesHtml}
     `
     this.statusIndicator.classList.remove('hidden')
   }

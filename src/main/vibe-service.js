@@ -170,8 +170,8 @@ class VibeService {
     if (this.currentProcess) {
       try {
         if (process.platform === 'win32') {
-          const { exec } = require('child_process')
-          exec(`taskkill /pid ${this.currentProcess.pid} /T /F`)
+          const { execFile } = require('child_process')
+          execFile('taskkill', ['/pid', String(this.currentProcess.pid), '/T', '/F'])
         } else {
           this.currentProcess.kill('SIGTERM')
         }

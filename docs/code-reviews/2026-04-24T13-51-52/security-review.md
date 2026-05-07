@@ -1,0 +1,17 @@
+# Code Review: Security Review
+
+**Date:** 2026-04-24
+
+## Summary
+Most renderer components correctly route user- and AI-supplied values through `escapeHtml()` before assigning to `innerHTML`, and main-process file/DB/IPC boundaries use parameterized SQL, `path.join`/`path.resolve` with validation, and `spawn` with arg arrays. Seven unsafe DOM-injection sites remain in the renderer (plugin manager, developer profile, prompt editor, user stories, CLI output) where externally-sourced strings — plugin manifest fields, profile import data, image filenames, upstream error messages, AI tool names, and the JSON-stringified fallback of CLI stream payloads — are interpolated into `innerHTML` attributes or text without escaping. A conditional Windows `shell:true` fallback in `claude-service.js` also spawns with user-supplied prompt args when the resolved `claude` binary is a `.cmd` wrapper.
+
+## Findings
+
+- **[IMPORTANT]** UNESCAPED_AI_CONTENT src/renderer/components/cli-output/cli-output.js:618 — `getMessagePreview` fallback returns raw `JSON.stringify(data).substring(0, 80)` (no `escapeHtml`) which is then embedded into `innerHTML` at line 394 for any non-assistant/user/result stream message; AI-supplied payloads containing `<script>` reach the DOM unescaped.
+- **[IMPORTANT]** UNESCAPED_AI_CONTENT src/renderer/components/cli-output/cli-output.js:600 — `${block.name}` (AI-supplied tool name from the CLI stream) is interpolated into the `innerHTML` template at line 394 with no `escapeHtml()` wrapping.
+- **[IMPORTANT]** UNSAFE_INNERHTML src/renderer/components/plugin-manager/plugin-manager.js:124 — `${displayName}`, `${version}`, `${description}` from the plugin manifest injected into `innerHTML` without `escapeHtml()`; malicious plugin JSON can execute script in the renderer.
+- **[IMPORTANT]** UNSAFE_ATTR_INJECTION src/renderer/components/plugin-manager/plugin-manager.js:133 — `data-plugin="${plugin.name}"` interpolates the raw plugin name into an attribute context with no `escapeAttr()`; a manifest name containing `"` breaks out of the attribute.
+- **[IMPORTANT]** UNSAFE_INNERHTML src/renderer/components/developer-profile/developer-profile.js:319 — `<img src="${profile.avatarUrl}">` concatenates the imported profile's `avatarUrl` directly into an attribute; `profile:import` (ipc-handlers.js:2257) accepts arbitrary JSON, so an attacker-controlled value can escape the `src` attribute.
+- **[IMPORTANT]** UNSAFE_INNERHTML src/renderer/components/prompt-editor/prompt-editor.js:671 — `${this.truncateFilename(img.originalName, 15)}` places the raw uploaded filename into `innerHTML` text content with no `escapeHtml()`; image filenames originate from file-system/import inputs.
+- **[IMPORTANT]** UNSAFE_INNERHTML src/renderer/components/user-stories/user-stories.js:1875 — `` `<span class="assertion-icon error">!</span> Error: ${errorMessage}` `` assigns an error string (propagated from assertion-evaluator/IPC failures) into `innerHTML` with no `escapeHtml()`.
+- **[INFO]** SPAWN_SHELL_TRUE_WITH_VARIABLE src/main/claude-service.js:1349 — `getSpawnOptions` sets `shell: true` on Windows whenever `claude` is not a `.exe` (e.g., `.cmd` wrapper); the resulting `spawn(agentExe, [...agentPrefixArgs, ...args], spawnOptions)` (lines 335, 1698, 1989, 2161, 2553) passes user-supplied prompt text and JSON schemas as args that cmd.exe will re-parse, re-introducing the metacharacter/quote-mangling class of issues the rest of the code tries to avoid.

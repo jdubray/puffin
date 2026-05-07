@@ -378,6 +378,14 @@ class GitService {
    * @returns {Promise<{success: boolean, branch?: string, error?: string}>}
    */
   async checkout(name) {
+    const validation = this.validateBranchName(name)
+    if (!validation.valid) {
+      return { success: false, error: validation.error }
+    }
+    // Reject any branch name that git would parse as a CLI flag (e.g. `--detach`, `-q`).
+    if (typeof name === 'string' && name.trim().startsWith('-')) {
+      return { success: false, error: 'Branch name cannot start with "-"' }
+    }
     try {
       const result = await this.execGit(['checkout', name])
       if (result.code === 0) {

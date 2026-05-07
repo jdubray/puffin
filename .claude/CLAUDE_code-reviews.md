@@ -253,26 +253,4 @@ Issues that should be fixed but may not cause immediate problems.
 - **Be Helpful**: Explain why something is a problem, not just that it is
 
 
----
-
-## Review Working Principles
-
-### 1. Think Before Commenting
-- Read the full diff first. Understand the intent before flagging lines.
-- Check existing patterns — what reads as odd may be the house style.
-- Distinguish "this is wrong" from "I would have written it differently."
-
-### 2. Simplicity First
-- Flag missing logic over excess logic. Speculative features are a real cost.
-- Prefer one well-justified comment over ten nitpicks. Reviewer attention is a scarce resource.
-
-### 3. Surgical Feedback
-- Comment on the lines that changed. Pre-existing issues belong in a separate ticket unless they directly enable the new bug.
-- Don't demand scope expansion ("while you're here, also fix X"). If the new code isn't the right place, say so and move on.
-
-### 4. Goal-Driven Review
-- Does this change achieve its stated goal? That's the first question.
-- Only report issues with confidence ≥ 80. Below that, it's noise.
-- Every comment needs an actionable fix or question. "This smells" without a suggestion is not useful.
-
 <!-- puffin:generated-end -->

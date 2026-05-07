@@ -1,0 +1,7 @@
+{
+  "name": "code-review-plugin",
+  "version": "1.0.0",
+  "description": "Puffin code review plugin",
+  "main": "index.js",
+  "private": true
+}

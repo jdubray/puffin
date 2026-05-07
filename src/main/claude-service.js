@@ -160,8 +160,8 @@ class ClaudeService {
   _killProcess(proc) {
     if (!proc) return
     if (process.platform === 'win32' && proc.pid) {
-      const { exec } = require('child_process')
-      exec(`taskkill /pid ${proc.pid} /T /F`, (err) => {
+      const { execFile } = require('child_process')
+      execFile('taskkill', ['/pid', String(proc.pid), '/T', '/F'], (err) => {
         if (err) {
           try { proc.kill('SIGTERM') } catch { /* already dead */ }
         }
@@ -798,7 +798,7 @@ class ClaudeService {
     args.push('--input-format', 'stream-json')
 
     // Limit turns to prevent runaway processes
-    args.push('--max-turns', String(data.maxTurns || '40'))
+    args.push('--max-turns', String(data.maxTurns || '100'))
 
     // Permission mode: bypass all prompts when puppeteer loop is active (user opted in),
     // otherwise only auto-accept file edits.
@@ -918,11 +918,8 @@ class ClaudeService {
 
       case 'rate_limit_event': {
         const info = json.rate_limit_info || {}
-        if (info.status === 'allowed') {
-          // Allowed — just a subtle icon, no noise
-          onChunk('\u23f1\ufe0f')
-        } else {
-          // Actually limited — show full details so the user knows why Claude isn't responding
+        if (info.status !== 'allowed') {
+          // Actually limited — show details in the CLI stream
           let msg = `\n⏸️ Rate limited`
           if (info.rateLimitType) {
             msg += ` (${info.rateLimitType.replace(/_/g, ' ')} window)`
@@ -933,10 +930,17 @@ class ClaudeService {
           }
           msg += '\n'
           onChunk(msg)
-          // Notify caller with structured rate limit info
-          if (onRateLimit) {
-            onRateLimit({ resetsAt: info.resetsAt || null, rateLimitType: info.rateLimitType || null })
-          }
+        }
+        // Always forward full rate limit info to the header widget
+        if (onRateLimit) {
+          onRateLimit({
+            resetsAt:        info.resetsAt        || null,
+            rateLimitType:   info.rateLimitType   || null,
+            status:          info.status          || null,
+            overageStatus:   info.overageStatus   || null,
+            overageResetsAt: info.overageResetsAt || null,
+            isUsingOverage:  !!info.isUsingOverage
+          })
         }
         break
       }
@@ -1008,6 +1012,15 @@ ${updatedContext}
       prompt += '\n\n## UI Layout Reference\n' + data.guiDescription
     }
 
+    // Files modified in this thread - always include when available so Claude
+    // knows the full set of files it has touched across all prompts in this session
+    if (data.threadFilesModified && data.threadFilesModified.length > 0) {
+      const filesSection = this.buildThreadFilesContext(data.threadFilesModified)
+      if (filesSection) {
+        prompt += '\n\n' + filesSection
+      }
+    }
+
     // User stories - only include for new conversations
     // When resuming a session, the stories are already in context and adding them
     // again can cause "Prompt is too long" errors
@@ -1039,6 +1052,7 @@ ${updatedContext}
       hasProject: !!data.project && !isResumingSession,
       hasUserStories: !isResumingSession && data.userStories?.length || 0,
       hasGuiDescription: !!data.guiDescription,
+      threadFilesModified: data.threadFilesModified?.length || 0,
       hasBranchContext: !!data.branchId,
       hasHandoffContext: !!data.handoffContext && !isResumingSession,
       hasPendingContextUpdate: hasPendingUpdate,
@@ -1141,6 +1155,18 @@ ${updatedContext}
 
     // Custom branch fallback
     return getCustomBranchFallback(branchId, codeModificationAllowed)
+  }
+
+  /**
+   * Build a concise summary of files modified across the current thread.
+   * Gives Claude a persistent reminder of what it has touched.
+   * @param {Array<{path: string, action: string}>} files
+   * @returns {string}
+   */
+  buildThreadFilesContext(files) {
+    if (!files || files.length === 0) return ''
+    const lines = files.map(f => `- \`${f.path}\` (${f.action || 'modified'})`)
+    return `## Files Modified in This Thread\n\n${lines.join('\n')}`
   }
 
   /**
@@ -1913,17 +1939,17 @@ ${feedback}
    * @returns {Promise<string>} - Generated title
    */
   async generateTitle(content) {
-    // CRITICAL: Prevent multiple CLI instances from being spawned
+    // If a real interactive session is running, use fallback to avoid competing for the CLI
     if (this.isProcessRunning()) {
       console.warn('[TITLE-GEN-GUARD] CLI process already running, using fallback title')
       return this.generateFallbackTitle(content)
     }
 
-    // Acquire the process lock immediately
-    this._processLock = true
-    console.log('[TITLE-GEN-GUARD] Process lock acquired')
+    // NOTE: generateTitle intentionally does NOT acquire _processLock. It spawns its own
+    // separate titleProcess (not this.currentProcess) and runs as a silent background task.
+    // Holding _processLock here would block the user from submitting for up to 10 seconds
+    // while the title is being generated — causing false "process already running" toasts.
 
-    // Metrics tracking
     const titleStartTime = Date.now()
     const titleMetrics = getMetricsService()
 
@@ -1933,8 +1959,6 @@ ${feedback}
       const releaseAndResolve = (value) => {
         if (resolved) return
         resolved = true
-        this._processLock = false
-        console.log('[TITLE-GEN-GUARD] Process lock released')
         if (titleMetrics) {
           titleMetrics.recordComplete(MetricComponent.CLAUDE_SERVICE, 'generate-title',
             {}, { duration_ms: Date.now() - titleStartTime }, { titleLength: value?.length || 0 })
@@ -2030,7 +2054,10 @@ ${content}`
     // Check currentProcess (actual running process), not _processLock alone.
     // _processLock may be held by an external caller (e.g. CRE) that is
     // invoking sendPrompt as part of its locked session — that is allowed.
-    if (this.currentProcess !== null) {
+    // allowConcurrent: true bypasses this check for fire-and-forget one-shot calls
+    // (e.g. /btw side questions) that use --print mode and disableTools:true,
+    // so they can't interfere with the main interactive session's file access.
+    if (this.currentProcess !== null && !options.allowConcurrent) {
       console.error('[sendPrompt-GUARD] Attempted to spawn CLI while another process is running! Rejecting.')
       return { success: false, error: 'A Claude CLI process is already running. Please wait for it to complete.' }
     }

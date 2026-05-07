@@ -281,9 +281,15 @@ class WebsiteServer {
       // Strip leading slash
       if (urlPath.startsWith('/')) urlPath = urlPath.slice(1)
 
-      // Prevent path traversal
+      // Prevent path traversal: resolve against serve root and confirm containment.
       const safePath = path.normalize(urlPath).replace(/^(\.\.(\/|\\|$))+/, '')
-      let filePath = path.join(this._serveRoot, safePath)
+      const resolvedRoot = path.resolve(this._serveRoot)
+      let filePath = path.resolve(resolvedRoot, safePath)
+      if (filePath !== resolvedRoot && !filePath.startsWith(resolvedRoot + path.sep)) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' })
+        res.end('403 Forbidden')
+        return
+      }
 
       // Directory → look for index.html
       let stat = null

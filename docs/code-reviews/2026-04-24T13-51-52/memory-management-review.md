@@ -1,0 +1,1 @@
+Findings written to `docs/memory-2026-04-24.md`. Eight IMPORTANT findings covering unremoved listeners in `rlm-document-plugin` (×5), a no-op `destroy()` in `DocumentViewerComponent`, an unremoved registry subscription in `ClaudeService`, and an incomplete `shutdown()` in the CRE module. MetricsService shutdown and plugin `deactivate()` coverage are clean.

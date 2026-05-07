@@ -54,6 +54,7 @@ class MetricsService extends EventEmitter {
     this.flushTimer = null
     this.insertStmt = null // Legacy: writes to metrics_events (kept during transition)
     this.insertPromptStmt = null // New: writes to prompt_metrics
+    this._stmtDb = null   // DB instance the statements were prepared on
     this._flushing = false
     this._shutdownStarted = false
     this._initializeStatements()
@@ -122,6 +123,10 @@ class MetricsService extends EventEmitter {
         @metadata, @created_at
       )
     `)
+
+    // Track the DB instance these statements are prepared on so _flushBatch
+    // can detect stale statements after a DB reopen cycle.
+    this._stmtDb = db
   }
 
   /**
@@ -191,8 +196,21 @@ class MetricsService extends EventEmitter {
 
       // Verify database connection is open (better-sqlite3 specific check)
       if (!db.open) {
-        console.error('[METRICS] Cannot flush batch: database connection is not open')
+        console.warn('[METRICS] Cannot flush batch: database connection is not open')
         return
+      }
+
+      // Detect stale prepared statements (prepared on a different DB instance,
+      // e.g. after a project close/reopen cycle). Re-initialize if needed.
+      if (this._stmtDb !== db) {
+        this.insertStmt = null
+        this.insertPromptStmt = null
+        this._stmtDb = null
+        this._initializeStatements()
+        if (!this.insertStmt || !this.insertPromptStmt) {
+          console.warn('[METRICS] Cannot flush batch: statements could not be prepared on current DB')
+          return
+        }
       }
 
       // Batch insert within transaction for performance
@@ -211,7 +229,7 @@ class MetricsService extends EventEmitter {
 
       this.emit('batch-flushed', { count })
     } catch (error) {
-      console.error('[METRICS] Error flushing batch:', error.message)
+      console.warn('[METRICS] Error flushing batch:', error.message)
       this.emit('error', { error, context: 'flush-batch' })
     } finally {
       this._flushing = false

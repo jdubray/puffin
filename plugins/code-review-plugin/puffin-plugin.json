@@ -1,0 +1,45 @@
+{
+  "name": "code-review-plugin",
+  "version": "1.0.0",
+  "displayName": "Code Review",
+  "description": "Manage and run nightly static-analysis code reviews with story-based configuration",
+  "main": "index.js",
+  "activationEvents": ["onStartup"],
+  "contributes": {
+    "views": [
+      {
+        "id": "code-review-view",
+        "name": "Code Review",
+        "location": "nav",
+        "icon": "🔍",
+        "order": 5,
+        "component": "CodeReviewView"
+      }
+    ]
+  },
+  "extensionPoints": {
+    "ipcHandlers": [
+      "code-review:listStories",
+      "code-review:saveStory",
+      "code-review:deleteStory",
+      "code-review:runStories",
+      "code-review:getRunStatus",
+      "code-review:getReviewDoc",
+      "code-review:listBranches",
+      "code-review:generateAc",
+      "code-review:generateRis",
+      "code-review:generateAssertions"
+    ]
+  },
+  "renderer": {
+    "entry": "renderer/index.js",
+    "components": [
+      {
+        "name": "CodeReviewView",
+        "export": "CodeReviewView",
+        "type": "class"
+      }
+    ],
+    "styles": ["renderer/styles/code-review.css"]
+  }
+}

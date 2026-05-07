@@ -324,12 +324,11 @@ export class DesignerView {
 
     // Add resize handles if selected
     if (isSelected) {
-      el.innerHTML += `
-        <div class="resize-handle nw"></div>
-        <div class="resize-handle ne"></div>
-        <div class="resize-handle sw"></div>
-        <div class="resize-handle se"></div>
-      `
+      for (const corner of ['nw', 'ne', 'sw', 'se']) {
+        const handle = document.createElement('div')
+        handle.className = `resize-handle ${corner}`
+        el.appendChild(handle)
+      }
     }
 
     parent.appendChild(el)

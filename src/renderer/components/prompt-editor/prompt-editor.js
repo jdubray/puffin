@@ -50,6 +50,11 @@ export class PromptEditorComponent {
     this._isListening = false
     this._isTranscribing = false
     this.micBtn = null
+    // Quick Code Review button state machine
+    // States: 'idle' | 'reviewing' | 'has-issues' | 'fixing' | 'passed' | 'fixed'
+    this.reviewThreadBtn = null
+    this._reviewState = 'idle'
+    this._pendingReviewAction = null // 'review' | 'fix'
   }
 
   /**
@@ -77,6 +82,9 @@ export class PromptEditorComponent {
     this.includeDocsMenu = document.getElementById('include-docs-menu')
     // Quick question (/btw) button
     this.btwOpenBtn = document.getElementById('btw-open-btn')
+
+    // Quick Code Review button
+    this.reviewThreadBtn = document.getElementById('review-thread-btn')
 
     // Clear prompt button (X)
     this.clearPromptBtn = document.getElementById('clear-prompt-btn')
@@ -275,6 +283,17 @@ export class PromptEditorComponent {
     if (this.btwOpenBtn) {
       this.btwOpenBtn.addEventListener('click', () => {
         window.puffinApp?._openBtwPanel?.()
+      })
+    }
+
+    // Quick Code Review button
+    if (this.reviewThreadBtn) {
+      this.reviewThreadBtn.addEventListener('click', () => {
+        if (this._reviewState === 'idle') {
+          this._triggerCodeReview()
+        } else if (this._reviewState === 'has-issues') {
+          this._triggerFixAllIssues()
+        }
       })
     }
 
@@ -787,6 +806,22 @@ export class PromptEditorComponent {
             .catch(err => console.warn('[PROMPT-EDITOR] Failed to cleanup images:', err))
           this._pendingImageCleanup = null
         }
+
+        // Quick Code Review: detect review or fix completion
+        if (this._pendingReviewAction === 'review') {
+          const lastResponse = this._getLastResponse(state)
+          if (lastResponse?.includes('<!-- REVIEW: ISSUES -->')) {
+            this._reviewState = 'has-issues'
+          } else {
+            this._reviewState = 'passed'
+          }
+          this._pendingReviewAction = null
+          this._updateReviewButton()
+        } else if (this._pendingReviewAction === 'fix') {
+          this._reviewState = 'fixed'
+          this._pendingReviewAction = null
+          this._updateReviewButton()
+        }
       }
       this.wasProcessing = state.prompt.isProcessing
 
@@ -1149,8 +1184,8 @@ export class PromptEditorComponent {
     const state = window.puffinApp?.state
     if (!state) return
 
-    // For normal submissions, require content
-    if (!content) return
+    // Require either text content or at least one attached image
+    if (!content && this.attachedImages.length === 0) return
 
     // CRITICAL: Check if a CLI process is already running
     // Read provider from live state config (authoritative); DOM select can override if user explicitly changed it.
@@ -1234,6 +1269,9 @@ export class PromptEditorComponent {
       // Get relevant user stories for this branch
       const userStories = this.getRelevantUserStories(state)
 
+      // Collect files modified across all prompts in this thread
+      const threadFilesModified = this._getThreadFilesModified(state)
+
       // When resuming a session, Claude CLI already has the conversation history
       // server-side. We only need to send our context (project, stories, GUI).
       // Sending duplicate history would be redundant and consume tokens.
@@ -1295,10 +1333,12 @@ export class PromptEditorComponent {
           // User stories are always relevant - they may have been updated
           userStories: userStories,
           guiDescription: guiDescription,
+          // Files modified anywhere in this thread so far
+          threadFilesModified: threadFilesModified,
           // Handoff context from another thread
           handoffContext: handoffContext,
           model: selectedModel,
-          maxTurns: 40, // Max turns per request
+          maxTurns: 100, // Max turns per request
           // Puppeteer Visual Feedback Loop (Website Edition)
           puppeteerLoop: !!state.puppeteerLoop,
           puppeteerPort: state.config?.websitePort || 5000
@@ -1333,6 +1373,11 @@ export class PromptEditorComponent {
 
     // Clear any pending handoff context
     this.pendingHandoff = null
+
+    // Reset review cycle for new thread
+    this._reviewState = 'idle'
+    this._pendingReviewAction = null
+    this._updateReviewButton()
 
     // Reset thinking budget to none for new threads
     if (this.thinkingBudgetSelect) {
@@ -1427,6 +1472,9 @@ export class PromptEditorComponent {
       // Get relevant user stories for this branch
       const userStories = this.getRelevantUserStories(state)
 
+      // Collect files modified across all prompts in this thread
+      const threadFilesModified = this._getThreadFilesModified(state)
+
       console.log('[CONTEXT-DEBUG] Submit mode: NEW thread (fresh conversation)')
 
       // Handle thinking budget - wrap prompt and potentially upgrade model
@@ -1434,8 +1482,16 @@ export class PromptEditorComponent {
       let selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
       let finalPrompt = content
 
+      // Prepend image attachments to prompt if any
+      const imageAttachmentsNT = this.formatImagesForPrompt()
+      if (imageAttachmentsNT) {
+        finalPrompt = imageAttachmentsNT + '\n\n' + finalPrompt
+        console.log(`[PROMPT-EDITOR] Including ${this.attachedImages.length} image(s) in new-thread prompt`)
+      }
+      const attachedImagePathsNT = this.attachedImages.map(img => img.filePath)
+
       if (thinkingBudget !== 'none') {
-        finalPrompt = this.wrapPromptWithThinkingBudget(content, thinkingBudget)
+        finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
         console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
 
         // Upgrade to opus for think-harder and superthink
@@ -1464,13 +1520,19 @@ export class PromptEditorComponent {
           } : null,
           userStories: userStories,
           guiDescription: guiDescription,
+          threadFilesModified: threadFilesModified,
           model: selectedModel,
-          maxTurns: 40 // Max turns per request
+          maxTurns: 100 // Max turns per request
         })
       }
 
       // Note: Debug prompt is now captured via onFullPrompt callback from main process
       // This ensures we get the complete prompt with all context
+
+      // Clear attached images after submission
+      this._pendingImageCleanup = attachedImagePathsNT
+      this.attachedImages = []
+      this.renderImageAttachmentPreview()
 
       // Reset userChanged flag after submitting a new thread
       if (this.modelSelect) {
@@ -2517,6 +2579,194 @@ ${prompt}`
       this.micBtn.title = transcribing ? 'Transcribing…' : 'Voice input (speech-to-text)'
       this.micBtn.disabled = transcribing
     }
+  }
+
+  // ── Quick Code Review ────────────────────────────────────────────────
+
+  /**
+   * Update the review button appearance based on current _reviewState.
+   */
+  _updateReviewButton() {
+    const btn = this.reviewThreadBtn
+    if (!btn) return
+
+    switch (this._reviewState) {
+      case 'idle':
+        btn.textContent = '🔍 Review Thread'
+        btn.disabled = false
+        btn.className = 'btn outline'
+        break
+      case 'reviewing':
+        btn.textContent = 'Reviewing…'
+        btn.disabled = true
+        btn.className = 'btn outline'
+        break
+      case 'has-issues':
+        btn.textContent = '⚠ Fix All Issues'
+        btn.disabled = false
+        btn.className = 'btn review-fix'
+        break
+      case 'fixing':
+        btn.textContent = 'Fixing…'
+        btn.disabled = true
+        btn.className = 'btn review-fix'
+        break
+      case 'passed':
+        btn.textContent = '✓ No Issues'
+        btn.disabled = true
+        btn.className = 'btn outline'
+        break
+      case 'fixed':
+        btn.textContent = '✓ Fixed'
+        btn.disabled = true
+        btn.className = 'btn outline'
+        break
+    }
+  }
+
+  /**
+   * Trigger the code review by submitting a built-in review prompt.
+   */
+  async _triggerCodeReview() {
+    const reviewPrompt = `Please do a quick sanity check on the code you just implemented in this thread.
+
+Use your tools to check:
+1. Run \`git diff HEAD~1..HEAD\` (or \`git status\` + read recently modified files if changes aren't committed yet) to see what changed
+2. Review for: logic errors, missing null/undefined checks, unhandled async errors, event listener leaks, broken IPC patterns, security issues (XSS, injection), and deviations from existing code patterns
+3. Be concise — list only real issues (confidence ≥ 80%) with file:line references
+
+At the end of your response, output EXACTLY one of these markers on a line by itself:
+- \`<!-- REVIEW: PASS -->\` if no issues found
+- \`<!-- REVIEW: ISSUES -->\` if issues were found that should be fixed`
+
+    this._reviewState = 'reviewing'
+    this._pendingReviewAction = 'review'
+    this._updateReviewButton()
+    await this._submitBuiltInPrompt(reviewPrompt)
+  }
+
+  /**
+   * Trigger fix-all by submitting a built-in fix prompt after a review found issues.
+   */
+  async _triggerFixAllIssues() {
+    const fixPrompt = `Based on the code review above, please fix all identified issues.
+
+For each issue:
+- Apply the minimal, surgical fix
+- Do not refactor unrelated code
+- Stay consistent with existing patterns and conventions
+
+After fixing all issues, briefly confirm what was changed.`
+
+    this._reviewState = 'fixing'
+    this._pendingReviewAction = 'fix'
+    this._updateReviewButton()
+    await this._submitBuiltInPrompt(fixPrompt)
+  }
+
+  /**
+   * Submit a built-in prompt without touching the textarea.
+   * Replicates the session-resume + parentId logic from submit().
+   * @param {string} promptText - The pre-formed prompt to send
+   */
+  async _submitBuiltInPrompt(promptText) {
+    const state = window.puffinApp?.state
+    if (!state) return
+
+    if (window.puffin?.claude?.isRunning) {
+      const isRunning = await window.puffin.claude.isRunning()
+      if (isRunning) {
+        console.error('[REVIEW] Cannot submit: process already running')
+        // Roll back state since we won't actually submit
+        this._reviewState = this._pendingReviewAction === 'review' ? 'idle' : 'has-issues'
+        this._pendingReviewAction = null
+        this._updateReviewButton()
+        return
+      }
+    }
+
+    // Determine parentId (same logic as submit())
+    let parentId = null
+    if (state.history.activePromptId) {
+      const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
+      if (rawBranch?.prompts) {
+        const isInCurrentBranch = rawBranch.prompts.some(p => p.id === state.history.activePromptId)
+        if (isInCurrentBranch) {
+          parentId = this.findLastPromptInThread(state.history.activePromptId, rawBranch.prompts)
+        }
+      }
+    }
+
+    // Register in SAM history
+    this.intents.submitPrompt({
+      branchId: state.history.activeBranch,
+      parentId,
+      content: promptText
+    })
+
+    const sessionId = this.getLastSessionId(state)
+    const userStories = this.getRelevantUserStories(state)
+    const threadFilesModified = this._getThreadFilesModified(state)
+    const selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+
+    if (window.puffin) {
+      window.puffin.claude.submit({
+        prompt: promptText,
+        branchId: state.history.activeBranch,
+        sessionId,
+        project: !sessionId && state.config ? {
+          name: state.config.name,
+          description: state.config.description,
+          assumptions: state.config.assumptions,
+          technicalArchitecture: state.config.technicalArchitecture,
+          dataModel: state.config.dataModel,
+          options: state.config.options,
+          architecture: state.architecture
+        } : null,
+        userStories,
+        threadFilesModified,
+        model: selectedModel,
+        maxTurns: 20
+      })
+    }
+  }
+
+  /**
+   * Get the content of the last response in the active branch.
+   * Used to detect review markers after processing completes.
+   * @param {Object} state - Current app state
+   * @returns {string|null}
+   */
+  _getLastResponse(state) {
+    const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
+    if (!rawBranch?.prompts?.length) return null
+    const lastPrompt = rawBranch.prompts[rawBranch.prompts.length - 1]
+    return lastPrompt?.response?.content || null
+  }
+
+  /**
+   * Collect all unique files modified across every prompt response in the current thread.
+   * De-duplicates by path, keeping the last-seen action for each file.
+   * @param {Object} state - Current app state
+   * @returns {Array<{path: string, action: string}>|null}
+   */
+  _getThreadFilesModified(state) {
+    const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
+    if (!rawBranch?.prompts?.length) return null
+
+    const fileMap = new Map() // path → action
+    for (const prompt of rawBranch.prompts) {
+      const files = prompt.response?.filesModified || []
+      for (const file of files) {
+        if (file.path) {
+          fileMap.set(file.path, file.action || 'modified')
+        }
+      }
+    }
+
+    return fileMap.size > 0
+      ? Array.from(fileMap.entries()).map(([path, action]) => ({ path, action }))
+      : null
   }
 
   /**

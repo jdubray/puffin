@@ -890,8 +890,9 @@ Please provide specific file locations and line numbers where issues are found, 
       const saved = localStorage.getItem('puffin-default-model')
       const selectedId = (saved && models.find(m => m.id === saved)) ? saved : defaultModel
 
+      const esc = (s) => this.escapeHtml(String(s ?? ''))
       const optionsHtml = models.map(m =>
-        `<option value="${m.id}"${m.id === selectedId ? ' selected' : ''}>${m.name} — ${m.description}</option>`
+        `<option value="${esc(m.id)}"${m.id === selectedId ? ' selected' : ''}>${esc(m.name)} — ${esc(m.description)}</option>`
       ).join('\n')
 
       for (const id of ['thread-model', 'default-model']) {
@@ -2750,15 +2751,22 @@ Please provide specific file locations and line numbers where issues are found, 
    * If sprint orchestration is running, pauses it and shows a modal so the
    * user can wait for tokens to reset and then continue.
    *
-   * @param {{ resetsAt: number|null, rateLimitType: string|null }} data
+   * @param {{ resetsAt: number|null, rateLimitType: string|null, status: string|null, overageStatus: string|null, overageResetsAt: number|null, isUsingOverage: boolean }} data
    */
   _handleRateLimitEvent(data) {
+    // Always update the header widget
+    this._updateRateLimitWidget(data)
+
     const orchestration = this.state?.activeSprint?.orchestration
     const isOrchestrating = orchestration?.status === OrchestrationStatus.RUNNING
 
     if (!isOrchestrating) {
-      // Not in an automated sprint — nothing special to do, the chunk already
-      // showed the rate limit message in CLI output.
+      return
+    }
+
+    // Claude CLI emits rate_limit_event for every status, including "allowed"
+    // (informational window updates). Only pause when actually limited.
+    if (!data.status || data.status === 'allowed') {
       return
     }
 
@@ -2775,6 +2783,51 @@ Please provide specific file locations and line numbers where issues are found, 
       rateLimitType: data.rateLimitType,
       completedStories
     })
+  }
+
+  /**
+   * Updates the rate-limit header widget with current rate limit info.
+   * Shows reset time in green, overage in red, and an emoji if overage is allowed.
+   *
+   * @param {{ resetsAt: number|null, status: string|null, overageStatus: string|null, isUsingOverage: boolean }} data
+   */
+  _updateRateLimitWidget(data) {
+    const widget = document.getElementById('rate-limit-widget')
+    if (!widget) return
+
+    if (!data || !data.resetsAt) {
+      widget.classList.add('hidden')
+      return
+    }
+
+    const resetDate = new Date(data.resetsAt * 1000)
+    const diffMs = resetDate - Date.now()
+
+    let resetText
+    if (diffMs <= 0) {
+      resetText = 'reset'
+    } else if (diffMs < 24 * 60 * 60 * 1000) {
+      const hrs = Math.floor(diffMs / 3600000)
+      const mins = Math.ceil((diffMs % 3600000) / 60000)
+      resetText = hrs > 0 ? `resets in ${hrs}h ${mins}m` : `resets in ${mins}m`
+    } else {
+      const day = resetDate.toLocaleDateString(undefined, { weekday: 'short' })
+      const time = resetDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+      resetText = `resets ${day} at ${time}`
+    }
+
+    let html = `<span class="rate-limit-resets">${resetText}</span>`
+
+    if (data.isUsingOverage) {
+      html += ` <span class="rate-limit-overage">overage</span>`
+    }
+
+    if (data.overageStatus === 'allowed') {
+      html += ` <span class="rate-limit-allowed">✅</span>`
+    }
+
+    widget.innerHTML = html
+    widget.classList.remove('hidden')
   }
 
   /**
@@ -5506,6 +5559,10 @@ Keep it concise but informative. Use markdown formatting.`
     if (!text) return ''
 
     return text
+      // Escape HTML first to prevent XSS — AI-generated content may contain raw tags
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
       // Headers
       .replace(/^### (.+)$/gm, '<h4>$1</h4>')
       .replace(/^## (.+)$/gm, '<h3>$1</h3>')
@@ -6153,7 +6210,9 @@ Keep it concise but informative. Use markdown formatting.`
 
   /**
    * Handle user-initiated CRE plan approval.
-   * Calls cre:approve-plan → cre:generate-ris per story → dispatches crePlanningComplete.
+   * Calls cre:approve-plan → cre:generate-ris + cre:generate-assertions per story
+   * (parallel with 500ms stagger to preserve API prompt-cache warm-up),
+   * then dispatches crePlanningComplete.
    * Triggered by APPROVE_PLAN_WITH_CRE action via _pendingCreApproval state flag.
    */
   async handleCreApproval(approvalData) {
@@ -6189,78 +6248,71 @@ Keep it concise but informative. Use markdown formatting.`
       }
       this.updateCreProgressStep('approve', 'completed')
 
-      // Step 2: Generate RIS for each story (RIS first — assertions derive from RIS content)
+      // Steps 2 & 3: Per-story pipeline — RIS then assertions — run in parallel.
+      // Stories are independent so each can progress through RIS → assertions without
+      // waiting for other stories. The first story starts immediately so its API call
+      // can warm the prompt cache; the rest are fired after a short stagger so they
+      // arrive while the cached prefix is hot (5-minute TTL on Anthropic's side).
+      const CACHE_STAGGER_MS = 500
       const risMap = {}
-
-      // Get the plan synthetic prompt ID to thread RIS entries under it
       const planPromptId = this.state?.history?.activePromptId || null
 
-      for (let i = 0; i < stories.length; i++) {
-        const story = stories[i]
-        const stepId = `ris-${i}`
-        this.updateCreProgressStep(stepId, 'active', `Generating RIS for "${story.title}"...`)
+      const processStory = async (story, index) => {
+        const risStepId = `ris-${index}`
+        const assertStepId = `assert-${index}`
 
+        // RIS generation
+        this.updateCreProgressStep(risStepId, 'active', `Generating RIS for "${story.title}"...`)
         const risResult = await window.puffin.cre.generateRis({ planId, storyId: story.id })
-        if (risResult.success) {
-          risMap[story.id] = risResult.data
-          this.updateCreProgressStep(stepId, 'completed', null, {
-            storyTitle: story.title,
-            risData: risResult.data?.markdown || risResult.data || 'No RIS data'
-          })
-        } else {
+
+        if (!risResult.success) {
           console.warn('[CRE] RIS generation failed for story:', story.id, risResult.error)
           risMap[story.id] = { error: risResult.error }
-          this.updateCreProgressStep(stepId, 'error', 'Failed')
-        }
-      }
-
-      // Step 3: Generate inspection assertions for each story (from RIS content)
-      // Track which stories had successful RIS generation — skip assertions for failed RIS
-      const risSuccessIds = new Set(
-        Object.entries(risMap)
-          .filter(([, data]) => data && !data.error)
-          .map(([id]) => id)
-      )
-      console.log(`[CRE] RIS generation succeeded for ${risSuccessIds.size}/${stories.length} stories`)
-
-      for (let i = 0; i < stories.length; i++) {
-        const story = stories[i]
-        const stepId = `assert-${i}`
-
-        // AC6: Skip assertion generation if RIS failed for this story
-        if (!risSuccessIds.has(story.id)) {
-          console.warn(`[CRE] Skipping assertion generation for story ${story.id} — RIS generation failed`)
-          this.updateCreProgressStep(stepId, 'error', 'Skipped (no RIS)')
-          continue
+          this.updateCreProgressStep(risStepId, 'error', 'Failed')
+          // AC6: Skip assertions when RIS failed
+          this.updateCreProgressStep(assertStepId, 'error', 'Skipped (no RIS)')
+          return
         }
 
-        this.updateCreProgressStep(stepId, 'active', `Generating assertions for "${story.title}"...`)
-
-        // Assertions load RIS from DB automatically via the CRE handler.
-        // Only storyId + planId are needed — handler loads story and RIS from DB.
-        const assertResult = await window.puffin.cre.generateAssertions({
-          planId,
-          storyId: story.id
+        risMap[story.id] = risResult.data
+        this.updateCreProgressStep(risStepId, 'completed', null, {
+          storyTitle: story.title,
+          risData: risResult.data?.markdown || risResult.data || 'No RIS data'
         })
+
+        // Assertion generation — starts as soon as this story's RIS is done.
+        // Assertions load RIS from DB automatically; only storyId + planId are needed.
+        this.updateCreProgressStep(assertStepId, 'active', `Generating assertions for "${story.title}"...`)
+        const assertResult = await window.puffin.cre.generateAssertions({ planId, storyId: story.id })
 
         if (assertResult.success) {
           const assertions = assertResult.data?.assertions || []
           console.log(`[CRE] Generated ${assertions.length} assertions for story:`, story.id)
-          this.updateCreProgressStep(stepId, 'completed', `${assertions.length} assertions`, {
+          this.updateCreProgressStep(assertStepId, 'completed', `${assertions.length} assertions`, {
             storyTitle: story.title,
-            assertions: assertions
+            assertions
           })
-
-          // Always update sprint and user story state with assertions (even if empty).
-          // The CRE IPC handler persists to user_stories DB directly, but we also
-          // update the in-memory model so the UI reflects the change immediately.
+          // CRE IPC handler persists to DB directly; also update in-memory model immediately.
           this.intents.updateSprintStoryAssertions(story.id, assertions)
           this.intents.updateUserStory(story.id, { inspectionAssertions: assertions })
         } else {
           console.warn('[CRE] Assertion generation failed for story:', story.id, assertResult.error)
-          this.updateCreProgressStep(stepId, 'error', 'Failed')
+          this.updateCreProgressStep(assertStepId, 'error', 'Failed')
         }
       }
+
+      // Fire first story immediately, stagger the rest so the cache can warm.
+      const [firstStory, ...remainingStories] = stories
+      const storyPromises = firstStory ? [processStory(firstStory, 0)] : []
+      if (firstStory && remainingStories.length > 0) {
+        await new Promise(r => setTimeout(r, CACHE_STAGGER_MS))
+        remainingStories.forEach((story, i) => storyPromises.push(processStory(story, i + 1)))
+      }
+      await Promise.all(storyPromises)
+
+      console.log(`[CRE] RIS generation succeeded for ${
+        Object.values(risMap).filter(d => d && !d.error).length
+      }/${stories.length} stories`)
 
       // Refresh backlog stories from DB to ensure in-memory model has assertions
       // (CRE handler persists directly to user_stories table)
@@ -6277,7 +6329,8 @@ Keep it concise but informative. Use markdown formatting.`
               const freshStory = storiesResult.stories.find(s => s.id === sprintStory.id)
               if (freshStory?.inspectionAssertions?.length > 0 &&
                   (!sprintStory.inspectionAssertions || sprintStory.inspectionAssertions.length === 0)) {
-                sprintStory.inspectionAssertions = freshStory.inspectionAssertions
+                this.intents.updateSprintStoryAssertions(sprintStory.id, freshStory.inspectionAssertions)
+                this.intents.updateUserStory(sprintStory.id, { inspectionAssertions: freshStory.inspectionAssertions })
                 console.log('[CRE] Synced assertions from DB to sprint story:', sprintStory.id,
                   freshStory.inspectionAssertions.length, 'assertions')
               }
@@ -6884,6 +6937,11 @@ Please proceed with the implementation.`
       this.showToast(`Continuing story (${this.orchestrationContinuationCount}/${maxContinuations})...`, 'info')
 
       setTimeout(() => {
+        const currentStatus = this.state?.activeSprint?.orchestration?.status
+        if (currentStatus !== OrchestrationStatus.RUNNING) {
+          console.log('[ORCHESTRATION] Orchestration no longer running, skipping continuation submit. Status:', currentStatus)
+          return
+        }
         window.puffin.claude.submit({
           prompt: 'Please continue with the implementation. Pick up where you left off.',
           branchId: branchType,
@@ -7436,7 +7494,14 @@ If no issues are found, report:
     } else {
       // No findings - orchestration already marked complete by acceptor
       this.showToast('Code review complete: No issues found!', 'success')
-      setTimeout(() => this.intents.showSprintCloseModal(), 1500)
+      setTimeout(() => {
+        const sprint = this.state?.activeSprint
+        if (!sprint || sprint.orchestration?.status === OrchestrationStatus.STOPPED) {
+          console.log('[CODE_REVIEW] Sprint closed or orchestration stopped, skipping sprint close modal')
+          return
+        }
+        this.intents.showSprintCloseModal()
+      }, 1500)
     }
   }
 
@@ -7673,7 +7738,14 @@ After fixing, respond with:
 
     this.intents.completeBugFixPhase(summary)
     this.showToast(`Orchestration complete! Fixed ${fixed}/${findings.length} issues.`, 'success')
-    setTimeout(() => this.intents.showSprintCloseModal(), 1500)
+    setTimeout(() => {
+      const sprint = this.state?.activeSprint
+      if (!sprint || sprint.orchestration?.status === OrchestrationStatus.STOPPED) {
+        console.log('[BUG_FIX] Sprint closed or orchestration stopped, skipping sprint close modal')
+        return
+      }
+      this.intents.showSprintCloseModal()
+    }, 1500)
   }
 
   /**

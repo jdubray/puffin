@@ -64,7 +64,7 @@
         <button class="nav-btn" data-view="config" data-help="Configure project settings, Claude guidance options, and manage plugins.">Config</button>
         <button class="nav-btn active" data-view="prompt" data-help="Compose and send prompts to Claude Code, and view conversation responses.">Prompt</button>
         <!-- Designer is now provided by designer-plugin -->
-        <button class="nav-btn" data-view="user-stories" data-help="View and manage your user story backlog and sprint history.">Backlog</button>
+        <button class="nav-btn" data-view="user-stories" data-help="View and manage your task backlog on the Kanban board.">Backlog</button>
         <button class="nav-btn" data-view="cli-output" data-help="View the live Claude Code CLI output stream and raw JSON messages.">CLI Output</button>
         <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn" data-help="View the full debug prompt that was last sent to Claude CLI.">Debug</button>
         <!-- Plugin nav buttons are inserted here dynamically -->
@@ -441,42 +441,6 @@
               </fieldset>
 
               <fieldset class="options-fieldset">
-                <legend>Central Reasoning Engine (CRE)</legend>
-                <p class="fieldset-description">Configure the h-DSL Code Model update behavior during sprint execution.</p>
-
-                <div class="form-group">
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="cre-sprint-auto-refresh">
-                    <span>Auto-refresh Code Model at Sprint End</span>
-                  </label>
-                  <small class="form-hint">Automatically refresh the Code Model when all stories complete. If disabled, use manual refresh before committing.</small>
-                </div>
-
-                <div class="form-group">
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="cre-sprint-full-rebuild">
-                    <span>Full Rebuild (instead of incremental)</span>
-                  </label>
-                  <small class="form-hint">Perform a complete Code Model rebuild at sprint end. More thorough but slower than incremental update.</small>
-                </div>
-
-                <div class="form-group">
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="cre-prompt-repetition" checked>
-                    <span>Prompt Repetition</span>
-                  </label>
-                  <small class="form-hint">Repeat each AI prompt twice before sending. Improves structured output quality by giving the model bidirectional attention over the full context. Based on <a href="https://arxiv.org/abs/2512.14982" target="_blank">arxiv 2512.14982</a>. Recommended on.</small>
-                </div>
-
-                <div class="form-group">
-                  <button type="button" id="cre-manual-refresh-btn" class="btn secondary" data-help="Manually trigger a Code Model refresh to update the CRE's understanding of the codebase.">
-                    Refresh Code Model Now
-                  </button>
-                  <small class="form-hint">Manually trigger Code Model refresh. Use after debugging or before committing changes.</small>
-                </div>
-              </fieldset>
-
-              <fieldset class="options-fieldset">
                 <legend>Tools</legend>
                 <p class="fieldset-description">Integrate external tools into Claude Code's execution pipeline.</p>
 
@@ -535,53 +499,8 @@
         <!-- Prompt View -->
         <section id="prompt-view" class="view active">
           <div class="view-content prompt-layout swimlane-container">
-            <!-- Left Swimlane: Sprint Context Panel -->
+            <!-- Left Swimlane: Website Edition panel -->
             <aside class="swimlane swimlane-left">
-              <div id="sprint-context-panel" class="sprint-context-panel">
-                <!-- Sprint Header -->
-                <div class="sprint-panel-header">
-                  <div class="sprint-title-row">
-                    <h3 class="sprint-title">Sprint</h3>
-                    <span id="sprint-status-badge" class="sprint-status-badge">No Sprint</span>
-                    <button id="sprint-close-btn" class="sprint-close-btn hidden" title="Close Sprint" data-help="Close the active sprint, run code review, and generate a completion summary.">&times;</button>
-                  </div>
-                </div>
-                <!-- Sprint Progress -->
-                <div id="sprint-progress-section" class="sprint-progress-section hidden">
-                  <div class="sprint-progress">
-                    <div class="sprint-progress-label">
-                      <span>Progress</span>
-                      <span id="sprint-progress-percent">0%</span>
-                    </div>
-                    <div class="sprint-progress-bar">
-                      <div id="sprint-progress-fill" class="sprint-progress-fill" style="width: 0%"></div>
-                    </div>
-                  </div>
-                </div>
-                <!-- Sprint Actions -->
-                <div class="sprint-panel-actions" id="sprint-actions">
-                  <button id="sprint-plan-btn" class="btn primary hidden" data-help="Generate an implementation plan for the current sprint stories using AI.">Plan</button>
-                  <button id="sprint-iterate-btn" class="btn secondary hidden" data-help="Refine and iterate on the current sprint plan before approving it.">Iterate on Plan</button>
-                  <button id="sprint-approve-btn" class="btn success hidden" data-help="Approve the current sprint plan and begin automated story implementation.">Approve Plan</button>
-                </div>
-                <!-- Orchestration Controls (for automated sprints) -->
-                <div id="orchestration-controls-container" class="hidden"></div>
-                <!-- Sprint Completion Summary -->
-                <div id="sprint-summary-container" class="hidden"></div>
-                <!-- Code Review Panel -->
-                <div id="code-review-container" class="hidden"></div>
-                <!-- Story Cards -->
-                <div class="sprint-stories-container">
-                  <div id="sprint-stories" class="sprint-stories">
-                    <!-- Story cards will be rendered here -->
-                    <div class="sprint-empty-state">
-                      <p class="text-muted">No active sprint</p>
-                      <p class="text-small">Select stories from the Backlog to start a sprint</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <!-- Website Edition URL Panel (hidden in normal mode, shown in Website Edition) -->
               <div id="website-url-panel" class="website-url-panel" style="display:none">
                 <div class="website-url-header">
@@ -664,9 +583,6 @@
                   </div>
                 </div>
                 <div class="prompt-actions">
-                  <button id="derive-stories-btn" class="btn outline" title="Derive user stories from conversation context" data-help="Analyze this conversation and automatically generate user stories for the backlog." disabled>
-                    Derive Stories
-                  </button>
                   <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread" data-help="Clear the prompt and start a new conversation thread on the current branch.">
                     Create New Thread
                   </button>
@@ -705,15 +621,6 @@
                     <div class="dropdown-menu" id="include-docs-menu">
                       <!-- Populated dynamically from docs/ directory -->
                     </div>
-                  </div>
-                </div>
-                <!-- Iteration Counter (visible during sprint execution) -->
-                <div id="iteration-counter" class="iteration-counter hidden">
-                  <div class="iteration-stats">
-                    <span class="iteration-label">Iterations:</span>
-                    <span id="iteration-current" class="iteration-value">0</span>
-                    <span class="iteration-separator">/</span>
-                    <span id="iteration-max" class="iteration-value">10</span>
                   </div>
                 </div>
               </div>
@@ -800,41 +707,6 @@
         <!-- Backlog View (with Insights subtab) -->
         <section id="user-stories-view" class="view">
           <div class="view-content user-stories-layout">
-            <!-- Sprint History Panel (Left Sidebar) -->
-            <aside id="sprint-history-panel" class="swimlane swimlane-left sprint-history-panel" aria-label="Sprint History">
-              <div class="sprint-context-panel">
-                <!-- Sprint History Header -->
-                <div class="sprint-panel-header">
-                  <div class="sprint-title-row">
-                    <h3 class="sprint-title">Sprint History</h3>
-                    <div class="sprint-header-buttons">
-                      <button id="sprint-history-refresh-btn" class="sprint-refresh-btn" aria-label="Refresh sprint history" title="Refresh" data-help="Refresh the sprint history list to show the latest sprint data.">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M21 2v6h-6"></path>
-                          <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
-                          <path d="M3 22v-6h6"></path>
-                          <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
-                        </svg>
-                      </button>
-                      <button id="sprint-panel-collapse-btn" class="sprint-close-btn" aria-expanded="true" aria-label="Collapse sprint history panel" title="Collapse" data-help="Collapse the sprint history panel to give more space to the backlog view.">
-                        <span class="collapse-icon"></span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <!-- Sprint Tiles Container -->
-                <div class="sprint-stories-container">
-                  <div id="sprint-tiles-list" class="sprint-stories sprint-tiles-list">
-                    <!-- Sprint tiles rendered dynamically -->
-                    <div class="sprint-empty-state">
-                      <p class="text-muted">No past sprints</p>
-                      <p class="text-small">Completed sprints will appear here</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </aside>
-
             <!-- Main Backlog Area -->
             <main class="backlog-main">
               <!-- Subtab navigation -->
@@ -862,7 +734,7 @@
                 </div>
                 <div id="user-stories-list" class="user-stories-list">
                   <!-- User stories rendered dynamically -->
-                  <p class="placeholder">No user stories yet. Use "Derive User Stories" checkbox when submitting prompts.</p>
+                  <p class="placeholder">No tasks yet. Click "+ Add Story" to create one.</p>
                 </div>
               </div>
 

@@ -20,7 +20,6 @@ export class PromptEditorComponent {
     this.includeGui = false
     this.selectedGuiDefinitions = [] // Array of selected GUI definitions (multi-select)
     this.useCurrentDesign = false // Track if current design is selected
-    this.deriveStoriesBtn = null
     this.modelSelect = null
     this.defaultModel = '__uninitialized__' // Sentinel value - will be updated from project config on first state load
     this.defaultProvider = 'claude' // Mirrors config.defaultProvider; updated on every state change
@@ -68,7 +67,6 @@ export class PromptEditorComponent {
     this.includeGuiBtn = document.getElementById('include-gui-btn')
     this.includeGuiDropdown = document.getElementById('include-gui-dropdown')
     this.includeGuiMenu = document.getElementById('include-gui-menu')
-    this.deriveStoriesBtn = document.getElementById('derive-stories-btn')
     this.modelSelect = document.getElementById('thread-model')
     // Provider selector (Claude vs Mistral Vibe)
     this.providerSelect = document.getElementById('provider-select')
@@ -318,31 +316,6 @@ export class PromptEditorComponent {
       this.includeDocsBtn.addEventListener('click', (e) => {
         e.stopPropagation()
         this.toggleDocsDropdown()
-      })
-    }
-
-    // Derive user stories button - directly triggers derivation
-    if (this.deriveStoriesBtn) {
-      this.deriveStoriesBtn.addEventListener('click', async () => {
-        const state = window.puffinApp?.state
-        if (!state) return
-
-        // Check if a CLI process is already running
-        if (window.puffin?.claude?.isRunning) {
-          const isRunning = await window.puffin.claude.isRunning()
-          if (isRunning) {
-            window.puffinApp?.showToast?.({
-              type: 'error',
-              title: 'Process Already Running',
-              message: 'A Claude process is already running. Please wait for it to complete.',
-              duration: 5000
-            })
-            return
-          }
-        }
-
-        const content = this.textarea.value.trim()
-        this.deriveStories(content, state)
       })
     }
 
@@ -825,14 +798,14 @@ export class PromptEditorComponent {
       }
       this.wasProcessing = state.prompt.isProcessing
 
-      this.render(state.prompt, state.history, state.storyGenerations, state.storyDerivation)
+      this.render(state.prompt, state.history, state.storyGenerations)
     })
   }
 
   /**
    * Render component based on state
    */
-  render(promptState, historyState, storyGenerations, storyDerivation) {
+  render(promptState, historyState, storyGenerations) {
     // DEBUG: Track textarea disabled state
     const wasDisabled = this.textarea.disabled
 
@@ -840,22 +813,12 @@ export class PromptEditorComponent {
     // The textarea is the source of truth for its own content.
     // This avoids performance issues from tracking every keystroke.
 
-    // Check if story derivation is in progress
-    const isDerivingStories = storyDerivation?.status === 'deriving'
-    const isProcessing = promptState.isProcessing || isDerivingStories
+    const isProcessing = promptState.isProcessing
 
     // Update button states
     const hasContent = this.textarea.value.trim().length > 0
     this.submitBtn.disabled = isProcessing || !hasContent
 
-    // Enable/disable Derive Stories button based on conversation context
-    // Use raw.branches prompts (same source deriveStories() reads from) rather than
-    // promptTree which is a filtered/tree-resolved view and can diverge
-    if (this.deriveStoriesBtn) {
-      const rawPrompts = historyState?.raw?.branches?.[historyState.activeBranch]?.prompts
-      const hasConversation = rawPrompts?.length > 0
-      this.deriveStoriesBtn.disabled = isProcessing || !hasConversation
-    }
     this.cancelBtn.classList.toggle('hidden', !promptState.canCancel)
 
     // Show loading state
@@ -878,7 +841,6 @@ export class PromptEditorComponent {
         wasDisabled,
         nowDisabled: this.textarea.disabled,
         isProcessing,
-        isDerivingStories,
         promptStateKeys: Object.keys(promptState),
         stack: new Error().stack.split('\n').slice(1, 5).join('\n')
       })
@@ -888,7 +850,6 @@ export class PromptEditorComponent {
     if (this.textarea.disabled && !isProcessing) {
       console.warn('[PROMPT-EDITOR-DEBUG] ANOMALY: Textarea disabled but isProcessing=false!', {
         promptState,
-        isDerivingStories,
         textareaDisabled: this.textarea.disabled
       })
     }
@@ -2205,110 +2166,6 @@ export class PromptEditorComponent {
     }
 
     return `## GUI Designs\n\nThe following UI designs should guide your implementation:\n\n${descriptions.join('\n\n---\n\n')}`
-  }
-
-  /**
-   * Derive user stories from the current context.
-   * Auto-assembles a comprehensive payload from the conversation thread,
-   * included documents, and GUI designs.
-   *
-   * @param {string} content - Optional user-typed prompt text (may be empty)
-   * @param {Object} state - Current application state
-   */
-  async deriveStories(content, state) {
-    console.log('[DERIVE-STORIES] Starting story derivation')
-    console.log('[DERIVE-STORIES] User prompt:', content ? content.substring(0, 100) : '(none)')
-
-    if (!window.puffin?.claude?.deriveStories) {
-      console.error('[DERIVE-STORIES] IPC not available!')
-      return
-    }
-
-    // Dispatch action to show derivation is in progress
-    this.intents.deriveUserStories({
-      branchId: state.history.activeBranch,
-      content: content || '(auto-derived from context)'
-    })
-
-    // Disable derive button during derivation
-    if (this.deriveStoriesBtn) {
-      this.deriveStoriesBtn.disabled = true
-    }
-
-    // === AC1: Gather full conversation thread ===
-    // Budget cap prevents excessively large payloads for long conversations.
-    // Recent messages are prioritized (iterate newest-first) since they carry
-    // the most relevant context for story derivation.
-    const CONTEXT_BUDGET = 100_000 // ~100KB character budget for conversation
-    let conversationContext = ''
-    const activeBranch = state.history.activeBranch
-    const branchData = state.history.raw?.branches?.[activeBranch]
-    if (branchData?.prompts?.length > 0) {
-      const contextParts = []
-      let budgetRemaining = CONTEXT_BUDGET
-
-      // Iterate newest-first so recent messages get priority
-      for (let i = branchData.prompts.length - 1; i >= 0 && budgetRemaining > 0; i--) {
-        const p = branchData.prompts[i]
-        const turnParts = []
-
-        if (p.content) {
-          const promptText = p.content.length > 2000
-            ? p.content.substring(0, 2000) + '...'
-            : p.content
-          turnParts.push(`User: ${promptText}`)
-        }
-        if (p.response?.content) {
-          const responseText = p.response.content.length > 3000
-            ? p.response.content.substring(0, 3000) + '...'
-            : p.response.content
-          turnParts.push(`Assistant: ${responseText}`)
-        }
-
-        const turnText = turnParts.join('\n\n')
-        if (turnText.length > budgetRemaining) break
-        budgetRemaining -= turnText.length
-        contextParts.unshift(turnText) // prepend to maintain chronological order
-      }
-
-      if (contextParts.length > 0) {
-        conversationContext = contextParts.join('\n\n')
-        const totalPrompts = branchData.prompts.length
-        const included = contextParts.length
-        console.log(`[DERIVE-STORIES] Conversation context: ${included}/${totalPrompts} turns, ${conversationContext.length} chars`)
-      }
-    }
-
-    // === AC2: Include selected documents ===
-    const docsContent = await this.getSelectedDocumentsContent()
-    if (docsContent) {
-      conversationContext += `\n\n${docsContent}`
-      console.log('[DERIVE-STORIES] Included docs content:', docsContent.length, 'chars')
-    }
-
-    // === AC3: Include GUI design if available ===
-    const guiDescription = this.buildCombinedGuiDescription(state)
-    if (guiDescription) {
-      conversationContext += `\n\n# GUI Design Context\n\n${guiDescription}`
-      console.log('[DERIVE-STORIES] Included GUI description:', guiDescription.length, 'chars')
-    }
-
-    // === AC4 & AC5: Build the prompt (use default if user didn't type anything) ===
-    const derivationPrompt = content || 'Derive user stories from the conversation thread, documents, and designs provided in the context.'
-
-    console.log('[DERIVE-STORIES] Calling IPC deriveStories, total context:', conversationContext.length, 'chars')
-
-    window.puffin.claude.deriveStories({
-      prompt: derivationPrompt,
-      branchId: activeBranch,
-      conversationContext: conversationContext,
-      model: this.modelSelect?.value || this.defaultModel || 'sonnet',
-      project: state.config ? {
-        name: state.config.name,
-        description: state.config.description
-      } : null
-    })
-    console.log('[DERIVE-STORIES] IPC call sent')
   }
 
   /**

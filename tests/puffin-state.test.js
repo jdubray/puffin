@@ -84,15 +84,6 @@ function createDatabaseMock() {
     }
   }
 
-  const sprints = {
-    findActive:   () => null,
-    findArchived: () => [],
-    findById:     () => null,
-    hasActiveSprint: () => false,
-    create() { throw new Error('Sprint create not implemented in mock') },
-    update:       () => null,
-  }
-
   let _initialized = false
 
   return {
@@ -107,8 +98,6 @@ function createDatabaseMock() {
       transaction(fn) { return fn(null) }
     },
     userStories,
-    sprints,
-    completionSummaries: null,
     getStatus() {
       return { initialized: _initialized, connected: true, stats: {}, migrations: null }
     },
@@ -414,28 +403,24 @@ describe('PuffinState', () => {
       // Set some cache values
       puffinState.userStories = [{ id: 'test' }]
       puffinState.archivedStories = [{ id: 'archived' }]
-      puffinState.activeSprint = { id: 'sprint' }
 
       // Invalidate only userStories
       puffinState.invalidateCache(['userStories'])
 
       assert.strictEqual(puffinState.userStories, null)
       assert.notStrictEqual(puffinState.archivedStories, null)
-      assert.notStrictEqual(puffinState.activeSprint, null)
     })
 
     it('should invalidate all caches when no types specified', () => {
       // Set some cache values
       puffinState.userStories = [{ id: 'test' }]
       puffinState.archivedStories = [{ id: 'archived' }]
-      puffinState.activeSprint = { id: 'sprint' }
 
       // Invalidate all
       puffinState.invalidateCache()
 
       assert.strictEqual(puffinState.userStories, null)
       assert.strictEqual(puffinState.archivedStories, null)
-      assert.strictEqual(puffinState.activeSprint, null)
     })
 
     it('should query SQLite on getUserStories even if cache is null', async () => {

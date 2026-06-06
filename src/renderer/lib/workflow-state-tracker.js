@@ -18,15 +18,12 @@
  *
  * Phases:
  *  0  Bootstrap       — project not configured
- *  1  Discovery       — exploring, no stories yet
- *  2  Design          — has threads + design work, no stories
+ *  1  Discovery       — exploring, no threads or stories yet
  *  3  Decompose       — has threads, ready to derive stories
- *  4  Sprint Planning — has stories, sprint being planned
- *  5  Implement       — sprint approved or vibe coding in progress
- *  6  Verify          — all sprint stories done, assertions pending
- *  7  Review & Fix    — code review / bug fix phase
- *  9  Commit & Ship   — work done, uncommitted changes remain
- *  10 Iterate         — sprint complete, nothing pending
+ *  4  Backlog         — has stories on the Kanban board
+ *  5  Working         — files modified this session
+ *  9  Commit & Ship   — uncommitted changes waiting to be committed
+ *  10 Iterate         — work committed, nothing pending
  *
  * @param {object} state
  * @param {object|null} gitStatusResult
@@ -41,52 +38,27 @@ export function detectWorkflowPhase(state, gitStatusResult = null) {
   const hasThreads  = Object.values(branches).some(b => b?.prompts?.length > 0)
   const stories     = state.userStories || []
   const hasStories  = stories.length > 0
-  const sprint      = state.activeSprint
-  const progress    = state.sprintProgress
-  const sprintDone  = progress?.storyPercentage === 100
   const hasModFiles = state.activity?.hasModifiedFiles || false
   const uncommitted = gitStatusResult?.success && gitStatusResult.status?.hasUncommittedChanges
 
-  // Active sprint states
-  if (sprint) {
-    const status = sprint.status || ''
-    // Planning / approval pending
-    if (status === 'planning' || status === 'pending' || status === 'created') {
-      return { id: 4, label: 'Sprint Planning', description: 'Sprint created — plan needs review and approval before implementation.' }
-    }
-    // Code review / bug fix in progress
-    const reviewActive = sprint.codeReview?.status === 'in_progress' || sprint.bugFix?.status === 'in_progress'
-    if (reviewActive) {
-      return { id: 7, label: 'Review & Fix', description: 'Code review or bug fix phase is active.' }
-    }
-    // All stories complete — move to verify/review
-    if (sprintDone && (status === 'in_progress' || status === 'active')) {
-      return { id: 6, label: 'Verify', description: 'All sprint stories are complete — run assertions and close the sprint for code review.' }
-    }
-    // Sprint implementation in progress
-    if (status === 'in_progress' || status === 'active') {
-      return { id: 5, label: 'Implement', description: 'Sprint is running — implement stories.' }
-    }
-    // Sprint completed
-    if (status === 'completed') {
-      if (uncommitted) {
-        return { id: 9, label: 'Commit & Ship', description: 'Sprint complete — uncommitted changes are waiting to be committed.' }
-      }
-      return { id: 10, label: 'Iterate', description: 'Sprint complete and committed — ready to plan the next sprint or explore new features.' }
-    }
+  // Uncommitted changes waiting to be committed — highest signal once work exists.
+  if (uncommitted && (hasModFiles || hasStories || hasThreads)) {
+    return { id: 9, label: 'Commit & Ship', description: 'Uncommitted changes are waiting to be committed.' }
   }
 
-  // No active sprint
+  // Actively editing files this session.
+  if (hasModFiles) {
+    return { id: 5, label: 'Working', description: 'Files have been modified this session — keep editing or commit when ready.' }
+  }
+
+  // Stories on the Kanban board.
   if (hasStories) {
-    return { id: 4, label: 'Sprint Planning', description: 'Backlog has stories — create a sprint and plan implementation.' }
+    return { id: 4, label: 'Backlog', description: 'Backlog has stories — work them on the Kanban board.' }
   }
 
+  // Conversation threads exist but no stories yet.
   if (hasThreads) {
-    // Active vibe coding (modified files, no sprint)
-    if (hasModFiles || uncommitted) {
-      return { id: 5, label: 'Vibe Coding', description: 'Actively coding via prompts — files have been modified.' }
-    }
-    return { id: 3, label: 'Decompose', description: 'Conversation threads exist — derive user stories or continue speccing.' }
+    return { id: 3, label: 'Decompose', description: 'Conversation threads exist — capture tasks in the backlog or keep exploring.' }
   }
 
   return { id: 1, label: 'Discovery', description: 'No threads or stories yet — start by describing what you want to build.' }
@@ -105,7 +77,6 @@ export function buildWorkflowSummary(state, gitStatusResult = null) {
 
   sections.push(_projectSection(state))
   sections.push(_branchSection(state))
-  sections.push(_sprintSection(state))
   sections.push(_backlogSection(state))
   sections.push(_assertionsSection(state))
   sections.push(_pendingOpsSection(state))
@@ -186,38 +157,6 @@ function _branchSection(state) {
   return line
 }
 
-function _sprintSection(state) {
-  const sprint = state.activeSprint
-  const progress = state.sprintProgress
-
-  if (!sprint) return '**Sprint:** none active'
-
-  const status = sprint.status || 'unknown'
-  const pct = progress ? `${progress.storyPercentage}%` : null
-  const header = `**Sprint:** ${sprint.title || 'Untitled'} [${status}${pct ? ' · ' + pct + ' done' : ''}]`
-
-  const storyLines = []
-  const stories = progress?.stories || []
-  for (const s of stories) {
-    const icon = s.status === 'completed' ? '✓' : s.status === 'in_progress' ? '→' : '○'
-    let line = `  ${icon} ${s.title}`
-    if (s.status === 'in_progress') {
-      const parts = []
-      if (s.criteriaPercentage != null) parts.push(`${s.criteriaPercentage}% criteria`)
-      if (s.branchPercentage != null) parts.push(`${s.branchPercentage}% branches`)
-      if (parts.length) line += ` (${parts.join(', ')})`
-    }
-    storyLines.push(line)
-  }
-
-  const activeImpl = state.activeImplementationStory
-  const implLine = activeImpl
-    ? `  Currently implementing: "${activeImpl.title}"`
-    : null
-
-  return [header, ...storyLines, implLine].filter(Boolean).join('\n')
-}
-
 function _backlogSection(state) {
   const stories = state.userStories || []
   if (stories.length === 0) return '**Backlog:** empty'
@@ -250,11 +189,6 @@ function _assertionsSection(state) {
 
 function _pendingOpsSection(state) {
   const ops = []
-  if (state._pendingCrePlanning) ops.push('CRE planning')
-  if (state._pendingCreIteration) ops.push('CRE plan iteration')
-  if (state._pendingCreApproval) ops.push('CRE plan approval')
-  if (state._pendingStoryImplementation) ops.push('story implementation')
-  if (state._pendingSprintPlanning) ops.push('sprint planning')
   if (state.app?.isProcessing) ops.push('Claude response in flight')
 
   return ops.length > 0 ? `**Pending:** ${ops.join(', ')}` : null

@@ -42,9 +42,6 @@ export function computeState(model) {
       currentGenerationId: null
     },
 
-    // Story Derivation state
-    storyDerivation: computeStoryDerivationState(model),
-
     // UI state
     ui: computeUIState(model),
 
@@ -63,39 +60,6 @@ export function computeState(model) {
     // Last updated story ID (for persistence tracking)
     _lastUpdatedStoryId: model._lastUpdatedStoryId || null,
 
-    // Active Sprint state
-    activeSprint: model.activeSprint || null,
-
-    // Active Implementation Story (tracks which story is being implemented)
-    activeImplementationStory: model.activeImplementationStory || null,
-
-    // Sprint error (validation errors like story limit exceeded)
-    sprintError: model.sprintError || null,
-
-    // Sprint progress (computed)
-    sprintProgress: computeSprintProgress(model),
-
-    // Pending sprint planning (for Claude submission)
-    _pendingSprintPlanning: model._pendingSprintPlanning || null,
-
-    // Pending CRE planning (for cre:generate-plan)
-    _pendingCrePlanning: model._pendingCrePlanning || null,
-
-    // Pending CRE iteration (for cre:refine-plan)
-    _pendingCreIteration: model._pendingCreIteration || null,
-
-    // Pending CRE answer submission (for cre:submit-answers)
-    _pendingCreAnswers: model._pendingCreAnswers || null,
-
-    // Pending CRE approval (for cre:approve-plan + cre:generate-ris)
-    _pendingCreApproval: model._pendingCreApproval || null,
-
-    // Pending story implementation from sprint (for Claude submission)
-    _pendingStoryImplementation: model._pendingStoryImplementation || null,
-
-    // Sprint progress update trigger (for persistence)
-    _sprintProgressUpdated: model._sprintProgressUpdated || false,
-
     // Stuck detection state
     stuckDetection: model.stuckDetection || {
       isStuck: false,
@@ -105,18 +69,6 @@ export function computeState(model) {
       lastAction: null,
       timestamp: null
     },
-
-    // Sprint archival state (for CLEAR_SPRINT persistence)
-    _sprintToArchive: model._sprintToArchive || null,
-    _completedStoryIdsToSync: model._completedStoryIdsToSync || [],
-    _resetToPendingStoryIds: model._resetToPendingStoryIds || [],
-
-    // Sprint deletion state (for DELETE_SPRINT persistence)
-    _sprintToDelete: model._sprintToDelete || null,
-
-    // Sprint history state
-    sprintHistory: model.sprintHistory || [],
-    selectedSprintFilter: model.selectedSprintFilter || null,
 
     // Debug state
     debug: model.debug || {
@@ -418,184 +370,6 @@ function getActivityStatusText(status, currentTool) {
       return 'Complete'
     default:
       return 'Unknown'
-  }
-}
-
-/**
- * Sprint Progress computation
- * Provides detailed progress tracking for each story and overall sprint
- */
-function computeSprintProgress(model) {
-  const sprint = model.activeSprint
-  if (!sprint) {
-    return null
-  }
-
-  const storyProgress = sprint.storyProgress || {}
-  const backlogStories = model.userStories || []
-
-  console.log('[SPRINT-PROGRESS-DEBUG] Computing sprint progress:', {
-    sprintId: sprint.id,
-    sprintStoriesCount: sprint.stories?.length,
-    backlogStoriesCount: backlogStories.length,
-    storyProgressKeys: Object.keys(storyProgress)
-  })
-
-  // Compute per-story progress
-  const storiesWithProgress = sprint.stories.map(story => {
-    const progress = storyProgress[story.id] || { branches: {}, criteriaProgress: {} }
-    const branches = progress.branches || {}
-    const criteriaProgress = progress.criteriaProgress || {}
-
-    // Count branch statuses
-    const branchEntries = Object.entries(branches)
-    const completedBranches = branchEntries.filter(([, b]) => b.status === 'completed').length
-    const inProgressBranches = branchEntries.filter(([, b]) => b.status === 'in_progress').length
-    const totalBranches = branchEntries.length
-
-    // Get acceptance criteria from backlog (source of truth) or fall back to sprint copy
-    const backlogStory = backlogStories.find(bs => bs.id === story.id)
-    const acceptanceCriteria = backlogStory?.acceptanceCriteria || story.acceptanceCriteria || []
-    const totalCriteria = acceptanceCriteria.length
-    const completedCriteria = acceptanceCriteria.filter((_, idx) =>
-      criteriaProgress[idx]?.checked === true
-    ).length
-    const criteriaPercentage = totalCriteria > 0
-      ? Math.round((completedCriteria / totalCriteria) * 100)
-      : 0
-
-    // Determine overall story status
-    // Check multiple sources: sprint storyProgress, sprint story copy, and backlog story
-    let storyStatus = 'pending'
-    if (progress.status === 'completed' || backlogStory?.status === 'completed' || story.status === 'completed') {
-      storyStatus = 'completed'
-    } else if (inProgressBranches > 0 || completedBranches > 0) {
-      storyStatus = 'in_progress'
-    }
-
-    console.log(`[SPRINT-PROGRESS-DEBUG] Story: "${story.title?.substring(0, 30)}" | progress.status: ${progress.status} | backlog.status: ${backlogStory?.status} | story.status: ${story.status} | FINAL: ${storyStatus}`)
-
-    // Check for blocked state (has in_progress for too long without completion)
-    const isBlocked = branchEntries.some(([, b]) => {
-      if (b.status === 'in_progress' && b.startedAt) {
-        // Consider blocked if in progress for more than 2 hours without activity
-        const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000)
-        return b.startedAt < twoHoursAgo
-      }
-      return false
-    })
-
-    return {
-      id: story.id,
-      title: story.title,
-      status: storyStatus,
-      isBlocked,
-      branches: Object.entries(branches).map(([branchType, branchData]) => ({
-        type: branchType,
-        status: branchData.status,
-        startedAt: branchData.startedAt,
-        completedAt: branchData.completedAt,
-        isStarted: !!branchData.startedAt,
-        isCompleted: branchData.status === 'completed',
-        isInProgress: branchData.status === 'in_progress'
-      })),
-      completedBranches,
-      inProgressBranches,
-      totalBranches,
-      branchPercentage: totalBranches > 0
-        ? Math.round((completedBranches / totalBranches) * 100)
-        : 0,
-      // Acceptance criteria progress
-      acceptanceCriteria: acceptanceCriteria.map((criteria, idx) => ({
-        text: criteria,
-        index: idx,
-        checked: criteriaProgress[idx]?.checked === true,
-        checkedAt: criteriaProgress[idx]?.checkedAt || null
-      })),
-      totalCriteria,
-      completedCriteria,
-      criteriaPercentage,
-      completedAt: progress.completedAt
-    }
-  })
-
-  // Compute overall sprint progress
-  const completedStories = storiesWithProgress.filter(s => s.status === 'completed').length
-  const inProgressStories = storiesWithProgress.filter(s => s.status === 'in_progress').length
-  const blockedStories = storiesWithProgress.filter(s => s.isBlocked).length
-  const totalStories = storiesWithProgress.length
-
-  const totalBranches = storiesWithProgress.reduce((sum, s) => sum + s.totalBranches, 0)
-  const completedBranches = storiesWithProgress.reduce((sum, s) => sum + s.completedBranches, 0)
-  const inProgressBranches = storiesWithProgress.reduce((sum, s) => sum + s.inProgressBranches, 0)
-
-  return {
-    // Sprint metadata
-    sprintId: sprint.id,
-    sprintStatus: sprint.status,
-    isComplete: sprint.status === 'completed',
-    createdAt: sprint.createdAt,
-    completedAt: sprint.completedAt,
-
-    // Story-level progress
-    stories: storiesWithProgress,
-    totalStories,
-    completedStories,
-    inProgressStories,
-    blockedStories,
-    storyPercentage: totalStories > 0
-      ? Math.round((completedStories / totalStories) * 100)
-      : 0,
-
-    // Branch-level progress (across all stories)
-    totalBranches,
-    completedBranches,
-    inProgressBranches,
-    branchPercentage: totalBranches > 0
-      ? Math.round((completedBranches / totalBranches) * 100)
-      : 0,
-
-    // Helper flags
-    hasBlockedWork: blockedStories > 0,
-    hasInProgressWork: inProgressStories > 0,
-    allStoriesComplete: completedStories === totalStories && totalStories > 0
-  }
-}
-
-/**
- * Story Derivation state computation
- */
-function computeStoryDerivationState(model) {
-  const derivation = model.storyDerivation || {
-    status: 'idle',
-    pendingStories: [],
-    originalPrompt: null,
-    branchId: null,
-    error: null
-  }
-
-  const pendingStories = derivation.pendingStories || []
-  const readyCount = pendingStories.filter(s => s.status === 'ready').length
-  const pendingCount = pendingStories.filter(s => s.status === 'pending').length
-
-  return {
-    status: derivation.status,
-    isDeriving: derivation.status === 'deriving',
-    isReviewing: derivation.status === 'reviewing',
-    isRequestingChanges: derivation.status === 'requesting-changes',
-    isImplementing: derivation.status === 'implementing',
-    isIdle: derivation.status === 'idle',
-
-    pendingStories: pendingStories,
-    storyCount: pendingStories.length,
-    readyCount: readyCount,
-    pendingCount: pendingCount,
-    hasReadyStories: readyCount > 0,
-    allStoriesReady: pendingStories.length > 0 && readyCount === pendingStories.length,
-
-    originalPrompt: derivation.originalPrompt,
-    branchId: derivation.branchId,
-    error: derivation.error
   }
 }
 

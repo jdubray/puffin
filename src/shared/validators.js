@@ -149,13 +149,3 @@ export function isValidFilePath(filePath) {
   const validPathRegex = /^[a-zA-Z0-9_\-./\\]+$/
   return validPathRegex.test(filePath)
 }
-
-// Re-export inspection assertion validators for convenience
-export {
-  validateAssertion,
-  validateAssertions,
-  validateAssertionResults,
-  AssertionType,
-  AssertionStatus,
-  ASSERTION_TYPES
-} from './inspection-assertions.js'

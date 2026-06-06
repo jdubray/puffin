@@ -63,74 +63,6 @@ contextBridge.exposeInMainWorld('puffin', {
     restoreArchivedStory: (storyId, newStatus) =>
       ipcRenderer.invoke('state:restoreArchivedStory', { storyId, newStatus }),
 
-    // Sprint operations
-    hasActiveSprint: () => ipcRenderer.invoke('state:hasActiveSprint'),
-    updateActiveSprint: (sprint) => ipcRenderer.invoke('state:updateActiveSprint', sprint),
-
-    // Sprint progress tracking
-    updateSprintStoryProgress: (storyId, branchType, progressUpdate) =>
-      ipcRenderer.invoke('state:updateSprintStoryProgress', { storyId, branchType, progressUpdate }),
-    getSprintProgress: () => ipcRenderer.invoke('state:getSprintProgress'),
-
-    // Atomic story status sync (updates sprint and backlog in one transaction)
-    syncStoryStatus: (storyId, status) =>
-      ipcRenderer.invoke('state:syncStoryStatus', { storyId, status }),
-
-    // Event listener for story status sync updates (no polling needed)
-    onStoryStatusSynced: (callback) => {
-      const handler = (event, data) => callback(data)
-      ipcRenderer.on('story-status-synced', handler)
-      return () => ipcRenderer.removeListener('story-status-synced', handler)
-    },
-
-    // Sprint history operations
-    archiveSprintToHistory: (sprint) => ipcRenderer.invoke('state:archiveSprintToHistory', sprint),
-    getSprintHistory: (options) => ipcRenderer.invoke('state:getSprintHistory', options),
-    getArchivedSprint: (sprintId) => ipcRenderer.invoke('state:getArchivedSprint', sprintId),
-    rerunSprint: (archivedSprintId, branchId) => ipcRenderer.invoke('state:rerunSprint', archivedSprintId, branchId),
-    deleteSprint: (sprintId) => ipcRenderer.invoke('state:deleteSprint', sprintId),
-
-    // Inspection assertion evaluation
-    evaluateStoryAssertions: (storyId) => ipcRenderer.invoke('state:evaluateStoryAssertions', storyId),
-    getAssertionResults: (storyId) => ipcRenderer.invoke('state:getAssertionResults', storyId),
-    syncAssertionsFromCreTable: (storyIds) => ipcRenderer.invoke('state:syncAssertionsFromCreTable', storyIds),
-    evaluateSingleAssertion: (storyId, assertionId) =>
-      ipcRenderer.invoke('state:evaluateSingleAssertion', { storyId, assertionId }),
-
-    // Inspection assertion generation
-    generateAssertions: (story, options) =>
-      ipcRenderer.invoke('state:generateAssertions', { story, options }),
-    getAssertionPatterns: () => ipcRenderer.invoke('state:getAssertionPatterns'),
-
-    // Generate assertions for sprint stories using Claude (called after plan approval)
-    generateSprintAssertions: (stories, plan, model) =>
-      ipcRenderer.invoke('state:generateSprintAssertions', { stories, plan, model }),
-
-    // Event listener for sprint assertion generation progress
-    onAssertionGenerationProgress: (callback) => {
-      const handler = (event, data) => callback(data)
-      ipcRenderer.on('assertion-generation-progress', handler)
-      return () => ipcRenderer.removeListener('assertion-generation-progress', handler)
-    },
-
-    // Event listeners for assertion evaluation progress
-    onAssertionEvaluationProgress: (callback) => {
-      const handler = (event, data) => callback(data)
-      ipcRenderer.on('assertion-evaluation-progress', handler)
-      return () => ipcRenderer.removeListener('assertion-evaluation-progress', handler)
-    },
-    onAssertionEvaluationComplete: (callback) => {
-      const handler = (event, data) => callback(data)
-      ipcRenderer.on('assertion-evaluation-complete', handler)
-      return () => ipcRenderer.removeListener('assertion-evaluation-complete', handler)
-    },
-
-    // Completion summary operations
-    storeCompletionSummary: (storyId, summary) =>
-      ipcRenderer.invoke('state:storeCompletionSummary', { storyId, summary }),
-    getCompletionSummary: (storyId) =>
-      ipcRenderer.invoke('state:getCompletionSummary', storyId),
-
     // Design document operations
     getDesignDocuments: () => ipcRenderer.invoke('state:getDesignDocuments'),
     loadDesignDocument: (filename) => ipcRenderer.invoke('state:loadDesignDocument', filename),
@@ -328,34 +260,6 @@ contextBridge.exposeInMainWorld('puffin', {
       const handler = (event, data) => callback(data)
       ipcRenderer.on('claude:rateLimited', handler)
       return () => ipcRenderer.removeListener('claude:rateLimited', handler)
-    },
-
-    // User Story Derivation Operations
-    // Derive user stories from a prompt
-    deriveStories: (data) => ipcRenderer.send('claude:deriveStories', data),
-
-    // Modify stories based on feedback
-    modifyStories: (data) => ipcRenderer.send('claude:modifyStories', data),
-
-    // Subscribe to stories derived event
-    onStoriesDerived: (callback) => {
-      const handler = (event, data) => callback(data)
-      ipcRenderer.on('claude:storiesDerived', handler)
-      return () => ipcRenderer.removeListener('claude:storiesDerived', handler)
-    },
-
-    // Subscribe to story derivation error event
-    onStoryDerivationError: (callback) => {
-      const handler = (event, error) => callback(error)
-      ipcRenderer.on('claude:storyDerivationError', handler)
-      return () => ipcRenderer.removeListener('claude:storyDerivationError', handler)
-    },
-
-    // Subscribe to story derivation progress (for debugging)
-    onDerivationProgress: (callback) => {
-      const handler = (event, data) => callback(data)
-      ipcRenderer.on('claude:derivationProgress', handler)
-      return () => ipcRenderer.removeListener('claude:derivationProgress', handler)
     },
 
     // Generate a title for a prompt (used for new threads)
@@ -860,25 +764,6 @@ contextBridge.exposeInMainWorld('puffin', {
       }
       throw new Error(result.error || 'Markdown parsing failed')
     }
-  },
-
-  /**
-   * CRE (Central Reasoning Engine) operations
-   */
-  cre: {
-    generatePlan: (args) => ipcRenderer.invoke('cre:generate-plan', args),
-    submitAnswers: (args) => ipcRenderer.invoke('cre:submit-answers', args),
-    refinePlan: (args) => ipcRenderer.invoke('cre:refine-plan', args),
-    approvePlan: (args) => ipcRenderer.invoke('cre:approve-plan', args),
-    generateRis: (args) => ipcRenderer.invoke('cre:generate-ris', args),
-    generateAssertions: (args) => ipcRenderer.invoke('cre:generate-assertions', args),
-    verifyAssertions: (args) => ipcRenderer.invoke('cre:verify-assertions', args),
-    updateModel: (args) => ipcRenderer.invoke('cre:update-model', args),
-    refreshModel: (args) => ipcRenderer.invoke('cre:refresh-model', args),
-    queryModel: (args) => ipcRenderer.invoke('cre:query-model', args),
-    getPlan: (args) => ipcRenderer.invoke('cre:get-plan', args),
-    getRis: (args) => ipcRenderer.invoke('cre:get-ris', args),
-    listRisStoryIds: () => ipcRenderer.invoke('cre:list-ris-story-ids')
   },
 
   /**

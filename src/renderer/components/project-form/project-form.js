@@ -234,14 +234,6 @@ export class ProjectFormComponent {
       })
     }
 
-    // CRE Manual Refresh button
-    const creRefreshBtn = document.getElementById('cre-manual-refresh-btn')
-    if (creRefreshBtn) {
-      creRefreshBtn.addEventListener('click', () => {
-        this.handleCreManualRefresh()
-      })
-    }
-
     // Color input synchronization (color picker <-> text input)
     this.bindColorInputs()
 
@@ -540,16 +532,6 @@ export class ProjectFormComponent {
     const debugCheckbox = document.getElementById('debug-mode-checkbox')
     if (debugCheckbox) debugCheckbox.checked = config.debugMode || false
 
-    // CRE Settings
-    const creConfig = config.cre || {}
-    const sprintEndConfig = creConfig.sprintEnd || {}
-    const creAutoRefresh = document.getElementById('cre-sprint-auto-refresh')
-    const creFullRebuild = document.getElementById('cre-sprint-full-rebuild')
-    const crePromptRepetition = document.getElementById('cre-prompt-repetition')
-    if (creAutoRefresh) creAutoRefresh.checked = sprintEndConfig.autoRefresh || false
-    if (creFullRebuild) creFullRebuild.checked = sprintEndConfig.fullRebuild || false
-    if (crePromptRepetition) crePromptRepetition.checked = creConfig.promptRepetition !== false
-
     // Tools — snip
     const snipEnabled = config.tools?.snip?.enabled || false
     const snipCheckbox = document.getElementById('tools-snip-enabled')
@@ -674,13 +656,6 @@ export class ProjectFormComponent {
       speechModel: this.getElementValue('speech-model-select', 'gpt-4o-mini-transcribe'),
       speechApiUrl: this.getElementValue('speech-api-url-input', '').trim(),
       debugMode: this.getCheckboxValue('debug-mode-checkbox'),
-      cre: {
-        sprintEnd: {
-          autoRefresh: this.getCheckboxValue('cre-sprint-auto-refresh'),
-          fullRebuild: this.getCheckboxValue('cre-sprint-full-rebuild')
-        },
-        promptRepetition: this.getCheckboxValue('cre-prompt-repetition', true)
-      },
       tools: {
         snip: {
           enabled: this.getCheckboxValue('tools-snip-enabled')
@@ -709,55 +684,6 @@ export class ProjectFormComponent {
    */
   handleInputChange() {
     this._debouncedUpdateConfig()
-  }
-
-  /**
-   * Handle CRE Manual Refresh button click
-   * Triggers Code Model refresh via cre:refresh-model IPC
-   */
-  async handleCreManualRefresh() {
-    const btn = document.getElementById('cre-manual-refresh-btn')
-    const originalText = btn?.textContent
-
-    try {
-      // Update button to show progress
-      if (btn) {
-        btn.disabled = true
-        btn.textContent = 'Refreshing...'
-      }
-
-      // Check if CRE API is available
-      if (!window.puffin?.cre?.refreshModel) {
-        this.showError('CRE API not available. Make sure the project is loaded.')
-        return
-      }
-
-      // Get current setting for full rebuild
-      const fullRebuild = this.getCheckboxValue('cre-sprint-full-rebuild')
-
-      // Call the refresh API
-      const result = await window.puffin.cre.refreshModel({ forceRebuild: fullRebuild })
-
-      if (result.success) {
-        const source = result.data?.source || 'unknown'
-        const updated = result.data?.updated
-        if (updated) {
-          this.showSuccess(`Code Model refreshed (${source})`)
-        } else {
-          this.showSuccess('Code Model is already up-to-date')
-        }
-      } else {
-        this.showError(result.error || 'Failed to refresh Code Model')
-      }
-    } catch (error) {
-      this.showError(`Error refreshing Code Model: ${error.message}`)
-    } finally {
-      // Restore button
-      if (btn) {
-        btn.disabled = false
-        btn.textContent = originalText
-      }
-    }
   }
 
   /**

@@ -659,12 +659,6 @@ app.on('before-quit', async (event) => {
     await shutdownMetricsService()
   } catch (_) { /* ignore — non-critical */ }
 
-  // Shutdown CRE (releases process lock)
-  try {
-    const cre = require('./cre')
-    await cre.shutdown()
-  } catch (_) { /* ignore — non-critical */ }
-
   if (pluginManager && !pluginManager.shuttingDown) {
     event.preventDefault()
     try {

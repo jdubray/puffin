@@ -45,70 +45,21 @@ export const HOW_CONTENT = {
       'Keep the conversation going until your requirements feel clear.',
     ],
   },
-  'derive-stories': {
-    title: 'How to derive user stories',
+  'add-story': {
+    title: 'How to add a task to the backlog',
     steps: [
-      'Make sure you have at least one conversation thread with Claude.',
-      'Click the **Derive Stories** button in the Prompt tab toolbar or Backlog tab.',
-      'Review the AI-generated stories — edit titles or descriptions inline.',
-      'Remove stories you don\'t need, then click **Add to Backlog**.',
+      'Open the **Backlog** tab.',
+      'Click **+ Add Story** and give it a title and short description.',
+      'Drag the card between **To Do / Doing / Done** as you make progress.',
     ],
   },
-  'create-sprint': {
-    title: 'How to create a sprint',
+  'work-backlog': {
+    title: 'How to work through your backlog',
     steps: [
-      'Go to the **Backlog** tab.',
-      'Select the stories you want to include using the checkboxes.',
-      'Click **Create Sprint** and give it a descriptive title.',
-      'The sprint will appear in the Sprint panel, ready for planning.',
-    ],
-  },
-  'approve-plan': {
-    title: 'How to generate and approve an implementation plan',
-    steps: [
-      'Open the Sprint panel on the right side.',
-      'Click **Generate Plan** (or **Generate CRE Plan** for structured planning with assertions).',
-      'Review the plan — use **Iterate** to ask Claude to refine it.',
-      'When satisfied, click **Approve Plan**.',
-      'Choose **Automated** or **Human-Controlled** implementation mode.',
-    ],
-  },
-  'run-sprint': {
-    title: 'How to run a sprint',
-    steps: [
-      'Make sure your sprint plan is approved.',
-      'In the Sprint panel, click **Start Sprint** (automated) or click **Start** on each story individually.',
-      'In Automated mode, Claude implements all stories sequentially.',
-      'In Human-Controlled mode, click **Start** per story to implement one at a time.',
-      'Monitor progress via the story status badges in the Sprint panel.',
-    ],
-  },
-  'run-assertions': {
-    title: 'How to run inspection assertions',
-    steps: [
-      'After all sprint stories are complete, open the Sprint panel.',
-      'Click **Run Assertions** — Puffin evaluates each story\'s assertion set against the codebase.',
-      'Review results: green = passed, red = failed.',
-      'Click on any failure to see details and fix the issue before proceeding.',
-    ],
-  },
-  'code-review': {
-    title: 'How to run a code review',
-    steps: [
-      'From the Sprint panel, click **Close Sprint**.',
-      'Puffin automatically triggers the **Code Review** phase.',
-      'Claude reviews all changes and produces a list of findings.',
-      'For each finding, click **Fix** to have Claude address it automatically.',
-      'When all findings are resolved, complete the bug fix phase to proceed.',
-    ],
-  },
-  'commit': {
-    title: 'How to commit your changes',
-    steps: [
-      'After code review is complete, click **Commit Changes** in the Sprint close flow.',
-      'Puffin auto-generates a commit message from your session.',
-      'Review and edit the message if needed, then click **Commit**.',
-      'Optionally use **Merge Branch** to merge back into your main branch.',
+      'Open the **Backlog** tab to see your Kanban board.',
+      'Drag stories between columns (Backlog → In Progress → Done) as you work.',
+      'Click a story to open it and discuss the work with Claude in the Prompt tab.',
+      'Update each story\'s status on the board to track progress.',
     ],
   },
   'git-init': {
@@ -171,10 +122,7 @@ export function computeActionCards(state, gitStatus = null, activityLog = null, 
   }
 
   const stories   = state.userStories || []
-  const sprint    = state.activeSprint
-  const progress  = state.sprintProgress
   const onMain    = _isOnMainBranch(gitStatus)
-  const hasFiles  = gitStatus?.success && gitStatus?.status?.hasUncommittedChanges
   const hasThreads = _hasThreads(state)
 
   // --- No git repository -------------------------------------------------------
@@ -208,7 +156,7 @@ export function computeActionCards(state, gitStatus = null, activityLog = null, 
   }
 
   // --- Phase 1: no threads, no stories -----------------------------------------
-  if (!hasThreads && stories.length === 0 && !sprint) {
+  if (!hasThreads && stories.length === 0) {
     cards.push({
       id: 'vibe-prompt',
       priority: 5,
@@ -224,166 +172,36 @@ export function computeActionCards(state, gitStatus = null, activityLog = null, 
   }
 
   // --- Phase 3: has threads, no stories ----------------------------------------
-  if (hasThreads && stories.length === 0 && !sprint) {
+  if (hasThreads && stories.length === 0) {
     cards.push({
-      id: 'derive-stories',
+      id: 'add-story',
       priority: 10,
       icon: '📋',
-      title: 'Derive user stories',
-      description: 'Turn your conversation into structured user stories. Claude will parse the thread and propose a backlog.',
-      actionLabel: 'Derive Stories',
-      howId: 'derive-stories',
+      title: 'Capture tasks in the backlog',
+      description: 'Add the follow-ups from your conversation to the Kanban backlog so you can track them as To Do / Doing / Done.',
+      actionLabel: 'Open Backlog',
+      howId: 'add-story',
       badgeLabel: 'Phase 3',
       badgeClass: 'badge-phase',
     })
     return _sort(cards)
   }
 
-  // --- Phase 4a: has stories, no sprint ----------------------------------------
-  if (stories.length > 0 && !sprint) {
+  // --- Has stories: work the Kanban backlog ------------------------------------
+  if (stories.length > 0) {
     const count = stories.length
     cards.push({
-      id: 'create-sprint',
+      id: 'work-backlog',
       priority: 20,
-      icon: '🏃',
-      title: 'Create a sprint',
-      description: `You have ${count} stor${count === 1 ? 'y' : 'ies'} in the backlog. Group them into a sprint to start planning implementation.`,
-      actionLabel: 'Create Sprint',
-      howId: 'create-sprint',
-      badgeLabel: 'Phase 4',
+      icon: '📋',
+      title: 'Work on your backlog',
+      description: `You have ${count} stor${count === 1 ? 'y' : 'ies'} in the backlog. Open the Kanban board to pick one up and move it across the board as you make progress.`,
+      actionLabel: 'Go to Backlog',
+      howId: 'work-backlog',
+      badgeLabel: 'Backlog',
       badgeClass: 'badge-phase',
     })
     return _sort(cards)
-  }
-
-  // --- Sprint-based states -----------------------------------------------------
-  if (sprint) {
-    const status    = sprint.status || ''
-    const sprintPct = progress?.storyPercentage ?? 0
-    const allDone   = sprintPct === 100
-    const reviewActive = sprint.codeReview?.status === 'in_progress'
-    const bugfixActive = sprint.bugFix?.status === 'in_progress'
-
-    // Phase 4b: plan not yet approved
-    if (status === 'created' || status === 'planning' || status === 'pending') {
-      cards.push({
-        id: 'approve-plan',
-        priority: 25,
-        icon: '🗺️',
-        title: 'Generate & approve the plan',
-        description: `Review and approve the implementation plan for "${sprint.title || 'your sprint'}" before implementation begins.`,
-        actionLabel: 'Review Plan',
-        howId: 'approve-plan',
-        badgeLabel: 'Phase 4',
-        badgeClass: 'badge-phase',
-      })
-      return _sort(cards)
-    }
-
-    // Phase 5a: approved, not yet started
-    if (status === 'approved') {
-      cards.push({
-        id: 'run-sprint',
-        priority: 30,
-        icon: '⚙️',
-        title: 'Start the sprint',
-        description: `"${sprint.title || 'Your sprint'}" is approved and ready. Start implementation — automated or story-by-story.`,
-        actionLabel: 'Start Sprint',
-        howId: 'run-sprint',
-        badgeLabel: 'Phase 5',
-        badgeClass: 'badge-phase',
-      })
-      return _sort(cards)
-    }
-
-    // Phase 7: review / bug-fix active
-    if (reviewActive || bugfixActive) {
-      cards.push({
-        id: 'complete-review',
-        priority: 45,
-        icon: '🔍',
-        title: 'Complete the code review',
-        description: 'Review findings are ready. Fix the issues and complete the review phase before committing.',
-        actionLabel: 'View Review',
-        howId: 'code-review',
-        badgeLabel: 'Phase 7',
-        badgeClass: 'badge-phase',
-      })
-      return _sort(cards)
-    }
-
-    // Phase 5b: implementation in progress
-    if (status === 'in_progress' || status === 'active') {
-      if (allDone) {
-        // Phase 6: all stories complete → verify
-        cards.push({
-          id: 'run-assertions',
-          priority: 35,
-          icon: '🧪',
-          title: 'Run inspection assertions',
-          description: 'All stories are complete. Verify the implementation against the acceptance criteria.',
-          actionLabel: 'Run Assertions',
-          howId: 'run-assertions',
-          badgeLabel: 'Phase 6',
-          badgeClass: 'badge-phase',
-        })
-        cards.push({
-          id: 'code-review',
-          priority: 40,
-          icon: '🔍',
-          title: 'Close sprint & run code review',
-          description: 'Trigger the automated code review — Claude reviews all changes and surfaces findings.',
-          actionLabel: 'Close Sprint',
-          howId: 'code-review',
-          badgeLabel: 'Phase 7',
-          badgeClass: 'badge-phase',
-        })
-      } else {
-        const pending = progress?.pendingCount ?? '?'
-        cards.push({
-          id: 'continue-sprint',
-          priority: 30,
-          icon: '▶️',
-          title: 'Continue implementing',
-          description: `Sprint is ${sprintPct}% complete — ${pending} stor${pending === 1 ? 'y' : 'ies'} remaining.`,
-          actionLabel: 'View Sprint',
-          howId: 'run-sprint',
-          badgeLabel: 'Phase 5',
-          badgeClass: 'badge-phase',
-        })
-      }
-      return _sort(cards)
-    }
-
-    // Phase 9 / 10: sprint completed
-    if (status === 'completed') {
-      if (hasFiles) {
-        cards.push({
-          id: 'commit',
-          priority: 50,
-          icon: '💾',
-          title: 'Commit your changes',
-          description: 'The sprint is complete and code review is done. Commit your work to version control.',
-          actionLabel: 'Commit',
-          howId: 'commit',
-          badgeLabel: 'Phase 9',
-          badgeClass: 'badge-phase',
-        })
-      } else {
-        cards.push({
-          id: 'next-sprint',
-          priority: 60,
-          icon: '🔄',
-          title: 'Plan your next sprint',
-          description: 'Sprint is done and committed. Head back to discovery or decompose new features into stories.',
-          actionLabel: 'Go to Backlog',
-          howId: 'derive-stories',
-          badgeLabel: 'Phase 10',
-          badgeClass: 'badge-phase',
-        })
-      }
-      return _sort(cards)
-    }
   }
 
   // --- Always-available: ask Claude a question ---------------------------------

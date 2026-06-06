@@ -107,7 +107,20 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\jjdub\\\\code\\\\puffin\" -Directory)",
       "Bash(Select-Object -ExpandProperty Name)",
       "Bash(git diff *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(sed -i '2563,2971d' src/main/puffin-state.js)",
+      "Bash(sed -n '2558,2570p' src/main/puffin-state.js)",
+      "Bash(sed -i '392,788d' src/main/ipc-handlers.js)",
+      "Bash(sed -n '388,396p' src/main/ipc-handlers.js)",
+      "Bash(sed -i '1591,1935d' src/main/claude-service.js)",
+      "Bash(sed -n '1586,1596p' src/main/claude-service.js)",
+      "Bash(python *)",
+      "Bash(sed -i '2092,2373d' src/main/claude-service.js)",
+      "Bash(sed -n '2084,2095p' src/main/claude-service.js)",
+      "PowerShell(Set-Content *)",
+      "Bash(sed -n '165,210p' src/renderer/lib/action-card-engine.js)",
+      "Bash(sed -n '35,60p' src/renderer/lib/workflow-state-tracker.js)",
+      "Bash(sed -n '180,210p' src/renderer/lib/workflow-state-tracker.js)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -264,6 +264,7 @@ class PuffinState {
   /**
    * Process sync inbox from CLI
    * Reads sync-inbox.json, adds prompts to appropriate branches, then clears the inbox
+   * @returns {Promise<number>} Number of inbox items processed (0 if none)
    * @private
    */
   async processSyncInbox() {
@@ -276,11 +277,11 @@ class PuffinState {
       if (!Array.isArray(inbox)) inbox = []
     } catch {
       // No inbox file exists, nothing to process
-      return
+      return 0
     }
 
     if (inbox.length === 0) {
-      return
+      return 0
     }
 
     console.log(`[PUFFIN-STATE] Processing ${inbox.length} sync inbox items`)
@@ -321,6 +322,8 @@ class PuffinState {
     } catch (err) {
       console.error('[PUFFIN-STATE] Failed to clear sync inbox:', err.message)
     }
+
+    return inbox.length
   }
 
   /**

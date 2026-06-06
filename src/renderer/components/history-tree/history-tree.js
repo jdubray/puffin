@@ -28,6 +28,7 @@ export class HistoryTreeComponent {
 
     this.bindEvents()
     this.subscribeToState()
+    this.subscribeToSync()
   }
 
   /**
@@ -78,14 +79,9 @@ export class HistoryTreeComponent {
     }
 
     try {
-      // Process any pending sync inbox items
+      // Process any pending sync inbox items, then reload state
       await window.puffin.state.processSyncInbox()
-
-      // Reload full state to pick up changes
-      const result = await window.puffin.state.init()
-      if (result.success) {
-        this.intents.loadState(result.state)
-      }
+      await this.reloadState()
     } catch (error) {
       console.error('[HISTORY-TREE] Refresh failed:', error)
     } finally {
@@ -94,6 +90,38 @@ export class HistoryTreeComponent {
         this.refreshBtn.disabled = false
       }
     }
+  }
+
+  /**
+   * Reload full state from main and push it into the model.
+   * Does NOT process the sync inbox — used when main has already processed it.
+   */
+  async reloadState() {
+    const result = await window.puffin.state.init()
+    if (result.success) {
+      this.intents.loadState(result.state)
+    }
+  }
+
+  /**
+   * Subscribe to auto-sync events. When the main-process file watcher detects
+   * and processes new /puffin-sync entries, reload state so they appear without
+   * a manual refresh or app restart.
+   */
+  subscribeToSync() {
+    if (!window.puffin?.state?.onSyncInboxProcessed) return
+
+    this._unsubscribeSync = window.puffin.state.onSyncInboxProcessed(async () => {
+      // Brief spin feedback on the refresh button, mirroring a manual refresh
+      if (this.refreshBtn) this.refreshBtn.classList.add('spinning')
+      try {
+        await this.reloadState()
+      } catch (error) {
+        console.error('[HISTORY-TREE] Auto-sync refresh failed:', error)
+      } finally {
+        if (this.refreshBtn) this.refreshBtn.classList.remove('spinning')
+      }
+    })
   }
 
   /**

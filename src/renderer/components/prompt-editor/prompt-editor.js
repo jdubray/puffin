@@ -1209,6 +1209,15 @@ export class PromptEditorComponent {
       }
     }
 
+    // A new user prompt restarts the review cycle: if we previously finished
+    // a Review or Fix pass, return the button to "Review Thread" so the user
+    // can sanity-check the new code without opening a new thread.
+    if (this._reviewState === 'fixed' || this._reviewState === 'passed') {
+      this._reviewState = 'idle'
+      this._pendingReviewAction = null
+      this._updateReviewButton()
+    }
+
     // If branch is empty, behave the same as "Send as New Thread"
     if (state.history.isEmpty) {
       this.submitAsNewThread()

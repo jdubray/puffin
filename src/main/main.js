@@ -53,6 +53,10 @@ const { PluginLoader, PluginManager, HistoryService, StoryService } = require('.
 const websiteServer = require('./website-server')
 const { getRecentProjects, addRecentProject, removeRecentProject } = require('./recent-projects')
 const { shutdownMetricsService } = require('./metrics-service')
+const { SyncInboxWatcher } = require('./sync-watcher')
+
+// Watches .puffin/sync-inbox.json so /puffin-sync entries appear without a restart
+const syncWatcher = new SyncInboxWatcher()
 
 /**
  * Forward a main-process error to the renderer as a toast notification.
@@ -307,6 +311,7 @@ function createWindow() {
 
   // Handle window closed
   mainWindow.on('closed', () => {
+    syncWatcher.stop()
     mainWindow = null
   })
 
@@ -514,6 +519,18 @@ async function initializeProject(projectPath) {
   if (mainWindow) {
     mainWindow.webContents.send('app:projectReady', { projectPath })
   }
+
+  // Watch the sync inbox so /puffin-sync entries appear live (no manual refresh
+  // or restart needed). On change, process the inbox in the main process and
+  // tell the renderer to reload its state.
+  syncWatcher.start(path.join(projectPath, '.puffin'), async () => {
+    const state = getPuffinState()
+    if (!state) return
+    const processed = await state.processSyncInbox()
+    if (processed > 0 && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('sync:inboxProcessed', { count: processed })
+    }
+  })
 }
 
 /**

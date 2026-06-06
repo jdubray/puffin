@@ -5,12 +5,12 @@
  * Receives a session summary from Claude Code CLI and writes it to
  * Puffin's history.json under the specified branch (defaults to "improvements").
  *
- * Usage: echo '{"title":"...", "content":"...", "files":[]}' | node puffin-sync.js [branch-name]
+ * Usage: echo '{"title":"...", "content":"...", "files":[]}' | node puffin-sync.cjs [branch-name]
  *
  * Examples:
- *   echo '{"title":"Fix bug", "content":"..."}' | node puffin-sync.js
- *   echo '{"title":"New feature", "content":"..."}' | node puffin-sync.js ui
- *   echo '{"title":"API changes", "content":"..."}' | node puffin-sync.js backend
+ *   echo '{"title":"Fix bug", "content":"..."}' | node puffin-sync.cjs
+ *   echo '{"title":"New feature", "content":"..."}' | node puffin-sync.cjs ui
+ *   echo '{"title":"API changes", "content":"..."}' | node puffin-sync.cjs backend
  */
 
 const fs = require('fs');

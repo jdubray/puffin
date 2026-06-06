@@ -34,6 +34,14 @@ contextBridge.exposeInMainWorld('puffin', {
     // Process sync inbox from CLI
     processSyncInbox: () => ipcRenderer.invoke('state:processSyncInbox'),
 
+    // Fired by main after it auto-processes the sync inbox (file watcher).
+    // The renderer should reload its state to show the new entries.
+    onSyncInboxProcessed: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('sync:inboxProcessed', handler)
+      return () => ipcRenderer.removeListener('sync:inboxProcessed', handler)
+    },
+
     // Update a prompt's response
     updatePromptResponse: (branchId, promptId, response) =>
       ipcRenderer.invoke('state:updatePromptResponse', { branchId, promptId, response }),

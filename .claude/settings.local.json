@@ -92,7 +92,18 @@
       "Bash(mistral-vibe --help)",
       "Bash(python -m mistral_vibe --help)",
       "Bash(\"C:/Users/jjdub/AppData/Local/Programs/Python/Python312/Scripts/vibe.exe\" --help)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "PowerShell(npm *)",
+      "PowerShell(node C:\\\\Users\\\\jjdub\\\\code\\\\puffin\\\\tmp\\\\pty\\\\pty-test.js 2>&1)",
+      "PowerShell(node C:\\\\Users\\\\jjdub\\\\code\\\\puffin\\\\tmp\\\\pty\\\\pty-claude.js 2>&1 | Select-Object -Last 40)",
+      "PowerShell(node C:\\\\Users\\\\jjdub\\\\code\\\\puffin\\\\tmp\\\\pty\\\\pty-resume.js 2>&1 | Select-Object -Last 30)",
+      "PowerShell(node -e \"const{execSync}=require\\('child_process'\\);const pty=require\\('C:/Users/jjdub/code/puffin/tmp/pty/node_modules/node-pty'\\);const t=pty.spawn\\(process.execPath,['-e','process.stdout.write\\(\\\\\"isTTY=\\\\\"+!!process.stdout.isTTY\\)'],{name:'xterm',cols:80,rows:24,cwd:process.cwd\\(\\),env:process.env}\\);let b='';t.onData\\(d=>b+=d\\);t.onExit\\(\\(\\)=>{console.log\\('[through node-pty]  '+b.trim\\(\\)\\)}\\)\")",
+      "PowerShell(node C:\\\\Users\\\\jjdub\\\\code\\\\puffin\\\\tmp\\\\pty\\\\detect-tty.js 2>&1)",
+      "Bash(npx jest *)",
+      "Bash(cp src/main/templates/puffin-sync/script.js .claude/scripts/puffin-sync.cjs)",
+      "Bash(cp src/main/templates/puffin-sync/command.md .claude/commands/puffin-sync.md)",
+      "Bash(rm -f .claude/scripts/puffin-sync.js)",
+      "Bash(git *)"
     ]
   },
   "enableAllProjectMcpServers": true,

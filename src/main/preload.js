@@ -172,15 +172,6 @@ contextBridge.exposeInMainWorld('puffin', {
     // Export UI guidelines
     exportUiGuidelines: (options) => ipcRenderer.invoke('state:exportUiGuidelines', options),
 
-    // Generate Claude.md file (legacy)
-    generateClaudeMd: (options) => ipcRenderer.invoke('state:generateClaudeMd', options),
-
-    // Get the byte size of CLAUDE_{branch}.md for size-warning badge
-    getClaudeMdSize: (branch) => ipcRenderer.invoke('state:getClaudeMdSize', branch),
-
-    // Activate branch - swaps CLAUDE.md to branch-specific content
-    activateBranch: (branchId) => ipcRenderer.invoke('state:activateBranch', branchId),
-
     // ============ Claude Code Plugin Operations ============
 
     // Get all installed Claude Code plugins

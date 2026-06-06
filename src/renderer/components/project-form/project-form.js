@@ -226,14 +226,6 @@ export class ProjectFormComponent {
       })
     }
 
-    // Generate Claude.md button
-    const generateBtn = document.getElementById('generate-claude-md-btn')
-    if (generateBtn) {
-      generateBtn.addEventListener('click', () => {
-        this.handleGenerateClaudeMd()
-      })
-    }
-
     // Add plugin button
     const addPluginBtn = document.getElementById('add-plugin-btn')
     if (addPluginBtn) {
@@ -717,28 +709,6 @@ export class ProjectFormComponent {
    */
   handleInputChange() {
     this._debouncedUpdateConfig()
-  }
-
-  /**
-   * Handle Generate Claude.md button click
-   */
-  async handleGenerateClaudeMd() {
-    try {
-      // Save current config first
-      const formData = this.getFormData()
-      this.intents.updateConfig(formData)
-
-      // Generate Claude.md via IPC
-      const result = await window.puffin.state.generateClaudeMd()
-
-      if (result.success) {
-        this.showSuccess(`Claude.md generated at ${result.path}`)
-      } else {
-        this.showError(result.error || 'Failed to generate Claude.md')
-      }
-    } catch (error) {
-      this.showError(`Error generating Claude.md: ${error.message}`)
-    }
   }
 
   /**

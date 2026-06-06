@@ -1,8 +1,9 @@
 /**
- * Tests for ClaudeMdGenerator command scaffolding
+ * Tests for command-scaffolder
  *
  * Verifies that bundled slash commands (e.g. /puffin-sync) are copied into a
- * target project's .claude/ during generation, idempotently.
+ * target project's .claude/ directory, idempotently. As of 4.0 this is the only
+ * thing Puffin writes under .claude/ — CLAUDE.md is left untouched.
  */
 
 const { describe, it, beforeEach, afterEach } = require('node:test')
@@ -11,16 +12,15 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-const ClaudeMdGenerator = require('../../src/main/claude-md-generator')
+const { scaffoldCommands } = require('../src/main/command-scaffolder')
 
-describe('ClaudeMdGenerator — scaffoldCommands', () => {
+describe('command-scaffolder — scaffoldCommands', () => {
   let projectDir
-  let generator
+  let claudeDir
 
-  beforeEach(async () => {
+  beforeEach(() => {
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puffin-scaffold-test-'))
-    generator = new ClaudeMdGenerator()
-    await generator.initialize(projectDir)
+    claudeDir = path.join(projectDir, '.claude')
   })
 
   afterEach(() => {
@@ -28,10 +28,10 @@ describe('ClaudeMdGenerator — scaffoldCommands', () => {
   })
 
   it('writes the puffin-sync command and .cjs script into .claude/', async () => {
-    await generator.scaffoldCommands()
+    await scaffoldCommands(claudeDir)
 
-    const commandPath = path.join(projectDir, '.claude', 'commands', 'puffin-sync.md')
-    const scriptPath = path.join(projectDir, '.claude', 'scripts', 'puffin-sync.cjs')
+    const commandPath = path.join(claudeDir, 'commands', 'puffin-sync.md')
+    const scriptPath = path.join(claudeDir, 'scripts', 'puffin-sync.cjs')
 
     assert.ok(fs.existsSync(commandPath), 'command.md should be written')
     assert.ok(fs.existsSync(scriptPath), 'script.cjs should be written')
@@ -45,45 +45,49 @@ describe('ClaudeMdGenerator — scaffoldCommands', () => {
   })
 
   it('uses .cjs so it runs under ESM ("type":"module") projects', async () => {
-    await generator.scaffoldCommands()
-    const scriptPath = path.join(projectDir, '.claude', 'scripts', 'puffin-sync.cjs')
+    await scaffoldCommands(claudeDir)
+    const scriptPath = path.join(claudeDir, 'scripts', 'puffin-sync.cjs')
     assert.ok(fs.existsSync(scriptPath), 'script must use the .cjs extension')
     assert.ok(
-      !fs.existsSync(path.join(projectDir, '.claude', 'scripts', 'puffin-sync.js')),
+      !fs.existsSync(path.join(claudeDir, 'scripts', 'puffin-sync.js')),
       'no .js variant should be written'
     )
   })
 
   it('removes a stale .js script left by earlier versions', async () => {
-    const scriptsDir = path.join(projectDir, '.claude', 'scripts')
+    const scriptsDir = path.join(claudeDir, 'scripts')
     fs.mkdirSync(scriptsDir, { recursive: true })
     const stalePath = path.join(scriptsDir, 'puffin-sync.js')
     fs.writeFileSync(stalePath, '// old commonjs-in-.js script')
 
-    await generator.scaffoldCommands()
+    await scaffoldCommands(claudeDir)
 
     assert.ok(!fs.existsSync(stalePath), 'stale .js should be removed')
     assert.ok(fs.existsSync(path.join(scriptsDir, 'puffin-sync.cjs')), '.cjs should be written')
   })
 
   it('is idempotent — a second run leaves content unchanged', async () => {
-    await generator.scaffoldCommands()
-    const scriptPath = path.join(projectDir, '.claude', 'scripts', 'puffin-sync.cjs')
+    await scaffoldCommands(claudeDir)
+    const scriptPath = path.join(claudeDir, 'scripts', 'puffin-sync.cjs')
     const first = fs.readFileSync(scriptPath, 'utf-8')
 
-    await generator.scaffoldCommands()
+    await scaffoldCommands(claudeDir)
     const second = fs.readFileSync(scriptPath, 'utf-8')
 
     assert.strictEqual(first, second, 'content should be stable across runs')
   })
 
   it('restores the command when a user deletes it', async () => {
-    await generator.scaffoldCommands()
-    const commandPath = path.join(projectDir, '.claude', 'commands', 'puffin-sync.md')
+    await scaffoldCommands(claudeDir)
+    const commandPath = path.join(claudeDir, 'commands', 'puffin-sync.md')
     fs.rmSync(commandPath)
     assert.ok(!fs.existsSync(commandPath))
 
-    await generator.scaffoldCommands()
+    await scaffoldCommands(claudeDir)
     assert.ok(fs.existsSync(commandPath), 'deleted command should be re-created')
+  })
+
+  it('is a no-op when given no claudeDir', async () => {
+    await assert.doesNotReject(() => scaffoldCommands(undefined))
   })
 })

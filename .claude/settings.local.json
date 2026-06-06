@@ -103,7 +103,11 @@
       "Bash(cp src/main/templates/puffin-sync/script.js .claude/scripts/puffin-sync.cjs)",
       "Bash(cp src/main/templates/puffin-sync/command.md .claude/commands/puffin-sync.md)",
       "Bash(rm -f .claude/scripts/puffin-sync.js)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\jjdub\\\\code\\\\puffin\" -Directory)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(git diff *)",
+      "Read(//tmp/**)"
     ]
   },
   "enableAllProjectMcpServers": true,

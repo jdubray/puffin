@@ -192,14 +192,6 @@ export class StatePersistence {
           }
         }
 
-        // When switching branches, activate the branch-specific CLAUDE.md
-        // This includes explicit branch selection AND sprint implementation which changes branch
-        if (normalizedType === 'SELECT_BRANCH' || normalizedType === 'START_SPRINT_STORY_IMPLEMENTATION') {
-          const activeBranch = state.history.activeBranch
-          console.log('[PERSIST-DEBUG] Activating CLAUDE.md for branch:', activeBranch)
-          await window.puffin.state.activateBranch(activeBranch)
-        }
-
         // NOTE: Auto-extraction of user stories is disabled.
         // Use the explicit "Derive User Stories" checkbox instead, which provides
         // better control and a review modal before adding stories.

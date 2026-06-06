@@ -1173,9 +1173,6 @@ Please provide specific file locations and line numbers where issues are found, 
     // Initialize activity log for this project
     this.activityLog.init(this.projectPath)
     this.activityLog.record(ActivityEventType.PROJECT_OPENED, { name: projectName })
-
-    // Initial CLAUDE.md size badge check
-    this._updateClaudeMdSizeBadge().catch(() => {})
   }
 
   /**
@@ -2372,9 +2369,6 @@ Please provide specific file locations and line numbers where issues are found, 
       if (this.state?.config?.websiteEdition) {
         this._refreshWebsiteUrlPanel().catch(() => {})
       }
-
-      // Recheck CLAUDE_{branch}.md size after every prompt — updates the header badge
-      this._updateClaudeMdSizeBadge().catch(() => {})
 
       // Capture sprint plan content if we're in planning mode
       try {
@@ -4786,46 +4780,6 @@ Please provide specific file locations and line numbers where issues are found, 
     }
   }
 
-  /**
-   * Check the byte size of CLAUDE_{branch}.md for the active Puffin branch and
-   * apply a warning badge class to #git-status-indicator.
-   *
-   * Thresholds (matching recommended Claude Code guidance):
-   *   < 8 KB  → no badge
-   *   8–40 KB → 'claude-md-warn'  (yellow border)
-   *   > 40 KB → 'claude-md-critical' (red border)
-   */
-  async _updateClaudeMdSizeBadge() {
-    const indicator = document.getElementById('git-status-indicator')
-    if (!indicator) return
-
-    const branch = this.state?.history?.activeBranch
-    if (!branch) {
-      indicator.classList.remove('claude-md-warn', 'claude-md-critical')
-      return
-    }
-
-    try {
-      const result = await window.puffin?.state?.getClaudeMdSize?.(branch)
-      if (!result?.success || !result.exists) {
-        indicator.classList.remove('claude-md-warn', 'claude-md-critical')
-        return
-      }
-
-      const KB = result.size / 1024
-      if (KB > 40) {
-        indicator.classList.remove('claude-md-warn')
-        indicator.classList.add('claude-md-critical')
-      } else if (KB > 8) {
-        indicator.classList.remove('claude-md-critical')
-        indicator.classList.add('claude-md-warn')
-      } else {
-        indicator.classList.remove('claude-md-warn', 'claude-md-critical')
-      }
-    } catch {
-      // Non-fatal — badge just won't show
-    }
-  }
 
   /**
    * Start the preview server if not already running on the correct port/path.

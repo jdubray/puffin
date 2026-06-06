@@ -161,23 +161,6 @@ a:hover {
   font-size: 0.625rem;
 }
 
-/* CLAUDE_{branch}.md size warning — applied by app.js _updateClaudeMdSizeBadge() */
-.git-indicator.claude-md-warn {
-  border: 1.5px solid #d69e2e;
-  box-shadow: 0 0 0 1px rgba(214, 158, 46, 0.25);
-}
-
-.git-indicator.claude-md-critical {
-  border: 1.5px solid #e53e3e;
-  box-shadow: 0 0 0 1px rgba(229, 62, 62, 0.25);
-  animation: claude-md-pulse 2.5s ease-in-out infinite;
-}
-
-@keyframes claude-md-pulse {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(229, 62, 62, 0.25); }
-  50%       { box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.15); }
-}
-
 .save-indicator {
   color: var(--warning-color);
   font-size: 1.25rem;

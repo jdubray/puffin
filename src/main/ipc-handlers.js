@@ -15,7 +15,7 @@ const { ClaudeService } = require('./claude-service')
 const VibeService = require('./vibe-service')
 const { DeveloperProfileManager } = require('./developer-profile')
 const { GitService } = require('./git-service')
-const ClaudeMdGenerator = require('./claude-md-generator')
+const { scaffoldCommands } = require('./command-scaffolder')
 const { AssertionEvaluator } = require('./evaluators/assertion-evaluator')
 const { AssertionGenerator } = require('./generators/assertion-generator')
 const { getTempImageService } = require('./services')
@@ -29,7 +29,6 @@ let claudeService = null
 let vibeService = null
 let developerProfile = null
 let gitService = null
-let claudeMdGenerator = null
 let tempImageService = null
 let projectPath = null
 // Lazy reference to pluginManager — set by setupPluginManagerHandlers once loaded
@@ -79,7 +78,6 @@ function setupIpcHandlers(ipcMain, initialProjectPath) {
   vibeService = new VibeService()
   developerProfile = new DeveloperProfileManager()
   gitService = new GitService()
-  claudeMdGenerator = new ClaudeMdGenerator()
 
   // Set Claude CLI working directory to the project path
   claudeService.setProjectPath(projectPath)
@@ -216,14 +214,14 @@ function setupStateHandlers(ipcMain) {
         console.error('[CRE] Initialization failed (non-fatal):', creErr.message)
       }
 
-      // Initialize CLAUDE.md generator and generate initial files
-      await claudeMdGenerator.initialize(projectPath)
-      const activeBranch = state.history?.activeBranch || 'specifications'
-
-      // Pass skill and agent content getters to include assigned content in branch files
-      const getSkillContent = (branchId) => puffinState.getBranchSkillContent(branchId)
-      const getAgentContent = (branchId) => puffinState.getBranchAgentContent(branchId)
-      await claudeMdGenerator.generateAll(state, activeBranch, getSkillContent, getAgentContent)
+      // Install Puffin's bundled slash commands (e.g. /puffin-sync) into the
+      // project's .claude/. Puffin no longer generates or swaps CLAUDE.md — the
+      // project's CLAUDE.md is left entirely under the user's control.
+      try {
+        await scaffoldCommands(require('path').join(projectPath, '.claude'))
+      } catch (scaffoldErr) {
+        console.warn('[IPC] Command scaffolding failed (non-fatal):', scaffoldErr.message)
+      }
 
       return { success: true, state }
     } catch (error) {
@@ -266,11 +264,6 @@ function setupStateHandlers(ipcMain) {
         }
       }
 
-      // Regenerate CLAUDE.md base (config affects all branches)
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      await claudeMdGenerator.updateBase(state, activeBranch)
-
       return { success: true, config }
     } catch (error) {
       return { success: false, error: error.message }
@@ -292,24 +285,7 @@ function setupStateHandlers(ipcMain) {
   // Update history
   ipcMain.handle('state:updateHistory', async (event, history) => {
     try {
-      // Get existing branches before update
-      const oldState = puffinState.getState()
-      const existingBranches = Object.keys(oldState.history?.branches || {})
-
       const updated = await puffinState.updateHistory(history)
-
-      // Check for new branches and create their CLAUDE files
-      const newBranches = Object.keys(history.branches || {})
-      for (const branchId of newBranches) {
-        if (!existingBranches.includes(branchId)) {
-          console.log(`[IPC] Creating CLAUDE file for new branch: ${branchId}`)
-          const state = puffinState.getState()
-          const skillContent = puffinState.getBranchSkillContent(branchId)
-          const agentContent = puffinState.getBranchAgentContent(branchId)
-          await claudeMdGenerator.generateBranch(branchId, state, skillContent, agentContent)
-        }
-      }
-
       return { success: true, history: updated }
     } catch (error) {
       return { success: false, error: error.message }
@@ -418,11 +394,6 @@ function setupStateHandlers(ipcMain) {
         }
       }
 
-      // Regenerate CLAUDE.md base (stories are in base context)
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      await claudeMdGenerator.updateBase(state, activeBranch)
-
       return { success: true, story: newStory }
     } catch (error) {
       return { success: false, error: error.message }
@@ -432,11 +403,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:updateUserStory', async (event, { storyId, updates }) => {
     try {
       const story = await puffinState.updateUserStory(storyId, updates)
-
-      // Regenerate CLAUDE.md base (stories are in base context)
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      await claudeMdGenerator.updateBase(state, activeBranch)
 
       return { success: true, story }
     } catch (error) {
@@ -449,11 +415,6 @@ function setupStateHandlers(ipcMain) {
       console.log('[IPC] deleteUserStory called with storyId:', storyId)
       const deleted = await puffinState.deleteUserStory(storyId)
       console.log('[IPC] deleteUserStory result:', deleted ? 'deleted successfully' : 'story not found')
-
-      // Regenerate CLAUDE.md base (stories are in base context)
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      await claudeMdGenerator.updateBase(state, activeBranch)
 
       return { success: true, deleted }
     } catch (error) {
@@ -476,11 +437,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:restoreArchivedStory', async (event, { storyId, newStatus }) => {
     try {
       const story = await puffinState.restoreArchivedStory(storyId, newStatus)
-
-      // Regenerate CLAUDE.md base (stories are in base context)
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      await claudeMdGenerator.updateBase(state, activeBranch)
 
       return { success: true, story }
     } catch (error) {
@@ -985,20 +941,10 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
-  // Helper to regenerate UI branch CLAUDE.md
-  async function regenerateUiBranchContext() {
-    const state = puffinState.getState()
-    const activeBranch = state.history?.activeBranch || 'specifications'
-    const skillContent = puffinState.getBranchSkillContent('ui')
-    const agentContent = puffinState.getBranchAgentContent('ui')
-    await claudeMdGenerator.updateBranch('ui', state, activeBranch, skillContent, agentContent)
-  }
-
   // UI Guidelines operations
   ipcMain.handle('state:updateUiGuidelines', async (event, updates) => {
     try {
       const guidelines = await puffinState.updateUiGuidelines(updates)
-      await regenerateUiBranchContext()
       return { success: true, guidelines }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1008,7 +954,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:updateGuidelineSection', async (event, { section, content }) => {
     try {
       const guidelines = await puffinState.updateGuidelineSection(section, content)
-      await regenerateUiBranchContext()
       return { success: true, guidelines }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1018,7 +963,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:addStylesheet', async (event, stylesheet) => {
     try {
       const newStylesheet = await puffinState.addStylesheet(stylesheet)
-      await regenerateUiBranchContext()
       return { success: true, stylesheet: newStylesheet }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1028,7 +972,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:updateStylesheet', async (event, { stylesheetId, updates }) => {
     try {
       const stylesheet = await puffinState.updateStylesheet(stylesheetId, updates)
-      await regenerateUiBranchContext()
       return { success: true, stylesheet }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1038,7 +981,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:deleteStylesheet', async (event, stylesheetId) => {
     try {
       const deleted = await puffinState.deleteStylesheet(stylesheetId)
-      await regenerateUiBranchContext()
       return { success: true, deleted }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1048,7 +990,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:updateDesignTokens', async (event, tokenUpdates) => {
     try {
       const tokens = await puffinState.updateDesignTokens(tokenUpdates)
-      await regenerateUiBranchContext()
       return { success: true, tokens }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1058,7 +999,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:addComponentPattern', async (event, pattern) => {
     try {
       const newPattern = await puffinState.addComponentPattern(pattern)
-      await regenerateUiBranchContext()
       return { success: true, pattern: newPattern }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1068,7 +1008,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:updateComponentPattern', async (event, { patternId, updates }) => {
     try {
       const pattern = await puffinState.updateComponentPattern(patternId, updates)
-      await regenerateUiBranchContext()
       return { success: true, pattern }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1078,7 +1017,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:deleteComponentPattern', async (event, patternId) => {
     try {
       const deleted = await puffinState.deleteComponentPattern(patternId)
-      await regenerateUiBranchContext()
       return { success: true, deleted }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1089,42 +1027,6 @@ function setupStateHandlers(ipcMain) {
     try {
       const exported = await puffinState.exportUiGuidelines(options)
       return { success: true, content: exported }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Generate Claude.md file (legacy - static generation)
-  ipcMain.handle('state:generateClaudeMd', async (event, options) => {
-    try {
-      const result = await puffinState.writeClaudeMd(options)
-      return { success: true, path: result.path, content: result.content }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Return the byte size of CLAUDE_{branch}.md for the active Puffin branch.
-  // Used by the renderer to show a size warning badge on the git indicator.
-  ipcMain.handle('state:getClaudeMdSize', async (event, branch) => {
-    try {
-      if (!projectPath || !branch) return { success: true, size: 0, exists: false }
-      const sanitized = branch.replace(/[^a-zA-Z0-9_-]/g, '_')
-      const filePath = require('path').join(projectPath, '.claude', `CLAUDE_${sanitized}.md`)
-      const stat = await require('fs').promises.stat(filePath)
-      return { success: true, size: stat.size, exists: true }
-    } catch (err) {
-      if (err.code === 'ENOENT') return { success: true, size: 0, exists: false }
-      return { success: false, error: err.message, size: 0 }
-    }
-  })
-
-  // Activate a branch - swaps CLAUDE.md to branch-specific content
-  ipcMain.handle('state:activateBranch', async (event, branchId) => {
-    try {
-      const state = puffinState.getState()
-      await claudeMdGenerator.activateBranch(branchId)
-      return { success: true, branchId }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -1220,13 +1122,6 @@ function setupStateHandlers(ipcMain) {
     try {
       const branch = await puffinState.assignPluginToBranch(pluginId, branchId)
 
-      // Regenerate the branch CLAUDE.md with updated skill and agent content
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      const skillContent = puffinState.getBranchSkillContent(branchId)
-      const agentContent = puffinState.getBranchAgentContent(branchId)
-      await claudeMdGenerator.updateBranch(branchId, state, activeBranch, skillContent, agentContent)
-
       return { success: true, branch }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1237,13 +1132,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:unassignPluginFromBranch', async (event, { pluginId, branchId }) => {
     try {
       const branch = await puffinState.unassignPluginFromBranch(pluginId, branchId)
-
-      // Regenerate the branch CLAUDE.md with updated skill and agent content
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      const skillContent = puffinState.getBranchSkillContent(branchId)
-      const agentContent = puffinState.getBranchAgentContent(branchId)
-      await claudeMdGenerator.updateBranch(branchId, state, activeBranch, skillContent, agentContent)
 
       return { success: true, branch }
     } catch (error) {
@@ -1301,13 +1189,6 @@ function setupStateHandlers(ipcMain) {
     try {
       const branch = await puffinState.assignAgentToBranch(agentId, branchId)
 
-      // Regenerate the branch CLAUDE.md with updated agent content
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      const getSkillContent = (bId) => puffinState.getBranchSkillContent(bId)
-      const getAgentContent = (bId) => puffinState.getBranchAgentContent(bId)
-      await claudeMdGenerator.updateBranch(branchId, state, activeBranch, getSkillContent(branchId), getAgentContent(branchId))
-
       return { success: true, branch }
     } catch (error) {
       return { success: false, error: error.message }
@@ -1318,13 +1199,6 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:unassignAgentFromBranch', async (event, { agentId, branchId }) => {
     try {
       const branch = await puffinState.unassignAgentFromBranch(agentId, branchId)
-
-      // Regenerate the branch CLAUDE.md with updated agent content
-      const state = puffinState.getState()
-      const activeBranch = state.history?.activeBranch || 'specifications'
-      const getSkillContent = (bId) => puffinState.getBranchSkillContent(bId)
-      const getAgentContent = (bId) => puffinState.getBranchAgentContent(bId)
-      await claudeMdGenerator.updateBranch(branchId, state, activeBranch, getSkillContent(branchId), getAgentContent(branchId))
 
       return { success: true, branch }
     } catch (error) {

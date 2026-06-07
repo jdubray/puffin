@@ -120,7 +120,8 @@
       "PowerShell(Set-Content *)",
       "Bash(sed -n '165,210p' src/renderer/lib/action-card-engine.js)",
       "Bash(sed -n '35,60p' src/renderer/lib/workflow-state-tracker.js)",
-      "Bash(sed -n '180,210p' src/renderer/lib/workflow-state-tracker.js)"
+      "Bash(sed -n '180,210p' src/renderer/lib/workflow-state-tracker.js)",
+      "Skill(claude-api)"
     ]
   },
   "enableAllProjectMcpServers": true,

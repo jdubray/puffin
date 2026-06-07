@@ -78,7 +78,6 @@ export function buildWorkflowSummary(state, gitStatusResult = null) {
   sections.push(_projectSection(state))
   sections.push(_branchSection(state))
   sections.push(_backlogSection(state))
-  sections.push(_assertionsSection(state))
   sections.push(_pendingOpsSection(state))
   sections.push(_activitySection(state))
   sections.push(_gitSection(gitStatusResult))
@@ -168,23 +167,6 @@ function _backlogSection(state) {
   const completed = stories.filter(s => s.status === 'completed').length
 
   return `**Backlog:** ${stories.length} stories — ${pending} pending, ${inProgress} in-progress, ${completed} completed`
-}
-
-function _assertionsSection(state) {
-  const stories = state.userStories || []
-  const withAssertions = stories.filter(s => s.inspectionAssertions?.length > 0)
-
-  if (withAssertions.length === 0) return null
-
-  const lines = [`**Inspection assertions** on ${withAssertions.length} story/stories:`]
-  const display = withAssertions.slice(0, 5)
-  for (const s of display) {
-    lines.push(`  • ${s.title}: ${s.inspectionAssertions.length} assertion(s)`)
-  }
-  if (withAssertions.length > 5) {
-    lines.push(`  … and ${withAssertions.length - 5} more`)
-  }
-  return lines.join('\n')
 }
 
 function _pendingOpsSection(state) {

@@ -265,7 +265,7 @@ export class PromptEditorComponent {
       this.submit()
     })
 
-    // New thread button - starts fresh WITHOUT clearing the prompt
+    // New task button - starts fresh WITHOUT clearing the prompt
     this.newThreadBtn.addEventListener('click', () => {
       this.createNewThread()
     })
@@ -909,7 +909,7 @@ export class PromptEditorComponent {
 
     if (prompts.length === 0 && !promptState.isProcessing) {
       responseContent.innerHTML = '<p class="placeholder">Start a conversation in the ' +
-        this.getBranchDisplayName(historyState.activeBranch) + ' thread...</p>'
+        this.getBranchDisplayName(historyState.activeBranch) + ' task...</p>'
       return
     }
 
@@ -1171,8 +1171,8 @@ export class PromptEditorComponent {
     }
 
     // A new user prompt restarts the review cycle: if we previously finished
-    // a Review or Fix pass, return the button to "Review Thread" so the user
-    // can sanity-check the new code without opening a new thread.
+    // a Review or Fix pass, return the button to "Review Task" so the user
+    // can sanity-check the new code without opening a new task.
     if (this._reviewState === 'fixed' || this._reviewState === 'passed') {
       this._reviewState = 'idle'
       this._pendingReviewAction = null
@@ -2212,7 +2212,7 @@ export class PromptEditorComponent {
       <div class="handoff-banner-info">
         <span>From: <strong>${this.escapeHtml(handoffData.sourceThreadName)}</strong></span>
         <span class="handoff-banner-separator">•</span>
-        <span>Branch: <strong>${this.escapeHtml(handoffData.sourceBranch)}</strong></span>
+        <span>Workspace: <strong>${this.escapeHtml(handoffData.sourceBranch)}</strong></span>
       </div>
       <div class="handoff-banner-summary">
         <pre>${this.escapeHtml(handoffData.summary)}</pre>
@@ -2458,7 +2458,7 @@ ${prompt}`
 
     switch (this._reviewState) {
       case 'idle':
-        btn.textContent = '🔍 Review Thread'
+        btn.textContent = '🔍 Review Task'
         btn.disabled = false
         btn.className = 'btn outline'
         break

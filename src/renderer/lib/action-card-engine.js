@@ -41,7 +41,7 @@ export const HOW_CONTENT = {
       'Go to the **Prompt** tab (default view).',
       'Type your idea, question, or requirement in the text area.',
       'Optionally attach a doc with **Include Docs** or a design with **Include GUI**.',
-      'Press **Send** — Claude responds in the thread below.',
+      'Press **Send** — Claude responds in the task below.',
       'Keep the conversation going until your requirements feel clear.',
     ],
   },

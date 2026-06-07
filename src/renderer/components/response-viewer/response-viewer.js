@@ -52,24 +52,21 @@ export class ResponseViewerComponent {
       const { state } = e.detail
       const provider = state.config?.defaultProvider || 'claude'
       this.agentLabel = provider === 'vibe' ? 'Vibe' : provider === 'local' ? 'Local LLM' : 'Claude'
-      this.render(state.prompt, state.history, state.storyDerivation, state.activity)
+      this.render(state.prompt, state.history, state.activity)
     })
   }
 
   /**
    * Render component based on state
    */
-  render(promptState, historyState, storyDerivationState, activityState) {
+  render(promptState, historyState, activityState) {
     // Store activity state for use in rendering
     this.activityState = activityState
     // Store history state for continuation button
     this.historyState = historyState
 
-    // Priority: story derivation error > waiting > streaming > selected prompt response > placeholder
-    if (storyDerivationState?.error) {
-      this._clearWaiting()
-      this.renderStoryDerivationError(storyDerivationState.error, historyState.selectedPrompt)
-    } else if (promptState.isProcessing && !promptState.hasStreamingResponse) {
+    // Priority: waiting > streaming > selected prompt response > placeholder
+    if (promptState.isProcessing && !promptState.hasStreamingResponse) {
       // Submitted but no response yet — show waiting overlay
       this.renderWaiting()
     } else if (promptState.hasStreamingResponse) {
@@ -358,42 +355,6 @@ export class ResponseViewerComponent {
   renderPlaceholder() {
     this.container.innerHTML = `
       <p class="placeholder">Claude's responses will appear here...</p>
-    `
-  }
-
-  /**
-   * Render story derivation error
-   */
-  renderStoryDerivationError(error, prompt) {
-    const promptHtml = prompt ? `
-      <div class="prompt-display">
-        <div class="prompt-label">You</div>
-        <div class="prompt-content">${this.parseMarkdown(prompt.content)}</div>
-      </div>
-    ` : ''
-
-    // Also show the response if it exists (Claude's response before error)
-    const responseHtml = prompt?.response?.content ? `
-      <div class="response-display">
-        <div class="response-label">${this.agentLabel}</div>
-        <div class="response-message">${this.parseMarkdown(prompt.response.content)}</div>
-      </div>
-    ` : ''
-
-    this.container.innerHTML = `
-      ${promptHtml}
-      ${responseHtml}
-      <div class="error-display">
-        <div class="error-icon">⚠️</div>
-        <div class="error-content">
-          <div class="error-title">Story Derivation Failed</div>
-          <div class="error-message">${this.escapeHtml(error)}</div>
-          <div class="error-hint">
-            Try submitting the prompt again without "Derive User Stories" enabled,
-            or rephrase your request to be more specific about the features you want.
-          </div>
-        </div>
-      </div>
     `
   }
 

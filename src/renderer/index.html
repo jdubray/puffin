@@ -55,7 +55,7 @@
     <!-- Header -->
     <header id="header">
       <div class="header-left">
-        <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar" data-help="Show or hide the sidebar panel that contains branch and thread navigation.">
+        <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar" data-help="Show or hide the sidebar panel that contains Workspace and Task navigation.">
           <span class="icon">☰</span>
         </button>
         <h1 id="app-title" class="app-title">Puffin</h1>
@@ -64,7 +64,7 @@
         <button class="nav-btn" data-view="config" data-help="Configure project settings, Claude guidance options, and manage plugins.">Config</button>
         <button class="nav-btn active" data-view="prompt" data-help="Compose and send prompts to Claude Code, and view conversation responses.">Prompt</button>
         <!-- Designer is now provided by designer-plugin -->
-        <button class="nav-btn" data-view="user-stories" data-help="View and manage your task backlog on the Kanban board.">Backlog</button>
+        <button class="nav-btn" data-view="user-stories" data-help="View and manage your Task backlog on the Kanban board.">Backlog</button>
         <button class="nav-btn" data-view="cli-output" data-help="View the live Claude Code CLI output stream and raw JSON messages.">CLI Output</button>
         <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn" data-help="View the full debug prompt that was last sent to Claude CLI.">Debug</button>
         <!-- Plugin nav buttons are inserted here dynamically -->
@@ -87,21 +87,21 @@
       <!-- Sidebar -->
       <aside id="sidebar">
         <div class="sidebar-section">
-          <h3 data-help="A Puffin branch is a named workspace for a feature or topic. Each branch holds its own conversation threads, keeping your work organised by concern — similar to a git branch, but for AI conversations.">Branches</h3>
+          <h3 data-help="A Workspace is a named area for a feature or topic; it holds its own conversation Tasks, keeping your work organised by concern.">Workspaces</h3>
           <ul id="branch-list" class="branch-list">
             <!-- Branches rendered dynamically -->
           </ul>
-          <button id="add-branch-btn" class="add-btn" data-help="Create a new branch to organize your conversations by topic or feature area.">+ Add Branch</button>
+          <button id="add-branch-btn" class="add-btn" data-help="Create a new Workspace to organize your conversations by topic or feature area.">+ Add Workspace</button>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-section-header">
-            <h3 data-help="A thread is one conversation with Claude — a prompt and its full response chain. Threads live inside a branch and let you keep separate chains of thought for different questions or tasks.">Threads</h3>
-            <button id="thread-refresh-btn" class="thread-refresh-btn" title="Refresh (process sync inbox)" data-help="Refresh the thread list and process any pending sync inbox items.">↻</button>
+            <h3 data-help="A Task is one conversation with Claude — a prompt and its full response chain. Tasks live inside a Workspace and let you keep separate chains of thought for different questions or tasks.">Tasks</h3>
+            <button id="thread-refresh-btn" class="thread-refresh-btn" title="Refresh (process sync inbox)" data-help="Refresh the Task list and process any pending sync inbox items.">↻</button>
           </div>
           <div class="thread-search-container">
-            <input type="text" id="thread-search-input" class="thread-search-input" placeholder="Search threads...">
+            <input type="text" id="thread-search-input" class="thread-search-input" placeholder="Search tasks...">
             <span class="thread-search-icon">🔍</span>
-            <button id="thread-search-clear" class="thread-search-clear" title="Clear search" data-help="Clear the thread search filter and show all threads.">×</button>
+            <button id="thread-search-clear" class="thread-search-clear" title="Clear search" data-help="Clear the Task search filter and show all Tasks.">×</button>
           </div>
           <div id="history-tree" class="history-tree">
             <!-- Threads rendered dynamically -->
@@ -236,7 +236,7 @@
                 <div class="form-group">
                   <label for="coding-standard-content">Coding Standard Rules</label>
                   <textarea id="coding-standard-content" rows="12" placeholder="Select a language above to populate with defaults, or write your own coding standards..."></textarea>
-                  <small class="form-hint">Customize the coding standards that Claude will follow. These will be included in all branch contexts.</small>
+                  <small class="form-hint">Customize the coding standards that Claude will follow. These will be included in all Workspace contexts.</small>
                 </div>
               </fieldset>
 
@@ -388,7 +388,7 @@
                   <select id="default-model">
                     <option value="">Loading models…</option>
                   </select>
-                  <small class="form-hint">You can override per-thread using the Model selector above the prompt.</small>
+                  <small class="form-hint">You can override per-Task using the Model selector above the prompt.</small>
                 </div>
 
                 <div class="form-group ai-provider-section" id="vibe-provider-section">
@@ -527,7 +527,7 @@
             <main class="swimlane swimlane-middle">
               <div class="response-area" id="response-area">
                 <div id="response-content" class="response-content">
-                  <p class="placeholder">Select a thread and start a conversation with Claude...</p>
+                  <p class="placeholder">Select a Task and start a conversation with Claude...</p>
                 </div>
               </div>
               <!-- Resizable separator -->
@@ -567,7 +567,7 @@
                   </div>
                   <div class="prompt-option-group">
                     <label for="thread-model" class="prompt-select-label">Model:</label>
-                    <select id="thread-model" class="prompt-model-select" title="Select model for this thread">
+                    <select id="thread-model" class="prompt-model-select" title="Select model for this Task">
                       <option value="">Loading models…</option>
                     </select>
                   </div>
@@ -583,11 +583,11 @@
                   </div>
                 </div>
                 <div class="prompt-actions">
-                  <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh thread" data-help="Clear the prompt and start a new conversation thread on the current branch.">
-                    Create New Thread
+                  <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh Task" data-help="Clear the prompt and start a new conversation Task on the current Workspace.">
+                    Create New Task
                   </button>
-                  <button id="review-thread-btn" class="btn outline" title="Quick sanity check on code implemented in this thread" data-help="Ask Claude to review the code implemented in this thread and flag any issues.">
-                    🔍 Review Thread
+                  <button id="review-thread-btn" class="btn outline" title="Quick sanity check on code implemented in this Task" data-help="Ask Claude to review the code implemented in this Task and flag any issues.">
+                    🔍 Review Task
                   </button>
                   <button id="btw-open-btn" class="btn outline" title="Ask a quick question without adding to history (/btw)" data-help="Open the Quick Question panel to ask Claude a one-off question without adding it to conversation history.">
                     💬 Quick Q
@@ -631,7 +631,7 @@
               <div id="metadata-panel" class="metadata-panel">
                 <!-- Thread Statistics -->
                 <div class="metadata-section">
-                  <h4 class="metadata-section-title">Thread Stats</h4>
+                  <h4 class="metadata-section-title">Task Stats</h4>
                   <div class="stats-grid">
                     <div class="stat-item">
                       <span class="stat-label">Turns</span>
@@ -670,7 +670,7 @@
                 <div class="metadata-section handoff-generate-section">
                   <h4 class="metadata-section-title">Handoff</h4>
                   <div id="handoff-generate-content" class="handoff-generate-content">
-                    <button id="generate-handoff-btn" class="btn handoff-btn handoff-btn-panel" title="Generate handoff summary from this thread" data-help="Generate a structured handoff summary from this thread to pass context to another branch.">
+                    <button id="generate-handoff-btn" class="btn handoff-btn handoff-btn-panel" title="Generate handoff summary from this Task" data-help="Generate a structured handoff summary from this Task to pass context to another Workspace.">
                       <span class="handoff-icon">✨</span>
                       <span class="handoff-text">Generate Handoff</span>
                     </button>
@@ -678,7 +678,7 @@
                   <!-- Generated summary display (hidden initially) -->
                   <div id="handoff-generated-section" class="handoff-generated hidden">
                     <div class="handoff-branch-buttons">
-                      <p class="handoff-branch-label">Send to branch:</p>
+                      <p class="handoff-branch-label">Send to Workspace:</p>
                       <div id="handoff-branch-grid" class="handoff-branch-grid">
                         <!-- Branch buttons rendered dynamically -->
                       </div>
@@ -687,7 +687,7 @@
                       <button id="handoff-regenerate-btn" class="btn small secondary handoff-regenerate-btn" data-help="Regenerate the handoff summary with a fresh AI call.">
                         Regenerate
                       </button>
-                      <button id="handoff-clear-btn" class="btn small outline handoff-clear-btn" data-help="Clear the generated handoff summary from this thread.">
+                      <button id="handoff-clear-btn" class="btn small outline handoff-clear-btn" data-help="Clear the generated handoff summary from this Task.">
                         Clear
                       </button>
                     </div>
@@ -722,7 +722,7 @@
                     <input type="search"
                            id="story-search-input"
                            class="story-search-input"
-                           placeholder="Search stories...">
+                           placeholder="Search tasks...">
                   </div>
                   <div class="filter-group">
                     <button class="filter-btn active" data-status="all">All</button>
@@ -730,11 +730,11 @@
                     <button class="filter-btn" data-status="in-progress">In Progress</button>
                     <button class="filter-btn" data-status="completed">Completed</button>
                   </div>
-                  <button id="add-story-btn" class="btn small" data-help="Add a new user story manually to the backlog.">+ Add Story</button>
+                  <button id="add-story-btn" class="btn small" data-help="Add a new Task manually to the backlog.">+ Add Task</button>
                 </div>
                 <div id="user-stories-list" class="user-stories-list">
                   <!-- User stories rendered dynamically -->
-                  <p class="placeholder">No tasks yet. Click "+ Add Story" to create one.</p>
+                  <p class="placeholder">No tasks yet. Click "+ Add Task" to create one.</p>
                 </div>
               </div>
 

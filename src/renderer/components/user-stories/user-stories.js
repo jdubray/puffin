@@ -396,7 +396,7 @@ export class UserStoriesComponent {
         <div class="archived-stories-section">
           <button class="archived-stories-toggle" aria-expanded="false">
             <span class="toggle-icon">▶</span>
-            Archived Stories (${archivedStories.length})
+            Archived Tasks (${archivedStories.length})
           </button>
           <div class="archived-stories-list collapsed">
             ${archivedStories.map(story => this.renderStoryCard(story)).join('')}
@@ -419,11 +419,11 @@ export class UserStoriesComponent {
     const filtered = this.getFilteredStories()
 
     if (filtered.length === 0) {
-      const branchText = this.currentBranch !== 'all' ? ` in "${this.currentBranch}" branch` : ''
+      const branchText = this.currentBranch !== 'all' ? ` in "${this.currentBranch}" workspace` : ''
       this.listContainer.innerHTML = `
         <p class="placeholder">
           ${this.currentFilter === 'all'
-            ? `No tasks${branchText} yet. Click "+ Add Story" to create one.`
+            ? `No tasks${branchText} yet. Click "+ Add Task" to create one.`
             : `No ${this.currentFilter} tasks${branchText}.`}
         </p>
       `
@@ -440,7 +440,7 @@ export class UserStoriesComponent {
     if (activeStories.length > 0) {
       html += activeStories.map(story => this.renderStoryCard(story)).join('')
     } else if (archivedStories.length > 0) {
-      html += '<p class="placeholder">No active stories. All stories are archived.</p>'
+      html += '<p class="placeholder">No active tasks. All tasks are archived.</p>'
     }
 
     // Render archived stories in collapsible section
@@ -449,7 +449,7 @@ export class UserStoriesComponent {
         <div class="archived-stories-section">
           <button class="archived-stories-toggle" aria-expanded="false">
             <span class="toggle-icon">▶</span>
-            Archived Stories (${archivedStories.length})
+            Archived Tasks (${archivedStories.length})
           </button>
           <div class="archived-stories-list collapsed">
             ${archivedStories.map(story => this.renderStoryCard(story)).join('')}
@@ -506,9 +506,9 @@ export class UserStoriesComponent {
     const branchIds = [...new Set(this.stories.map(s => s.branchId).filter(Boolean))]
 
     branchFilterContainer.innerHTML = `
-      <label class="branch-filter-label">Branch:</label>
+      <label class="branch-filter-label">Workspace:</label>
       <select class="branch-filter-select" id="story-branch-filter">
-        <option value="all" ${this.currentBranch === 'all' ? 'selected' : ''}>All Branches</option>
+        <option value="all" ${this.currentBranch === 'all' ? 'selected' : ''}>All Workspaces</option>
         ${branchIds.map(branchId => `
           <option value="${branchId}" ${this.currentBranch === branchId ? 'selected' : ''}>
             ${this.formatBranchName(branchId)}
@@ -573,12 +573,12 @@ export class UserStoriesComponent {
             ${showFallbackDropdown ? this.renderStatusDropdown(story) : ''}
           </div>
           <div class="story-card-actions">
-            <button class="story-action-btn expand-btn" title="View full details" aria-label="Expand story">⤢</button>
+            <button class="story-action-btn expand-btn" title="View full details" aria-label="Expand task">⤢</button>
             ${canComplete ? `<button class="story-action-btn complete-btn" title="Mark as completed">✓</button>` : ''}
-            ${canArchive ? `<button class="story-action-btn archive-btn" title="Archive story">⌫</button>` : ''}
-            ${canReopen ? `<button class="story-action-btn reopen-btn" title="Reopen story">↺</button>` : ''}
-            ${!isArchived ? `<button class="story-action-btn edit-btn" title="Edit story">✎</button>` : ''}
-            <button class="story-action-btn delete-btn" title="Delete story">×</button>
+            ${canArchive ? `<button class="story-action-btn archive-btn" title="Archive task">⌫</button>` : ''}
+            ${canReopen ? `<button class="story-action-btn reopen-btn" title="Reopen task">↺</button>` : ''}
+            ${!isArchived ? `<button class="story-action-btn edit-btn" title="Edit task">✎</button>` : ''}
+            <button class="story-action-btn delete-btn" title="Delete task">×</button>
           </div>
         </div>
         <h4 class="story-title">${this.escapeHtml(story.title)}</h4>
@@ -597,7 +597,7 @@ export class UserStoriesComponent {
   renderStatusDropdown(story) {
     const statuses = ['pending', 'in-progress', 'completed']
     return `
-      <select class="status-dropdown" data-story-id="${story.id}" aria-label="Change story status">
+      <select class="status-dropdown" data-story-id="${story.id}" aria-label="Change task status">
         ${statuses.map(status => `
           <option value="${status}" ${story.status === status ? 'selected' : ''}>
             ${this.formatStatus(status)}
@@ -912,7 +912,7 @@ export class UserStoriesComponent {
    * Delete a story
    */
   deleteStory(storyId) {
-    if (confirm('Are you sure you want to delete this story?')) {
+    if (confirm('Are you sure you want to delete this task?')) {
       this.intents.deleteUserStory(storyId)
     }
   }

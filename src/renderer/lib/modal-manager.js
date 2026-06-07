@@ -127,11 +127,11 @@ export class ModalManager {
       <div class="handoff-review-content">
         <div class="handoff-thread-info">
           <div class="handoff-field">
-            <label>Source Thread:</label>
+            <label>Source Task:</label>
             <span>${this.escapeHtml(data.sourceThreadName)}</span>
           </div>
           <div class="handoff-field">
-            <label>Branch:</label>
+            <label>Workspace:</label>
             <span>${this.escapeHtml(data.sourceBranch)}</span>
           </div>
         </div>
@@ -149,7 +149,7 @@ export class ModalManager {
       <button class="btn secondary" id="handoff-cancel-btn">Cancel</button>
       <button class="btn primary" id="handoff-continue-btn">
         <span class="handoff-icon">🤝</span>
-        Hand Off to New Thread
+        Hand Off to New Task
       </button>
     `
 
@@ -167,17 +167,17 @@ export class ModalManager {
    * Render branch selection - Step 2: Select target branch
    */
   renderBranchSelection(title, content, actions, data, state) {
-    title.textContent = 'Select Target Branch'
+    title.textContent = 'Select Target Workspace'
 
     // Get available branches from state
     const branches = state.history?.branches || []
 
     content.innerHTML = `
       <div class="handoff-branch-selection">
-        <p class="handoff-hint">Choose the branch where you want to start a new thread with this context:</p>
+        <p class="handoff-hint">Choose the workspace where you want to start a new task with this context:</p>
         <div class="branch-list">
           ${branches.length === 0 ? `
-            <p class="no-branches">No branches available. Create a branch first.</p>
+            <p class="no-branches">No workspaces available. Create a workspace first.</p>
           ` : branches.map(branch => `
             <button class="branch-select-item" data-branch-id="${this.escapeHtml(branch.id)}">
               <span class="branch-name">${this.escapeHtml(branch.name)}</span>
@@ -231,7 +231,7 @@ export class ModalManager {
     })
     document.dispatchEvent(event)
 
-    this.showToast(`Handoff received! Context ready for new thread in "${branchName}".`, 'success')
+    this.showToast(`Handoff received! Context ready for new task in "${branchName}".`, 'success')
   }
 
   /**
@@ -913,14 +913,14 @@ export class ModalManager {
   renderStoryDetail(title, content, actions, data) {
     const story = data?.story
     if (!story) {
-      title.textContent = 'Story Not Found'
-      content.innerHTML = '<p>The requested story could not be found.</p>'
+      title.textContent = 'Task Not Found'
+      content.innerHTML = '<p>The requested task could not be found.</p>'
       actions.innerHTML = '<button class="btn secondary" id="modal-cancel-btn">Close</button>'
       document.getElementById('modal-cancel-btn')?.addEventListener('click', () => this.intents.hideModal())
       return
     }
 
-    title.textContent = 'Story Details'
+    title.textContent = 'Task Details'
 
     const statuses = ['pending', 'in-progress', 'completed', 'archived']
     const criteriaHtml = (story.acceptanceCriteria || []).map((c, i) => `
@@ -963,7 +963,7 @@ export class ModalManager {
 
         <div class="story-meta">
           <span class="meta-item">Created: ${this.formatDate(story.createdAt)}</span>
-          ${story.branchId ? `<span class="meta-item">Branch: ${this.escapeHtml(story.branchId)}</span>` : ''}
+          ${story.branchId ? `<span class="meta-item">Workspace: ${this.escapeHtml(story.branchId)}</span>` : ''}
           ${story.sourcePromptId ? '<span class="meta-item">Auto-extracted</span>' : ''}
         </div>
       </form>
@@ -1092,14 +1092,14 @@ export class ModalManager {
     }
 
     this.intents.hideModal()
-    this.showToast('Story updated successfully', 'success')
+    this.showToast('Task updated successfully', 'success')
   }
 
   /**
    * Render add user story modal
    */
   renderAddUserStory(title, content, actions, data) {
-    title.textContent = 'Add User Story'
+    title.textContent = 'Add Task'
 
     content.innerHTML = `
       <form id="add-story-form" class="story-detail-form">
@@ -1125,7 +1125,7 @@ export class ModalManager {
 
     actions.innerHTML = `
       <button class="btn secondary" id="story-cancel-btn">Cancel</button>
-      <button class="btn primary" id="story-save-btn">Add Story</button>
+      <button class="btn primary" id="story-save-btn">Add Task</button>
     `
 
     this.bindAddStoryEvents(data)
@@ -1206,7 +1206,7 @@ export class ModalManager {
     }
 
     this.intents.hideModal()
-    this.showToast('Story added successfully', 'success')
+    this.showToast('Task added successfully', 'success')
   }
 
   /**
@@ -1215,7 +1215,7 @@ export class ModalManager {
   renderEditUserStory(title, content, actions, data) {
     // Reuse story detail modal for editing
     this.renderStoryDetail(title, content, actions, data)
-    title.textContent = 'Edit Story'
+    title.textContent = 'Edit Task'
   }
 
   /**
@@ -1666,8 +1666,8 @@ export class ModalManager {
             : thread.type === 'derivation' ? '📎'
             : '💬'
           const rawText = thread.type === 'story-thread'
-            ? (thread.title || thread.content || 'Story thread')
-            : (thread.content || 'Thread')
+            ? (thread.title || thread.content || 'Task')
+            : (thread.content || 'Task')
           allThreadEvents.push({
             ts:     thread.responseTimestamp || thread.createdAt || 0,
             icon,
@@ -1694,7 +1694,7 @@ export class ModalManager {
       .sort((a, b) => (a.ts || 0) - (b.ts || 0))
 
     if (allEvents.length === 0) {
-      return '<p class="pg-timeline-empty">No conversations yet. Start a thread to begin your journey.</p>'
+      return '<p class="pg-timeline-empty">No conversations yet. Start a task to begin your journey.</p>'
     }
 
     const shown = allEvents

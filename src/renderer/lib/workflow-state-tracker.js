@@ -53,15 +53,15 @@ export function detectWorkflowPhase(state, gitStatusResult = null) {
 
   // Stories on the Kanban board.
   if (hasStories) {
-    return { id: 4, label: 'Backlog', description: 'Backlog has stories — work them on the Kanban board.' }
+    return { id: 4, label: 'Backlog', description: 'Backlog has tasks — work them on the Kanban board.' }
   }
 
-  // Conversation threads exist but no stories yet.
+  // Conversation tasks exist but no backlog tasks yet.
   if (hasThreads) {
-    return { id: 3, label: 'Decompose', description: 'Conversation threads exist — capture tasks in the backlog or keep exploring.' }
+    return { id: 3, label: 'Decompose', description: 'Conversation tasks exist — keep exploring or capture work in the backlog.' }
   }
 
-  return { id: 1, label: 'Discovery', description: 'No threads or stories yet — start by describing what you want to build.' }
+  return { id: 1, label: 'Discovery', description: 'No tasks yet — start by describing what you want to build.' }
 }
 
 /**
@@ -136,22 +136,22 @@ function _branchSection(state) {
   const prompts = branch?.prompts || []
   const promptCount = prompts.length
 
-  let line = `**Active Puffin branch:** ${activeBranch}`
+  let line = `**Active Workspace:** ${activeBranch}`
   if (promptCount > 0) {
-    line += ` — ${promptCount} thread${promptCount !== 1 ? 's' : ''}`
+    line += ` — ${promptCount} task${promptCount !== 1 ? 's' : ''}`
     const last = prompts[prompts.length - 1]
     if (last?.timestamp) {
       line += `, last activity ${_relativeTime(last.timestamp)}`
     }
   } else {
-    line += ' — no threads yet'
+    line += ' — no tasks yet'
   }
 
   const selectedPrompt = state.history?.selectedPrompt
   if (selectedPrompt?.content) {
     const preview = selectedPrompt.content.slice(0, 100)
     const ellipsis = selectedPrompt.content.length > 100 ? '…' : ''
-    line += `\n**Selected thread:** "${preview}${ellipsis}"`
+    line += `\n**Selected task:** "${preview}${ellipsis}"`
   }
 
   return line

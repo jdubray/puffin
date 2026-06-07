@@ -2767,7 +2767,7 @@ class PuffinApp {
     const allPrompts = branch?.prompts || []
 
     if (allPrompts.length === 0) {
-      this.showToast('No thread content to generate handoff from', 'warning')
+      this.showToast('No task content to generate handoff from', 'warning')
       return
     }
 
@@ -2775,7 +2775,7 @@ class PuffinApp {
     const threadPrompts = this.getLinearThreadPath(activePromptId, allPrompts)
 
     if (threadPrompts.length === 0) {
-      this.showToast('No active thread selected', 'warning')
+      this.showToast('No active task selected', 'warning')
       return
     }
 
@@ -2898,13 +2898,13 @@ Keep it concise but informative. Use markdown formatting.`
    * Get a title for the thread from prompts
    */
   getThreadTitle(prompts) {
-    if (prompts.length === 0) return 'Unknown Thread'
+    if (prompts.length === 0) return 'Unknown Task'
     const firstPrompt = prompts[0]
     if (firstPrompt.title) return firstPrompt.title
     if (firstPrompt.content) {
       return firstPrompt.content.substring(0, 50) + (firstPrompt.content.length > 50 ? '...' : '')
     }
-    return 'Thread'
+    return 'Task'
   }
 
   /**

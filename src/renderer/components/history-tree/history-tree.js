@@ -201,7 +201,7 @@ export class HistoryTreeComponent {
       item.dataset.branchId = branch.id
       item.dataset.index = index
       item.draggable = true
-      item.dataset.help = `Branch "${branch.name}" \u2014 a named workspace for a feature or topic. Each branch holds its own conversation threads, keeping your work organised by concern. Click to switch. ${branch.promptCount} thread(s).`
+      item.dataset.help = `Workspace "${branch.name}" \u2014 a named workspace for a feature or topic. Each workspace holds its own conversation tasks, keeping your work organised by concern. Click to switch. ${branch.promptCount} task(s).`
       item.innerHTML = `
         <span class="drag-handle">⋮</span>
         <span class="icon">${this.getBranchIcon(branch.icon, branch.id)}</span>
@@ -337,7 +337,7 @@ export class HistoryTreeComponent {
       this.historyTree.innerHTML = `
         <div class="history-empty history-no-results">
           <span class="no-results-icon">🔍</span>
-          <span>No threads match "${this.escapeHtml(searchQuery)}"</span>
+          <span>No tasks match "${this.escapeHtml(searchQuery)}"</span>
         </div>
       `
       return
@@ -363,11 +363,11 @@ export class HistoryTreeComponent {
 
       // Help-mode tooltip for threads
       if (prompt.isStoryThread) {
-        item.dataset.help = `Story thread: "${prompt.storyTitle || prompt.preview}" \u2014 a conversation dedicated to implementing a user story. Status: ${prompt.storyStatus || 'unknown'}. Click to view.`
+        item.dataset.help = `Story task: "${prompt.storyTitle || prompt.preview}" \u2014 a conversation dedicated to implementing a user story. Status: ${prompt.storyStatus || 'unknown'}. Click to view.`
       } else if (prompt.isDerivation) {
-        item.dataset.help = `Derivation thread \u2014 Claude analysed your conversation and generated user stories from it. Click to view.`
+        item.dataset.help = `Derivation task \u2014 Claude analysed your conversation and generated user stories from it. Click to view.`
       } else {
-        item.dataset.help = `Thread: "${prompt.preview}" \u2014 a single conversation with Claude. Click to view, right-click for options.`
+        item.dataset.help = `Task: "${prompt.preview}" \u2014 a single conversation with Claude. Click to view, right-click for options.`
       }
 
       // Build the expand/collapse indicator for items with children
@@ -552,11 +552,11 @@ export class HistoryTreeComponent {
     const modalTitle = document.getElementById('modal-title')
     const modalActions = document.getElementById('modal-actions')
 
-    modalTitle.textContent = 'Add Branch'
+    modalTitle.textContent = 'Add Workspace'
 
     modalContent.innerHTML = `
       <div class="form-group">
-        <label for="branch-name-input">Branch Name</label>
+        <label for="branch-name-input">Workspace Name</label>
         <input type="text" id="branch-name-input" placeholder="e.g., Testing, Database, API...">
       </div>
       <div class="form-group">
@@ -575,13 +575,13 @@ export class HistoryTreeComponent {
           <input type="checkbox" id="branch-code-allowed" checked>
           Allow code modifications
         </label>
-        <span class="form-hint">When unchecked, this branch can only modify documentation files</span>
+        <span class="form-hint">When unchecked, this workspace can only modify documentation files</span>
       </div>
     `
 
     modalActions.innerHTML = `
       <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
-      <button class="btn primary" id="modal-confirm-btn">Add Branch</button>
+      <button class="btn primary" id="modal-confirm-btn">Add Workspace</button>
     `
 
     document.getElementById('modal-cancel-btn').addEventListener('click', () => {
@@ -635,9 +635,9 @@ export class HistoryTreeComponent {
     // Only add delete option for custom branches
     if (!isBuiltIn) {
       menuItems.push({
-        label: '🗑️ Delete Branch',
+        label: '🗑️ Delete Workspace',
         action: () => {
-          if (confirm(`Delete branch "${branch.name}"? This will delete all prompts in this branch.`)) {
+          if (confirm(`Delete workspace "${branch.name}"? This will delete all prompts in this workspace.`)) {
             this.intents.deleteBranch(branch.id)
           }
         },
@@ -689,7 +689,7 @@ export class HistoryTreeComponent {
     const modalTitle = document.getElementById('modal-title')
     const modalActions = document.getElementById('modal-actions')
 
-    modalTitle.textContent = `Branch Settings: ${branch.name}`
+    modalTitle.textContent = `Workspace Settings: ${branch.name}`
 
     // Load available plugins
     let availablePlugins = []
@@ -710,9 +710,9 @@ export class HistoryTreeComponent {
     modalContent.innerHTML = `
       <div class="branch-settings-modal">
         <div class="form-group">
-          <label for="branch-settings-name">Branch Name</label>
+          <label for="branch-settings-name">Workspace Name</label>
           <input type="text" id="branch-settings-name" value="${this.escapeHtml(branch.name)}"
-                 placeholder="Branch name">
+                 placeholder="Workspace name">
         </div>
 
         <div class="form-group">
@@ -735,12 +735,12 @@ export class HistoryTreeComponent {
                    ${branch.codeModificationAllowed !== false ? 'checked' : ''}>
             Allow code modifications
           </label>
-          <small class="form-hint">When unchecked, this branch can only modify documentation files</small>
+          <small class="form-hint">When unchecked, this workspace can only modify documentation files</small>
         </div>
 
         <fieldset class="branch-plugins-fieldset">
           <legend>Assigned Plugins</legend>
-          <p class="fieldset-description">Select plugins to inject their context when working on this branch</p>
+          <p class="fieldset-description">Select plugins to inject their context when working on this workspace</p>
 
           <div id="branch-plugins-list" class="branch-plugins-list">
             ${availablePlugins.length === 0 ? `
@@ -769,7 +769,7 @@ export class HistoryTreeComponent {
         <fieldset class="branch-plugins-fieldset">
           <legend>Additional Directories</legend>
           <p class="fieldset-description">
-            These directories are added to every Claude session on this branch via <code>--add-dir</code>.
+            These directories are added to every Claude session on this workspace via <code>--add-dir</code>.
             Read-only directories may be referenced but not modified.
           </p>
           <div id="additional-dirs-list" class="additional-dirs-list">
@@ -885,7 +885,7 @@ export class HistoryTreeComponent {
     })).filter(d => d.path.length > 0)
 
     if (!name) {
-      alert('Branch name is required')
+      alert('Workspace name is required')
       return
     }
 
@@ -945,7 +945,7 @@ export class HistoryTreeComponent {
     // Toggle expansion for items with children
     if (prompt.hasChildren) {
       menuItems.push({
-        label: prompt.isExpanded ? 'Collapse thread' : 'Expand thread',
+        label: prompt.isExpanded ? 'Collapse task' : 'Expand task',
         action: () => this.intents.toggleThreadExpanded(prompt.id)
       })
     }

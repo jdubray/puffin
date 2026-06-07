@@ -16,6 +16,7 @@ const VibeService = require('./vibe-service')
 const { DeveloperProfileManager } = require('./developer-profile')
 const { GitService } = require('./git-service')
 const { scaffoldCommands } = require('./command-scaffolder')
+const documentEditService = require('./document-edit-service')
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
@@ -231,6 +232,23 @@ function setupStateHandlers(ipcMain) {
       }
 
       return { success: true, config }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Document editing via the configured prompt provider (api | cli).
+  // The one prompt path Puffin keeps in 4.0 — cost-controlled and tool-free.
+  ipcMain.handle('ai:editDocument', async (event, { instruction, content, provider } = {}) => {
+    try {
+      const config = puffinState?.getState?.()?.config || {}
+      return await documentEditService.editDocument({
+        instruction,
+        content,
+        provider,
+        config,
+        claudeService
+      })
     } catch (error) {
       return { success: false, error: error.message }
     }

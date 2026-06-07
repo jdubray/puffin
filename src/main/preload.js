@@ -776,6 +776,15 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   /**
+   * AI document editing via the configured provider (api | cli).
+   * The only prompt path Puffin keeps in 4.0 — cost-controlled, tool-free.
+   */
+  ai: {
+    // editDocument({ instruction, content, provider? }) → { success, response?, error?, provider }
+    editDocument: (args) => ipcRenderer.invoke('ai:editDocument', args)
+  },
+
+  /**
    * External tool integrations
    */
   tools: {

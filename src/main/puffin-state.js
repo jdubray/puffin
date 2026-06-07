@@ -2056,6 +2056,13 @@ ${content}`
       if (!config.tools) {
         config.tools = { snip: { enabled: false } }
       }
+      // Ensure prompt-provider config exists for older configs (4.0 document editing)
+      if (!config.promptProvider) {
+        config.promptProvider = 'cli'
+      }
+      if (!config.anthropic) {
+        config.anthropic = { model: 'claude-haiku-4-5', maxTokens: 4096, apiKey: '' }
+      }
       return config
     } catch {
       // Create default config
@@ -2082,6 +2089,14 @@ ${content}`
         },
         tools: {
           snip: { enabled: false }
+        },
+        // Prompt provider for 4.0 document editing: 'cli' (Claude Code CLI) or
+        // 'api' (direct Anthropic Messages API, pay-per-token).
+        promptProvider: 'cli',
+        anthropic: {
+          model: 'claude-haiku-4-5',
+          maxTokens: 4096,
+          apiKey: ''
         },
         helpMode: false,
         createdAt: new Date().toISOString(),

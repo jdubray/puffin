@@ -539,6 +539,17 @@ export class ProjectFormComponent {
       snipCheckbox.checked = snipEnabled
       if (snipEnabled) this._checkSnipInstalled()
     }
+
+    // Document editing — prompt provider
+    const providerSelect = document.getElementById('prompt-provider-select')
+    if (providerSelect) providerSelect.value = config.promptProvider || 'cli'
+    const anthropic = config.anthropic || {}
+    const modelInput = document.getElementById('anthropic-model-input')
+    if (modelInput) modelInput.value = anthropic.model || 'claude-haiku-4-5'
+    const maxTokensInput = document.getElementById('anthropic-max-tokens-input')
+    if (maxTokensInput) maxTokensInput.value = anthropic.maxTokens || 4096
+    const apiKeyInput = document.getElementById('anthropic-api-key-input')
+    if (apiKeyInput) apiKeyInput.value = anthropic.apiKey || ''
   }
 
   /**
@@ -656,6 +667,12 @@ export class ProjectFormComponent {
       speechModel: this.getElementValue('speech-model-select', 'gpt-4o-mini-transcribe'),
       speechApiUrl: this.getElementValue('speech-api-url-input', '').trim(),
       debugMode: this.getCheckboxValue('debug-mode-checkbox'),
+      promptProvider: this.getElementValue('prompt-provider-select', 'cli'),
+      anthropic: {
+        model: this.getElementValue('anthropic-model-input', 'claude-haiku-4-5').trim() || 'claude-haiku-4-5',
+        maxTokens: parseInt(this.getElementValue('anthropic-max-tokens-input', '4096'), 10) || 4096,
+        apiKey: this.getElementValue('anthropic-api-key-input', '').trim()
+      },
       tools: {
         snip: {
           enabled: this.getCheckboxValue('tools-snip-enabled')

@@ -489,6 +489,36 @@
                 </button>
               </fieldset>
 
+              <fieldset class="options-fieldset">
+                <legend>Document Editing</legend>
+                <p class="fieldset-description">Puffin can apply AI edits to documents. Choose how those prompts run.</p>
+
+                <div class="form-group">
+                  <label for="prompt-provider-select">Prompt provider</label>
+                  <select id="prompt-provider-select" class="form-control" style="width:280px" data-help="Choose how document-editing prompts run: the Claude Code CLI (uses your CLI login) or the Anthropic API (pay-per-token, needs an API key).">
+                    <option value="cli">Claude Code CLI (uses your CLI login)</option>
+                    <option value="api">Anthropic API (pay-per-token)</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="anthropic-model-input">API model</label>
+                  <input type="text" id="anthropic-model-input" class="form-control" style="width:280px" placeholder="claude-haiku-4-5" data-help="Anthropic model id for the API provider. Haiku is the cheapest; only used when the provider is set to Anthropic API.">
+                  <small class="form-hint">Used only with the Anthropic API provider. Default: claude-haiku-4-5 (cheapest).</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="anthropic-max-tokens-input">Max output tokens</label>
+                  <input type="number" id="anthropic-max-tokens-input" class="form-control" style="width:140px" min="1" max="8192" placeholder="4096" data-help="Caps the response size for API document edits to bound cost.">
+                </div>
+
+                <div class="form-group">
+                  <label for="anthropic-api-key-input">API key</label>
+                  <input type="password" id="anthropic-api-key-input" class="form-control" style="width:280px" placeholder="sk-ant-… (or set ANTHROPIC_API_KEY)" data-help="Anthropic API key for the API provider. Leave blank to use the ANTHROPIC_API_KEY environment variable.">
+                  <small class="form-hint">Stored in this project's config. Leave blank to use the ANTHROPIC_API_KEY environment variable instead.</small>
+                </div>
+              </fieldset>
+
               <div class="form-actions">
                 <button type="submit" class="btn primary" data-help="Save all project configuration changes to disk.">Save Configuration</button>
               </div>

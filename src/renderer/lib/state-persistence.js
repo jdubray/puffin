@@ -81,10 +81,8 @@ export class StatePersistence {
         await window.puffin.state.updateHistory(state.history.raw)
         console.log('[PERSIST-DEBUG] History persisted successfully')
 
-        // NOTE: Auto-extraction of user stories is disabled.
-        // Use the explicit "Derive User Stories" checkbox instead, which provides
-        // better control and a review modal before adding stories.
-        // The old auto-extraction was creating too many false positives.
+        // NOTE: As of 4.0 Puffin does not derive tasks from prompts. Tasks are
+        // added manually on the Kanban board.
       }
 
       // Persist individual user story updates (status changes, edits)

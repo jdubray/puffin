@@ -295,6 +295,22 @@ IMPORTANT: Your response MUST include either <<<CHANGE>>> blocks, an ## Updated 
       promptLength: prompt.length
     })
 
+    // Determine the configured prompt provider (4.0). When set to 'api', route
+    // the (already harnessed) prompt through the cost-controlled Anthropic API
+    // path; otherwise use the tuned CLI path below.
+    const provider = await this._getPromptProvider()
+
+    if (provider === 'api' && window.puffin?.ai?.editDocument) {
+      console.log('[DocumentEditorPromptService] Routing via Anthropic API provider')
+      const result = await window.puffin.ai.editDocument({ prompt, provider: 'api' })
+      if (result.success) {
+        console.log('[DocumentEditorPromptService] API response length:', result.response?.length || 0)
+        return { response: result.response }
+      }
+      console.error('[DocumentEditorPromptService] API request failed:', result.error)
+      throw new Error(result.error || 'Anthropic API request failed')
+    }
+
     // Use sendPrompt API for dedicated plugin channel (non-streaming, returns response directly)
     // This avoids routing through the main Puffin prompt view
     if (window.puffin?.claude?.sendPrompt) {
@@ -317,6 +333,21 @@ IMPORTANT: Your response MUST include either <<<CHANGE>>> blocks, an ## Updated 
     } else {
       console.error('[DocumentEditorPromptService] Claude sendPrompt API not available')
       throw new Error('Claude API is not available')
+    }
+  }
+
+  /**
+   * Read the project's configured prompt provider ('api' | 'cli').
+   * Defaults to 'cli' if unavailable.
+   * @returns {Promise<string>}
+   * @private
+   */
+  async _getPromptProvider() {
+    try {
+      const result = await window.puffin?.state?.get?.()
+      return result?.state?.config?.promptProvider || 'cli'
+    } catch {
+      return 'cli'
     }
   }
 

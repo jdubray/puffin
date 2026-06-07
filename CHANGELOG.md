@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-06-06
+
+Puffin pivots from an AI code generator to a **documentation manager**. Anthropic's
+pricing made code generation cost-ineffective, so 4.0 removes the code-generation
+engine and keeps the parts that organize and track work — at near-zero Claude cost.
+
+### Changed (breaking)
+
+- **Renamed UI concepts**: "Branch" → **Workspace** and "Thread" → **Task** throughout
+  the interface (labels, help text, buttons, placeholders, modal titles, toasts). The
+  rename is display-only; internal identifiers, IPC channels, CSS classes, and the
+  on-disk data format are unchanged, and real git-branch wording (git panel, git
+  status indicator) is intentionally left as "branch". The Kanban board's cards are
+  now "Tasks" (To Do / Doing / Done).
+- **Puffin no longer generates or modifies `CLAUDE.md`.** The per-Workspace CLAUDE.md
+  generation/swap subsystem is removed — whatever is in your `CLAUDE.md` is left
+  untouched. The Config view's "View CLAUDE.md" button is now a read-only viewer.
+  The only thing Puffin still writes under `.claude/` is the `/puffin-sync` slash
+  command + helper script (installed on project open).
+
+### Removed
+
+- **Code-generation pipeline**: the CRE engine (`src/main/cre/`), sprints and the
+  automated story-implementation orchestration (plan → implement → code review →
+  bug fix), story derivation, inspection assertions, RIS, and completion summaries.
+  The Kanban backlog is kept as a lightweight task manager (no structured user
+  stories or sprints behind it).
+- **h-DSL MCP registration** (`.mcp.json` emptied) — Puffin no longer spawns the
+  code-model tool server.
+- The CLAUDE.md-size badge, the "Generate Claude.md" button, the derive-stories
+  control, the sprint/orchestration panels, and the related IPC/preload surface.
+- Database **migrations are kept** (historical/non-destructive); the unused
+  sprint/assertion/completion tables simply remain.
+
+### Added
+
+- **Document editing via a configurable prompt provider.** The one prompt path Puffin
+  keeps in 4.0 runs cost-controlled document edits through either the **Anthropic API**
+  (direct Messages API, defaults to the cheapest Haiku model, no tools, capped output
+  tokens, key from settings or `ANTHROPIC_API_KEY`) or the **Claude Code CLI** (uses
+  your existing CLI login). Selectable per project in Config → Document Editing. The
+  document-editor plugin routes through the API provider when configured.
+- **Live sync watcher**: `/puffin-sync` writes are picked up automatically and the
+  history reloads without restarting Puffin.
+
 ## [3.11.2] - 2026-04-17
 
 ### Fixed

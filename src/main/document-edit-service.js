@@ -42,22 +42,29 @@ function buildEditPrompt(instruction, content) {
  * Edit a document via the configured provider.
  *
  * @param {Object} args
- * @param {string} args.instruction - What change to make.
- * @param {string} args.content - The current document text.
+ * @param {string} [args.instruction] - What change to make (used to build the prompt).
+ * @param {string} [args.content] - The current document text (used to build the prompt).
+ * @param {string} [args.prompt] - A pre-built prompt; when given, instruction/content
+ *   are ignored. Lets a caller (e.g. the document-editor plugin) supply its own
+ *   harnessed prompt while still routing through the configured provider.
  * @param {string} [args.provider] - Override the configured provider ('api'|'cli').
  * @param {Object} [args.config] - Project config (reads promptProvider + anthropic.*).
  * @param {Object} [args.claudeService] - ClaudeService instance (for the 'cli' provider).
  * @returns {Promise<{success:boolean, response?:string, error?:string, provider:string}>}
  */
 async function editDocument(args = {}) {
-  const { instruction, content, provider, config = {}, claudeService } = args
+  const { instruction, content, prompt: prebuiltPrompt, provider, config = {}, claudeService } = args
 
-  if (!instruction || !String(instruction).trim()) {
-    return { success: false, error: 'An editing instruction is required', provider: 'none' }
+  let prompt
+  if (prebuiltPrompt && String(prebuiltPrompt).trim()) {
+    prompt = String(prebuiltPrompt)
+  } else if (instruction && String(instruction).trim()) {
+    prompt = buildEditPrompt(instruction, content)
+  } else {
+    return { success: false, error: 'An editing instruction or prompt is required', provider: 'none' }
   }
 
   const chosen = provider || config.promptProvider || 'cli'
-  const prompt = buildEditPrompt(instruction, content)
 
   if (chosen === 'api') {
     const a = config.anthropic || {}

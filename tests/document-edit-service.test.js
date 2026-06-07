@@ -78,6 +78,26 @@ describe('document-edit-service', () => {
     assert.strictEqual(usedCli, true)
   })
 
+  it('accepts a pre-built prompt (passthrough) without instruction/content', async () => {
+    let captured = null
+    const fakeClaude = {
+      async sendPrompt(prompt, options) { captured = { prompt, options }; return { success: true, response: 'ok' } }
+    }
+    const result = await service.editDocument({
+      prompt: 'FULLY HARNESSED PROMPT',
+      config: { promptProvider: 'cli' },
+      claudeService: fakeClaude
+    })
+    assert.strictEqual(result.success, true)
+    assert.strictEqual(captured.prompt, 'FULLY HARNESSED PROMPT')
+  })
+
+  it('requires either an instruction or a prompt', async () => {
+    const result = await service.editDocument({ content: 'doc', claudeService: { sendPrompt: async () => ({}) } })
+    assert.strictEqual(result.success, false)
+    assert.match(result.error, /instruction or prompt/i)
+  })
+
   it('errors gracefully when CLI provider is selected but unavailable', async () => {
     const result = await service.editDocument({
       instruction: 'do it',

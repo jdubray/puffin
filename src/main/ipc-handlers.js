@@ -239,12 +239,13 @@ function setupStateHandlers(ipcMain) {
 
   // Document editing via the configured prompt provider (api | cli).
   // The one prompt path Puffin keeps in 4.0 — cost-controlled and tool-free.
-  ipcMain.handle('ai:editDocument', async (event, { instruction, content, provider } = {}) => {
+  ipcMain.handle('ai:editDocument', async (event, { instruction, content, prompt, provider } = {}) => {
     try {
       const config = puffinState?.getState?.()?.config || {}
       return await documentEditService.editDocument({
         instruction,
         content,
+        prompt,
         provider,
         config,
         claudeService

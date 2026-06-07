@@ -121,7 +121,8 @@
       "Bash(sed -n '165,210p' src/renderer/lib/action-card-engine.js)",
       "Bash(sed -n '35,60p' src/renderer/lib/workflow-state-tracker.js)",
       "Bash(sed -n '180,210p' src/renderer/lib/workflow-state-tracker.js)",
-      "Skill(claude-api)"
+      "Skill(claude-api)",
+      "Bash(awk 'NR>=1707 && NR<=1980' C:/Users/jjdub/code/puffin/src/main/claude-service.js)"
     ]
   },
   "enableAllProjectMcpServers": true,

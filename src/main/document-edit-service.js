@@ -16,13 +16,19 @@ const SYSTEM_PROMPT =
 
 /**
  * Build the editing prompt from an instruction and the current document text.
+ *
+ * The formatting guardrail is embedded directly in the prompt rather than passed
+ * as a separate system prompt, because the CLI one-shot path (sendPrompt) does
+ * not apply a system prompt — embedding it here keeps both providers' output
+ * format identical.
+ *
  * @param {string} instruction
  * @param {string} content
  * @returns {string}
  */
 function buildEditPrompt(instruction, content) {
   return [
-    'Apply the following instruction to the document and return the complete revised document.',
+    SYSTEM_PROMPT,
     '',
     '## Instruction',
     instruction || '(no instruction provided)',
@@ -57,23 +63,27 @@ async function editDocument(args = {}) {
     const a = config.anthropic || {}
     const result = await apiClient.sendMessage({
       prompt,
-      system: SYSTEM_PROMPT,
       model: a.model,
       maxTokens: a.maxTokens,
       apiKey: a.apiKey
     })
+    // Treat an empty body (e.g. a refusal) as a soft failure rather than
+    // silently returning an empty document.
+    if (result.success && !String(result.response || '').trim()) {
+      return { success: false, error: 'The model returned an empty response', provider: 'api' }
+    }
     return { ...result, provider: 'api' }
   }
 
   // Default: CLI one-shot. disableTools + allowConcurrent keep it cheap and
-  // isolated from any interactive session.
+  // isolated from any interactive session. (The formatting guardrail is baked
+  // into the prompt — sendPrompt does not apply a system prompt.)
   if (!claudeService || typeof claudeService.sendPrompt !== 'function') {
     return { success: false, error: 'CLI provider is unavailable', provider: 'cli' }
   }
   const result = await claudeService.sendPrompt(prompt, {
     allowConcurrent: true,
-    disableTools: true,
-    system: SYSTEM_PROMPT
+    disableTools: true
   })
   return { ...result, provider: 'cli' }
 }

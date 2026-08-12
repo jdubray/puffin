@@ -24,7 +24,8 @@ function sanitizeSvg(markup) {
   const svg = doc.documentElement
   if (!svg || svg.nodeName.toLowerCase() !== 'svg') return ''
 
-  for (const el of [...svg.querySelectorAll('script, foreignObject')]) {
+  const banned = 'script, foreignObject, style, use, animate, animateTransform, set'
+  for (const el of [...svg.querySelectorAll(banned)]) {
     el.remove()
   }
   const walker = doc.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT)
@@ -32,8 +33,10 @@ function sanitizeSvg(markup) {
   while (node) {
     for (const attr of [...node.attributes]) {
       const name = attr.name.toLowerCase()
-      if (name.startsWith('on') || (name === 'href' && !attr.value.startsWith('#'))) {
-        node.removeAttribute(attr.name)
+      // Drop event handlers and any (possibly namespaced) href/xlink:href
+      // that is not a same-document fragment reference.
+      if (name.startsWith('on') || (name.endsWith('href') && !attr.value.startsWith('#'))) {
+        node.removeAttributeNS(attr.namespaceURI, attr.localName)
       }
     }
     node = walker.nextNode()

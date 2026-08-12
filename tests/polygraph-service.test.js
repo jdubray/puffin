@@ -104,10 +104,24 @@ describe('PolygraphService', () => {
     })
 
     it('rejects SVG paths outside the project', () => {
-      const svc = new PolygraphService({ projectPath: path.join(repoRoot, 'machines') })
-      const result = svc.readDiagram('C:\\Windows\\Temp\\evil.svg')
+      const os = require('node:os')
+      const outside = path.join(os.tmpdir(), 'puffin-readdiagram-outside.svg')
+      fs.writeFileSync(outside, '<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+      try {
+        const svc = new PolygraphService({ projectPath: path.join(repoRoot, 'machines') })
+        const result = svc.readDiagram(outside)
+        assert.strictEqual(result.success, false)
+        assert.match(result.error, /outside the project/)
+      } finally {
+        fs.rmSync(outside, { force: true })
+      }
+    })
+
+    it('rejects reads when no project is active', () => {
+      const svc = new PolygraphService({})
+      const result = svc.readDiagram(path.join(repoRoot, 'anything.svg'))
       assert.strictEqual(result.success, false)
-      assert.match(result.error, /outside the project/)
+      assert.match(result.error, /No active project/)
     })
 
     it('reads an SVG inside the project', () => {

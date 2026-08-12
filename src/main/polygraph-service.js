@@ -309,20 +309,18 @@ class PolygraphService {
     if (typeof svgPath !== 'string' || !svgPath.toLowerCase().endsWith('.svg')) {
       return { success: false, error: 'Not an SVG path' }
     }
-    const resolved = path.resolve(svgPath)
-    const allowedRoots = [
-      this.projectPath ? path.resolve(this.projectPath) : null
-    ].filter(Boolean)
-
-    const isAllowed = allowedRoots.some(root =>
-      resolved.startsWith(root + path.sep)) ||
-      resolved.includes(`${path.sep}.polyviz-out${path.sep}`)
-    if (!isAllowed) {
-      return { success: false, error: 'Path outside the project' }
+    if (!this.projectPath) {
+      return { success: false, error: 'No active project' }
     }
 
     try {
-      return { success: true, svg: fs.readFileSync(resolved, 'utf-8') }
+      // realpath both sides so symlinks cannot escape the project root
+      const realRoot = fs.realpathSync(path.resolve(this.projectPath))
+      const real = fs.realpathSync(path.resolve(svgPath))
+      if (real !== realRoot && !real.startsWith(realRoot + path.sep)) {
+        return { success: false, error: 'Path outside the project' }
+      }
+      return { success: true, svg: fs.readFileSync(real, 'utf-8') }
     } catch (error) {
       return { success: false, error: error.message }
     }

@@ -493,6 +493,26 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  ipcMain.handle('glm:createScr', async (event, { workspaceId, ...body } = {}) => {
+    try {
+      if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+      return { success: true, scr: (await glmClient.createScr(workspaceId, body))?.scr }
+    } catch (error) {
+      return { success: false, error: error.message, status: error.status }
+    }
+  })
+
+  ipcMain.handle('glm:scrStatus', async (event, { workspaceId, scrId, event: scrEvent, reason } = {}) => {
+    try {
+      if (!workspaceId || !scrId || !scrEvent) {
+        return { success: false, error: 'workspaceId, scrId, and event are required' }
+      }
+      return { success: true, ...(await glmClient.scrStatus(workspaceId, scrId, scrEvent, reason)) }
+    } catch (error) {
+      return { success: false, error: error.message, status: error.status }
+    }
+  })
+
   ipcMain.handle('glm:updateNode', async (event, { workspaceId, glmId, input } = {}) => {
     try {
       if (!workspaceId || !glmId || !input) {

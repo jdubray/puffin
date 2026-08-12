@@ -164,6 +164,24 @@ class GlmClient {
       `/workspaces/${workspaceId}/nodes/${encodeURIComponent(glmId)}/lock`)
   }
 
+  /** Create an SCR (Sekkei Change Request) — starts in Draft. */
+  async createScr(workspaceId, { title, problem, scrClass, targetNodes } = {}) {
+    return this._request('POST', `/workspaces/${workspaceId}/scrs`, {
+      title, problem, scrClass, targetNodes
+    })
+  }
+
+  /**
+   * Drive the SCR status FSM one legal event forward
+   * (submit | startReview | approve | return | reject | reopen |
+   *  implement | release). Illegal transitions come back as 409.
+   */
+  async scrStatus(workspaceId, scrId, event, reason) {
+    return this._request('PUT',
+      `/workspaces/${workspaceId}/scrs/${encodeURIComponent(scrId)}/status`,
+      { event, reason })
+  }
+
   /** Run the 7-gate sekkei verifier. */
   async verify(workspaceId) {
     return this._request('POST', `/workspaces/${workspaceId}/verify`, {})

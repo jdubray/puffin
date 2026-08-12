@@ -17,6 +17,18 @@ function esc(text) {
 
 const STRATUM_ORDER = ['system', 'capability', 'component', 'interaction', 'spec']
 
+/** Legal SCR events per status (mirror of GLM's domain/scr.ts FSM) */
+const SCR_EVENTS = {
+  'Draft': ['submit'],
+  'Submitted': ['startReview'],
+  'Under Review': ['approve', 'return', 'reject'],
+  'Returned': ['reopen'],
+  'Approved': ['implement'],
+  'Implemented': ['release'],
+  'Rejected': [],
+  'Released': []
+}
+
 /**
  * The recycled spec-authoring focus (formerly the 'specifications' workspace
  * prompt), retargeted at sekkei nodes: the AI edits ONE node's content and
@@ -73,6 +85,11 @@ export class SpecsViewComponent {
     // Node editor state
     this.editing = null // { glmId, title, description, bodyText, error, isSaving, isAssisting, aiDraft }
     this._heartbeatTimer = null
+    // SCR panel state
+    this.scrs = []
+    this.showScrs = false
+    this.scrForm = null // { title, problem, scrClass, error, isSaving }
+    this.scrError = null
   }
 
   init() {
@@ -159,6 +176,8 @@ export class SpecsViewComponent {
     ])
     this.summary = summaryRes.success ? summaryRes.summary : null
     this.nodes = nodesRes.success ? nodesRes.nodes : []
+    const scrsRes = await window.puffin.glm.listScrs({ workspaceId })
+    this.scrs = scrsRes.success ? (scrsRes.scrs || []) : []
     if (!keepSelection) {
       this.selectedGlmId = null
       this.selectedNode = null
@@ -191,6 +210,52 @@ export class SpecsViewComponent {
     this.render()
     const res = await window.puffin.glm.verify({ workspaceId: this.workspaceId })
     this.verifyResult = res.success ? res.result : { error: res.error }
+    this.render()
+  }
+
+  // ===== SCRs =====
+
+  async createScr() {
+    const title = this.container.querySelector('#scr-title')?.value?.trim()
+    const problem = this.container.querySelector('#scr-problem')?.value?.trim()
+    const scrClass = this.container.querySelector('#scr-class')?.value || 'II'
+    if (!title || !problem) {
+      this.scrForm = { ...this.scrForm, title, problem, scrClass, error: 'Title and problem are required' }
+      this.render()
+      return
+    }
+    this.scrForm = { title, problem, scrClass, isSaving: true }
+    this.render()
+    const targetNodes = this.selectedGlmId ? [this.selectedGlmId] : []
+    const result = await window.puffin.glm.createScr({
+      workspaceId: this.workspaceId, title, problem, scrClass, targetNodes
+    })
+    if (!result.success) {
+      this.scrForm = { title, problem, scrClass, error: result.error }
+    } else {
+      this.scrForm = null
+      const scrsRes = await window.puffin.glm.listScrs({ workspaceId: this.workspaceId })
+      this.scrs = scrsRes.success ? (scrsRes.scrs || []) : this.scrs
+    }
+    this.render()
+  }
+
+  async driveScr(scrId, scrEvent) {
+    let reason
+    if (scrEvent === 'return') {
+      reason = window.prompt('Return reason (recorded on the SCR):')
+      if (reason === null) return
+    }
+    this.scrError = null
+    const result = await window.puffin.glm.scrStatus({
+      workspaceId: this.workspaceId, scrId, event: scrEvent, reason
+    })
+    if (!result.success) {
+      this.scrError = `${scrId}: ${result.error}`
+    } else {
+      const scrsRes = await window.puffin.glm.listScrs({ workspaceId: this.workspaceId })
+      this.scrs = scrsRes.success ? (scrsRes.scrs || []) : this.scrs
+    }
     this.render()
   }
 
@@ -368,6 +433,22 @@ export class SpecsViewComponent {
       else if (action === 'save-node') this.saveEdit()
       else if (action === 'cancel-edit') this.cancelEdit()
       else if (action === 'assist-node') this.assistEdit()
+      else if (action === 'toggle-scrs') {
+        this.showScrs = !this.showScrs
+        this.render()
+      }
+      else if (action === 'new-scr') {
+        this.scrForm = { title: '', problem: '', scrClass: 'II' }
+        this.render()
+      }
+      else if (action === 'cancel-scr') {
+        this.scrForm = null
+        this.render()
+      }
+      else if (action === 'create-scr') this.createScr()
+      else if (action === 'scr-event') {
+        this.driveScr(button.dataset.scrId, button.dataset.event)
+      }
       return
     }
     if (nodeRow && !this.editing) {
@@ -402,6 +483,7 @@ export class SpecsViewComponent {
       </div>
       ${this._renderSummary()}
       ${this._renderVerify()}
+      ${this._renderScrs()}
       <div class="specs-body">
         <div class="specs-tree">${this._renderTree()}</div>
         <div class="specs-detail">${this._renderDetail()}</div>
@@ -459,6 +541,64 @@ export class SpecsViewComponent {
       ).join('')}</div>` : ''}
       ${!passed && v.problems?.length ? `<pre class="specs-output">${esc(v.problems.slice(0, 20).map(p =>
         typeof p === 'string' ? p : JSON.stringify(p)).join('\n'))}</pre>` : ''}
+    </div>`
+  }
+
+  _renderScrs() {
+    if (!this.workspaceId) return ''
+    const open = this.scrs.filter(s => !['Released', 'Rejected'].includes(s.status))
+    return `<div class="specs-scrs">
+      <div class="specs-scrs-header">
+        <button class="specs-twisty" data-action="toggle-scrs">${this.showScrs ? '▾' : '▸'}</button>
+        <span class="specs-scrs-title">Changes (SCRs)</span>
+        <span class="specs-badge">${open.length} open · ${this.scrs.length} total</span>
+        <button class="btn btn-secondary btn-sm specs-scr-new" data-action="new-scr">New SCR</button>
+      </div>
+      ${this.scrError ? `<div class="specs-editor-error">✗ ${esc(this.scrError)}</div>` : ''}
+      ${this.scrForm ? this._renderScrForm() : ''}
+      ${this.showScrs || this.scrForm ? this._renderScrList() : ''}
+    </div>`
+  }
+
+  _renderScrForm() {
+    const form = this.scrForm
+    return `<div class="specs-scr-form">
+      ${form.error ? `<div class="specs-editor-error">✗ ${esc(form.error)}</div>` : ''}
+      <input type="text" id="scr-title" placeholder="Title — what changes" value="${esc(form.title || '')}" ${form.isSaving ? 'disabled' : ''}>
+      <textarea id="scr-problem" rows="2" placeholder="Problem — why this change is needed" ${form.isSaving ? 'disabled' : ''}>${esc(form.problem || '')}</textarea>
+      <div class="specs-scr-form-row">
+        <select id="scr-class" ${form.isSaving ? 'disabled' : ''}>
+          <option value="II" ${form.scrClass !== 'I' ? 'selected' : ''}>Class II (minor — no interface change)</option>
+          <option value="I" ${form.scrClass === 'I' ? 'selected' : ''}>Class I (major — interface/contract change)</option>
+        </select>
+        ${this.selectedGlmId ? `<span class="specs-hint">target: <code>${esc(this.selectedGlmId)}</code></span>` : ''}
+        <button class="btn btn-primary btn-sm" data-action="create-scr" ${form.isSaving ? 'disabled' : ''}>
+          ${form.isSaving ? 'Creating…' : 'Create'}
+        </button>
+        <button class="btn btn-secondary btn-sm" data-action="cancel-scr" ${form.isSaving ? 'disabled' : ''}>Cancel</button>
+      </div>
+    </div>`
+  }
+
+  _renderScrList() {
+    if (this.scrs.length === 0) {
+      return '<div class="specs-empty">No SCRs yet — an SCR is the unit of change: Draft → Submitted → Under Review → Approved → Implemented → Released.</div>'
+    }
+    return `<div class="specs-scr-list">
+      ${this.scrs.map(scr => `
+        <div class="specs-scr-row">
+          <code class="specs-scr-id">${esc(scr.id)}</code>
+          <span class="specs-badge">Class ${esc(scr.scrClass)}</span>
+          <span class="specs-scr-title-text">${esc(scr.title)}</span>
+          <span class="specs-badge specs-scr-status-${esc(String(scr.status).replace(/\s/g, '-'))}">${esc(scr.status)}</span>
+          <span class="specs-scr-actions">
+            ${(SCR_EVENTS[scr.status] || []).map(ev => `
+              <button class="btn btn-secondary btn-sm" data-action="scr-event"
+                data-scr-id="${esc(scr.id)}" data-event="${esc(ev)}">${esc(ev)}</button>
+            `).join('')}
+          </span>
+        </div>
+      `).join('')}
     </div>`
   }
 

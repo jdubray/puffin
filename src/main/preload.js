@@ -820,7 +820,20 @@ contextBridge.exposeInMainWorld('puffin', {
     listNodes: (args) => ipcRenderer.invoke('glm:nodes', args),
     getNode: (args) => ipcRenderer.invoke('glm:node', args),
     listScrs: (args) => ipcRenderer.invoke('glm:scrs', args),
-    verify: (args) => ipcRenderer.invoke('glm:verify', args)
+    verify: (args) => ipcRenderer.invoke('glm:verify', args),
+    // Live workspace channel (main-process socket, forwarded events)
+    subscribe: (args) => ipcRenderer.invoke('glm:subscribe', args),
+    unsubscribe: () => ipcRenderer.invoke('glm:unsubscribe'),
+    onEvent: (callback) => {
+      const listener = (event, payload) => callback(payload)
+      ipcRenderer.on('glm:event', listener)
+      return () => ipcRenderer.removeListener('glm:event', listener)
+    },
+    onSocketStatus: (callback) => {
+      const listener = (event, payload) => callback(payload)
+      ipcRenderer.on('glm:socket-status', listener)
+      return () => ipcRenderer.removeListener('glm:socket-status', listener)
+    }
   },
 
   /**

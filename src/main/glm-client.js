@@ -15,8 +15,11 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { WebSocket } = require('ws')
 
 const DEFAULT_PORT = 3300
+const RECONNECT_BASE_MS = 1000
+const RECONNECT_MAX_MS = 30000
 
 class GlmClient {
   constructor(options = {}) {
@@ -141,6 +144,79 @@ class GlmClient {
   /** Latest verifier run (if any). */
   async getLatestVerifierRun(workspaceId) {
     return this._request('GET', `/workspaces/${workspaceId}/verifier/runs/latest`)
+  }
+
+  /**
+   * Subscribe to a workspace's live event channel
+   * (ws://…/ws/<workspaceId>, bearer-authenticated upgrade).
+   *
+   * Reconnects with exponential backoff; on reconnect, replays events since
+   * the last seen timestamp so nothing is missed (crash-safe catch-up).
+   *
+   * @param {string} workspaceId
+   * @param {Object} handlers
+   * @param {(event: Object) => void} handlers.onEvent
+   * @param {(status: 'open'|'closed'|'error') => void} [handlers.onStatus]
+   * @returns {{ close: () => void }}
+   */
+  subscribe(workspaceId, { onEvent, onStatus } = {}) {
+    const { token, port } = this._readConfig()
+    let socket = null
+    let closed = false
+    let attempts = 0
+    let lastSeenTs = null
+    let reconnectTimer = null
+
+    const connect = () => {
+      if (closed) return
+      socket = new WebSocket(`ws://127.0.0.1:${port}/ws/${workspaceId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+
+      socket.on('open', () => {
+        attempts = 0
+        onStatus?.('open')
+        socket.send(JSON.stringify({ type: 'hello' }))
+        if (lastSeenTs) {
+          socket.send(JSON.stringify({ type: 'replay', since: lastSeenTs }))
+        }
+      })
+
+      socket.on('message', (data) => {
+        try {
+          const event = JSON.parse(data.toString())
+          if (event?.ts) lastSeenTs = event.ts
+          onEvent?.(event)
+        } catch { /* non-JSON frame — ignore */ }
+      })
+
+      const scheduleReconnect = () => {
+        if (closed || reconnectTimer) return
+        onStatus?.('closed')
+        const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempts, RECONNECT_MAX_MS)
+        attempts++
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null
+          connect()
+        }, delay)
+      }
+
+      socket.on('close', scheduleReconnect)
+      socket.on('error', () => {
+        onStatus?.('error')
+        try { socket.close() } catch { /* already closing */ }
+        scheduleReconnect()
+      })
+    }
+
+    connect()
+    return {
+      close: () => {
+        closed = true
+        if (reconnectTimer) clearTimeout(reconnectTimer)
+        try { socket?.close() } catch { /* already closed */ }
+      }
+    }
   }
 }
 

@@ -25,6 +25,9 @@ const polygraphService = new PolygraphService()
 
 // GLM — the spec-oriented backbone (always-on local server, solo mode)
 const glmClient = new GlmClient()
+
+// One live GLM subscription at a time (the Specs view's active workspace)
+let glmSubscription = null
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
@@ -472,6 +475,38 @@ function setupStateHandlers(ipcMain) {
     } catch (error) {
       return { success: false, error: error.message }
     }
+  })
+
+  // Live workspace events: one subscription (the Specs view's workspace),
+  // forwarded to the renderer as 'glm:event' / 'glm:socket-status'.
+  ipcMain.handle('glm:subscribe', async (event, { workspaceId } = {}) => {
+    try {
+      if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+      if (glmSubscription) {
+        glmSubscription.close()
+        glmSubscription = null
+      }
+      const sender = event.sender
+      glmSubscription = glmClient.subscribe(workspaceId, {
+        onEvent: (evt) => {
+          if (!sender.isDestroyed()) sender.send('glm:event', { workspaceId, event: evt })
+        },
+        onStatus: (status) => {
+          if (!sender.isDestroyed()) sender.send('glm:socket-status', { workspaceId, status })
+        }
+      })
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:unsubscribe', async () => {
+    if (glmSubscription) {
+      glmSubscription.close()
+      glmSubscription = null
+    }
+    return { success: true }
   })
 
   // Check whether snip is installed on PATH

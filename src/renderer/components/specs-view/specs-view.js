@@ -32,6 +32,9 @@ export class SpecsViewComponent {
     this.expanded = new Set()
     this.isBusy = false
     this.hasLoaded = false
+    this.socketStatus = null
+    this.lastEvent = null
+    this._refreshTimer = null
   }
 
   init() {
@@ -43,6 +46,39 @@ export class SpecsViewComponent {
     this.render()
     this.container.addEventListener('click', (e) => this._onClick(e))
     this.container.addEventListener('change', (e) => this._onChange(e))
+
+    // Live workspace events (main-process socket, replay-on-reconnect)
+    window.puffin.glm.onEvent(({ workspaceId, event }) => {
+      if (workspaceId !== this.workspaceId) return
+      this.lastEvent = event
+      this._scheduleLiveRefresh(event)
+    })
+    window.puffin.glm.onSocketStatus(({ workspaceId, status }) => {
+      if (workspaceId !== this.workspaceId) return
+      this.socketStatus = status
+      this.render()
+    })
+  }
+
+  /**
+   * Debounced refresh on live events: node/SCR/drift changes reload the
+   * workspace data; noisy bursts (e.g. a /glm-build run) collapse into one
+   * reload per second.
+   */
+  _scheduleLiveRefresh(event) {
+    const type = event?.type || ''
+    if (!/^(node|scr|drift|generation|variant|git)\./.test(type)) return
+    if (this._refreshTimer) return
+    this._refreshTimer = setTimeout(async () => {
+      this._refreshTimer = null
+      const selected = this.selectedGlmId
+      await this._loadWorkspace({ keepSelection: true })
+      if (selected) {
+        this.selectedGlmId = selected
+        this.selectedNode = this.nodes.find(n => n.glmId === selected) || this.selectedNode
+      }
+      this.render()
+    }, 1000)
   }
 
   onShow() {
@@ -76,7 +112,7 @@ export class SpecsViewComponent {
     }
   }
 
-  async _loadWorkspace() {
+  async _loadWorkspace({ keepSelection = false } = {}) {
     const workspaceId = this.workspaceId
     const [summaryRes, nodesRes] = await Promise.all([
       window.puffin.glm.getSummary({ workspaceId }),
@@ -84,14 +120,19 @@ export class SpecsViewComponent {
     ])
     this.summary = summaryRes.success ? summaryRes.summary : null
     this.nodes = nodesRes.success ? nodesRes.nodes : []
-    this.selectedGlmId = null
-    this.selectedNode = null
-    this.verifyResult = null
+    if (!keepSelection) {
+      this.selectedGlmId = null
+      this.selectedNode = null
+      this.verifyResult = null
+    }
     // Expand the first two levels by default
     for (const node of this.nodes) {
       const segments = this._segments(node.glmId)
       if (segments.length <= 2) this.expanded.add(this._parentPath(node.glmId))
     }
+    // Follow the workspace with the live channel
+    this.socketStatus = 'connecting'
+    window.puffin.glm.subscribe({ workspaceId })
   }
 
   async selectNode(glmId) {
@@ -194,9 +235,15 @@ export class SpecsViewComponent {
         GLM server not reachable on port ${this.status.port} — start it, or check <code>~/.glm/config.json</code>.
       </div>`
     }
+    const live = this.socketStatus === 'open'
+      ? '<span class="specs-live specs-live-on">● live</span>'
+      : this.socketStatus
+        ? `<span class="specs-live">○ ${esc(this.socketStatus)}</span>`
+        : ''
     return `<div class="specs-status">
       GLM v${esc(this.status.version || '?')} · port ${this.status.port}
       ${!this.status.hasToken ? ' · <span class="specs-warn">no token in ~/.glm/config.json</span>' : ''}
+      ${live}
     </div>`
   }
 

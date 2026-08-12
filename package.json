@@ -30,7 +30,8 @@
     "marked": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",

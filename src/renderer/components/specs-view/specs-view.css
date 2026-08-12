@@ -37,6 +37,16 @@
   color: var(--warning-color, #e0a030);
 }
 
+.specs-live {
+  margin-left: 8px;
+  font-size: 11.5px;
+  color: var(--text-secondary, #888);
+}
+
+.specs-live-on {
+  color: var(--success-color, #4cae6f);
+}
+
 .specs-summary {
   display: flex;
   gap: 1px;

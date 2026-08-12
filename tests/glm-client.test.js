@@ -65,6 +65,29 @@ describe('GlmClient', () => {
       assert.ok(summary.nodes.byStratum)
     })
 
+    it('opens a live workspace socket (bearer upgrade)', async (t) => {
+      if (!available) return t.skip('GLM server not running')
+      const workspaces = await client.listWorkspaces()
+      if (workspaces.length === 0) return t.skip('no workspaces')
+
+      const status = await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          subscription.close()
+          resolve('timeout')
+        }, 5000)
+        const subscription = client.subscribe(workspaces[0].id, {
+          onStatus: (s) => {
+            if (s === 'open') {
+              clearTimeout(timeout)
+              subscription.close()
+              resolve('open')
+            }
+          }
+        })
+      })
+      assert.strictEqual(status, 'open')
+    })
+
     it('lists nodes with glm ids', async (t) => {
       if (!available) return t.skip('GLM server not running')
       const workspaces = await client.listWorkspaces()

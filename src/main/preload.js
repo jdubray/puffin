@@ -812,6 +812,17 @@ contextBridge.exposeInMainWorld('puffin', {
     replay: (args) => ipcRenderer.invoke('polygraph:replay', args)
   },
 
+  // GLM — spec-oriented development (sekkei, SCRs, verifier)
+  glm: {
+    getStatus: () => ipcRenderer.invoke('glm:status'),
+    listWorkspaces: () => ipcRenderer.invoke('glm:workspaces'),
+    getSummary: (args) => ipcRenderer.invoke('glm:summary', args),
+    listNodes: (args) => ipcRenderer.invoke('glm:nodes', args),
+    getNode: (args) => ipcRenderer.invoke('glm:node', args),
+    listScrs: (args) => ipcRenderer.invoke('glm:scrs', args),
+    verify: (args) => ipcRenderer.invoke('glm:verify', args)
+  },
+
   /**
    * External tool integrations
    */

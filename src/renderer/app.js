@@ -36,6 +36,7 @@ import { DeveloperProfileComponent } from './components/developer-profile/develo
 import { StoryGenerationsComponent } from './components/story-generations/story-generations.js'
 import { GitPanelComponent } from './components/git-panel/git-panel.js'
 import { PolygraphWorkbenchComponent } from './components/polygraph-workbench/polygraph-workbench.js'
+import { SpecsViewComponent } from './components/specs-view/specs-view.js'
 
 // Plugin system
 import { FirstRunSetup } from './components/first-run-setup/first-run-setup.js'
@@ -1014,7 +1015,8 @@ class PuffinApp {
       developerProfile: new DeveloperProfileComponent(this.intents),
       storyGenerations: new StoryGenerationsComponent(this.intents),
       gitPanel: new GitPanelComponent(this.intents),
-      polygraphWorkbench: new PolygraphWorkbenchComponent(this.intents)
+      polygraphWorkbench: new PolygraphWorkbenchComponent(this.intents),
+      specsView: new SpecsViewComponent(this.intents)
     }
 
     Object.values(this.components).forEach(component => {
@@ -1920,7 +1922,7 @@ class PuffinApp {
    */
   updateViews(state) {
     // Core views - plugins may contribute additional views (e.g., designer-plugin)
-    const views = ['config', 'prompt', 'user-stories', 'cli-output', 'polygraph', 'git', 'profile', 'debug']
+    const views = ['config', 'prompt', 'specs', 'user-stories', 'cli-output', 'polygraph', 'git', 'profile', 'debug']
     const hasActivePluginView = this.sidebarViewManager.hasActivePluginView()
     const currentView = state.ui.currentView
 
@@ -1955,6 +1957,10 @@ class PuffinApp {
     // First display of the Polygraph workbench triggers its project scan
     if (currentView === 'polygraph') {
       this.components?.polygraphWorkbench?.onShow()
+    }
+    // First display of the Specs view loads the GLM workspaces
+    if (currentView === 'specs') {
+      this.components?.specsView?.onShow()
     }
   }
 

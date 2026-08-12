@@ -18,9 +18,13 @@ const { GitService } = require('./git-service')
 const { scaffoldCommands } = require('./command-scaffolder')
 const documentEditService = require('./document-edit-service')
 const { PolygraphService } = require('./polygraph-service')
+const { GlmClient } = require('./glm-client')
 
 // Polygraph workbench — engine access for any project built with Polygraph
 const polygraphService = new PolygraphService()
+
+// GLM — the spec-oriented backbone (always-on local server, solo mode)
+const glmClient = new GlmClient()
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
@@ -402,6 +406,69 @@ function setupStateHandlers(ipcMain) {
     try {
       if (!svgPath) return { success: false, error: 'svgPath is required' }
       return polygraphService.readDiagram(svgPath)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ===== GLM (spec-oriented development) =====
+
+  ipcMain.handle('glm:status', async () => {
+    try {
+      return { success: true, ...(await glmClient.getStatus()) }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:workspaces', async () => {
+    try {
+      return { success: true, workspaces: await glmClient.listWorkspaces() }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:summary', async (event, { workspaceId } = {}) => {
+    try {
+      if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+      return { success: true, summary: await glmClient.getSummary(workspaceId) }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:nodes', async (event, { workspaceId } = {}) => {
+    try {
+      if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+      return { success: true, nodes: await glmClient.listNodes(workspaceId) }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:node', async (event, { workspaceId, glmId } = {}) => {
+    try {
+      if (!workspaceId || !glmId) return { success: false, error: 'workspaceId and glmId are required' }
+      return { success: true, node: await glmClient.getNode(workspaceId, glmId) }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:scrs', async (event, { workspaceId } = {}) => {
+    try {
+      if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+      return { success: true, scrs: await glmClient.listScrs(workspaceId) }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:verify', async (event, { workspaceId } = {}) => {
+    try {
+      if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+      return { success: true, result: await glmClient.verify(workspaceId) }
     } catch (error) {
       return { success: false, error: error.message }
     }

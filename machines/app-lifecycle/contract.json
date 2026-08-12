@@ -1,0 +1,87 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "appState",
+      "type": "enum: 'initializing' | 'loading' | 'ready' | 'prompting' | 'processing' | 'error'"
+    },
+    {
+      "name": "loaded",
+      "type": "boolean — true once project state has been loaded successfully (LOAD_STATE accepted); never cleared"
+    }
+  ],
+  "initState": {
+    "appState": "initializing",
+    "loaded": false
+  },
+  "actions": {
+    "INITIALIZE_APP": { "dataFields": {} },
+    "LOAD_STATE": { "dataFields": {} },
+    "START_PROMPTING": { "dataFields": {} },
+    "SUBMIT_PROMPT": { "dataFields": {} },
+    "COMPLETE_RESPONSE": { "dataFields": {} },
+    "APP_ERROR": { "dataFields": {} },
+    "RECOVER": { "dataFields": {} }
+  },
+  "dataDomain": {
+    "INITIALIZE_APP": {},
+    "LOAD_STATE": {},
+    "START_PROMPTING": {},
+    "SUBMIT_PROMPT": {},
+    "COMPLETE_RESPONSE": {},
+    "APP_ERROR": {},
+    "RECOVER": {}
+  },
+  "terminalStates": [],
+  "specialRules": [
+    {
+      "name": "initialize-only-from-initializing",
+      "note": "INITIALIZE_APP applies once, from initializing.",
+      "whenState": "appState != 'initializing'",
+      "whenAction": "INITIALIZE_APP"
+    },
+    {
+      "name": "load-only-from-loading",
+      "note": "LOAD_STATE applies only while loading; it sets loaded=true.",
+      "whenState": "appState != 'loading'",
+      "whenAction": "LOAD_STATE"
+    },
+    {
+      "name": "prompt-only-when-ready",
+      "note": "START_PROMPTING applies only from ready.",
+      "whenState": "appState != 'ready'",
+      "whenAction": "START_PROMPTING"
+    },
+    {
+      "name": "submit-only-when-ready-or-prompting",
+      "note": "SUBMIT_PROMPT enters processing from ready or prompting.",
+      "whenState": "appState not in ('ready','prompting')",
+      "whenAction": "SUBMIT_PROMPT"
+    },
+    {
+      "name": "complete-only-when-processing",
+      "note": "COMPLETE_RESPONSE returns to ready only from processing.",
+      "whenState": "appState != 'processing'",
+      "whenAction": "COMPLETE_RESPONSE"
+    },
+    {
+      "name": "already-in-error",
+      "note": "APP_ERROR from error is an observable no-op — errors do not stack.",
+      "whenState": "appState == 'error'",
+      "whenAction": "APP_ERROR"
+    },
+    {
+      "name": "recover-only-from-error",
+      "note": "RECOVER applies only from error.",
+      "whenState": "appState != 'error'",
+      "whenAction": "RECOVER"
+    },
+    {
+      "name": "recovery-cannot-skip-loading",
+      "note": "DELIBERATE DIVERGENCE from the legacy appFsm, which sent every RECOVER to ready — including errors raised before project state ever loaded, yielding a 'ready' app with nothing loaded. Here RECOVER returns to ready only when loaded==true; otherwise it returns to loading to retry the load.",
+      "whenState": "appState == 'error' && loaded == false",
+      "whenAction": "RECOVER"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre, never a throw and never a silent return."
+}

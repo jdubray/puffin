@@ -22,11 +22,14 @@ no-ops, settlement recorded truthfully (`endedVia`).
 `{pre, action, data, post}` windows via a step listener (CR-4) so live sessions produce the
 verification corpus.
 
-### M2 — App lifecycle (appFsm)
-`src/renderer/sam/instance.js` — INITIALIZING → LOADING → READY → PROMPTING → PROCESSING →
-ERROR → RECOVER. Small alphabet, low data, easy contract. Invariant at stake: no prompt
-processing before state load; ERROR always recoverable to READY. Capture cost: low.
-**Order: next.**
+### M2 — App lifecycle ✅ MANAGED (2026-08-11)
+`machines/app-lifecycle/`. Replaces the legacy `appFsm` skeleton. 7 states, 8 reject
+reasons, 7 invariants — exhaustively checked. **The contract fixed a real legacy flaw**
+(`recovery-cannot-skip-loading`): the old appFsm sent every RECOVER to READY, including
+errors raised before project state ever loaded, yielding a "ready" app with nothing
+loaded. The managed machine routes pre-load recovery back to `loading`, and the invariant
+`active-states-imply-loaded` now holds over every reachable state.
+**Next step**: swap the renderer to execute this module (with M1) and emit windows.
 
 ### M3 — Kanban story status
 `user_stories.status` (pending → in-progress → completed → archived) mutated via SAM

@@ -17,6 +17,10 @@ const { DeveloperProfileManager } = require('./developer-profile')
 const { GitService } = require('./git-service')
 const { scaffoldCommands } = require('./command-scaffolder')
 const documentEditService = require('./document-edit-service')
+const { PolygraphService } = require('./polygraph-service')
+
+// Polygraph workbench — engine access for any project built with Polygraph
+const polygraphService = new PolygraphService()
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
@@ -163,6 +167,7 @@ function setIpcProjectPath(newProjectPath) {
   projectPath = newProjectPath
   if (claudeService) claudeService.setProjectPath(newProjectPath)
   if (gitService) gitService.setProjectPath(newProjectPath)
+  if (polygraphService) polygraphService.setProjectPath(newProjectPath)
   // Propagate existing config so agentCmd is correct from the first submission
   if (claudeService && puffinState) {
     try {
@@ -250,6 +255,52 @@ function setupStateHandlers(ipcMain) {
         config,
         claudeService
       })
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ===== Polygraph workbench =====
+  // Engine access for any project built with Polygraph. All answers come
+  // from the engines (sibling checkout / POLYGRAPH_DIR) — never re-derived.
+
+  ipcMain.handle('polygraph:status', async () => {
+    try {
+      return { success: true, ...polygraphService.getStatus() }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:discover', async () => {
+    try {
+      return { success: true, machines: polygraphService.discoverMachines() }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:check', async (event, { machineDir, maxStates } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.checkMachine(machineDir, { maxStates })
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:checkAll', async () => {
+    try {
+      return { success: true, results: await polygraphService.checkAll() }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:renderDiagrams', async (event, { machineDir, diagram, theme } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.renderDiagrams(machineDir, { diagram, theme })
     } catch (error) {
       return { success: false, error: error.message }
     }

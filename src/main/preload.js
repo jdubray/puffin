@@ -784,6 +784,20 @@ contextBridge.exposeInMainWorld('puffin', {
     editDocument: (args) => ipcRenderer.invoke('ai:editDocument', args)
   },
 
+  // Polygraph workbench — engine access for any project built with Polygraph
+  polygraph: {
+    // → { success, available, polygraphDir, polyviz }
+    getStatus: () => ipcRenderer.invoke('polygraph:status'),
+    // → { success, machines: [{ name, dir, relDir, moduleFile, hasInvariants, traceFiles, ... }] }
+    discover: () => ipcRenderer.invoke('polygraph:discover'),
+    // check({ machineDir, maxStates? }) → { success, statesExplored, violations, output }
+    check: (args) => ipcRenderer.invoke('polygraph:check', args),
+    // → { success, results: [machine + { check }] }
+    checkAll: () => ipcRenderer.invoke('polygraph:checkAll'),
+    // renderDiagrams({ machineDir, diagram?, theme? }) → { success, svgs, outDir }
+    renderDiagrams: (args) => ipcRenderer.invoke('polygraph:renderDiagrams', args)
+  },
+
   /**
    * External tool integrations
    */

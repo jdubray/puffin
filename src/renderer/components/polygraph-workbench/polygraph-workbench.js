@@ -265,6 +265,29 @@ export class PolygraphWorkbenchComponent {
     this.render()
   }
 
+  /**
+   * Pre-fill the prompt editor with a /polygraph:* command and switch to the
+   * Prompt view. The spawned Claude Code session resolves the command from
+   * the user's installed polygraph plugin.
+   *
+   * @param {string} text - Command text; an optional «…» placeholder gets selected
+   */
+  _prefillPrompt(text) {
+    this.intents.switchView('prompt')
+    const textarea = document.getElementById('prompt-input')
+    if (!textarea) return
+    const placeholder = '«describe the feature»'
+    const start = text.indexOf(placeholder)
+    textarea.value = text
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.focus()
+    if (start >= 0) {
+      textarea.setSelectionRange(start, start + placeholder.length)
+    } else {
+      textarea.setSelectionRange(text.length, text.length)
+    }
+  }
+
   _onClick(e) {
     const button = e.target.closest('button[data-action]')
     if (!button || this.isBusy && button.dataset.action !== 'refresh') return
@@ -298,6 +321,17 @@ export class PolygraphWorkbenchComponent {
     }
     else if (action === 'validate-corpus' && dir) this.validateCorpus(dir)
     else if (action === 'replay' && dir) this.replayTraces(dir)
+    else if (action === 'session-workflow') {
+      this._prefillPrompt('/polygraph:workflow "«describe the feature»" --out machines/')
+    }
+    else if (action === 'session-polygen') {
+      this._prefillPrompt('/polygraph:polygen --intent "«describe the feature»" --out machines/')
+    }
+    else if (action === 'session-interview' && dir) {
+      const machine = this.machines.find(m => m.dir === dir)
+      const artifacts = machine?.relDir || dir
+      this._prefillPrompt(`/polygraph:polynv questions --artifacts ${artifacts} --next`)
+    }
   }
 
   render() {
@@ -306,6 +340,14 @@ export class PolygraphWorkbenchComponent {
       <div class="pgwb-toolbar">
         ${this._renderStatus()}
         <div class="pgwb-toolbar-actions">
+          <button class="btn btn-secondary" data-action="session-workflow"
+            title="Design a feature as a verified workflow in a Claude Code session (/polygraph:workflow)">
+            New workflow…
+          </button>
+          <button class="btn btn-secondary" data-action="session-polygen"
+            title="Author a new verified machine in a Claude Code session (/polygraph:polygen)">
+            New machine…
+          </button>
           <button class="btn btn-secondary" data-action="refresh" ${this.isBusy ? 'disabled' : ''}>
             ${this.isBusy ? 'Scanning…' : 'Scan project'}
           </button>
@@ -516,7 +558,10 @@ export class PolygraphWorkbenchComponent {
         <div><button class="btn btn-primary btn-sm" data-action="harvest" data-dir="${esc(machine.dir)}">Harvest candidates</button></div>
       </div>`
     } else if (entry.question) {
-      body = this._renderQuestion(machine, entry.question)
+      body = `${this._renderQuestion(machine, entry.question)}
+        <div class="pgwb-session-hint">Prefer the full interview dialog?
+          <button class="btn btn-link btn-sm" data-action="session-interview" data-dir="${esc(machine.dir)}">Continue in a Claude session (/polygraph:polynv)</button>
+        </div>`
     } else {
       body = `<div class="pgwb-elicit-empty">
         No open questions — the ledger has converged for now.

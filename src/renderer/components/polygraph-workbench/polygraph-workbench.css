@@ -322,6 +322,22 @@
   font-size: 12px;
 }
 
+.pgwb-session-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+}
+
+.pgwb-session-hint .btn-link {
+  background: none;
+  border: none;
+  color: var(--accent-color, #5f97d6);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  text-decoration: underline;
+}
+
 .pgwb-concern {
   flex: 1;
   min-width: 180px;

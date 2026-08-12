@@ -94,13 +94,12 @@ export class FirstRunSetup {
         label: 'Standard',
         description: 'Recommended for most users',
         names: ['document-editor-plugin', 'claude-config-plugin', 'stats-plugin',
-                'toast-history-plugin', 'document-viewer-plugin', 'calendar'],
+                'toast-history-plugin', 'document-viewer-plugin'],
       },
       {
         label: 'Power Tools',
         description: 'Useful for advanced workflows',
-        names: ['prompt-template-plugin', 'excalidraw-plugin',
-                'outcome-lifecycle-plugin', 'rlm-document-plugin'],
+        names: ['prompt-template-plugin', 'excalidraw-plugin'],
       },
     ]
 

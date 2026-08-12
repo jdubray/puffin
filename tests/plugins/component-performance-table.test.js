@@ -20,12 +20,7 @@ const assert = require('node:assert/strict')
 
 const COMPONENT_DISPLAY_NAMES = {
   'claude-service': 'Claude Service',
-  'cre-plan': 'CRE Plan Generator',
-  'cre-ris': 'CRE RIS Generator',
-  'cre-assertion': 'CRE Assertion Generator',
-  'hdsl-engine': 'h-DSL Engine',
   'memory-plugin': 'Memory Plugin',
-  'outcomes-plugin': 'Outcomes Plugin',
   'skills-system': 'Skills System'
 }
 
@@ -109,7 +104,7 @@ function formatDuration(ms) {
 
 const SAMPLE_ROWS = [
   { component: 'claude-service', operations: 42, totalCost: 1.5234, totalTokens: 150000, avgDuration: 5000, pctOfCost: 65.2 },
-  { component: 'cre-plan', operations: 8, totalCost: 0.5100, totalTokens: 75000, avgDuration: 12000, pctOfCost: 21.8 },
+  { component: 'skills-system', operations: 8, totalCost: 0.5100, totalTokens: 75000, avgDuration: 12000, pctOfCost: 21.8 },
   { component: 'memory-plugin', operations: 15, totalCost: 0.3050, totalTokens: 30000, avgDuration: 2000, pctOfCost: 13.0 }
 ]
 
@@ -119,8 +114,8 @@ describe('ComponentPerformanceTable logic', () => {
   describe('displayName', () => {
     it('should map known component IDs to display names', () => {
       assert.strictEqual(displayName('claude-service'), 'Claude Service')
-      assert.strictEqual(displayName('cre-plan'), 'CRE Plan Generator')
-      assert.strictEqual(displayName('hdsl-engine'), 'h-DSL Engine')
+      assert.strictEqual(displayName('skills-system'), 'Skills System')
+      assert.strictEqual(displayName('memory-plugin'), 'Memory Plugin')
     })
 
     it('should return raw ID for unknown components', () => {
@@ -137,7 +132,7 @@ describe('ComponentPerformanceTable logic', () => {
     it('should sort by cost descending (default)', () => {
       const sorted = sortRows(SAMPLE_ROWS, 'totalCost', 'desc')
       assert.strictEqual(sorted[0].component, 'claude-service')
-      assert.strictEqual(sorted[1].component, 'cre-plan')
+      assert.strictEqual(sorted[1].component, 'skills-system')
       assert.strictEqual(sorted[2].component, 'memory-plugin')
     })
 
@@ -156,15 +151,15 @@ describe('ComponentPerformanceTable logic', () => {
 
     it('should sort by component name alphabetically (asc)', () => {
       const sorted = sortRows(SAMPLE_ROWS, 'component', 'asc')
-      // Display names: "CRE Plan Generator", "Claude Service", "Memory Plugin"
-      assert.strictEqual(sorted[0].component, 'claude-service')  // "Claude..." < "CRE..."
-      assert.strictEqual(sorted[1].component, 'cre-plan')
-      assert.strictEqual(sorted[2].component, 'memory-plugin')
+      // Display names: "Claude Service", "Memory Plugin", "Skills System"
+      assert.strictEqual(sorted[0].component, 'claude-service')
+      assert.strictEqual(sorted[1].component, 'memory-plugin')
+      assert.strictEqual(sorted[2].component, 'skills-system')
     })
 
     it('should sort by component name descending', () => {
       const sorted = sortRows(SAMPLE_ROWS, 'component', 'desc')
-      assert.strictEqual(sorted[0].component, 'memory-plugin')
+      assert.strictEqual(sorted[0].component, 'skills-system')
     })
 
     it('should not mutate original array', () => {
@@ -234,7 +229,7 @@ describe('ComponentPerformanceTable logic', () => {
     it('should include display names for components', () => {
       const csv = toCSV(SAMPLE_ROWS)
       assert.ok(csv.includes('Claude Service'))
-      assert.ok(csv.includes('CRE Plan Generator'))
+      assert.ok(csv.includes('Skills System'))
     })
 
     it('should format cost to 4 decimals', () => {
@@ -348,7 +343,7 @@ describe('ComponentPerformanceTable logic', () => {
 
   describe('filter behavior', () => {
     it('display name filter should match known components', () => {
-      const filter = 'cre'
+      const filter = 'skills'
       const lowerFilter = filter.toLowerCase()
       const filtered = SAMPLE_ROWS.filter(c => {
         const display = displayName(c.component).toLowerCase()
@@ -356,7 +351,7 @@ describe('ComponentPerformanceTable logic', () => {
         return display.includes(lowerFilter) || raw.includes(lowerFilter)
       })
       assert.strictEqual(filtered.length, 1)
-      assert.strictEqual(filtered[0].component, 'cre-plan')
+      assert.strictEqual(filtered[0].component, 'skills-system')
     })
 
     it('should match by raw component ID', () => {
@@ -397,17 +392,17 @@ describe('ComponentPerformanceTable logic', () => {
 
   describe('combined sort + filter', () => {
     it('should sort filtered results', () => {
-      // Filter to "CRE" components
-      const allCre = [
-        { component: 'cre-plan', operations: 8, totalCost: 0.51, totalTokens: 75000, avgDuration: 12000, pctOfCost: 21.8 },
-        { component: 'cre-ris', operations: 12, totalCost: 0.22, totalTokens: 40000, avgDuration: 8000, pctOfCost: 9.4 },
-        { component: 'cre-assertion', operations: 5, totalCost: 0.15, totalTokens: 20000, avgDuration: 6000, pctOfCost: 6.4 }
+      // Filter to plugin components (unknown ids fall back to their raw id)
+      const filtered = [
+        { component: 'plugin-a', operations: 8, totalCost: 0.51, totalTokens: 75000, avgDuration: 12000, pctOfCost: 21.8 },
+        { component: 'plugin-b', operations: 12, totalCost: 0.22, totalTokens: 40000, avgDuration: 8000, pctOfCost: 9.4 },
+        { component: 'plugin-c', operations: 5, totalCost: 0.15, totalTokens: 20000, avgDuration: 6000, pctOfCost: 6.4 }
       ]
 
-      const sorted = sortRows(allCre, 'operations', 'desc')
-      assert.strictEqual(sorted[0].component, 'cre-ris')
-      assert.strictEqual(sorted[1].component, 'cre-plan')
-      assert.strictEqual(sorted[2].component, 'cre-assertion')
+      const sorted = sortRows(filtered, 'operations', 'desc')
+      assert.strictEqual(sorted[0].component, 'plugin-b')
+      assert.strictEqual(sorted[1].component, 'plugin-a')
+      assert.strictEqual(sorted[2].component, 'plugin-c')
     })
   })
 })

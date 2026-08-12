@@ -87,7 +87,6 @@ describe('MetricsService', () => {
     it('should define all component identifiers', () => {
       assert.strictEqual(MetricComponent.CLAUDE_SERVICE, 'claude-service')
       assert.strictEqual(MetricComponent.MEMORY_PLUGIN, 'memory-plugin')
-      assert.strictEqual(MetricComponent.OUTCOMES_PLUGIN, 'outcomes-plugin')
     })
   })
 

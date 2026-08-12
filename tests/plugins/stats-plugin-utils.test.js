@@ -115,12 +115,7 @@ describe('formatComponentName', () => {
 
   it('should map known component IDs to display names', () => {
     assert.strictEqual(formatComponentName('claude-service'), 'Claude Service')
-    assert.strictEqual(formatComponentName('cre-plan'), 'CRE Plan Generator')
-    assert.strictEqual(formatComponentName('cre-ris'), 'CRE RIS Generator')
-    assert.strictEqual(formatComponentName('cre-assertion'), 'CRE Assertion Generator')
-    assert.strictEqual(formatComponentName('hdsl-engine'), 'h-DSL Engine')
     assert.strictEqual(formatComponentName('memory-plugin'), 'Memory Plugin')
-    assert.strictEqual(formatComponentName('outcomes-plugin'), 'Outcomes Plugin')
     assert.strictEqual(formatComponentName('skills-system'), 'Skills System')
   })
 
@@ -130,8 +125,7 @@ describe('formatComponentName', () => {
 
   it('should have entries for all known MetricComponent values', () => {
     const expectedIds = [
-      'claude-service', 'cre-plan', 'cre-ris', 'cre-assertion',
-      'hdsl-engine', 'memory-plugin', 'outcomes-plugin', 'skills-system'
+      'claude-service', 'memory-plugin', 'skills-system'
     ]
     for (const id of expectedIds) {
       assert.ok(COMPONENT_DISPLAY_NAMES[id], `Missing display name for ${id}`)
@@ -240,14 +234,14 @@ describe('generateMetricsReport', () => {
       componentBreakdown: {
         components: [
           { component: 'claude-service', operations: 50, totalTokens: 100000, totalCost: 5.0, pctOfCost: 62.5 },
-          { component: 'cre-plan', operations: 10, totalTokens: 30000, totalCost: 3.0, pctOfCost: 37.5 }
+          { component: 'skills-system', operations: 10, totalTokens: 30000, totalCost: 3.0, pctOfCost: 37.5 }
         ]
       }
     })
 
     assert.ok(report.includes('## Component Breakdown'))
     assert.ok(report.includes('Claude Service'))
-    assert.ok(report.includes('CRE Plan Generator'))
+    assert.ok(report.includes('Skills System'))
     assert.ok(report.includes('62.5%'))
   })
 

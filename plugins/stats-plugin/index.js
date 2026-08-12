@@ -14,8 +14,7 @@ try {
 // Known components instrumented with MetricsService
 // NOTE: If new components are added to the cognitive architecture, add them here
 const KNOWN_COMPONENTS = [
-  'claude-service', 'cre-plan', 'cre-ris', 'cre-assertion',
-  'hdsl-engine', 'memory-plugin', 'outcomes-plugin', 'skills-system'
+  'claude-service', 'memory-plugin', 'skills-system'
 ]
 
 const StatsPlugin = {
@@ -199,7 +198,7 @@ const StatsPlugin = {
    * Falls back to empty object when MetricsService is unavailable.
    *
    * @param {Object} [options] - Filter options
-   * @param {string} [options.component] - Filter by component (e.g. 'claude-service', 'cre-plan')
+   * @param {string} [options.component] - Filter by component (e.g. 'claude-service')
    * @param {string} [options.start_date] - ISO date filter start
    * @param {string} [options.end_date] - ISO date filter end
    * @returns {Promise<Object>} Component metrics or empty object if unavailable

@@ -30,7 +30,6 @@ const MetricEventType = {
 const MetricComponent = {
   CLAUDE_SERVICE: 'claude-service',
   MEMORY_PLUGIN: 'memory-plugin',
-  OUTCOMES_PLUGIN: 'outcomes-plugin',
   SKILLS_SYSTEM: 'skills-system'
 }
 

@@ -160,12 +160,7 @@ function formatPercentChange(pct) {
  */
 const COMPONENT_DISPLAY_NAMES = {
   'claude-service': 'Claude Service',
-  'cre-plan': 'CRE Plan Generator',
-  'cre-ris': 'CRE RIS Generator',
-  'cre-assertion': 'CRE Assertion Generator',
-  'hdsl-engine': 'h-DSL Engine',
   'memory-plugin': 'Memory Plugin',
-  'outcomes-plugin': 'Outcomes Plugin',
   'skills-system': 'Skills System'
 }
 

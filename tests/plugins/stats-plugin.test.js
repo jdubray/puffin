@@ -122,7 +122,7 @@ function createMockMetricsServiceWithData() {
       story_id: 'story-1', created_at: new Date(now.getTime() - 10 * 86400000).toISOString()
     },
     {
-      component: 'cre-plan', operation: 'generate-plan', event_type: 'complete',
+      component: 'skills-system', operation: 'generate-plan', event_type: 'complete',
       total_tokens: 7000, cost_usd: 1.75, duration_ms: 5000,
       story_id: 'story-2', created_at: new Date(now.getTime() - 15 * 86400000).toISOString()
     }
@@ -136,7 +136,7 @@ function createMockMetricsServiceWithData() {
       story_id: 'story-0', created_at: new Date(now.getTime() - 40 * 86400000).toISOString()
     },
     {
-      component: 'cre-plan', operation: 'generate-plan', event_type: 'complete',
+      component: 'skills-system', operation: 'generate-plan', event_type: 'complete',
       total_tokens: 6000, cost_usd: 1.5, duration_ms: 4000,
       story_id: 'story-0', created_at: new Date(now.getTime() - 50 * 86400000).toISOString()
     }
@@ -413,7 +413,7 @@ describe('StatsPlugin', () => {
         }
       }
 
-      const result = await plugin.getComponentMetrics({ component: 'cre-plan' })
+      const result = await plugin.getComponentMetrics({ component: 'skills-system' })
       assert.ok(result)
       assert.strictEqual(result.operation_count, 5)
     })
@@ -598,7 +598,7 @@ describe('StatsPlugin', () => {
           if (component === 'claude-service') {
             return { operation_count: 8, total_tokens: 16000, total_cost_usd: 3.0, avg_duration_ms: 2000, max_duration_ms: 5000, min_duration_ms: 500 }
           }
-          if (component === 'cre-plan') {
+          if (component === 'skills-system') {
             return { operation_count: 2, total_tokens: 4000, total_cost_usd: 1.0, avg_duration_ms: 3000, max_duration_ms: 4000, min_duration_ms: 2000 }
           }
           return { operation_count: 0 }
@@ -622,14 +622,14 @@ describe('StatsPlugin', () => {
       plugin.metricsService = {
         getComponentStats(component) {
           if (component === 'claude-service') return { operation_count: 5, total_tokens: 10000, total_cost_usd: 1.0, avg_duration_ms: 1000, max_duration_ms: 2000, min_duration_ms: 500 }
-          if (component === 'cre-plan') return { operation_count: 2, total_tokens: 4000, total_cost_usd: 3.0, avg_duration_ms: 3000, max_duration_ms: 4000, min_duration_ms: 2000 }
+          if (component === 'skills-system') return { operation_count: 2, total_tokens: 4000, total_cost_usd: 3.0, avg_duration_ms: 3000, max_duration_ms: 4000, min_duration_ms: 2000 }
           return { operation_count: 0 }
         },
         _flushBatch() {}
       }
 
       const result = await plugin.getComponentBreakdown()
-      assert.strictEqual(result.components[0].component, 'cre-plan') // 3.0 > 1.0
+      assert.strictEqual(result.components[0].component, 'skills-system') // 3.0 > 1.0
       assert.strictEqual(result.components[1].component, 'claude-service')
     })
 

@@ -795,7 +795,9 @@ contextBridge.exposeInMainWorld('puffin', {
     // → { success, results: [machine + { check }] }
     checkAll: () => ipcRenderer.invoke('polygraph:checkAll'),
     // renderDiagrams({ machineDir, diagram?, theme? }) → { success, svgs, outDir }
-    renderDiagrams: (args) => ipcRenderer.invoke('polygraph:renderDiagrams', args)
+    renderDiagrams: (args) => ipcRenderer.invoke('polygraph:renderDiagrams', args),
+    // readDiagram({ svgPath }) → { success, svg }
+    readDiagram: (args) => ipcRenderer.invoke('polygraph:readDiagram', args)
   },
 
   /**

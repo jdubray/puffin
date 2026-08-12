@@ -296,6 +296,39 @@ class PolygraphService {
   }
 
   /**
+   * Read a rendered diagram's SVG markup for inline display.
+   *
+   * Only files produced by renderDiagrams are readable: the path must be an
+   * .svg inside the active project (or inside a machine's .polyviz-out
+   * fallback dir when no project is set).
+   *
+   * @param {string} svgPath - Absolute path returned by renderDiagrams
+   * @returns {{success: boolean, svg?: string, error?: string}}
+   */
+  readDiagram(svgPath) {
+    if (typeof svgPath !== 'string' || !svgPath.toLowerCase().endsWith('.svg')) {
+      return { success: false, error: 'Not an SVG path' }
+    }
+    const resolved = path.resolve(svgPath)
+    const allowedRoots = [
+      this.projectPath ? path.resolve(this.projectPath) : null
+    ].filter(Boolean)
+
+    const isAllowed = allowedRoots.some(root =>
+      resolved.startsWith(root + path.sep)) ||
+      resolved.includes(`${path.sep}.polyviz-out${path.sep}`)
+    if (!isAllowed) {
+      return { success: false, error: 'Path outside the project' }
+    }
+
+    try {
+      return { success: true, svg: fs.readFileSync(resolved, 'utf-8') }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  }
+
+  /**
    * @private
    * Count invariant violations from checker output.
    */

@@ -306,6 +306,15 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  ipcMain.handle('polygraph:readDiagram', async (event, { svgPath } = {}) => {
+    try {
+      if (!svgPath) return { success: false, error: 'svgPath is required' }
+      return polygraphService.readDiagram(svgPath)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   // Check whether snip is installed on PATH
   ipcMain.handle('tools:checkSnip', async () => {
     try {

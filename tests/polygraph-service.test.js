@@ -96,6 +96,35 @@ describe('PolygraphService', () => {
     })
   })
 
+  describe('readDiagram', () => {
+    it('rejects non-SVG paths', () => {
+      const svc = new PolygraphService({ projectPath: repoRoot })
+      const result = svc.readDiagram(path.join(repoRoot, 'package.json'))
+      assert.strictEqual(result.success, false)
+    })
+
+    it('rejects SVG paths outside the project', () => {
+      const svc = new PolygraphService({ projectPath: path.join(repoRoot, 'machines') })
+      const result = svc.readDiagram('C:\\Windows\\Temp\\evil.svg')
+      assert.strictEqual(result.success, false)
+      assert.match(result.error, /outside the project/)
+    })
+
+    it('reads an SVG inside the project', () => {
+      const svc = new PolygraphService({ projectPath: repoRoot })
+      const svgPath = path.join(repoRoot, '.puffin', 'polyviz', 'test-fixture.svg')
+      fs.mkdirSync(path.dirname(svgPath), { recursive: true })
+      fs.writeFileSync(svgPath, '<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+      try {
+        const result = svc.readDiagram(svgPath)
+        assert.strictEqual(result.success, true)
+        assert.match(result.svg, /^<svg/)
+      } finally {
+        fs.rmSync(svgPath, { force: true })
+      }
+    })
+  })
+
   describe('checkAll', () => {
     it('checks every repo machine green',
       { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {

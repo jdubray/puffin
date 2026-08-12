@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="styles/debugger.css">
   <link rel="stylesheet" href="components/story-generations/story-generations.css">
   <link rel="stylesheet" href="components/git-panel/git-panel.css">
+  <link rel="stylesheet" href="components/polygraph-workbench/polygraph-workbench.css">
 </head>
 <body>
   <!-- Toast Notifications Container -->
@@ -66,6 +67,7 @@
         <!-- Designer is now provided by designer-plugin -->
         <button class="nav-btn" data-view="user-stories" data-help="View and manage your Task backlog on the Kanban board.">Backlog</button>
         <button class="nav-btn" data-view="cli-output" data-help="View the live Claude Code CLI output stream and raw JSON messages.">CLI Output</button>
+        <button class="nav-btn" data-view="polygraph" data-help="Polygraph workbench: discover, model-check, and visualize this project's verified state machines.">Polygraph</button>
         <button class="nav-btn hidden" data-view="debug" id="debug-nav-btn" data-help="View the full debug prompt that was last sent to Claude CLI.">Debug</button>
         <!-- Plugin nav buttons are inserted here dynamically -->
         <div id="plugin-nav-buttons"></div>
@@ -840,6 +842,15 @@
               <span id="cli-status" class="cli-status">Idle</span>
               <span id="cli-session-info" class="cli-session-info"></span>
               <span id="cli-cost-info" class="cli-cost-info"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Polygraph Workbench View -->
+        <section id="polygraph-view" class="view">
+          <div class="view-content">
+            <div id="polygraph-workbench">
+              <!-- Rendered dynamically by PolygraphWorkbenchComponent -->
             </div>
           </div>
         </section>

@@ -45,7 +45,15 @@ Puffin 2.0 is a spec-oriented development manager over the Claude Code CLI:
 
 ## Phases
 
-### Phase 0 — Sweep & stabilize (days)
+### Phase 0 — Sweep & stabilize — DONE 2026-08-11 (commits d64bd79, 53f6e32, d11ab97)
+
+Executed as planned, with one deviation: instead of squashing migrations 001–011 (which would break
+existing DBs' `_migrations` checksums), migration **012_drop_legacy_tables** drops the dead tables
+on top of the preserved chain — same end state, upgrade-safe. Still open from Phase 0: plugin fates
+(calendar / rlm-document / outcome-lifecycle) and the stats-plugin CRE display-label rename (harmless;
+historical metrics rows may still carry `cre-*` component ids).
+
+Original scope:
 - Delete: `h-dsl-engine/` (42.6k LOC, zero imports) + `hdsl-viewer-plugin` + `tests/h-dsl-engine/`;
   `src/main/schemas/`; `src/renderer/components/architecture/`; `scripts/fix-stuck-sprint.*`,
   `scripts/extract-stories.py`; stale docs (RIS-01..10, CRE, sprint plans); stale worktrees under

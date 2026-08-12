@@ -46,6 +46,7 @@ class PolygraphService {
   /** Update the active project path (mirrors setIpcProjectPath). */
   setProjectPath(projectPath) {
     this.projectPath = projectPath
+    this._resolvedDir = undefined // project change can change the resolution
   }
 
   /**
@@ -53,22 +54,40 @@ class PolygraphService {
    * Order: explicit option > POLYGRAPH_DIR env > sibling of the project >
    * sibling of the Puffin repo.
    *
+   * Relative values (including the documented '../polygraph' form of
+   * POLYGRAPH_DIR) are resolved against stable bases — the project path and
+   * the repo root — never the process cwd, which is arbitrary for a packaged
+   * Electron app launched from a shortcut.
+   *
+   * Memoized; invalidated by setProjectPath().
+   *
    * @returns {string|null} Absolute path, or null when no checkout found
    */
   resolvePolygraphDir() {
-    const candidates = [
-      this._polygraphDir,
-      process.env.POLYGRAPH_DIR,
-      this.projectPath ? path.resolve(this.projectPath, '..', 'polygraph') : null,
-      path.resolve(__dirname, '..', '..', '..', 'polygraph')
+    if (this._resolvedDir !== undefined) return this._resolvedDir
+
+    const bases = [
+      this.projectPath,
+      path.resolve(__dirname, '..', '..')
     ].filter(Boolean)
 
-    for (const dir of candidates) {
-      if (fs.existsSync(path.join(dir, 'scripts', 'check.mjs'))) {
-        return dir
+    const candidates = []
+    for (const raw of [this._polygraphDir, process.env.POLYGRAPH_DIR]) {
+      if (!raw) continue
+      if (path.isAbsolute(raw)) {
+        candidates.push(raw)
+      } else {
+        for (const base of bases) candidates.push(path.resolve(base, raw))
       }
     }
-    return null
+    for (const base of bases) {
+      candidates.push(path.resolve(base, '..', 'polygraph'))
+    }
+
+    this._resolvedDir = candidates.find(
+      dir => fs.existsSync(path.join(dir, 'scripts', 'check.mjs'))
+    ) ?? null
+    return this._resolvedDir
   }
 
   /**
@@ -238,9 +257,18 @@ class PolygraphService {
       return { success: false, error: 'polyviz not found in the Polygraph checkout' }
     }
 
+    // Key the output dir by the machine's project-relative path (not its
+    // basename) so same-named machines in different subtrees don't collide.
+    const machineKey = this.projectPath
+      ? path.relative(this.projectPath, machineDir).split(path.sep).join('__') || 'root'
+      : path.basename(machineDir)
     const outDir = options.outDir || (this.projectPath
-      ? path.join(this.projectPath, '.puffin', 'polyviz', path.basename(machineDir))
+      ? path.join(this.projectPath, '.puffin', 'polyviz', machineKey)
       : path.join(machineDir, '.polyviz-out'))
+
+    // Clear previous output — the result must reflect THIS render only, so
+    // stale SVGs can never mask a failed render as success.
+    fs.rmSync(outDir, { recursive: true, force: true })
     fs.mkdirSync(outDir, { recursive: true })
 
     const args = [
@@ -282,7 +310,13 @@ class PolygraphService {
    */
   _run(cmd, args) {
     return new Promise((resolve) => {
-      const proc = spawn(cmd, args, { windowsHide: true })
+      // ELECTRON_RUN_AS_NODE: inside Electron's main process,
+      // process.execPath is electron.exe — without this flag the engine
+      // scripts would launch as a second Electron GUI instance and hang.
+      const proc = spawn(cmd, args, {
+        windowsHide: true,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+      })
       let stdout = ''
       let stderr = ''
       proc.stdout.on('data', d => { stdout += d })

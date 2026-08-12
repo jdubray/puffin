@@ -12,7 +12,6 @@ const DEFAULT_ENABLED = new Set([
   'stats-plugin',
   'toast-history-plugin',
   'document-viewer-plugin',
-  'calendar',
   'prompt-template-plugin',
 ])
 

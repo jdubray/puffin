@@ -47,12 +47,11 @@ for (const name of targets) {
   const contract = path.join(dir, 'contract.json')
   const invariants = path.join(dir, 'invariants.mjs')
 
-  for (const f of [spec, contract, invariants]) {
-    if (!existsSync(f)) {
-      console.error(`✗ ${name}: missing ${path.basename(f)}`)
-      failed++
-      continue
-    }
+  const missing = [spec, contract, invariants].filter(f => !existsSync(f))
+  if (missing.length > 0) {
+    console.error(`✗ ${name}: missing ${missing.map(f => path.basename(f)).join(', ')}`)
+    failed++
+    continue
   }
 
   const args = [checker, '--spec', spec, '--contract', contract, '--invariants', invariants]

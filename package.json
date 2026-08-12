@@ -22,6 +22,7 @@
   "author": "jdubray",
   "license": "MIT",
   "dependencies": {
+    "@cognitive-fab/sam-pattern": "^2.2.1",
     "@excalidraw/excalidraw": "^0.17.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
@@ -32,7 +33,6 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
-    "@cognitive-fab/sam-pattern": "^2.2.1",
     "@electron/rebuild": "^3.6.0",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",

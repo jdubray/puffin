@@ -5,7 +5,7 @@
  *
  * Managed replacement for the legacy appFsm skeleton
  * (src/renderer/sam/instance.js). One deliberate divergence, named in the
- * contract as `recovery-cannot-skip-loading`: RECOVER from an error raised
+ * contract's designNotes as `recovery-cannot-skip-loading`: RECOVER from an error raised
  * before project state loaded returns to 'loading' (retry the load), never
  * to a hollow 'ready'.
  */
@@ -84,7 +84,7 @@ const acceptors = {
   },
 
   // RECOVER: back to ready when state is loaded; otherwise retry the load —
-  // recovery must not skip loading (contract: recovery-cannot-skip-loading).
+  // recovery must not skip loading (contract designNotes: recovery-cannot-skip-loading).
   RECOVER: (model) => (proposal, { reject, next, unchanged }) => {
     if (model.appState !== 'error') {
       return reject('recover-only-from-error');

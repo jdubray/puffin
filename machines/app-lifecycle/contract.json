@@ -75,13 +75,10 @@
       "note": "RECOVER applies only from error.",
       "whenState": "appState != 'error'",
       "whenAction": "RECOVER"
-    },
-    {
-      "name": "recovery-cannot-skip-loading",
-      "note": "DELIBERATE DIVERGENCE from the legacy appFsm, which sent every RECOVER to ready — including errors raised before project state ever loaded, yielding a 'ready' app with nothing loaded. Here RECOVER returns to ready only when loaded==true; otherwise it returns to loading to retry the load.",
-      "whenState": "appState == 'error' && loaded == false",
-      "whenAction": "RECOVER"
     }
+  ],
+  "designNotes": [
+    "recovery-cannot-skip-loading — DELIBERATE DIVERGENCE from the legacy appFsm, which sent every RECOVER to ready, including errors raised before project state ever loaded, yielding a 'ready' app with nothing loaded. Here an ACCEPTED RECOVER returns to ready only when loaded==true; otherwise it returns to loading to retry the load. This is accepted-transition routing, not a rejection, so it lives here rather than in specialRules (the reject-reason vocabulary)."
   ],
   "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre, never a throw and never a silent return."
 }

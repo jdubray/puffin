@@ -110,6 +110,9 @@ Engine access: sibling checkout / `POLYGRAPH_DIR` (the PolySec pattern) via a ma
 - Register `glm-mcp` + `/glm-*` commands into spawned sessions; wrap `/glm-build` with Puffin's
   streaming output/progress/cancel (GLM's known weak spot on Windows: 8–21 min silent generations).
 - Remove the branch system; one-time import of `history.json` into an archive viewer or GLM provenance.
+- Remove or rewrite the sprint-era workflow coach: `modal-manager.js` AI coach prompts (~1800, ~1857)
+  and `activity-log.js` phases 4–9 still narrate the deleted 3.x sprint pipeline (code-review finding,
+  2026-08-11).
 - Retire the `specifications` workspace with the rest; port its spec-authoring prompt into the
   sekkei node editor's AI assistance (see Decisions). Change the sekkei `$schema` identifier in GLM.
 

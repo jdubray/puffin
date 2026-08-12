@@ -103,6 +103,7 @@ class ClaudeService {
     this._cancelRequested = false // Track explicit cancel to distinguish from errors
     this._pluginManager = null // Reference to plugin manager for branch focus retrieval
     this._pendingContextUpdate = null // Queued branch focus update to include in next prompt
+    this._glmMcpConfigPath = null // Project-scoped glm MCP server config (glm-integration)
     this._currentBranchId = null // Track current branch for context updates
     this._pendingQuestionTimeout = null // Auto-answer timer for AskUserQuestion
     this._pendingQuestionToolUseId = null // Tracks which tool_use is awaiting an answer
@@ -842,7 +843,22 @@ class ClaudeService {
       args.push('--mcp-config', data.mcpConfigPath)
     }
 
+    // GLM MCP server (glm_status, glm_get_component_spec, glm_record_generation, …)
+    // — an ADDITIONAL --mcp-config; deliberately does not touch permissionMode.
+    if (this._glmMcpConfigPath && this._glmMcpConfigPath !== data.mcpConfigPath) {
+      args.push('--mcp-config', this._glmMcpConfigPath)
+    }
+
     return args
+  }
+
+  /**
+   * Register the project's GLM MCP config (or null to clear). Interactive
+   * sessions gain the glm_* tools; one-shot sendPrompt paths are unaffected
+   * (they pin an empty MCP config).
+   */
+  setGlmMcpConfigPath(configPath) {
+    this._glmMcpConfigPath = configPath || null
   }
 
   /**

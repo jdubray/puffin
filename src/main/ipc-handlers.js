@@ -19,6 +19,7 @@ const { scaffoldCommands } = require('./command-scaffolder')
 const documentEditService = require('./document-edit-service')
 const { PolygraphService } = require('./polygraph-service')
 const { GlmClient } = require('./glm-client')
+const { setupGlmSessionIntegration } = require('./glm-integration')
 
 // Polygraph workbench — engine access for any project built with Polygraph
 const polygraphService = new PolygraphService()
@@ -200,6 +201,21 @@ function setupStateHandlers(ipcMain) {
 
       // Apply the configured Polygraph engines path now that config is loaded
       polygraphService.setConfiguredDir(state?.config?.polygraphDir)
+
+      // Wire spawned sessions to GLM: project-scoped glm MCP config +
+      // /glm-* slash commands (non-fatal when no GLM checkout is found)
+      try {
+        const glmSetup = setupGlmSessionIntegration({
+          projectPath,
+          configuredDir: state?.config?.glmDir
+        })
+        claudeService.setGlmMcpConfigPath(glmSetup.mcpConfigPath)
+        if (glmSetup.glmDir) {
+          console.log(`[GLM-INTEGRATION] Sessions wired: ${glmSetup.commands.length} /glm-* commands, mcp=${!!glmSetup.mcpConfigPath}`)
+        }
+      } catch (glmErr) {
+        console.warn('[IPC] GLM session integration failed (non-fatal):', glmErr.message)
+      }
 
       // Initialize MetricsService after database is ready
       try {

@@ -971,14 +971,6 @@ class ClaudeService {
       }
     }
 
-    // Handoff context from another thread - include for new conversations
-    if (data.handoffContext && !isResumingSession) {
-      const handoffSection = this.buildHandoffContext(data.handoffContext)
-      if (handoffSection) {
-        prompt = handoffSection + '\n\n---\n\n' + prompt
-      }
-    }
-
     console.log('[PROMPT-DEBUG] Built prompt:', {
       isResumingSession,
       hasProject: !!data.project && !isResumingSession,
@@ -986,7 +978,6 @@ class ClaudeService {
       hasGuiDescription: !!data.guiDescription,
       threadFilesModified: data.threadFilesModified?.length || 0,
       hasBranchContext: !!data.branchId,
-      hasHandoffContext: !!data.handoffContext && !isResumingSession,
       hasPendingContextUpdate: hasPendingUpdate,
       promptLength: prompt.length
     })
@@ -1025,28 +1016,6 @@ class ClaudeService {
     })
 
     lines.push('--- END USER STORIES ---')
-    return lines.join('\n')
-  }
-
-  /**
-   * Build handoff context string from another thread
-   * @private
-   */
-  buildHandoffContext(handoffContext) {
-    if (!handoffContext || !handoffContext.summary) return ''
-
-    const lines = ['## Handoff Context']
-    lines.push('')
-    lines.push('This thread is receiving context from a previous development thread. Please review this summary to understand what was accomplished and continue the work appropriately.')
-    lines.push('')
-    lines.push(`**Source Thread:** ${handoffContext.sourceThreadName || 'Unknown'}`)
-    lines.push(`**Source Branch:** ${handoffContext.sourceBranch || 'Unknown'}`)
-    lines.push('')
-    lines.push('--- BEGIN HANDOFF SUMMARY ---')
-    lines.push(handoffContext.summary)
-    lines.push('--- END HANDOFF SUMMARY ---')
-    lines.push('')
-
     return lines.join('\n')
   }
 

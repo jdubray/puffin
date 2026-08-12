@@ -127,23 +127,22 @@ function _projectSection(state) {
 }
 
 function _branchSection(state) {
-  const activeBranch = state.history?.activeBranch
-  if (!activeBranch) return null
-
   const rawBranches = state.history?.raw?.branches || {}
-  const branch = rawBranches[activeBranch]
-  const prompts = branch?.prompts || []
+  const branch = rawBranches.main
+  if (!branch) return null
+
+  const prompts = branch.prompts || []
   const promptCount = prompts.length
 
-  let line = `**Active Workspace:** ${activeBranch}`
+  let line
   if (promptCount > 0) {
-    line += ` — ${promptCount} task${promptCount !== 1 ? 's' : ''}`
+    line = `**Tasks:** ${promptCount} task${promptCount !== 1 ? 's' : ''}`
     const last = prompts[prompts.length - 1]
     if (last?.timestamp) {
       line += `, last activity ${_relativeTime(last.timestamp)}`
     }
   } else {
-    line += ' — no tasks yet'
+    line = '**Tasks:** no tasks yet'
   }
 
   const selectedPrompt = state.history?.selectedPrompt

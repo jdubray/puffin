@@ -146,54 +146,6 @@ describe('validators', () => {
     })
   })
 
-  describe('validateBranch', () => {
-    it('should reject null branch', async () => {
-      const { validateBranch } = await importValidators()
-      const result = validateBranch(null)
-
-      assert.strictEqual(result.valid, false)
-    })
-
-    it('should require id', async () => {
-      const { validateBranch } = await importValidators()
-      const result = validateBranch({ name: 'Test' })
-
-      assert.strictEqual(result.valid, false)
-      assert.ok(result.errors.some(e => e.includes('ID')))
-    })
-
-    it('should require name', async () => {
-      const { validateBranch } = await importValidators()
-      const result = validateBranch({ id: 'test' })
-
-      assert.strictEqual(result.valid, false)
-      assert.ok(result.errors.some(e => e.includes('name')))
-    })
-
-    it('should accept valid branch', async () => {
-      const { validateBranch } = await importValidators()
-      const result = validateBranch({
-        id: 'specifications',
-        name: 'Specifications',
-        prompts: []
-      })
-
-      assert.strictEqual(result.valid, true)
-    })
-
-    it('should validate prompts is array', async () => {
-      const { validateBranch } = await importValidators()
-      const result = validateBranch({
-        id: 'test',
-        name: 'Test',
-        prompts: 'not an array'
-      })
-
-      assert.strictEqual(result.valid, false)
-      assert.ok(result.errors.some(e => e.includes('array')))
-    })
-  })
-
   describe('sanitizeString', () => {
     it('should escape HTML entities', async () => {
       const { sanitizeString } = await importValidators()

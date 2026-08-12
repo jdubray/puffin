@@ -657,15 +657,7 @@ export class ResponseViewerComponent {
     const activeBranch = this.historyState.activeBranch
     const selectedPrompt = this.historyState.selectedPrompt
 
-    // Determine if this is a coding branch or not
-    // Non-coding branches: specifications (planning only)
-    const nonCodingBranches = ['specifications']
-    const isCodingBranch = !nonCodingBranches.includes(activeBranch)
-
-    // Build the continuation prompt based on branch type
-    const promptContent = isCodingBranch
-      ? 'Complete the implementation, when complete reply with [Complete]'
-      : 'Complete the task, when complete reply with [Complete]'
+    const promptContent = 'Complete the implementation, when complete reply with [Complete]'
 
     // Use SAM action to request continue - the next-action will handle submission
     this.intents.requestContinue(activeBranch, promptContent, selectedPrompt?.id || null)

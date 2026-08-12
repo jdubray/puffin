@@ -1,14 +1,14 @@
 /**
  * History Tree Component
  *
- * Displays hierarchical prompt history organized by branches.
- * Allows navigation through prompt history and branch management.
+ * Displays the hierarchical prompt/task history for the single implicit
+ * prompt stream. Allows navigation through prompt history (chronological
+ * root threads, expandable chains) and search.
  */
 
 export class HistoryTreeComponent {
   constructor(intents) {
     this.intents = intents
-    this.branchList = null
     this.historyTree = null
     this.searchInput = null
     this.searchClearBtn = null
@@ -20,7 +20,6 @@ export class HistoryTreeComponent {
    * Initialize the component
    */
   init() {
-    this.branchList = document.getElementById('branch-list')
     this.historyTree = document.getElementById('history-tree')
     this.searchInput = document.getElementById('thread-search-input')
     this.searchClearBtn = document.getElementById('thread-search-clear')
@@ -35,11 +34,6 @@ export class HistoryTreeComponent {
    * Bind DOM events
    */
   bindEvents() {
-    // Add branch button
-    document.getElementById('add-branch-btn').addEventListener('click', () => {
-      this.showAddBranchDialog()
-    })
-
     // Search input with debounce
     if (this.searchInput) {
       this.searchInput.addEventListener('input', (e) => {
@@ -178,7 +172,6 @@ export class HistoryTreeComponent {
    * Render component based on state
    */
   render(historyState) {
-    this.renderBranches(historyState.branches, historyState.activeBranch)
     const searchQuery = historyState.threadSearchQuery || ''
     this.renderHistory(historyState.promptTree, historyState.activePromptId, searchQuery)
 
@@ -187,128 +180,6 @@ export class HistoryTreeComponent {
       this.searchInput.value = searchQuery
       this.updateClearButtonVisibility(searchQuery)
     }
-  }
-
-  /**
-   * Render branch list
-   */
-  renderBranches(branches, activeBranch) {
-    this.branchList.innerHTML = ''
-
-    branches.forEach((branch, index) => {
-      const item = document.createElement('li')
-      item.className = `branch-item ${branch.isActive ? 'active' : ''}`
-      item.dataset.branchId = branch.id
-      item.dataset.index = index
-      item.draggable = true
-      item.dataset.help = `Workspace "${branch.name}" \u2014 a named workspace for a feature or topic. Each workspace holds its own conversation tasks, keeping your work organised by concern. Click to switch. ${branch.promptCount} task(s).`
-      item.innerHTML = `
-        <span class="drag-handle">⋮</span>
-        <span class="icon">${this.getBranchIcon(branch.icon, branch.id)}</span>
-        <span class="name">${this.escapeHtml(branch.name)}</span>
-        <span class="count">${branch.promptCount}</span>
-      `
-
-      item.addEventListener('click', (e) => {
-        // Don't trigger click when dragging
-        if (e.target.classList.contains('drag-handle')) return
-        this.intents.selectBranch(branch.id)
-        // View switch is now handled in selectBranchAcceptor
-      })
-
-      // Drag and drop events
-      item.addEventListener('dragstart', (e) => this.handleDragStart(e, branch.id, index))
-      item.addEventListener('dragover', (e) => this.handleDragOver(e))
-      item.addEventListener('dragenter', (e) => this.handleDragEnter(e))
-      item.addEventListener('dragleave', (e) => this.handleDragLeave(e))
-      item.addEventListener('drop', (e) => this.handleDrop(e))
-      item.addEventListener('dragend', (e) => this.handleDragEnd(e))
-
-      // Context menu for all branches (custom branches get full menu, built-in branches get limited menu)
-      item.addEventListener('contextmenu', (e) => {
-        e.preventDefault()
-        this.showBranchContextMenu(e, branch)
-      })
-
-      this.branchList.appendChild(item)
-    })
-  }
-
-  /**
-   * Handle drag start
-   */
-  handleDragStart(e, branchId, index) {
-    this.draggedBranchId = branchId
-    this.draggedIndex = index
-    e.target.classList.add('dragging')
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', branchId)
-  }
-
-  /**
-   * Handle drag over
-   */
-  handleDragOver(e) {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
-
-  /**
-   * Handle drag enter
-   */
-  handleDragEnter(e) {
-    e.preventDefault()
-    const item = e.target.closest('.branch-item')
-    if (item && item.dataset.branchId !== this.draggedBranchId) {
-      item.classList.add('drag-over')
-    }
-  }
-
-  /**
-   * Handle drag leave
-   * Only remove drag-over class when actually leaving the branch-item bounds,
-   * not when moving between child elements within the same item
-   */
-  handleDragLeave(e) {
-    const item = e.target.closest('.branch-item')
-    if (!item) return
-
-    // Check if we're leaving to an element outside this branch-item
-    const relatedTarget = e.relatedTarget
-    if (!relatedTarget || !item.contains(relatedTarget)) {
-      item.classList.remove('drag-over')
-    }
-  }
-
-  /**
-   * Handle drop
-   */
-  handleDrop(e) {
-    e.preventDefault()
-    const targetItem = e.target.closest('.branch-item')
-    if (!targetItem) return
-
-    const targetIndex = parseInt(targetItem.dataset.index, 10)
-    const sourceIndex = this.draggedIndex
-
-    if (sourceIndex !== targetIndex) {
-      this.intents.reorderBranches(sourceIndex, targetIndex)
-    }
-
-    targetItem.classList.remove('drag-over')
-  }
-
-  /**
-   * Handle drag end
-   */
-  handleDragEnd(e) {
-    e.target.classList.remove('dragging')
-    // Clean up any remaining drag-over classes
-    this.branchList.querySelectorAll('.drag-over').forEach(item => {
-      item.classList.remove('drag-over')
-    })
-    this.draggedBranchId = null
-    this.draggedIndex = null
   }
 
   /**
@@ -363,11 +234,11 @@ export class HistoryTreeComponent {
 
       // Help-mode tooltip for threads
       if (prompt.isStoryThread) {
-        item.dataset.help = `Story task: "${prompt.storyTitle || prompt.preview}" \u2014 a conversation dedicated to implementing a user story. Status: ${prompt.storyStatus || 'unknown'}. Click to view.`
+        item.dataset.help = `Story task: "${prompt.storyTitle || prompt.preview}" — a conversation dedicated to implementing a user story. Status: ${prompt.storyStatus || 'unknown'}. Click to view.`
       } else if (prompt.isDerivation) {
-        item.dataset.help = `Derivation task \u2014 Claude analysed your conversation and generated user stories from it. Click to view.`
+        item.dataset.help = `Derivation task — Claude analysed your conversation and generated user stories from it. Click to view.`
       } else {
-        item.dataset.help = `Task: "${prompt.preview}" \u2014 a single conversation with Claude. Click to view, right-click for options.`
+        item.dataset.help = `Task: "${prompt.preview}" — a single conversation with Claude. Click to view, right-click for options.`
       }
 
       // Build the expand/collapse indicator for items with children
@@ -490,420 +361,6 @@ export class HistoryTreeComponent {
     return statusIcons[status] || '🟡'
   }
 
-  /**
-   * Get icon for branch type or branch ID
-   * @param {string} icon - Icon name or branch ID
-   * @param {string} [branchId] - Optional branch ID for default branch icons
-   */
-  getBranchIcon(icon, branchId) {
-    // Icon name to emoji mapping
-    const icons = {
-      building: '🏗️',
-      layout: '🎨',
-      server: '⚙️',
-      cloud: '☁️',
-      folder: '📁',
-      code: '💻',
-      test: '🧪',
-      docs: '📄'
-    }
-
-    // Default icons for known branch IDs (matches handoff panel)
-    const branchIcons = {
-      specifications: '📋',
-      architecture: '🏗️',
-      ui: '🪟',
-      backend: '⚙️',
-      deployment: '🚀',
-      tmp: '📝',
-      improvements: '✨',
-      fullstack: '🔄',
-      bugfixes: '🐛',
-      'bug-fixes': '🐛'
-    }
-
-    // First check if there's a specific icon for this branch ID
-    if (branchId && branchIcons[branchId]) {
-      return branchIcons[branchId]
-    }
-
-    // Then check icon name mapping
-    if (icons[icon]) {
-      return icons[icon]
-    }
-
-    // Fall back to folder
-    return '📁'
-  }
-
-  /**
-   * Show add branch dialog
-   */
-  showAddBranchDialog() {
-    this.intents.showModal('add-branch', {})
-    this.renderAddBranchModal()
-  }
-
-  /**
-   * Render add branch modal
-   */
-  renderAddBranchModal() {
-    const modalContent = document.getElementById('modal-content')
-    const modalTitle = document.getElementById('modal-title')
-    const modalActions = document.getElementById('modal-actions')
-
-    modalTitle.textContent = 'Add Workspace'
-
-    modalContent.innerHTML = `
-      <div class="form-group">
-        <label for="branch-name-input">Workspace Name</label>
-        <input type="text" id="branch-name-input" placeholder="e.g., Testing, Database, API...">
-      </div>
-      <div class="form-group">
-        <label for="branch-icon-select">Icon</label>
-        <select id="branch-icon-select">
-          <option value="folder">📁 Folder</option>
-          <option value="code">💻 Code</option>
-          <option value="test">🧪 Testing</option>
-          <option value="docs">📄 Docs</option>
-          <option value="cloud">☁️ Cloud</option>
-          <option value="server">⚙️ Server</option>
-        </select>
-      </div>
-      <div class="form-group checkbox-group">
-        <label>
-          <input type="checkbox" id="branch-code-allowed" checked>
-          Allow code modifications
-        </label>
-        <span class="form-hint">When unchecked, this workspace can only modify documentation files</span>
-      </div>
-    `
-
-    modalActions.innerHTML = `
-      <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
-      <button class="btn primary" id="modal-confirm-btn">Add Workspace</button>
-    `
-
-    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
-      this.intents.hideModal()
-    })
-
-    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-      const name = document.getElementById('branch-name-input').value.trim()
-      const icon = document.getElementById('branch-icon-select').value
-      const codeModificationAllowed = document.getElementById('branch-code-allowed').checked
-
-      if (name) {
-        const id = name.toLowerCase().replace(/\s+/g, '-')
-        this.intents.createBranch({ id, name, icon, codeModificationAllowed })
-        this.intents.hideModal()
-      }
-    })
-
-    // Focus input
-    document.getElementById('branch-name-input').focus()
-  }
-
-  /**
-   * Show branch context menu
-   */
-  showBranchContextMenu(e, branch) {
-    // Remove any existing context menu
-    const existingMenu = document.querySelector('.branch-context-menu')
-    if (existingMenu) {
-      existingMenu.remove()
-    }
-
-    // Create context menu
-    const menu = document.createElement('div')
-    menu.className = 'branch-context-menu'
-    menu.style.left = `${e.clientX}px`
-    menu.style.top = `${e.clientY}px`
-
-    // Built-in branches that cannot be deleted
-    const builtInBranches = ['specifications', 'architecture', 'ui', 'backend', 'deployment', 'improvements', 'tmp']
-    const isBuiltIn = builtInBranches.includes(branch.id)
-
-    // Build menu items
-    const menuItems = [
-      {
-        label: '⚙️ Settings',
-        action: () => this.showBranchSettingsModal(branch)
-      }
-    ]
-
-    // Only add delete option for custom branches
-    if (!isBuiltIn) {
-      menuItems.push({
-        label: '🗑️ Delete Workspace',
-        action: () => {
-          if (confirm(`Delete workspace "${branch.name}"? This will delete all prompts in this workspace.`)) {
-            this.intents.deleteBranch(branch.id)
-          }
-        },
-        className: 'danger'
-      })
-    }
-
-    // Render menu items
-    menu.innerHTML = menuItems.map(item =>
-      `<button class="branch-context-menu-item ${item.className || ''}">${item.label}</button>`
-    ).join('')
-
-    // Add click handlers
-    const menuItemEls = menu.querySelectorAll('.branch-context-menu-item')
-    menuItemEls.forEach((el, i) => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation()
-        menuItems[i].action()
-        menu.remove()
-      })
-    })
-
-    // Add to document
-    document.body.appendChild(menu)
-
-    // Close on click outside
-    const closeHandler = (e) => {
-      if (!menu.contains(e.target)) {
-        menu.remove()
-        document.removeEventListener('click', closeHandler)
-      }
-    }
-    setTimeout(() => document.addEventListener('click', closeHandler), 0)
-  }
-
-  /**
-   * Show branch settings modal
-   */
-  showBranchSettingsModal(branch) {
-    this.intents.showModal('branch-settings', { branch })
-    this.renderBranchSettingsModal(branch)
-  }
-
-  /**
-   * Render branch settings modal
-   */
-  async renderBranchSettingsModal(branch) {
-    const modalContent = document.getElementById('modal-content')
-    const modalTitle = document.getElementById('modal-title')
-    const modalActions = document.getElementById('modal-actions')
-
-    modalTitle.textContent = `Workspace Settings: ${branch.name}`
-
-    // Load available plugins
-    let availablePlugins = []
-    try {
-      if (window.puffin?.state?.getClaudePlugins) {
-        const result = await window.puffin.state.getClaudePlugins()
-        if (result.success) {
-          availablePlugins = result.plugins || []
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load plugins:', error)
-    }
-
-    // Get currently assigned plugins for this branch
-    const assignedPlugins = branch.assignedPlugins || []
-
-    modalContent.innerHTML = `
-      <div class="branch-settings-modal">
-        <div class="form-group">
-          <label for="branch-settings-name">Workspace Name</label>
-          <input type="text" id="branch-settings-name" value="${this.escapeHtml(branch.name)}"
-                 placeholder="Workspace name">
-        </div>
-
-        <div class="form-group">
-          <label for="branch-settings-icon">Icon</label>
-          <select id="branch-settings-icon">
-            <option value="folder" ${branch.icon === 'folder' ? 'selected' : ''}>📁 Folder</option>
-            <option value="building" ${branch.icon === 'building' ? 'selected' : ''}>🏗️ Building</option>
-            <option value="layout" ${branch.icon === 'layout' ? 'selected' : ''}>🎨 Layout</option>
-            <option value="server" ${branch.icon === 'server' ? 'selected' : ''}>⚙️ Server</option>
-            <option value="cloud" ${branch.icon === 'cloud' ? 'selected' : ''}>☁️ Cloud</option>
-            <option value="code" ${branch.icon === 'code' ? 'selected' : ''}>💻 Code</option>
-            <option value="test" ${branch.icon === 'test' ? 'selected' : ''}>🧪 Testing</option>
-            <option value="docs" ${branch.icon === 'docs' ? 'selected' : ''}>📄 Docs</option>
-          </select>
-        </div>
-
-        <div class="form-group checkbox-group">
-          <label>
-            <input type="checkbox" id="branch-settings-code-allowed"
-                   ${branch.codeModificationAllowed !== false ? 'checked' : ''}>
-            Allow code modifications
-          </label>
-          <small class="form-hint">When unchecked, this workspace can only modify documentation files</small>
-        </div>
-
-        <fieldset class="branch-plugins-fieldset">
-          <legend>Assigned Plugins</legend>
-          <p class="fieldset-description">Select plugins to inject their context when working on this workspace</p>
-
-          <div id="branch-plugins-list" class="branch-plugins-list">
-            ${availablePlugins.length === 0 ? `
-              <div class="no-plugins-message">
-                <span>No plugins available.</span>
-                <a href="#" id="go-to-plugins-link">Add plugins in Config tab</a>
-              </div>
-            ` : availablePlugins.map(plugin => `
-              <label class="plugin-checkbox-item">
-                <input type="checkbox"
-                       name="assigned-plugin"
-                       value="${plugin.id}"
-                       ${assignedPlugins.includes(plugin.id) ? 'checked' : ''}
-                       ${plugin.enabled === false ? 'disabled' : ''}>
-                <span class="plugin-checkbox-icon">${plugin.icon || '🔧'}</span>
-                <span class="plugin-checkbox-content">
-                  <span class="plugin-checkbox-name">${this.escapeHtml(plugin.name)}</span>
-                  <span class="plugin-checkbox-desc">${this.escapeHtml(plugin.description || '')}</span>
-                </span>
-                ${plugin.enabled === false ? '<span class="plugin-disabled-badge">Disabled</span>' : ''}
-              </label>
-            `).join('')}
-          </div>
-        </fieldset>
-
-        <fieldset class="branch-plugins-fieldset">
-          <legend>Additional Directories</legend>
-          <p class="fieldset-description">
-            These directories are added to every Claude session on this workspace via <code>--add-dir</code>.
-            Read-only directories may be referenced but not modified.
-          </p>
-          <div id="additional-dirs-list" class="additional-dirs-list">
-            ${(branch.additionalDirs || []).map((dir, i) => `
-              <div class="additional-dir-row" data-index="${i}">
-                <input type="text" class="dir-path" placeholder="/path/to/project"
-                       value="${this.escapeHtml(dir.path)}" aria-label="Directory path">
-                <input type="text" class="dir-label" placeholder="Label (optional)"
-                       value="${this.escapeHtml(dir.label || '')}" aria-label="Directory label">
-                <label class="dir-readonly-label">
-                  <input type="checkbox" class="dir-readonly-toggle" ${dir.readOnly ? 'checked' : ''}>
-                  Read-only
-                </label>
-                <button type="button" class="dir-remove-btn" aria-label="Remove directory">×</button>
-              </div>
-            `).join('')}
-          </div>
-          <button type="button" id="add-dir-btn" class="btn-secondary btn-sm">+ Add Directory</button>
-        </fieldset>
-      </div>
-    `
-
-    modalActions.innerHTML = `
-      <button class="btn secondary" id="modal-cancel-btn">Cancel</button>
-      <button class="btn primary" id="modal-confirm-btn">Save Settings</button>
-    `
-
-    // Bind go-to-plugins link if present
-    const goToPluginsLink = document.getElementById('go-to-plugins-link')
-    if (goToPluginsLink) {
-      goToPluginsLink.addEventListener('click', (e) => {
-        e.preventDefault()
-        this.intents.hideModal()
-        this.intents.switchView('config')
-      })
-    }
-
-    // Bind modal buttons
-    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
-      this.intents.hideModal()
-    })
-
-    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-      this.saveBranchSettings(branch.id)
-    })
-
-    // Bind checkbox item toggle for visual feedback
-    const pluginItems = document.querySelectorAll('.plugin-checkbox-item')
-    pluginItems.forEach(item => {
-      const checkbox = item.querySelector('input[type="checkbox"]')
-      if (checkbox && !checkbox.disabled) {
-        checkbox.addEventListener('change', () => {
-          item.classList.toggle('selected', checkbox.checked)
-        })
-        // Set initial selected state
-        if (checkbox.checked) {
-          item.classList.add('selected')
-        }
-      }
-    })
-
-    // Additional directories: add row
-    document.getElementById('add-dir-btn').addEventListener('click', () => {
-      const list = document.getElementById('additional-dirs-list')
-      if (list.querySelectorAll('.additional-dir-row').length >= 5) {
-        alert('Maximum of 5 additional directories allowed')
-        return
-      }
-      const row = document.createElement('div')
-      row.className = 'additional-dir-row'
-      row.innerHTML = `
-        <input type="text" class="dir-path" placeholder="/path/to/project" aria-label="Directory path">
-        <input type="text" class="dir-label" placeholder="Label (optional)" aria-label="Directory label">
-        <label class="dir-readonly-label">
-          <input type="checkbox" class="dir-readonly-toggle">
-          Read-only
-        </label>
-        <button type="button" class="dir-remove-btn" aria-label="Remove directory">×</button>
-      `
-      row.querySelector('.dir-remove-btn').addEventListener('click', () => row.remove())
-      list.appendChild(row)
-      row.querySelector('.dir-path').focus()
-    })
-
-    // Additional directories: remove existing rows
-    document.querySelectorAll('.dir-remove-btn').forEach(btn => {
-      btn.addEventListener('click', () => btn.closest('.additional-dir-row').remove())
-    })
-
-    // Focus name input
-    document.getElementById('branch-settings-name').focus()
-  }
-
-  /**
-   * Save branch settings from modal
-   */
-  saveBranchSettings(branchId) {
-    const name = document.getElementById('branch-settings-name').value.trim()
-    const icon = document.getElementById('branch-settings-icon').value
-    const codeModificationAllowed = document.getElementById('branch-settings-code-allowed').checked
-
-    // Get assigned plugins
-    const pluginCheckboxes = document.querySelectorAll('input[name="assigned-plugin"]:checked')
-    const assignedPlugins = Array.from(pluginCheckboxes).map(cb => cb.value)
-
-    // Collect additional directories
-    const additionalDirs = Array.from(
-      document.querySelectorAll('#additional-dirs-list .additional-dir-row')
-    ).map(row => ({
-      path: row.querySelector('.dir-path').value.trim(),
-      label: row.querySelector('.dir-label').value.trim() || undefined,
-      readOnly: row.querySelector('.dir-readonly-toggle').checked
-    })).filter(d => d.path.length > 0)
-
-    if (!name) {
-      alert('Workspace name is required')
-      return
-    }
-
-    // Update branch settings
-    this.intents.updateBranchSettings(branchId, {
-      name,
-      icon,
-      codeModificationAllowed,
-      assignedPlugins,
-      additionalDirs
-    })
-
-    this.intents.hideModal()
-  }
-
-  /**
-   * Show plugin assignment modal for a branch
-   */
   /**
    * Show prompt context menu
    */

@@ -28,10 +28,8 @@ export class UserStoriesComponent {
     this.filterBtns = null
     this.addBtn = null
     this.listContainer = null
-    this.branchSelect = null
     this.searchInput = null
     this.currentFilter = 'all'
-    this.currentBranch = 'all' // Filter by branch
     this.currentView = VIEW_MODES.LIST // Will be set by responsive detection
     this.autoResponsive = true // Enable automatic view switching based on width
     this.searchQuery = ''
@@ -39,7 +37,6 @@ export class UserStoriesComponent {
     this.resizeDebounceTimer = null
     this.resizeObserver = null
     this.stories = []
-    this.branches = {}
     // Drag and drop state
     this.draggedStoryId = null
     this.draggedStoryStatus = null
@@ -224,7 +221,6 @@ export class UserStoriesComponent {
       const { state, actionType } = e.detail
       const previousCount = this.stories?.length || 0
       this.stories = state.userStories || []
-      this.branches = state.history?.raw?.branches || {}
 
       // Debug logging for story count changes
       if (this.stories.length !== previousCount) {
@@ -251,23 +247,10 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Set branch filter
-   */
-  setBranchFilter(branchId) {
-    this.currentBranch = branchId
-    this.render()
-  }
-
-  /**
-   * Get filtered stories (by status, branch, and search query)
+   * Get filtered stories (by status and search query)
    */
   getFilteredStories() {
     let filtered = this.stories
-
-    // Filter by branch
-    if (this.currentBranch !== 'all') {
-      filtered = filtered.filter(s => s.branchId === this.currentBranch)
-    }
 
     // Filter by status
     if (this.currentFilter !== 'all') {
@@ -293,9 +276,8 @@ export class UserStoriesComponent {
     // Set view mode data attribute for CSS-based visibility toggling
     this.container.dataset.viewMode = this.currentView
 
-    // Render layout indicator and branch filter
+    // Render layout indicator
     this.renderLayoutIndicator()
-    this.renderBranchFilter()
 
     // Use kanban or list view based on current setting
     if (this.currentView === VIEW_MODES.KANBAN) {
@@ -336,13 +318,8 @@ export class UserStoriesComponent {
    * Render the kanban board view with three swimlanes
    */
   renderKanbanView() {
-    // Get stories filtered by branch and search (but not status since kanban shows all statuses)
+    // Get stories filtered by search (but not status since kanban shows all statuses)
     let filtered = this.stories
-
-    // Filter by branch
-    if (this.currentBranch !== 'all') {
-      filtered = filtered.filter(s => s.branchId === this.currentBranch)
-    }
 
     // Filter by search query
     if (this.searchQuery.length >= SEARCH_MIN_CHARS) {
@@ -419,12 +396,11 @@ export class UserStoriesComponent {
     const filtered = this.getFilteredStories()
 
     if (filtered.length === 0) {
-      const branchText = this.currentBranch !== 'all' ? ` in "${this.currentBranch}" workspace` : ''
       this.listContainer.innerHTML = `
         <p class="placeholder">
           ${this.currentFilter === 'all'
-            ? `No tasks${branchText} yet. Click "+ Add Task" to create one.`
-            : `No ${this.currentFilter} tasks${branchText}.`}
+            ? `No tasks yet. Click "+ Add Task" to create one.`
+            : `No ${this.currentFilter} tasks.`}
         </p>
       `
       return
@@ -486,56 +462,6 @@ export class UserStoriesComponent {
   }
 
   /**
-   * Render the branch filter dropdown
-   */
-  renderBranchFilter() {
-    // Find or create branch filter container
-    let branchFilterContainer = this.container.querySelector('.branch-filter-container')
-    if (!branchFilterContainer) {
-      const toolbar = this.container.querySelector('.user-stories-toolbar')
-      if (toolbar) {
-        branchFilterContainer = document.createElement('div')
-        branchFilterContainer.className = 'branch-filter-container'
-        toolbar.insertBefore(branchFilterContainer, toolbar.firstChild)
-      } else {
-        return
-      }
-    }
-
-    // Get unique branches from stories
-    const branchIds = [...new Set(this.stories.map(s => s.branchId).filter(Boolean))]
-
-    branchFilterContainer.innerHTML = `
-      <label class="branch-filter-label">Workspace:</label>
-      <select class="branch-filter-select" id="story-branch-filter">
-        <option value="all" ${this.currentBranch === 'all' ? 'selected' : ''}>All Workspaces</option>
-        ${branchIds.map(branchId => `
-          <option value="${branchId}" ${this.currentBranch === branchId ? 'selected' : ''}>
-            ${this.formatBranchName(branchId)}
-          </option>
-        `).join('')}
-      </select>
-    `
-
-    // Bind change event
-    const select = branchFilterContainer.querySelector('#story-branch-filter')
-    select.addEventListener('change', (e) => {
-      this.setBranchFilter(e.target.value)
-    })
-  }
-
-
-  /**
-   * Format branch name for display
-   */
-  formatBranchName(branchId) {
-    const branch = this.branches[branchId]
-    if (branch?.name) return branch.name
-    // Capitalize first letter
-    return branchId.charAt(0).toUpperCase() + branchId.slice(1)
-  }
-
-  /**
    * Check if drag-and-drop is supported
    */
   isDragDropSupported() {
@@ -585,7 +511,6 @@ export class UserStoriesComponent {
         ${story.description ? `<p class="story-description">${this.escapeHtml(story.description)}</p>` : ''}
         <div class="story-footer">
           <span class="story-date">${this.formatDate(story.createdAt)}</span>
-          ${story.branchId ? `<span class="story-branch">${this.formatBranchName(story.branchId)}</span>` : ''}
         </div>
       </div>
     `

@@ -90,36 +90,6 @@ export function validateGuiElement(element) {
 }
 
 /**
- * Validate branch configuration
- * @param {Object} branch - Branch object to validate
- * @returns {{ valid: boolean, errors: string[] }}
- */
-export function validateBranch(branch) {
-  const errors = []
-
-  if (!branch) {
-    return { valid: false, errors: ['Branch is required'] }
-  }
-
-  if (!branch.id || typeof branch.id !== 'string') {
-    errors.push('Branch ID is required')
-  }
-
-  if (!branch.name || typeof branch.name !== 'string' || branch.name.trim().length === 0) {
-    errors.push('Branch name is required')
-  }
-
-  if (branch.prompts && !Array.isArray(branch.prompts)) {
-    errors.push('Branch prompts must be an array')
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors
-  }
-}
-
-/**
  * Sanitize string for safe display
  * @param {string} str - String to sanitize
  * @returns {string}

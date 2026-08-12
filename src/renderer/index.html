@@ -57,7 +57,7 @@
     <!-- Header -->
     <header id="header">
       <div class="header-left">
-        <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar" data-help="Show or hide the sidebar panel that contains Workspace and Task navigation.">
+        <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar" data-help="Show or hide the sidebar panel that contains Task navigation.">
           <span class="icon">☰</span>
         </button>
         <h1 id="app-title" class="app-title">Puffin</h1>
@@ -91,15 +91,8 @@
       <!-- Sidebar -->
       <aside id="sidebar">
         <div class="sidebar-section">
-          <h3 data-help="A Workspace is a named area for a feature or topic; it holds its own conversation Tasks, keeping your work organised by concern.">Workspaces</h3>
-          <ul id="branch-list" class="branch-list">
-            <!-- Branches rendered dynamically -->
-          </ul>
-          <button id="add-branch-btn" class="add-btn" data-help="Create a new Workspace to organize your conversations by topic or feature area.">+ Add Workspace</button>
-        </div>
-        <div class="sidebar-section">
           <div class="sidebar-section-header">
-            <h3 data-help="A Task is one conversation with Claude — a prompt and its full response chain. Tasks live inside a Workspace and let you keep separate chains of thought for different questions or tasks.">Tasks</h3>
+            <h3 data-help="A Task is one conversation with Claude — a prompt and its full response chain. Tasks let you keep separate chains of thought for different questions or tasks.">Tasks</h3>
             <button id="thread-refresh-btn" class="thread-refresh-btn" title="Refresh (process sync inbox)" data-help="Refresh the Task list and process any pending sync inbox items.">↻</button>
           </div>
           <div class="thread-search-container">
@@ -236,7 +229,7 @@
                 <div class="form-group">
                   <label for="coding-standard-content">Coding Standard Rules</label>
                   <textarea id="coding-standard-content" rows="12" placeholder="Select a language above to populate with defaults, or write your own coding standards..."></textarea>
-                  <small class="form-hint">Customize the coding standards that Claude will follow. These will be included in all Workspace contexts.</small>
+                  <small class="form-hint">Customize the coding standards that Claude will follow. These will be included in all Task contexts.</small>
                 </div>
               </fieldset>
 
@@ -623,7 +616,7 @@
                   </div>
                 </div>
                 <div class="prompt-actions">
-                  <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh Task" data-help="Clear the prompt and start a new conversation Task on the current Workspace.">
+                  <button id="new-thread-btn" class="btn outline" title="Clear prompt and start a fresh Task" data-help="Clear the prompt and start a new conversation Task.">
                     Create New Task
                   </button>
                   <button id="review-thread-btn" class="btn outline" title="Quick sanity check on code implemented in this Task" data-help="Ask Claude to review the code implemented in this Task and flag any issues.">
@@ -666,7 +659,7 @@
               </div>
             </main>
 
-            <!-- Right Swimlane: Metadata & Handoff -->
+            <!-- Right Swimlane: Metadata -->
             <aside class="swimlane swimlane-right">
               <div id="metadata-panel" class="metadata-panel">
                 <!-- Thread Statistics -->
@@ -696,43 +689,6 @@
                     <div class="stat-item">
                       <span class="stat-label">Continuations</span>
                       <span id="stat-continuations" class="stat-value">0</span>
-                    </div>
-                  </div>
-                </div>
-                <!-- Incoming Handoff Context (from another thread) -->
-                <div id="handoff-incoming-section" class="metadata-section handoff-section hidden">
-                  <h4 class="metadata-section-title">Incoming Handoff</h4>
-                  <div id="handoff-incoming-display" class="handoff-display">
-                    <!-- Incoming handoff summary rendered here -->
-                  </div>
-                </div>
-                <!-- Generate Handoff Section -->
-                <div class="metadata-section handoff-generate-section">
-                  <h4 class="metadata-section-title">Handoff</h4>
-                  <div id="handoff-generate-content" class="handoff-generate-content">
-                    <button id="generate-handoff-btn" class="btn handoff-btn handoff-btn-panel" title="Generate handoff summary from this Task" data-help="Generate a structured handoff summary from this Task to pass context to another Workspace.">
-                      <span class="handoff-icon">✨</span>
-                      <span class="handoff-text">Generate Handoff</span>
-                    </button>
-                  </div>
-                  <!-- Generated summary display (hidden initially) -->
-                  <div id="handoff-generated-section" class="handoff-generated hidden">
-                    <div class="handoff-branch-buttons">
-                      <p class="handoff-branch-label">Send to Workspace:</p>
-                      <div id="handoff-branch-grid" class="handoff-branch-grid">
-                        <!-- Branch buttons rendered dynamically -->
-                      </div>
-                    </div>
-                    <div class="handoff-actions-row">
-                      <button id="handoff-regenerate-btn" class="btn small secondary handoff-regenerate-btn" data-help="Regenerate the handoff summary with a fresh AI call.">
-                        Regenerate
-                      </button>
-                      <button id="handoff-clear-btn" class="btn small outline handoff-clear-btn" data-help="Clear the generated handoff summary from this Task.">
-                        Clear
-                      </button>
-                    </div>
-                    <div id="handoff-generated-summary" class="handoff-generated-summary">
-                      <!-- Generated summary will be rendered here -->
                     </div>
                   </div>
                 </div>

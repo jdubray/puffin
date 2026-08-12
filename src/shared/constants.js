@@ -2,18 +2,6 @@
  * Puffin Constants
  */
 
-// Branch types for prompt history
-export const BRANCH_TYPES = {
-  SPECIFICATIONS: 'specifications',
-  ARCHITECTURE: 'architecture',
-  UI: 'ui',
-  BACKEND: 'backend',
-  DEPLOYMENT: 'deployment',
-  TESTING: 'testing',
-  DOCUMENTATION: 'documentation',
-  CUSTOM: 'custom'
-}
-
 // Programming style options
 export const PROGRAMMING_STYLES = {
   OOP: 'Object-Oriented Programming',
@@ -134,15 +122,11 @@ export const DEFAULT_CONFIG = {
   }
 }
 
-// Default history template
+// Default history template — single implicit prompt stream ('main')
 export const DEFAULT_HISTORY = {
   branches: {
-    specifications: { id: 'specifications', name: 'Specifications', prompts: [] },
-    architecture: { id: 'architecture', name: 'Architecture', prompts: [] },
-    ui: { id: 'ui', name: 'UI', prompts: [] },
-    backend: { id: 'backend', name: 'Backend', prompts: [] },
-    deployment: { id: 'deployment', name: 'Deployment', prompts: [] }
+    main: { id: 'main', name: 'Main', prompts: [] }
   },
-  activeBranch: 'specifications',
+  activeBranch: 'main',
   activePromptId: null
 }

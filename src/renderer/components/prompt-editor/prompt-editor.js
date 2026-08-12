@@ -25,10 +25,6 @@ export class PromptEditorComponent {
     this.defaultProvider = 'claude' // Mirrors config.defaultProvider; updated on every state change
     // Thinking budget selector
     this.thinkingBudgetSelect = null
-    // Handoff button
-    this.handoffReadyBtn = null
-    // Current handoff context (to be injected in next prompt)
-    this.pendingHandoff = null
     // Design documents dropdown
     this.includeDocsBtn = null
     this.includeDocsDropdown = null
@@ -72,8 +68,6 @@ export class PromptEditorComponent {
     this.providerSelect = document.getElementById('provider-select')
     // Thinking budget selector
     this.thinkingBudgetSelect = document.getElementById('thinking-budget')
-    // Handoff button
-    this.handoffReadyBtn = document.getElementById('handoff-ready-btn')
     // Design documents dropdown
     this.includeDocsBtn = document.getElementById('include-docs-btn')
     this.includeDocsDropdown = document.getElementById('include-docs-dropdown')
@@ -333,20 +327,6 @@ export class PromptEditorComponent {
       })
     }
 
-    // Handoff Ready button
-    if (this.handoffReadyBtn) {
-      this.handoffReadyBtn.addEventListener('click', () => {
-        console.log('[HANDOFF] Handoff Ready button clicked')
-        this.openHandoffReview()
-      })
-    }
-
-    // Listen for handoff received event
-    document.addEventListener('handoff-received', (e) => {
-      console.log('[HANDOFF] Handoff received:', e.detail)
-      this.handleHandoffReceived(e.detail)
-    })
-
     // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
       if (!this.includeGuiDropdown.contains(e.target)) {
@@ -355,16 +335,6 @@ export class PromptEditorComponent {
       if (this.includeDocsDropdown && !this.includeDocsDropdown.contains(e.target)) {
         this.closeDocsDropdown()
       }
-    })
-
-    // Branch tab clicks
-    document.querySelectorAll('.branch-tab').forEach(tab => {
-      tab.addEventListener('click', (e) => {
-        const branchId = e.target.dataset.branch
-        if (branchId) {
-          this.intents.selectBranch(branchId)
-        }
-      })
     })
 
     // Keyboard shortcuts
@@ -857,35 +827,8 @@ export class PromptEditorComponent {
     // Update include GUI button state
     this.includeGuiBtn.classList.toggle('active', this.includeGui)
 
-    // Update branch tabs
-    this.updateBranchTabs(historyState)
-
     // Update response area with conversation history
     this.updateResponseArea(historyState, promptState)
-  }
-
-  /**
-   * Update branch tabs to show active state
-   */
-  updateBranchTabs(historyState) {
-    document.querySelectorAll('.branch-tab').forEach(tab => {
-      const branchId = tab.dataset.branch
-      tab.classList.toggle('active', branchId === historyState.activeBranch)
-
-      // Update badge with prompt count
-      const branch = historyState.branches.find(b => b.id === branchId)
-      let badge = tab.querySelector('.badge')
-      if (branch && branch.promptCount > 0) {
-        if (!badge) {
-          badge = document.createElement('span')
-          badge.className = 'badge'
-          tab.appendChild(badge)
-        }
-        badge.textContent = branch.promptCount
-      } else if (badge) {
-        badge.remove()
-      }
-    })
   }
 
   /**
@@ -908,8 +851,7 @@ export class PromptEditorComponent {
     const prompts = historyState.promptTree || []
 
     if (prompts.length === 0 && !promptState.isProcessing) {
-      responseContent.innerHTML = '<p class="placeholder">Start a conversation in the ' +
-        this.getBranchDisplayName(historyState.activeBranch) + ' task...</p>'
+      responseContent.innerHTML = '<p class="placeholder">Start a conversation...</p>'
       return
     }
 
@@ -991,20 +933,6 @@ export class PromptEditorComponent {
     if (responseArea) {
       responseArea.scrollTop = responseArea.scrollHeight
     }
-  }
-
-  /**
-   * Get display name for branch
-   */
-  getBranchDisplayName(branchId) {
-    const names = {
-      specifications: 'Specifications',
-      architecture: 'Architecture',
-      ui: 'UI',
-      backend: 'Backend',
-      deployment: 'Deployment'
-    }
-    return names[branchId] || branchId
   }
 
   /**
@@ -1214,21 +1142,8 @@ export class PromptEditorComponent {
 
     // Submit to Claude via IPC
     if (window.puffin) {
-      // Get handoff context if present - must check BEFORE determining session
-      const handoffContext = this.pendingHandoff ? {
-        summary: this.pendingHandoff.summary,
-        sourceThreadName: this.pendingHandoff.sourceThreadName,
-        sourceBranch: this.pendingHandoff.sourceBranch
-      } : null
-
-      // Get session ID to resume conversation (if continuing in same branch)
-      // IMPORTANT: If there's a pending handoff, always start a NEW conversation
-      // to ensure the handoff context is included in the prompt
-      const sessionId = handoffContext ? null : this.getLastSessionId(state)
-
-      if (handoffContext) {
-        console.log('[CONTEXT-DEBUG] Handoff present - forcing NEW conversation to include handoff context')
-      }
+      // Get session ID to resume conversation
+      const sessionId = this.getLastSessionId(state)
 
       // Get GUI description if included (supports multiple definitions)
       const guiDescription = this.buildCombinedGuiDescription(state)
@@ -1248,10 +1163,6 @@ export class PromptEditorComponent {
       const isResumingSession = !!sessionId
 
       console.log('[CONTEXT-DEBUG] Submit mode:', isResumingSession ? 'RESUME session' : 'NEW conversation')
-
-      if (handoffContext) {
-        console.log('[CONTEXT-DEBUG] Including handoff context from:', handoffContext.sourceBranch)
-      }
 
       // Append design documents to prompt if selected
       let finalPrompt = docsContent ? content + docsContent : content
@@ -1305,8 +1216,6 @@ export class PromptEditorComponent {
           guiDescription: guiDescription,
           // Files modified anywhere in this thread so far
           threadFilesModified: threadFilesModified,
-          // Handoff context from another thread
-          handoffContext: handoffContext,
           model: selectedModel,
           maxTurns: 100, // Max turns per request
           // Puppeteer Visual Feedback Loop (Website Edition)
@@ -1320,11 +1229,6 @@ export class PromptEditorComponent {
 
       // Note: Debug prompt is now captured via onFullPrompt callback from main process
       // This ensures we get the complete prompt with all context
-
-      // Clear pending handoff after submission
-      if (this.pendingHandoff) {
-        this.clearPendingHandoff()
-      }
 
       // Clear attached images after submission (cleanup happens in state change handler)
       // Store paths for cleanup in the onComplete handler
@@ -1341,9 +1245,6 @@ export class PromptEditorComponent {
     // DO NOT clear the textarea - preserve user's typed content
     // this.textarea.value = ''
 
-    // Clear any pending handoff context
-    this.pendingHandoff = null
-
     // Reset review cycle for new thread
     this._reviewState = 'idle'
     this._pendingReviewAction = null
@@ -1356,9 +1257,6 @@ export class PromptEditorComponent {
 
     // Keep submit button state based on textarea content
     // this.submitBtn.disabled = true
-
-    // Remove handoff banner if present
-    this.hideHandoffBanner()
 
     // Focus the textarea
     this.textarea.focus()
@@ -1374,14 +1272,8 @@ export class PromptEditorComponent {
     // Clear the textarea
     this.textarea.value = ''
 
-    // Clear any pending handoff context
-    this.pendingHandoff = null
-
     // Disable submit button until user types again
     this.submitBtn.disabled = true
-
-    // Remove handoff banner if present
-    this.hideHandoffBanner()
 
     // Focus the textarea
     this.textarea.focus()
@@ -1908,10 +1800,7 @@ export class PromptEditorComponent {
    * including full response content for each.
    */
   buildHistoryContext(state) {
-    const activeBranch = state.history.branches.find(b => b.id === state.history.activeBranch)
-    if (!activeBranch) return []
-
-    // Get raw prompts from the branch (these have full response content)
+    // Get raw prompts from the single 'main' stream (these have full response content)
     const rawBranch = state.history.raw?.branches?.[state.history.activeBranch]
     if (!rawBranch || !rawBranch.prompts) return []
 
@@ -2169,96 +2058,6 @@ export class PromptEditorComponent {
   }
 
   /**
-   * Handle received handoff context
-   */
-  handleHandoffReceived(handoffData) {
-    console.log('[HANDOFF] handleHandoffReceived called:', handoffData)
-
-    // Store the pending handoff
-    this.pendingHandoff = handoffData
-
-    // Clear any selected prompt (to show empty prompt view)
-    console.log('[HANDOFF] Calling clearPromptSelection()')
-    this.intents.clearPromptSelection()
-
-    // Clear the textarea
-    this.textarea.value = ''
-    this.submitBtn.disabled = true
-
-    // Show the handoff banner above the prompt
-    console.log('[HANDOFF] Calling showHandoffBanner')
-    this.showHandoffBanner(handoffData)
-  }
-
-  /**
-   * Show handoff context banner above the prompt input
-   */
-  showHandoffBanner(handoffData) {
-    console.log('[HANDOFF] showHandoffBanner called with data:', handoffData)
-
-    // Remove existing banner if any
-    this.hideHandoffBanner()
-
-    // Create the banner element
-    const banner = document.createElement('div')
-    banner.id = 'handoff-context-banner'
-    banner.className = 'handoff-context-banner'
-    banner.innerHTML = `
-      <div class="handoff-banner-header">
-        <span class="handoff-banner-icon">🤝</span>
-        <span class="handoff-banner-title">Handoff Context Ready</span>
-        <button class="handoff-banner-dismiss" title="Dismiss handoff context">&times;</button>
-      </div>
-      <div class="handoff-banner-info">
-        <span>From: <strong>${this.escapeHtml(handoffData.sourceThreadName)}</strong></span>
-        <span class="handoff-banner-separator">•</span>
-        <span>Workspace: <strong>${this.escapeHtml(handoffData.sourceBranch)}</strong></span>
-      </div>
-      <div class="handoff-banner-summary">
-        <pre>${this.escapeHtml(handoffData.summary)}</pre>
-      </div>
-      <div class="handoff-banner-hint">
-        This context will be automatically included in your next prompt.
-      </div>
-    `
-
-    // Find the prompt area and insert banner before it
-    const promptArea = document.querySelector('.prompt-area')
-    if (promptArea) {
-      console.log('[HANDOFF] Found prompt area, inserting banner before it')
-      promptArea.parentNode.insertBefore(banner, promptArea)
-    } else {
-      console.warn('[HANDOFF] Could not find .prompt-area container')
-    }
-
-    // Add dismiss button handler
-    const dismissBtn = banner.querySelector('.handoff-banner-dismiss')
-    if (dismissBtn) {
-      dismissBtn.addEventListener('click', () => {
-        this.clearPendingHandoff()
-      })
-    }
-  }
-
-  /**
-   * Hide the handoff banner
-   */
-  hideHandoffBanner() {
-    const existingBanner = document.getElementById('handoff-context-banner')
-    if (existingBanner) {
-      existingBanner.remove()
-    }
-  }
-
-  /**
-   * Clear the pending handoff
-   */
-  clearPendingHandoff() {
-    this.pendingHandoff = null
-    this.hideHandoffBanner()
-  }
-
-  /**
    * Escape HTML for safe rendering
    */
   escapeHtml(str) {
@@ -2268,27 +2067,6 @@ export class PromptEditorComponent {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
-  }
-
-  /**
-   * Open the handoff review modal
-   */
-  openHandoffReview() {
-    console.log('[HANDOFF] Opening handoff review modal')
-
-    // Get current state
-    const state = window.puffinApp?.state
-    if (!state) {
-      console.warn('[HANDOFF] No state available')
-      return
-    }
-
-    // Dispatch the action to show the handoff review modal
-    if (this.intents.showHandoffReview) {
-      this.intents.showHandoffReview()
-    } else {
-      console.error('[HANDOFF] showHandoffReview intent not found')
-    }
   }
 
   /**

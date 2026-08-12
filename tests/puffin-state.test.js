@@ -263,16 +263,14 @@ describe('PuffinState', () => {
       assert.strictEqual(state.config.options.programmingStyle, 'HYBRID')
     })
 
-    it('should initialize default history with branches', async () => {
+    it('should initialize default history as a single main stream', async () => {
       const state = await puffinState.open(testDir)
 
       assert.ok(state.history)
       assert.ok(state.history.branches)
-      assert.ok(state.history.branches.specifications)
-      assert.ok(state.history.branches.architecture)
-      assert.ok(state.history.branches.ui)
-      assert.ok(state.history.branches.backend)
-      assert.ok(state.history.branches.deployment)
+      assert.ok(state.history.branches.main)
+      assert.strictEqual(state.history.activeBranch, 'main')
+      assert.strictEqual(Object.keys(state.history.branches).length, 1)
     })
   })
 

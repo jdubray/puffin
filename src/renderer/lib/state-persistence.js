@@ -7,7 +7,7 @@
  * NOTE: Puffin is a documentation manager. Sprint, orchestration,
  * inspection-assertion, and story-derivation persistence have been removed.
  * This module now persists only plain user stories (the Kanban board),
- * branch/workspace state, prompts, and history.
+ * prompts, and the single-stream history.
  */
 
 export class StatePersistence {
@@ -37,8 +37,7 @@ export class StatePersistence {
     const persistActions = [
       'UPDATE_CONFIG', 'UPDATE_OPTIONS',
       'SUBMIT_PROMPT', 'COMPLETE_RESPONSE',
-      'SELECT_BRANCH', 'SELECT_PROMPT', 'CREATE_BRANCH', 'DELETE_BRANCH', 'REORDER_BRANCHES',
-      'UPDATE_BRANCH_SETTINGS',
+      'SELECT_PROMPT',
       'ADD_USER_STORY', 'UPDATE_USER_STORY', 'DELETE_USER_STORY',
       'ADD_STORIES_TO_BACKLOG'
     ]
@@ -56,7 +55,7 @@ export class StatePersistence {
         console.log('Config persist result:', result)
       }
 
-      if (['SUBMIT_PROMPT', 'COMPLETE_RESPONSE', 'SELECT_BRANCH', 'SELECT_PROMPT', 'CREATE_BRANCH', 'DELETE_BRANCH', 'REORDER_BRANCHES', 'UPDATE_BRANCH_SETTINGS'].includes(normalizedType)) {
+      if (['SUBMIT_PROMPT', 'COMPLETE_RESPONSE', 'SELECT_PROMPT'].includes(normalizedType)) {
         console.log('[PERSIST-DEBUG] Action:', normalizedType)
 
         // For COMPLETE_RESPONSE, verify the response is in the history before persisting
@@ -65,12 +64,11 @@ export class StatePersistence {
           console.log('[PERSIST-DEBUG] selectedPrompt.id:', activePrompt?.id)
           console.log('[PERSIST-DEBUG] selectedPrompt.response:', activePrompt?.response ? 'EXISTS' : 'NULL')
 
-          // Also check directly in raw history
-          const activeBranch = state.history.activeBranch
-          const branchData = state.history.raw?.branches?.[activeBranch]
+          // Also check directly in raw history (single 'main' stream)
+          const branchData = state.history.raw?.branches?.main
           if (branchData) {
             const lastPrompt = branchData.prompts[branchData.prompts.length - 1]
-            console.log('[PERSIST-DEBUG] Last prompt in branch:', lastPrompt?.id)
+            console.log('[PERSIST-DEBUG] Last prompt in stream:', lastPrompt?.id)
             console.log('[PERSIST-DEBUG] Last prompt response:', lastPrompt?.response ? 'EXISTS' : 'NULL')
             if (lastPrompt?.response) {
               console.log('[PERSIST-DEBUG] Last prompt response content length:', lastPrompt.response.content?.length || 0)
@@ -193,57 +191,6 @@ export class StatePersistence {
       console.log('[PERSIST-DEBUG] State persisted for action:', normalizedType)
     } catch (error) {
       console.error('Failed to persist state:', error)
-    }
-  }
-
-  /**
-   * Extract user stories from specifications response
-   * @param {Object} state - Current app state
-   */
-  async extractUserStoriesFromResponse(state) {
-    try {
-      const specBranch = state.history.raw.branches.specifications
-      if (!specBranch || !specBranch.prompts.length) return
-
-      // Get the most recent prompt with a response
-      const recentPrompt = [...specBranch.prompts].reverse().find(p => p.response)
-      if (!recentPrompt || !recentPrompt.response?.content) return
-
-      const content = recentPrompt.content + '\n' + recentPrompt.response.content
-      const extractedStories = this.parseUserStories(content)
-
-      if (extractedStories.length === 0) {
-        console.log('No user stories found in specifications response')
-        return
-      }
-
-      // Add each extracted story
-      for (const story of extractedStories) {
-        // Check if a similar story already exists (by title)
-        const exists = state.userStories?.some(
-          s => s.title.toLowerCase() === story.title.toLowerCase()
-        )
-
-        if (!exists) {
-          await window.puffin.state.addUserStory({
-            ...story,
-            sourcePromptId: recentPrompt.id
-          })
-          console.log('Auto-extracted user story:', story.title)
-        }
-      }
-
-      // Reload user stories to update state
-      const result = await window.puffin.state.getUserStories()
-      if (result.success) {
-        this.intents.loadUserStories(result.stories)
-      }
-
-      if (extractedStories.length > 0) {
-        this.showToast(`Extracted ${extractedStories.length} user ${extractedStories.length === 1 ? 'story' : 'stories'} from specifications`, 'success')
-      }
-    } catch (error) {
-      console.error('Failed to extract user stories:', error)
     }
   }
 

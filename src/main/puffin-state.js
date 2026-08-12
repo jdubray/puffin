@@ -251,28 +251,21 @@ class PuffinState {
     console.log(`[PUFFIN-STATE] Processing ${inbox.length} sync inbox items`)
 
     for (const item of inbox) {
-      const { branchId, branchName, prompt } = item
+      const { prompt } = item
 
-      // Create branch if it doesn't exist (e.g., improvements)
-      if (!this.history.branches[branchId]) {
-        this.history.branches[branchId] = {
-          id: branchId,
-          name: branchName || branchId.charAt(0).toUpperCase() + branchId.slice(1),
-          icon: 'code',
-          codeModificationAllowed: true,
-          prompts: []
-        }
-        console.log(`[PUFFIN-STATE] Created branch "${branchName}" for sync`)
+      // Single-stream: all synced prompts land in 'main'
+      if (!this.history.branches.main) {
+        this.history.branches.main = { id: 'main', name: 'Main', prompts: [] }
       }
 
-      // Prepend prompt to branch (newest first)
-      this.history.branches[branchId].prompts.unshift({
+      // Prepend prompt (newest first)
+      this.history.branches.main.prompts.unshift({
         ...prompt,
         id: prompt.id || this.generateId(),
         timestamp: prompt.timestamp || new Date().toISOString()
       })
 
-      console.log(`[PUFFIN-STATE] Synced prompt "${prompt.id}" to branch "${branchId}"`)
+      console.log(`[PUFFIN-STATE] Synced prompt "${prompt.id}" into the main stream`)
     }
 
     // Update history timestamp and save
@@ -401,10 +394,13 @@ class PuffinState {
    * @param {Object} prompt - Prompt object
    */
   async addPrompt(branchId, prompt) {
+    // Single-stream: every prompt lands in 'main' regardless of the passed
+    // branchId (signature kept for caller compatibility).
+    branchId = 'main'
     if (!this.history.branches[branchId]) {
       this.history.branches[branchId] = {
         id: branchId,
-        name: branchId.charAt(0).toUpperCase() + branchId.slice(1),
+        name: 'Main',
         prompts: []
       }
     }
@@ -427,7 +423,8 @@ class PuffinState {
    * @param {Object} response - Response data
    */
   async updatePromptResponse(branchId, promptId, response) {
-    const branch = this.history.branches[branchId]
+    // Single-stream: prompts live in 'main' (signature kept for callers)
+    const branch = this.history.branches.main || this.history.branches[branchId]
     if (!branch) return null
 
     const prompt = branch.prompts.find(p => p.id === promptId)
@@ -1891,20 +1888,15 @@ ${content}`
     const historyPath = path.join(this.puffinPath, HISTORY_FILE)
     try {
       const content = await fs.readFile(historyPath, 'utf-8')
-      return JSON.parse(content)
+      const history = JSON.parse(content)
+      return this._migrateHistoryToSingleStream(history)
     } catch {
-      // Create default history with standard branches
+      // Create default single-stream history
       const defaultHistory = {
         branches: {
-          specifications: { id: 'specifications', name: 'Specifications', prompts: [], codeModificationAllowed: false },
-          architecture: { id: 'architecture', name: 'Architecture', prompts: [], codeModificationAllowed: true },
-          ui: { id: 'ui', name: 'UI', prompts: [], codeModificationAllowed: true },
-          backend: { id: 'backend', name: 'Backend', prompts: [], codeModificationAllowed: true },
-          deployment: { id: 'deployment', name: 'Deployment', prompts: [], codeModificationAllowed: true },
-          improvements: { id: 'improvements', name: 'Improvements', icon: 'code', prompts: [], codeModificationAllowed: true },
-          tmp: { id: 'tmp', name: 'Tmp', prompts: [], codeModificationAllowed: true }
+          main: { id: 'main', name: 'Main', prompts: [] }
         },
-        activeBranch: 'specifications',
+        activeBranch: 'main',
         activePromptId: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -1912,6 +1904,45 @@ ${content}`
       await this.saveHistory(defaultHistory)
       return defaultHistory
     }
+  }
+
+  /**
+   * One-time migration: flatten a multi-branch history into the single
+   * implicit 'main' stream. Prompt chains (parentId links) are preserved.
+   * @param {Object} history - History object as read from disk
+   * @returns {Object} History in single-stream shape
+   * @private
+   */
+  _migrateHistoryToSingleStream(history) {
+    const branches = history?.branches || {}
+    const branchIds = Object.keys(branches)
+
+    // Already in single-stream shape
+    if (branchIds.length === 1 && branches.main) {
+      return history
+    }
+
+    const prompts = []
+    for (const branchId of branchIds) {
+      for (const prompt of branches[branchId]?.prompts || []) {
+        prompts.push(prompt)
+      }
+    }
+    prompts.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0))
+
+    console.log(`[PUFFIN-STATE] Migrated history.json: flattened ${branchIds.length} branch(es) into the single 'main' stream (${prompts.length} prompts)`)
+
+    const migrated = {
+      ...history,
+      branches: {
+        main: { id: 'main', name: 'Main', prompts }
+      },
+      activeBranch: 'main',
+      updatedAt: new Date().toISOString()
+    }
+    delete migrated.branchOrder
+    delete migrated.lastSelectedPromptPerBranch
+    return migrated
   }
 
   /**

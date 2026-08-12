@@ -179,51 +179,6 @@ export const clearContinueRequest = () => ({
   payload: {}
 })
 
-// Select a branch
-export const selectBranch = (branchId) => ({
-  type: 'SELECT_BRANCH',
-  payload: {
-    branchId
-  }
-})
-
-// Create a new branch
-export const createBranch = (data) => ({
-  type: 'CREATE_BRANCH',
-  payload: {
-    id: data.id || generateId(),
-    name: data.name,
-    icon: data.icon || 'folder'
-  }
-})
-
-// Delete a branch
-export const deleteBranch = (branchId) => ({
-  type: 'DELETE_BRANCH',
-  payload: {
-    branchId
-  }
-})
-
-// Reorder branches
-export const reorderBranches = (fromIndex, toIndex) => ({
-  type: 'REORDER_BRANCHES',
-  payload: {
-    fromIndex,
-    toIndex
-  }
-})
-
-// Update branch settings (including plugin assignments)
-export const updateBranchSettings = (branchId, settings) => ({
-  type: 'UPDATE_BRANCH_SETTINGS',
-  payload: {
-    branchId,
-    settings,
-    timestamp: Date.now()
-  }
-})
-
 // Select a prompt from history
 export const selectPrompt = (promptId) => ({
   type: 'SELECT_PROMPT',
@@ -577,74 +532,6 @@ export const unmarkThreadComplete = (promptId) => ({
   type: 'UNMARK_THREAD_COMPLETE',
   payload: {
     promptId,
-    timestamp: Date.now()
-  }
-})
-
-/**
- * Handoff Actions
- * For context handoff between threads
- */
-
-// Show the handoff review modal
-export const showHandoffReview = (handoffData = {}) => ({
-  type: 'SHOW_HANDOFF_REVIEW',
-  payload: {
-    ...handoffData,
-    timestamp: Date.now()
-  }
-})
-
-// Update the handoff summary
-export const updateHandoffSummary = (summary) => ({
-  type: 'UPDATE_HANDOFF_SUMMARY',
-  payload: {
-    summary,
-    timestamp: Date.now()
-  }
-})
-
-// Complete the handoff (create new thread with context)
-export const completeHandoff = (handoffData) => ({
-  type: 'COMPLETE_HANDOFF',
-  payload: {
-    ...handoffData,
-    timestamp: Date.now()
-  }
-})
-
-// Cancel handoff review
-export const cancelHandoff = () => ({
-  type: 'CANCEL_HANDOFF',
-  payload: {
-    timestamp: Date.now()
-  }
-})
-
-// Delete a saved handoff
-export const deleteHandoff = (handoffId) => ({
-  type: 'DELETE_HANDOFF',
-  payload: {
-    handoffId,
-    timestamp: Date.now()
-  }
-})
-
-// Set handoff context for a branch (persisted in history)
-export const setBranchHandoffContext = (branchId, handoffContext) => ({
-  type: 'SET_BRANCH_HANDOFF_CONTEXT',
-  payload: {
-    branchId,
-    handoffContext,
-    timestamp: Date.now()
-  }
-})
-
-// Clear handoff context for a branch
-export const clearBranchHandoffContext = (branchId) => ({
-  type: 'CLEAR_BRANCH_HANDOFF_CONTEXT',
-  payload: {
-    branchId,
     timestamp: Date.now()
   }
 })

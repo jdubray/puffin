@@ -8,7 +8,7 @@
  * No explicit save/load - Puffin opens a directory and state is always synced.
  */
 
-import { validatePrompt, validateBranch } from '../../shared/validators.js'
+import { validatePrompt } from '../../shared/validators.js'
 
 /**
  * Initial model state
@@ -69,16 +69,13 @@ export const initialModel = {
   streamingResponse: '',
 
   // History state (from .puffin/history.json)
+  // Single implicit stream: 'main' is the only branch; the internal shape is
+  // kept for plumbing compatibility (prompt chains still link via parentId).
   history: {
     branches: {
-      specifications: { id: 'specifications', name: 'Specifications', prompts: [] },
-      architecture: { id: 'architecture', name: 'Architecture', prompts: [] },
-      ui: { id: 'ui', name: 'UI', prompts: [] },
-      backend: { id: 'backend', name: 'Backend', prompts: [] },
-      deployment: { id: 'deployment', name: 'Deployment', prompts: [] },
-      tmp: { id: 'tmp', name: 'Tmp', prompts: [] }
+      main: { id: 'main', name: 'Main', prompts: [] }
     },
-    activeBranch: 'specifications',
+    activeBranch: 'main',
     activePromptId: null,
     expandedThreads: {}, // Track which threads are expanded: { promptId: true }
     threadSearchQuery: '' // Search query for filtering threads
@@ -572,134 +569,6 @@ export const clearContinueRequestAcceptor = model => proposal => {
   }
 }
 
-export const selectBranchAcceptor = model => proposal => {
-  if (proposal?.type === 'SELECT_BRANCH') {
-    const newBranchId = proposal.payload.branchId
-    if (model.history.branches[newBranchId]) {
-      model.history.activeBranch = newBranchId
-
-      // Also switch to prompt view when selecting a branch
-      model.currentView = 'prompt'
-
-      // Check if this branch has a remembered last selected prompt
-      const lastSelectedPromptId = model.history.lastSelectedPromptPerBranch?.[newBranchId]
-      const newBranch = model.history.branches[newBranchId]
-
-      if (lastSelectedPromptId && newBranch.prompts.some(p => p.id === lastSelectedPromptId)) {
-        // Restore the last selected prompt for this branch
-        model.history.activePromptId = lastSelectedPromptId
-        console.log('[SAM-DEBUG] selectBranchAcceptor: switched to branch', newBranchId, 'restored last selected prompt:', lastSelectedPromptId)
-      } else if (newBranch.prompts && newBranch.prompts.length > 0) {
-        // Fall back to the most recent prompt in the new branch
-        const lastPrompt = newBranch.prompts[newBranch.prompts.length - 1]
-        model.history.activePromptId = lastPrompt.id
-        console.log('[SAM-DEBUG] selectBranchAcceptor: switched to branch', newBranchId, 'selected prompt:', lastPrompt.id)
-      } else {
-        // No prompts in this branch, clear the selection
-        model.history.activePromptId = null
-        console.log('[SAM-DEBUG] selectBranchAcceptor: switched to branch', newBranchId, 'no prompts, cleared activePromptId')
-      }
-    }
-  }
-}
-
-export const createBranchAcceptor = model => proposal => {
-  if (proposal?.type === 'CREATE_BRANCH') {
-    const validation = validateBranch({
-      id: proposal.payload.id,
-      name: proposal.payload.name
-    })
-
-    if (!validation.valid) {
-      model.appError = { message: validation.errors.join(', ') }
-      return
-    }
-
-    model.history.branches[proposal.payload.id] = {
-      id: proposal.payload.id,
-      name: proposal.payload.name,
-      icon: proposal.payload.icon,
-      codeModificationAllowed: proposal.payload.codeModificationAllowed !== false,
-      prompts: []
-    }
-
-    // Add to branchOrder if it exists
-    if (model.history.branchOrder) {
-      model.history.branchOrder.push(proposal.payload.id)
-    }
-  }
-}
-
-export const deleteBranchAcceptor = model => proposal => {
-  if (proposal?.type === 'DELETE_BRANCH') {
-    const branchId = proposal.payload.branchId
-    // Don't delete default branches
-    const defaultBranches = ['specifications', 'architecture', 'ui', 'backend', 'deployment', 'improvements', 'tmp']
-    if (!defaultBranches.includes(branchId) && model.history.branches[branchId]) {
-      delete model.history.branches[branchId]
-
-      // Remove from branchOrder if it exists
-      if (model.history.branchOrder) {
-        model.history.branchOrder = model.history.branchOrder.filter(id => id !== branchId)
-      }
-
-      if (model.history.activeBranch === branchId) {
-        model.history.activeBranch = 'specifications'
-      }
-    }
-  }
-}
-
-export const reorderBranchesAcceptor = model => proposal => {
-  if (proposal?.type === 'REORDER_BRANCHES') {
-    const { fromIndex, toIndex } = proposal.payload
-
-    // Get ordered branch IDs
-    if (!model.history.branchOrder) {
-      // Initialize branch order from current branches
-      model.history.branchOrder = Object.keys(model.history.branches)
-    }
-
-    const order = [...model.history.branchOrder]
-    if (fromIndex >= 0 && fromIndex < order.length && toIndex >= 0 && toIndex < order.length) {
-      // Remove the branch from its original position
-      const [movedBranch] = order.splice(fromIndex, 1)
-      // Insert it at the new position
-      order.splice(toIndex, 0, movedBranch)
-      model.history.branchOrder = order
-    }
-  }
-}
-
-export const updateBranchSettingsAcceptor = model => proposal => {
-  if (proposal?.type === 'UPDATE_BRANCH_SETTINGS') {
-    const { branchId, settings } = proposal.payload
-
-    if (model.history.branches[branchId]) {
-      const branch = model.history.branches[branchId]
-
-      // Update branch properties from settings
-      if (settings.name !== undefined) {
-        branch.name = settings.name
-      }
-      if (settings.icon !== undefined) {
-        branch.icon = settings.icon
-      }
-      if (settings.codeModificationAllowed !== undefined) {
-        branch.codeModificationAllowed = settings.codeModificationAllowed
-      }
-      if (settings.assignedPlugins !== undefined) {
-        branch.assignedPlugins = settings.assignedPlugins
-      }
-      if (settings.additionalDirs !== undefined) {
-        branch.additionalDirs = settings.additionalDirs
-      }
-
-      console.log('[BRANCH] Updated settings for branch:', branchId, settings)
-    }
-  }
-}
-
 export const selectPromptAcceptor = model => proposal => {
   if (proposal?.type === 'SELECT_PROMPT') {
     const promptId = proposal.payload.promptId
@@ -981,98 +850,6 @@ export const loadUserStoriesAcceptor = model => proposal => {
     model.userStories = newStories
     console.log('[LOAD_USER_STORIES] Updated model.userStories to', model.userStories.length, 'stories')
   }
-}
-
-/**
- * Build UI branch context with design tokens and guidelines
- */
-function buildUiBranchContext(model) {
-  const guidelines = model.uiGuidelines
-  if (!guidelines) return ''
-
-  let context = '\n**UI Implementation Context:**\n'
-  context += 'This is a UI-focused implementation. Please follow these guidelines:\n\n'
-
-  // Add design tokens if available
-  if (guidelines.designTokens) {
-    const tokens = guidelines.designTokens
-    if (tokens.colors && Object.keys(tokens.colors).length > 0) {
-      context += '**Color Tokens:**\n'
-      for (const [name, token] of Object.entries(tokens.colors)) {
-        context += `- ${name}: ${token.value}\n`
-      }
-      context += '\n'
-    }
-    if (tokens.fontFamilies && tokens.fontFamilies.length > 0) {
-      context += '**Font Families:**\n'
-      tokens.fontFamilies.forEach(f => {
-        context += `- ${f.name}: ${f.value}\n`
-      })
-      context += '\n'
-    }
-    if (tokens.spacing && tokens.spacing.length > 0) {
-      context += '**Spacing Scale:**\n'
-      tokens.spacing.forEach(s => {
-        context += `- ${s.name}: ${s.value}\n`
-      })
-      context += '\n'
-    }
-  }
-
-  // Add component patterns if available
-  if (guidelines.componentPatterns && guidelines.componentPatterns.length > 0) {
-    context += '**Existing Component Patterns:**\n'
-    guidelines.componentPatterns.forEach(p => {
-      context += `- ${p.name}: ${p.description || ''}\n`
-    })
-    context += '\n'
-  }
-
-  // Add general guidelines
-  if (guidelines.guidelines) {
-    const g = guidelines.guidelines
-    if (g.components) {
-      context += '**Component Guidelines:**\n' + g.components + '\n\n'
-    }
-    if (g.interactions) {
-      context += '**Interaction Guidelines:**\n' + g.interactions + '\n\n'
-    }
-  }
-
-  return context
-}
-
-/**
- * Build architecture branch context
- */
-function buildArchitectureBranchContext(model) {
-  let context = '\n**Architecture Implementation Context:**\n'
-  context += 'This is an architecture-focused implementation. Consider:\n'
-  context += '- System design and component boundaries\n'
-  context += '- Data flow and state management patterns\n'
-  context += '- API contracts and interfaces\n'
-  context += '- Scalability and maintainability\n\n'
-
-  if (model.architecture?.content) {
-    context += '**Current Architecture:**\n'
-    context += model.architecture.content.substring(0, 2000) + '\n\n'
-  }
-
-  return context
-}
-
-/**
- * Build backend branch context
- */
-function buildBackendBranchContext(model) {
-  let context = '\n**Backend Implementation Context:**\n'
-  context += 'This is a backend-focused implementation. Consider:\n'
-  context += '- API design and REST/GraphQL conventions\n'
-  context += '- Data persistence and database patterns\n'
-  context += '- Error handling and validation\n'
-  context += '- Security and authentication\n\n'
-
-  return context
 }
 
 /**
@@ -1389,124 +1166,6 @@ export const setDebugModeAcceptor = model => proposal => {
   }
 }
 
-/**
- * Handoff Acceptors
- * For context handoff between threads
- */
-
-export const showHandoffReviewAcceptor = model => proposal => {
-  if (proposal?.type === 'SHOW_HANDOFF_REVIEW') {
-    // Generate handoff summary from current thread context
-    const activePromptId = model.history.activePromptId
-    const activeBranch = model.history.activeBranch
-    const branch = model.history.branches[activeBranch]
-
-    let sourceThread = null
-    let summary = ''
-
-    if (activePromptId && branch) {
-      sourceThread = branch.prompts.find(p => p.id === activePromptId)
-      if (sourceThread) {
-        // Build summary from thread content and response
-        summary = buildHandoffSummary(sourceThread, branch, model)
-      }
-    }
-
-    model.modal = {
-      type: 'handoff-review',
-      data: {
-        sourceThreadId: activePromptId,
-        sourceThreadName: sourceThread?.title || truncateText(sourceThread?.content, 50) || 'Current Thread',
-        sourceBranch: activeBranch,
-        summary: summary,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      }
-    }
-  }
-}
-
-export const updateHandoffSummaryAcceptor = model => proposal => {
-  if (proposal?.type === 'UPDATE_HANDOFF_SUMMARY') {
-    if (model.modal?.type === 'handoff-review') {
-      model.modal.data.summary = proposal.payload.summary
-      model.modal.data.updatedAt = proposal.payload.timestamp
-    }
-  }
-}
-
-export const completeHandoffAcceptor = model => proposal => {
-  if (proposal?.type === 'COMPLETE_HANDOFF') {
-    const handoffData = model.modal?.data
-    if (!handoffData) return
-
-    // Store the handoff for the new thread to receive
-    if (!model.handoffs) {
-      model.handoffs = []
-    }
-
-    const handoff = {
-      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
-      sourceThreadId: handoffData.sourceThreadId,
-      sourceThreadName: handoffData.sourceThreadName,
-      sourceBranch: handoffData.sourceBranch,
-      summary: handoffData.summary,
-      createdAt: handoffData.createdAt,
-      updatedAt: handoffData.updatedAt,
-      status: 'pending',
-      receivingThreadId: null
-    }
-
-    model.handoffs.push(handoff)
-
-    // Close the modal
-    model.modal = null
-  }
-}
-
-export const cancelHandoffAcceptor = model => proposal => {
-  if (proposal?.type === 'CANCEL_HANDOFF') {
-    model.modal = null
-  }
-}
-
-export const deleteHandoffAcceptor = model => proposal => {
-  if (proposal?.type === 'DELETE_HANDOFF') {
-    if (model.handoffs) {
-      model.handoffs = model.handoffs.filter(h => h.id !== proposal.payload.handoffId)
-    }
-  }
-}
-
-/**
- * Set handoff context for a branch - persisted in history
- * This allows the handoff summary to survive app restarts
- */
-export const setBranchHandoffContextAcceptor = model => proposal => {
-  if (proposal?.type === 'SET_BRANCH_HANDOFF_CONTEXT') {
-    const { branchId, handoffContext } = proposal.payload
-
-    if (model.history.branches[branchId]) {
-      model.history.branches[branchId].handoffContext = handoffContext
-      console.log('[HANDOFF] Stored handoff context in branch:', branchId)
-    }
-  }
-}
-
-/**
- * Clear handoff context for a branch
- */
-export const clearBranchHandoffContextAcceptor = model => proposal => {
-  if (proposal?.type === 'CLEAR_BRANCH_HANDOFF_CONTEXT') {
-    const { branchId } = proposal.payload
-
-    if (model.history.branches[branchId]) {
-      delete model.history.branches[branchId].handoffContext
-      console.log('[HANDOFF] Cleared handoff context from branch:', branchId)
-    }
-  }
-}
-
 // Add a synthetic prompt entry to branch history (for CRE plan/RIS/assertion visibility)
 export const addSyntheticPromptAcceptor = model => proposal => {
   if (proposal?.type === 'ADD_SYNTHETIC_PROMPT') {
@@ -1621,80 +1280,6 @@ export const resetStuckDetectionAcceptor = model => proposal => {
       timestamp: proposal.payload.timestamp
     }
   }
-}
-
-/**
- * Helper: Build handoff summary from thread context
- */
-function buildHandoffSummary(thread, branch, model) {
-  let summary = ''
-
-  // What was worked on
-  summary += '🎯 What Was Implemented\n'
-  summary += '─'.repeat(30) + '\n\n'
-  if (thread.content) {
-    summary += `📝 Original Request:\n${thread.content}\n\n`
-  }
-
-  // Get response content if available
-  if (thread.response?.content) {
-    const responsePreview = thread.response.content.substring(0, 500)
-    summary += `💬 Work Summary:\n${responsePreview}${thread.response.content.length > 500 ? '...' : ''}\n\n`
-  }
-
-  // Files modified
-  if (thread.response?.filesModified?.length > 0) {
-    summary += '📁 Files Modified\n'
-    summary += '─'.repeat(30) + '\n\n'
-    thread.response.filesModified.forEach(file => {
-      // Handle both string and object formats
-      const filePath = typeof file === 'string' ? file : (file?.path || file?.file || String(file))
-
-      // Use different emoji based on file type
-      const ext = filePath.split('.').pop()?.toLowerCase()
-      let icon = '📄'
-      if (['js', 'ts', 'jsx', 'tsx'].includes(ext)) icon = '⚡'
-      else if (['css', 'scss', 'less'].includes(ext)) icon = '🎨'
-      else if (['html', 'htm'].includes(ext)) icon = '🌐'
-      else if (['json', 'yaml', 'yml'].includes(ext)) icon = '⚙️'
-      else if (['md', 'txt'].includes(ext)) icon = '📝'
-      else if (['test', 'spec'].some(t => filePath.includes(t))) icon = '🧪'
-
-      summary += `  ${icon} ${filePath}\n`
-    })
-    summary += '\n'
-  }
-
-  // Story context if available
-  if (thread.storyIds?.length > 0) {
-    const stories = model.userStories.filter(s => thread.storyIds.includes(s.id))
-    if (stories.length > 0) {
-      summary += '📖 Related User Stories\n'
-      summary += '─'.repeat(30) + '\n\n'
-      stories.forEach(story => {
-        const statusIcon = story.status === 'done' ? '✅' :
-                          story.status === 'in-progress' ? '🔄' : '📋'
-        summary += `  ${statusIcon} ${story.title}\n`
-      })
-      summary += '\n'
-    }
-  }
-
-  // Add notes section
-  summary += '📌 Notes for Next Thread\n'
-  summary += '─'.repeat(30) + '\n\n'
-  summary += '  ℹ️ Add any additional context or notes here before handing off.\n'
-
-  return summary
-}
-
-/**
- * Helper: Truncate text
- */
-function truncateText(text, maxLength) {
-  if (!text) return ''
-  if (text.length <= maxLength) return text
-  return text.substring(0, maxLength) + '...'
 }
 
 /**
@@ -1833,11 +1418,6 @@ export const acceptors = [
   clearRerunRequestAcceptor,
   requestContinueAcceptor,
   clearContinueRequestAcceptor,
-  selectBranchAcceptor,
-  createBranchAcceptor,
-  deleteBranchAcceptor,
-  reorderBranchesAcceptor,
-  updateBranchSettingsAcceptor,
   selectPromptAcceptor,
   clearPromptSelectionAcceptor,
   toggleThreadExpandedAcceptor,
@@ -1863,15 +1443,6 @@ export const acceptors = [
   toggleSidebarAcceptor,
   showModalAcceptor,
   hideModalAcceptor,
-
-  // Handoff
-  showHandoffReviewAcceptor,
-  updateHandoffSummaryAcceptor,
-  completeHandoffAcceptor,
-  cancelHandoffAcceptor,
-  deleteHandoffAcceptor,
-  setBranchHandoffContextAcceptor,
-  clearBranchHandoffContextAcceptor,
 
   // Synthetic prompt (CRE plan/RIS/assertion visibility)
   addSyntheticPromptAcceptor,

@@ -812,15 +812,12 @@ class PuffinApp {
       'receiveResponseChunk', 'completeResponse', 'responseError', 'cancelPrompt',
       'rerunPrompt', 'clearRerunRequest', 'setPendingPromptId',
       'requestContinue', 'clearContinueRequest',
-      'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'updateBranchSettings', 'selectPrompt', 'clearPromptSelection',
+      'selectPrompt', 'clearPromptSelection',
       'toggleThreadExpanded', 'expandThreadToEnd', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
       'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories',
       'switchView', 'toggleSidebar', 'showModal', 'hideModal',
       'toolStart', 'toolEnd', 'clearActivity',
       'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity',
-      // Handoff actions
-      'showHandoffReview', 'updateHandoffSummary', 'completeHandoff', 'cancelHandoff', 'deleteHandoff',
-      'setBranchHandoffContext', 'clearBranchHandoffContext',
       // Stuck detection actions
       'recordIterationOutput', 'resolveStuckState', 'resetStuckDetection',
       // Debug actions
@@ -866,12 +863,7 @@ class PuffinApp {
           ['REQUEST_CONTINUE', actions.requestContinue],
           ['CLEAR_CONTINUE_REQUEST', actions.clearContinueRequest],
 
-          // Branch/History actions
-          ['SELECT_BRANCH', actions.selectBranch],
-          ['CREATE_BRANCH', actions.createBranch],
-          ['DELETE_BRANCH', actions.deleteBranch],
-          ['REORDER_BRANCHES', actions.reorderBranches],
-          ['UPDATE_BRANCH_SETTINGS', actions.updateBranchSettings],
+          // History actions
           ['SELECT_PROMPT', actions.selectPrompt],
           ['CLEAR_PROMPT_SELECTION', actions.clearPromptSelection],
 
@@ -903,15 +895,6 @@ class PuffinApp {
           ['LOAD_DEVELOPER_PROFILE', actions.loadDeveloperProfile],
           ['LOAD_GITHUB_REPOSITORIES', actions.loadGithubRepositories],
           ['LOAD_GITHUB_ACTIVITY', actions.loadGithubActivity],
-
-          // Handoff actions
-          ['SHOW_HANDOFF_REVIEW', actions.showHandoffReview],
-          ['UPDATE_HANDOFF_SUMMARY', actions.updateHandoffSummary],
-          ['COMPLETE_HANDOFF', actions.completeHandoff],
-          ['CANCEL_HANDOFF', actions.cancelHandoff],
-          ['DELETE_HANDOFF', actions.deleteHandoff],
-          ['SET_BRANCH_HANDOFF_CONTEXT', actions.setBranchHandoffContext],
-          ['CLEAR_BRANCH_HANDOFF_CONTEXT', actions.clearBranchHandoffContext],
 
           // Stuck detection actions
           ['RECORD_ITERATION_OUTPUT', actions.recordIterationOutput],

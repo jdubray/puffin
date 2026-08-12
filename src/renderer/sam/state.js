@@ -155,38 +155,12 @@ function computePromptState(model) {
  * History state computation
  */
 function computeHistoryState(model) {
-  const { branches, activeBranch, activePromptId, expandedThreads, threadSearchQuery, branchOrder, lastSelectedPromptPerBranch } = model.history
+  const { branches, activeBranch, activePromptId, expandedThreads, threadSearchQuery } = model.history
 
   console.log('[SAM-DEBUG] computeHistoryState - activeBranch:', activeBranch, 'activePromptId:', activePromptId)
 
-  // Get ordered branch IDs (use branchOrder if available, otherwise default order)
-  const orderedBranchIds = branchOrder && branchOrder.length > 0
-    ? branchOrder.filter(id => branches[id]) // Filter out any deleted branches
-    : Object.keys(branches)
-
-  // Add any new branches that aren't in the order yet
-  const allBranchIds = Object.keys(branches)
-  const missingBranches = allBranchIds.filter(id => !orderedBranchIds.includes(id))
-  const finalOrder = [...orderedBranchIds, ...missingBranches]
-
-  // Build branch list with metadata in the specified order
-  const branchList = finalOrder.map(id => {
-    const branch = branches[id]
-    if (!branch) return null
-    return {
-      id,
-      name: branch.name,
-      icon: branch.icon || 'folder',
-      promptCount: branch.prompts.length,
-      isActive: id === activeBranch,
-      // Include branch settings for UI (settings modal, context menu)
-      codeModificationAllowed: branch.codeModificationAllowed,
-      assignedPlugins: branch.assignedPlugins || []
-    }
-  }).filter(Boolean)
-
-  // Get active branch prompts as flat tree
-  const activeBranchData = branches[activeBranch]
+  // Single implicit stream: everything lives in the 'main' branch.
+  const activeBranchData = branches[activeBranch] || branches.main
   const promptTree = activeBranchData ? flattenPromptTree(activeBranchData) : []
 
   // Create a map of parent IDs to check which prompts have children
@@ -256,14 +230,11 @@ function computeHistoryState(model) {
   })
 
   const result = {
-    branches: branchList,
     // Keep full raw history for persistence
     raw: {
       branches,
       activeBranch,
-      activePromptId,
-      branchOrder,
-      lastSelectedPromptPerBranch
+      activePromptId
     },
     activeBranch,
     activePromptId,

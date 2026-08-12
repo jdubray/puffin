@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="components/git-panel/git-panel.css">
   <link rel="stylesheet" href="components/polygraph-workbench/polygraph-workbench.css">
   <link rel="stylesheet" href="components/specs-view/specs-view.css">
+  <link rel="stylesheet" href="components/board-view/board-view.css">
 </head>
 <body>
   <!-- Toast Notifications Container -->
@@ -66,6 +67,7 @@
         <button class="nav-btn" data-view="config" data-help="Configure project settings, Claude guidance options, and manage plugins.">Config</button>
         <button class="nav-btn active" data-view="prompt" data-help="Compose and send prompts to Claude Code, and view conversation responses.">Prompt</button>
         <button class="nav-btn" data-view="specs" data-help="Browse the project's sekkei (GLM spec DAG): nodes, SCRs, and the 7-gate verifier.">Specs</button>
+        <button class="nav-btn" data-view="board" data-help="Verified kanban: cards are durable machine instances; drags are dispatches the machine may reject.">Board</button>
         <!-- Designer is now provided by designer-plugin -->
         <button class="nav-btn" data-view="user-stories" data-help="View and manage your Task backlog on the Kanban board.">Backlog</button>
         <button class="nav-btn" data-view="cli-output" data-help="View the live Claude Code CLI output stream and raw JSON messages.">CLI Output</button>
@@ -815,6 +817,15 @@
           <div class="view-content">
             <div id="specs-view-root">
               <!-- Rendered dynamically by SpecsViewComponent -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Board View (verified kanban) -->
+        <section id="board-view" class="view">
+          <div class="view-content">
+            <div id="board-view-root">
+              <!-- Rendered dynamically by BoardViewComponent -->
             </div>
           </div>
         </section>

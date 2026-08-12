@@ -1289,7 +1289,7 @@ export const resetStuckDetectionAcceptor = model => proposal => {
 export const switchViewAcceptor = model => proposal => {
   if (proposal?.type === 'SWITCH_VIEW') {
     // Core views plus plugin-contributed views (e.g., 'designer' from designer-plugin)
-    const validViews = ['config', 'prompt', 'specs', 'user-stories', 'cli-output', 'polygraph', 'profile', 'git', 'debug', 'designer']
+    const validViews = ['config', 'prompt', 'specs', 'board', 'user-stories', 'cli-output', 'polygraph', 'profile', 'git', 'debug', 'designer']
     if (validViews.includes(proposal.payload.view)) {
       model.currentView = proposal.payload.view
     }

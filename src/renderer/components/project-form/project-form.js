@@ -518,6 +518,8 @@ export class ProjectFormComponent {
     const ollamaModelInput = document.getElementById('ollama-model-input')
     if (mistralApiKeyInput) mistralApiKeyInput.value = config.mistralApiKey || ''
     if (vibeModelInput) vibeModelInput.value = config.vibeModel || ''
+    const polygraphDirInput = document.getElementById('polygraph-dir-input')
+    if (polygraphDirInput) polygraphDirInput.value = config.polygraphDir || ''
     if (deepagentsCmdInput) deepagentsCmdInput.value = config.deepagentsCmd || ''
     if (ollamaHostInput) ollamaHostInput.value = config.ollamaHost || ''
     if (ollamaModelInput) ollamaModelInput.value = config.ollamaModel || ''
@@ -664,6 +666,7 @@ export class ProjectFormComponent {
       mistralApiKey: this.getElementValue('mistral-api-key-input', '').trim(),
       // vibe-model-input no longer exists in the UI — carry the loaded value
       vibeModel: (this._loadedConfig?.vibeModel || '').trim(),
+      polygraphDir: this.getElementValue('polygraph-dir-input', '').trim(),
       deepagentsCmd: this.getElementValue('deepagents-cmd-input', '').trim(),
       ollamaHost: this.getElementValue('ollama-host-input', '').trim(),
       ollamaModel: this.getElementValue('ollama-model-input', '').trim(),

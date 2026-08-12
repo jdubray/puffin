@@ -416,6 +416,16 @@
               </fieldset>
 
               <fieldset class="options-fieldset">
+                <legend>Polygraph Engines</legend>
+                <p class="fieldset-description">The Polygraph workbench (model checking, diagrams, invariant elicitation, evolution gates) runs entirely locally — no API key required. Puffin looks for the engines in a sibling <code>polygraph</code> checkout by default.</p>
+                <div class="form-group">
+                  <label for="polygraph-dir-input">Polygraph Checkout <span class="label-optional">(optional)</span></label>
+                  <input type="text" id="polygraph-dir-input" class="form-control" placeholder="../polygraph">
+                  <small class="form-hint">Path to your polygraph checkout (absolute, or relative to the project). Leave blank to use a sibling checkout or the <code>POLYGRAPH_DIR</code> environment variable.</small>
+                </div>
+              </fieldset>
+
+              <fieldset class="options-fieldset">
                 <legend>Voice Input</legend>
                 <p class="fieldset-description">Dictate prompts using your microphone. Requires an OpenAI-compatible Speech-to-Text API key.</p>
 

@@ -167,7 +167,12 @@ function setIpcProjectPath(newProjectPath) {
   projectPath = newProjectPath
   if (claudeService) claudeService.setProjectPath(newProjectPath)
   if (gitService) gitService.setProjectPath(newProjectPath)
-  if (polygraphService) polygraphService.setProjectPath(newProjectPath)
+  if (polygraphService) {
+    polygraphService.setProjectPath(newProjectPath)
+    // Config is not loaded yet at project-switch time; state:init applies
+    // the configured engines path once the config is read.
+    polygraphService.setConfiguredDir(puffinState?.config?.polygraphDir)
+  }
   // Propagate existing config so agentCmd is correct from the first submission
   if (claudeService && puffinState) {
     try {
@@ -185,6 +190,9 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('state:init', async () => {
     try {
       const state = await puffinState.open(projectPath)
+
+      // Apply the configured Polygraph engines path now that config is loaded
+      polygraphService.setConfiguredDir(state?.config?.polygraphDir)
 
       // Initialize MetricsService after database is ready
       try {
@@ -226,6 +234,9 @@ function setupStateHandlers(ipcMain) {
 
       // Propagate agent config to ClaudeService so provider/deepagentsCmd take effect immediately
       claudeService.setAgentConfig(config)
+
+      // Polygraph engines path takes effect immediately as well
+      polygraphService.setConfiguredDir(config.polygraphDir)
 
       // Sync snip PreToolUse hook into .claude/settings.json
       if (projectPath) {

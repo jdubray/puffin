@@ -49,6 +49,12 @@ class PolygraphService {
     this._resolvedDir = undefined // project change can change the resolution
   }
 
+  /** Apply the project-config engines path (Config → Polygraph Engines). */
+  setConfiguredDir(dir) {
+    this._polygraphDir = (typeof dir === 'string' && dir.trim()) ? dir.trim() : null
+    this._resolvedDir = undefined
+  }
+
   /**
    * Resolve the Polygraph checkout directory.
    * Order: explicit option > POLYGRAPH_DIR env > sibling of the project >

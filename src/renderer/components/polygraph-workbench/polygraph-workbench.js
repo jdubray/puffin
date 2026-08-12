@@ -298,6 +298,7 @@ export class PolygraphWorkbenchComponent {
     return `<div class="pgwb-status pgwb-status-ok">
       Engines: <code>${esc(this.status.polygraphDir)}</code>
       ${this.status.polyviz ? '· polyviz available' : '· polyviz not found'}
+      · local &amp; deterministic — no API key required
     </div>`
   }
 

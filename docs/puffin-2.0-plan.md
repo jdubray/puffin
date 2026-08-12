@@ -22,9 +22,13 @@ Puffin 2.0 is a spec-oriented development manager over the Claude Code CLI:
 
 1. **GLM replaces branches/threads.** Organizational primitives become workspace → sekkei DAG → SCR →
    release, served by the always-on GLM server (`localhost:3300`, REST + WS + `glm-mcp` + `/glm-*`).
-2. **Every state machine is managed by the Polygraph toolset.** Each machine is an artifact dir
-   (`contract.json` + SAM v2 strict-profile module + `invariants.mjs` + `intent-ledger.json`), checked
-   locally with no API key; polyrun executes, polyvers gates evolution, polyviz renders, polynv elicits.
+2. **Polygraph integration for any project built with Polygraph — the flagship feature.** Puffin is
+   the Polygraph workbench: it discovers the opened project's machine artifact dirs
+   (`contract.json` + SAM v2 strict-profile module + `invariants.mjs` + traces +
+   `polyrun.config.mjs`), runs the checker locally (no API key), renders polyviz diagrams, drives
+   polynv invariant elicitation as a GUI, gates changes through polyvers, and surfaces polyrun
+   instances/journals. Puffin's own machines under management (`machines/`) is the dogfood case of
+   the same feature, not the feature itself.
 3. **The kanban board becomes a verified workflow** ("Workflows Not Loops"): cards are polyrun
    instances, columns are contract states, drag is a rejectable dispatch, doneness is mechanical
    (GLM DoRC gate at Ready, acceptance verifier exit 0 at Done), rework is bounded and event-driven.
@@ -66,7 +70,31 @@ Original scope:
   Keep: document-editor, document-viewer, excalidraw, stats (rename CRE labels), prompt-template,
   toast-history.
 
-### Phase 1 — Puffin under Polygraph management (1–2 weeks)
+### Phase 1 — Polygraph workbench (REFRAMED 2026-08-11)
+
+The product feature: a **Polygraph panel for the opened project** — works on any project that
+carries Polygraph artifacts, with Puffin's own `machines/` as the dogfood.
+
+1. **Discovery**: scan the project for machine artifact dirs, trace corpora (`traces/*.ndjson`),
+   `polyrun.config.mjs`, `out/findings.json`, compat reports, `intent-ledger.json`.
+2. **Verify panel**: run the checker per machine (local, $0); render violations with their
+   shortest counterexample paths as replayable steps; show the rejection/coverage report.
+3. **Diagram panel**: polyviz `adaptDir` → deterministic SVG (state-machine, invariants,
+   counterexample, model-card), cached by content hash.
+4. **Invariant elicitation GUI**: polynv `questions --json` → one pre-checked question at a time
+   (HOLDS verdict or counterexample story) with confirm/reject/modify → `record` →
+   `intent-ledger.json` + regenerated `invariants.mjs`.
+5. **Evolution gate**: on machine edits, `polyvers classify` + `check` against snapshots; render
+   the compat report; scaffold migrations.
+6. **Runtime view**: when the project has `polyrun.config.mjs`, list instances, journals, traces
+   (`exportTraces`) — the bridge to the Phase 3 kanban.
+7. **Session integration**: spawned Claude Code sessions get the polygraph plugin
+   (`/polygraph:workflow`, `/polygraph:polygen`, …) pre-wired against the project.
+
+Engine access: sibling checkout / `POLYGRAPH_DIR` (the PolySec pattern) via a main-process
+`polygraph-service.js`; never re-implement engine logic in Puffin.
+
+#### Dogfood sub-track (original Phase 1 scope — partially DONE)
 - Run `docs/polygraph-inventory-prompt.md` over Puffin; first target: `promptFsm`.
 - Contracts + polynv-elicited invariants; reshape to strict profile (reject-not-silent CR-3, effects
   declared not awaited CR-6, injected time/ids CR-5, finite domains, `reactors: []`).

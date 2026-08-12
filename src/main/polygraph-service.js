@@ -401,6 +401,123 @@ class PolygraphService {
   }
 
   /**
+   * @private
+   * Locate the polyvers CLI inside the Polygraph checkout.
+   */
+  _polyversBin() {
+    const polygraphDir = this.resolvePolygraphDir()
+    if (!polygraphDir) return null
+    const bin = path.join(polygraphDir, 'polyvers', 'bin', 'polyvers.mjs')
+    return fs.existsSync(bin) ? bin : null
+  }
+
+  /**
+   * @private
+   * Extract the git baseline of a machine artifact dir into
+   * .puffin/polyvers-baseline/<machineKey>/ — INSIDE the project, so the
+   * baseline module can still resolve its npm dependencies.
+   *
+   * @returns {Promise<{found: boolean, dir?: string, files?: string[], error?: string}>}
+   */
+  async _extractBaseline(machineDir, ref) {
+    if (!this.projectPath) return { found: false, error: 'No active project' }
+    const relDir = path.relative(this.projectPath, machineDir).split(path.sep).join('/')
+    if (relDir.startsWith('..')) return { found: false, error: 'Machine outside the project' }
+
+    const ls = await this._run('git',
+      ['-C', this.projectPath, 'ls-tree', '--name-only', ref, '--', `${relDir}/`])
+    if (ls.code !== 0) return { found: false, error: ls.stderr.trim() || 'git ls-tree failed' }
+
+    const ARTIFACT_FILES = ['contract.json', 'next.cjs', 'machine.cjs', 'next.js',
+      'reference.js', 'invariants.mjs', 'effects.cjs', 'effects.manifest.json', 'migrate.cjs']
+    const present = ls.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+      .map(p => p.split('/').pop())
+      .filter(name => ARTIFACT_FILES.includes(name))
+
+    if (!present.includes('contract.json')) {
+      return { found: false } // new machine — no baseline to gate against
+    }
+
+    const machineKey = relDir.split('/').join('__')
+    const baseDir = path.join(this.projectPath, '.puffin', 'polyvers-baseline', machineKey)
+    fs.rmSync(baseDir, { recursive: true, force: true })
+    fs.mkdirSync(baseDir, { recursive: true })
+
+    for (const name of present) {
+      const show = await this._run('git',
+        ['-C', this.projectPath, 'show', `${ref}:${relDir}/${name}`])
+      if (show.code !== 0) return { found: false, error: show.stderr.trim() }
+      fs.writeFileSync(path.join(baseDir, name), show.stdout)
+    }
+    return { found: true, dir: baseDir, files: present }
+  }
+
+  /**
+   * Evolution gate: compare the working machine against its git baseline
+   * with polyvers (classify + the gates its lanes require).
+   *
+   * @param {string} machineDir
+   * @param {Object} [options]
+   * @param {string} [options.ref='HEAD'] - Git ref for the baseline
+   * @param {string} [options.snapshotsPath] - Live fleet snapshots (preferred
+   *   over the synthesized corpus, which is the weakest tier)
+   * @returns {Promise<Object>} { success, baseline, report?, error? }
+   */
+  async evolutionGate(machineDir, options = {}) {
+    const bin = this._polyversBin()
+    if (!bin) return { success: false, error: 'polyvers not found in the Polygraph checkout' }
+    const ref = options.ref || 'HEAD'
+
+    const baseline = await this._extractBaseline(machineDir, ref)
+    if (baseline.error) return { success: false, error: baseline.error }
+    if (!baseline.found) {
+      return { success: true, baseline: 'none', ref, verdict: 'NEW' }
+    }
+
+    try {
+      const args = [bin, 'check', '--old', baseline.dir, '--new', machineDir, '--json']
+      if (options.snapshotsPath) args.push('--snapshots', options.snapshotsPath)
+      else args.push('--synthesize')
+
+      const { stdout, stderr } = await this._run(process.execPath, args)
+      try {
+        const report = JSON.parse(stdout)
+        return { success: true, baseline: 'git', ref, report }
+      } catch {
+        return { success: false, error: `${stdout}${stderr}`.trim() }
+      }
+    } finally {
+      fs.rmSync(baseline.dir, { recursive: true, force: true })
+    }
+  }
+
+  /**
+   * Scaffold a migrate.cjs in the machine dir from the shape diff against
+   * the git baseline (polyvers migrate scaffold).
+   *
+   * @param {string} machineDir
+   * @param {Object} [options]
+   * @param {string} [options.ref='HEAD']
+   * @returns {Promise<{success: boolean, output?: string, error?: string}>}
+   */
+  async scaffoldMigration(machineDir, options = {}) {
+    const bin = this._polyversBin()
+    if (!bin) return { success: false, error: 'polyvers not found in the Polygraph checkout' }
+
+    const baseline = await this._extractBaseline(machineDir, options.ref || 'HEAD')
+    if (baseline.error || !baseline.found) {
+      return { success: false, error: baseline.error || 'No baseline to scaffold from' }
+    }
+    try {
+      const { code, stdout, stderr } = await this._run(process.execPath,
+        [bin, 'migrate', 'scaffold', '--old', baseline.dir, '--new', machineDir])
+      return { success: code === 0, output: `${stdout}${stderr}`.trim() }
+    } finally {
+      fs.rmSync(baseline.dir, { recursive: true, force: true })
+    }
+  }
+
+  /**
    * Read a rendered diagram's SVG markup for inline display.
    *
    * Only files produced by renderDiagrams are readable: the path must be an

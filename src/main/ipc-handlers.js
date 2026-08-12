@@ -342,6 +342,24 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  ipcMain.handle('polygraph:evolution', async (event, { machineDir, ref, snapshotsPath } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.evolutionGate(machineDir, { ref, snapshotsPath })
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:scaffoldMigration', async (event, { machineDir, ref } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.scaffoldMigration(machineDir, { ref })
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('polygraph:readDiagram', async (event, { svgPath } = {}) => {
     try {
       if (!svgPath) return { success: false, error: 'svgPath is required' }

@@ -802,7 +802,10 @@ contextBridge.exposeInMainWorld('puffin', {
     nvHarvest: (args) => ipcRenderer.invoke('polygraph:nvHarvest', args),
     nvQuestions: (args) => ipcRenderer.invoke('polygraph:nvQuestions', args),
     nvRecord: (args) => ipcRenderer.invoke('polygraph:nvRecord', args),
-    nvReport: (args) => ipcRenderer.invoke('polygraph:nvReport', args)
+    nvReport: (args) => ipcRenderer.invoke('polygraph:nvReport', args),
+    // Evolution gate (polyvers): working machine vs git baseline
+    evolution: (args) => ipcRenderer.invoke('polygraph:evolution', args),
+    scaffoldMigration: (args) => ipcRenderer.invoke('polygraph:scaffoldMigration', args)
   },
 
   /**

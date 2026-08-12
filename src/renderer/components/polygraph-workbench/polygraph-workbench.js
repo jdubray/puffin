@@ -53,6 +53,7 @@ export class PolygraphWorkbenchComponent {
     this.results = new Map() // machineDir -> check result
     this.diagrams = new Map() // machineDir -> { svgs: [{name, markup}] }
     this.elicitation = new Map() // machineDir -> { report, question, lastOutput, pending }
+    this.evolution = new Map() // machineDir -> { report, verdict, ref, pending }
     this.author = 'puffin-user'
     this.isBusy = false
     this.hasScanned = false
@@ -211,6 +212,32 @@ export class PolygraphWorkbenchComponent {
     }
   }
 
+  /** Run the polyvers evolution gate against the git baseline (HEAD) */
+  async runEvolution(machineDir) {
+    this.evolution.set(machineDir, { pending: true })
+    this.render()
+    try {
+      const result = await window.puffin.polygraph.evolution({ machineDir })
+      this.evolution.set(machineDir, result)
+    } catch (error) {
+      this.evolution.set(machineDir, { success: false, error: error.message })
+    }
+    this.render()
+  }
+
+  async scaffoldMigration(machineDir) {
+    this.evolution.set(machineDir, { pending: true })
+    this.render()
+    const result = await window.puffin.polygraph.scaffoldMigration({ machineDir })
+    // Re-run the gate — the scaffold changes the migrate gate's outcome
+    await this.runEvolution(machineDir)
+    const entry = this.evolution.get(machineDir)
+    if (entry) {
+      entry.scaffoldOutput = result.output || result.error
+      this.render()
+    }
+  }
+
   _onClick(e) {
     const button = e.target.closest('button[data-action]')
     if (!button || this.isBusy && button.dataset.action !== 'refresh') return
@@ -231,6 +258,12 @@ export class PolygraphWorkbenchComponent {
     }
     else if (action === 'harvest' && dir) this.harvest(dir)
     else if (action === 'record' && dir && disposition) this.record(dir, disposition)
+    else if (action === 'evolution' && dir) this.runEvolution(dir)
+    else if (action === 'hide-evolution' && dir) {
+      this.evolution.delete(dir)
+      this.render()
+    }
+    else if (action === 'scaffold-migration' && dir) this.scaffoldMigration(dir)
   }
 
   render() {
@@ -288,6 +321,7 @@ export class PolygraphWorkbenchComponent {
     const result = this.results.get(machine.dir)
     const diagram = this.diagrams.get(machine.dir)
     const elicitation = this.elicitation.get(machine.dir)
+    const evolution = this.evolution.get(machine.dir)
 
     return `<div class="pgwb-machine">
       <div class="pgwb-machine-header">
@@ -311,11 +345,62 @@ export class PolygraphWorkbenchComponent {
           <button class="btn btn-secondary btn-sm" data-action="${elicitation ? 'hide-elicit' : 'elicit'}"
             data-dir="${esc(machine.dir)}"
             ${!this.status?.available ? 'disabled' : ''}>${elicitation ? 'Hide invariants' : 'Invariants'}</button>
+          <button class="btn btn-secondary btn-sm" data-action="${evolution ? 'hide-evolution' : 'evolution'}"
+            data-dir="${esc(machine.dir)}"
+            ${!this.status?.available ? 'disabled' : ''}>${evolution ? 'Hide evolution' : 'Evolution'}</button>
         </div>
       </div>
       ${result ? this._renderResult(result) : ''}
       ${diagram ? this._renderDiagrams(diagram) : ''}
       ${elicitation ? this._renderElicitation(machine, elicitation) : ''}
+      ${evolution ? this._renderEvolution(machine, evolution) : ''}
+    </div>`
+  }
+
+  _renderEvolution(machine, entry) {
+    if (entry.pending) {
+      return '<div class="pgwb-result pgwb-result-pending">polyvers gating against the git baseline…</div>'
+    }
+    if (!entry.success) {
+      return `<div class="pgwb-result pgwb-result-fail">✗ ${esc(entry.error || 'Evolution gate failed')}</div>`
+    }
+    if (entry.baseline === 'none') {
+      return `<div class="pgwb-elicit">
+        <div class="pgwb-elicit-header">Evolution gate</div>
+        <div class="pgwb-elicit-empty">New machine — no baseline at ${esc(entry.ref)}, nothing to gate.
+        The gate activates once a first version is committed.</div>
+      </div>`
+    }
+
+    const report = entry.report || {}
+    const isPass = report.verdict === 'PASS'
+    const gates = report.gates || []
+    const migrateFailed = gates.some(g => g.gate === 'migrate' && !g.ok)
+
+    return `<div class="pgwb-elicit">
+      <div class="pgwb-elicit-header">Evolution gate — vs ${esc(entry.ref)}
+        <span class="pgwb-badge ${isPass ? '' : 'pgwb-badge-warn'}">${esc(report.verdict || '?')}</span>
+        ${report.identical ? '<span class="pgwb-badge">identical</span>' : ''}
+        ${(report.lanes || []).map(l => `<span class="pgwb-badge">${esc(l)}</span>`).join('')}
+      </div>
+      ${report.identical ? '<div class="pgwb-elicit-empty">No change against the baseline — nothing to gate.</div>' : `
+        <div class="pgwb-gates">
+          ${gates.map(g => `
+            <div class="pgwb-gate ${g.ok ? 'pgwb-gate-ok' : 'pgwb-gate-fail'}">
+              <span class="pgwb-gate-mark">${g.ok ? '✓' : '✗'}</span>
+              <span class="pgwb-gate-name">${esc(g.gate)}</span>
+              <span class="pgwb-gate-summary">${esc(g.summary || '')}</span>
+            </div>
+            ${!g.ok && g.failures?.length ? `<pre class="pgwb-output">${esc(g.failures.slice(0, 12).join('\n'))}</pre>` : ''}
+          `).join('')}
+        </div>
+        ${report.corpus ? `<div class="pgwb-corpus-note">Corpus: ${esc(report.corpus.source)} (${report.corpus.count} snapshot${report.corpus.count === 1 ? '' : 's'})</div>` : ''}
+        ${migrateFailed ? `<div class="pgwb-question-actions">
+          <button class="btn btn-primary btn-sm" data-action="scaffold-migration" data-dir="${esc(machine.dir)}">Scaffold migration</button>
+          <span class="pgwb-question-note">Shape changed — scaffold a migrate.cjs from the diff, then complete it by hand.</span>
+        </div>` : ''}
+      `}
+      ${entry.scaffoldOutput ? `<pre class="pgwb-output">${esc(entry.scaffoldOutput)}</pre>` : ''}
     </div>`
   }
 

@@ -262,6 +262,45 @@
   margin-top: 4px;
 }
 
+/* Evolution gate */
+
+.pgwb-gates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pgwb-gate {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.pgwb-gate-ok .pgwb-gate-mark { color: var(--success-color, #4cae6f); }
+.pgwb-gate-fail { background: rgba(224, 98, 88, 0.08); }
+.pgwb-gate-fail .pgwb-gate-mark { color: var(--error-color, #e06258); }
+
+.pgwb-gate-name {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  min-width: 170px;
+}
+
+.pgwb-gate-summary {
+  color: var(--text-secondary, #999);
+  font-size: 12px;
+}
+
+.pgwb-corpus-note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-secondary, #999);
+  font-style: italic;
+}
+
 .pgwb-concern {
   flex: 1;
   min-width: 180px;

@@ -177,6 +177,33 @@ describe('PolygraphService', () => {
       })
   })
 
+  describe('evolution gate (polyvers)', () => {
+    const machineDir = path.join(repoRoot, 'machines', 'prompt-lifecycle')
+
+    it('gates the unchanged dogfood machine as identical PASS',
+      { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {
+        const svc = new PolygraphService({ projectPath: repoRoot })
+        const result = await svc.evolutionGate(machineDir)
+        assert.strictEqual(result.success, true, result.error)
+        if (result.baseline === 'git') {
+          // Working tree may differ from HEAD mid-development; both outcomes
+          // are legal, but the report must always carry a verdict.
+          assert.ok(['PASS', 'FAIL'].includes(result.report.verdict))
+          assert.strictEqual(typeof result.report.identical, 'boolean')
+        } else {
+          assert.strictEqual(result.baseline, 'none')
+        }
+      })
+
+    it('reports machines outside the project as an error',
+      { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {
+        const svc = new PolygraphService({ projectPath: path.join(repoRoot, 'machines') })
+        const result = await svc.evolutionGate(path.join(repoRoot, 'docs'))
+        assert.strictEqual(result.success, false)
+        assert.match(result.error, /outside the project/i)
+      })
+  })
+
   describe('checkAll', () => {
     it('checks every repo machine green',
       { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {

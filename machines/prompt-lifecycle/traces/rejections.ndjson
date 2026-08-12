@@ -1,0 +1,6 @@
+{"pre":{"promptState":"idle","hasResponse":false,"endedVia":""},"action":"SUBMIT_PROMPT","data":{},"post":{"promptState":"idle","hasResponse":false,"endedVia":""}}
+{"pre":{"promptState":"idle","hasResponse":false,"endedVia":""},"action":"CANCEL_PROMPT","data":{},"post":{"promptState":"idle","hasResponse":false,"endedVia":""}}
+{"pre":{"promptState":"idle","hasResponse":false,"endedVia":""},"action":"START_COMPOSE","data":{},"post":{"promptState":"composing","hasResponse":false,"endedVia":""}}
+{"pre":{"promptState":"composing","hasResponse":false,"endedVia":""},"action":"START_COMPOSE","data":{},"post":{"promptState":"composing","hasResponse":false,"endedVia":""}}
+{"pre":{"promptState":"composing","hasResponse":false,"endedVia":""},"action":"COMPLETE_RESPONSE","data":{},"post":{"promptState":"composing","hasResponse":false,"endedVia":""}}
+{"pre":{"promptState":"composing","hasResponse":false,"endedVia":""},"action":"CANCEL_PROMPT","data":{},"post":{"promptState":"idle","hasResponse":false,"endedVia":""}}

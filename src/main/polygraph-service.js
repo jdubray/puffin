@@ -524,6 +524,123 @@ class PolygraphService {
   }
 
   /**
+   * @private
+   * Project-relative key for per-machine output dirs (collision-safe).
+   */
+  _machineKey(machineDir) {
+    return this.projectPath
+      ? (path.relative(this.projectPath, machineDir).split(path.sep).join('__') || 'root')
+      : path.basename(machineDir)
+  }
+
+  /**
+   * List a machine's trace corpus (traces/*.ndjson with window counts).
+   *
+   * @param {string} machineDir
+   * @returns {{success: boolean, traces: Array<{file: string, windows: number}>}}
+   */
+  getTraces(machineDir) {
+    const tracesDir = path.join(machineDir, 'traces')
+    if (!fs.existsSync(tracesDir)) return { success: true, traces: [] }
+    try {
+      const traces = fs.readdirSync(tracesDir)
+        .filter(f => f.endsWith('.ndjson'))
+        .map(f => {
+          const content = fs.readFileSync(path.join(tracesDir, f), 'utf-8')
+          return { file: f, windows: content.split('\n').filter(l => l.trim()).length }
+        })
+      return { success: true, traces }
+    } catch (error) {
+      return { success: false, error: error.message, traces: [] }
+    }
+  }
+
+  /**
+   * Corpus hygiene check (validate_corpus.mjs): chaining, terminals, and
+   * reject-reason coverage warnings.
+   *
+   * @param {string} machineDir
+   * @returns {Promise<{success: boolean, output?: string, error?: string}>}
+   */
+  async validateCorpus(machineDir) {
+    const polygraphDir = this.resolvePolygraphDir()
+    if (!polygraphDir) return { success: false, error: 'Polygraph checkout not found (set POLYGRAPH_DIR)' }
+    const tracesDir = path.join(machineDir, 'traces')
+    if (!fs.existsSync(tracesDir)) return { success: false, error: 'No traces/ directory' }
+
+    const { code, stdout, stderr } = await this._run(process.execPath, [
+      path.join(polygraphDir, 'scripts', 'validate_corpus.mjs'),
+      path.join(machineDir, 'contract.json'),
+      tracesDir
+    ])
+    return { success: code === 0, output: `${stdout}${stderr}`.trim() }
+  }
+
+  /**
+   * Replay the machine's trace corpus against the machine itself
+   * (verify.mjs replay-only — conformance, no API key). Answers: does the
+   * committed module still reproduce the recorded behavior, window by
+   * window?
+   *
+   * @param {string} machineDir
+   * @returns {Promise<Object>} { success, summary?, failures?, output?, error? }
+   */
+  async replayTraces(machineDir) {
+    const polygraphDir = this.resolvePolygraphDir()
+    if (!polygraphDir) return { success: false, error: 'Polygraph checkout not found (set POLYGRAPH_DIR)' }
+    if (!this.projectPath) return { success: false, error: 'No active project' }
+
+    const tracesDir = path.join(machineDir, 'traces')
+    const contract = path.join(machineDir, 'contract.json')
+    const moduleFile = ['next.cjs', 'machine.cjs', 'next.js', 'reference.js']
+      .find(f => fs.existsSync(path.join(machineDir, f)))
+    if (!moduleFile || !fs.existsSync(contract)) {
+      return { success: false, error: `Not a machine artifact dir: ${machineDir}` }
+    }
+    if (!fs.existsSync(tracesDir)) return { success: false, error: 'No traces/ directory' }
+
+    // Stage the module as the sole spec, inside the project so it can still
+    // resolve its npm dependencies.
+    const key = this._machineKey(machineDir)
+    const specDir = path.join(this.projectPath, '.puffin', 'polygraph-replay', key, 'spec')
+    const outDir = path.join(this.projectPath, '.puffin', 'polygraph-replay', key, 'out')
+    fs.rmSync(path.dirname(specDir), { recursive: true, force: true })
+    fs.mkdirSync(specDir, { recursive: true })
+    fs.mkdirSync(outDir, { recursive: true })
+    fs.copyFileSync(path.join(machineDir, moduleFile), path.join(specDir, 'spec-1.cjs'))
+
+    try {
+      const { code, stdout, stderr } = await this._run(process.execPath, [
+        path.join(polygraphDir, 'scripts', 'verify.mjs'),
+        '--contract', contract,
+        '--traces', tracesDir,
+        '--specs', specDir,
+        '--out', outDir
+      ])
+      const output = `${stdout}${stderr}`.trim()
+
+      const findingsPath = path.join(outDir, 'findings.json')
+      if (!fs.existsSync(findingsPath)) {
+        return { success: false, error: output || 'Replay produced no findings.json' }
+      }
+      const findings = JSON.parse(fs.readFileSync(findingsPath, 'utf-8'))
+      const failures = (findings.perWindow || [])
+        .filter(w => w.verdict && w.verdict !== 'consistent')
+      return {
+        success: code === 0 && failures.length === 0,
+        summary: findings.summary,
+        failures,
+        output
+      }
+    } catch (error) {
+      return { success: false, error: error.message }
+    } finally {
+      fs.rmSync(path.join(this.projectPath, '.puffin', 'polygraph-replay', key),
+        { recursive: true, force: true })
+    }
+  }
+
+  /**
    * Read a rendered diagram's SVG markup for inline display.
    *
    * Only files produced by renderDiagrams are readable: the path must be an

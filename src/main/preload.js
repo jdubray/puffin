@@ -805,7 +805,11 @@ contextBridge.exposeInMainWorld('puffin', {
     nvReport: (args) => ipcRenderer.invoke('polygraph:nvReport', args),
     // Evolution gate (polyvers): working machine vs git baseline
     evolution: (args) => ipcRenderer.invoke('polygraph:evolution', args),
-    scaffoldMigration: (args) => ipcRenderer.invoke('polygraph:scaffoldMigration', args)
+    scaffoldMigration: (args) => ipcRenderer.invoke('polygraph:scaffoldMigration', args),
+    // Trace corpus: list, hygiene-check, replay (conformance, no key)
+    traces: (args) => ipcRenderer.invoke('polygraph:traces', args),
+    validateCorpus: (args) => ipcRenderer.invoke('polygraph:validateCorpus', args),
+    replay: (args) => ipcRenderer.invoke('polygraph:replay', args)
   },
 
   /**

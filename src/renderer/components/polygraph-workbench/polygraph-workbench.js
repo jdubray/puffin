@@ -54,6 +54,7 @@ export class PolygraphWorkbenchComponent {
     this.diagrams = new Map() // machineDir -> { svgs: [{name, markup}] }
     this.elicitation = new Map() // machineDir -> { report, question, lastOutput, pending }
     this.evolution = new Map() // machineDir -> { report, verdict, ref, pending }
+    this.traces = new Map() // machineDir -> { traces, validation, replay, pending }
     this.author = 'puffin-user'
     this.isBusy = false
     this.hasScanned = false
@@ -238,6 +239,32 @@ export class PolygraphWorkbenchComponent {
     }
   }
 
+  async openTraces(machineDir) {
+    this.traces.set(machineDir, { pending: true })
+    this.render()
+    const result = await window.puffin.polygraph.traces({ machineDir })
+    this.traces.set(machineDir, { traces: result.traces || [], error: result.error })
+    this.render()
+  }
+
+  async validateCorpus(machineDir) {
+    const entry = this.traces.get(machineDir) || {}
+    this.traces.set(machineDir, { ...entry, pending: true })
+    this.render()
+    const result = await window.puffin.polygraph.validateCorpus({ machineDir })
+    this.traces.set(machineDir, { ...entry, pending: false, validation: result })
+    this.render()
+  }
+
+  async replayTraces(machineDir) {
+    const entry = this.traces.get(machineDir) || {}
+    this.traces.set(machineDir, { ...entry, pending: true })
+    this.render()
+    const result = await window.puffin.polygraph.replay({ machineDir })
+    this.traces.set(machineDir, { ...entry, pending: false, replay: result })
+    this.render()
+  }
+
   _onClick(e) {
     const button = e.target.closest('button[data-action]')
     if (!button || this.isBusy && button.dataset.action !== 'refresh') return
@@ -264,6 +291,13 @@ export class PolygraphWorkbenchComponent {
       this.render()
     }
     else if (action === 'scaffold-migration' && dir) this.scaffoldMigration(dir)
+    else if (action === 'traces' && dir) this.openTraces(dir)
+    else if (action === 'hide-traces' && dir) {
+      this.traces.delete(dir)
+      this.render()
+    }
+    else if (action === 'validate-corpus' && dir) this.validateCorpus(dir)
+    else if (action === 'replay' && dir) this.replayTraces(dir)
   }
 
   render() {
@@ -323,6 +357,7 @@ export class PolygraphWorkbenchComponent {
     const diagram = this.diagrams.get(machine.dir)
     const elicitation = this.elicitation.get(machine.dir)
     const evolution = this.evolution.get(machine.dir)
+    const traces = this.traces.get(machine.dir)
 
     return `<div class="pgwb-machine">
       <div class="pgwb-machine-header">
@@ -349,12 +384,62 @@ export class PolygraphWorkbenchComponent {
           <button class="btn btn-secondary btn-sm" data-action="${evolution ? 'hide-evolution' : 'evolution'}"
             data-dir="${esc(machine.dir)}"
             ${!this.status?.available ? 'disabled' : ''}>${evolution ? 'Hide evolution' : 'Evolution'}</button>
+          <button class="btn btn-secondary btn-sm" data-action="${traces ? 'hide-traces' : 'traces'}"
+            data-dir="${esc(machine.dir)}"
+            ${machine.traceFiles === 0 ? 'disabled title="No traces/ directory"' : ''}>${traces ? 'Hide traces' : 'Traces'}</button>
         </div>
       </div>
       ${result ? this._renderResult(result) : ''}
       ${diagram ? this._renderDiagrams(diagram) : ''}
       ${elicitation ? this._renderElicitation(machine, elicitation) : ''}
       ${evolution ? this._renderEvolution(machine, evolution) : ''}
+      ${traces ? this._renderTraces(machine, traces) : ''}
+    </div>`
+  }
+
+  _renderTraces(machine, entry) {
+    if (entry.pending) {
+      return '<div class="pgwb-result pgwb-result-pending">Working on the trace corpus…</div>'
+    }
+    if (entry.error) {
+      return `<div class="pgwb-result pgwb-result-fail">✗ ${esc(entry.error)}</div>`
+    }
+    const total = (entry.traces || []).reduce((n, t) => n + t.windows, 0)
+    const replay = entry.replay
+
+    return `<div class="pgwb-elicit">
+      <div class="pgwb-elicit-header">Trace corpus
+        <span class="pgwb-badge">${entry.traces.length} scenario${entry.traces.length === 1 ? '' : 's'} · ${total} windows</span>
+      </div>
+      <div class="pgwb-trace-list">
+        ${entry.traces.map(t => `<div class="pgwb-trace-row">
+          <code>${esc(t.file)}</code><span>${t.windows} windows</span>
+        </div>`).join('')}
+      </div>
+      <div class="pgwb-question-actions">
+        <button class="btn btn-secondary btn-sm" data-action="validate-corpus" data-dir="${esc(machine.dir)}">Validate corpus</button>
+        <button class="btn btn-primary btn-sm" data-action="replay" data-dir="${esc(machine.dir)}">Replay against machine</button>
+      </div>
+      ${entry.validation ? `<div class="pgwb-result ${entry.validation.success ? 'pgwb-result-ok' : 'pgwb-result-fail'}">
+        ${entry.validation.success ? '✓ corpus hygiene' : '✗ corpus problems'}
+        <pre class="pgwb-output">${esc(entry.validation.output || entry.validation.error || '')}</pre>
+      </div>` : ''}
+      ${replay ? this._renderReplay(replay) : ''}
+    </div>`
+  }
+
+  _renderReplay(replay) {
+    if (!replay.summary) {
+      return `<div class="pgwb-result pgwb-result-fail">✗ ${esc(replay.error || 'Replay failed')}</div>`
+    }
+    const s = replay.summary
+    const clean = replay.success
+    return `<div class="pgwb-result ${clean ? 'pgwb-result-ok' : 'pgwb-result-fail'}">
+      ${clean
+        ? `✓ ${s.consistent}/${s.windows} windows consistent — the machine reproduces its recorded behavior`
+        : `✗ ${s.windows - s.consistent} of ${s.windows} windows diverge (${s.specError} spec-error, ${s.codeFinding} code-finding/contract, ${s.unscoreableAll} unscoreable)`}
+      ${!clean && replay.failures?.length ? `<pre class="pgwb-output">${esc(replay.failures.slice(0, 10).map(f =>
+        `${f.scenario}[${f.index}] ${f.action}: ${f.verdict}`).join('\n'))}</pre>` : ''}
     </div>`
   }
 

@@ -204,6 +204,34 @@ describe('PolygraphService', () => {
       })
   })
 
+  describe('trace corpus', () => {
+    const machineDir = path.join(repoRoot, 'machines', 'prompt-lifecycle')
+
+    it('lists trace files with window counts', () => {
+      const svc = new PolygraphService({ projectPath: repoRoot })
+      const result = svc.getTraces(machineDir)
+      assert.strictEqual(result.success, true)
+      assert.ok(result.traces.length >= 4)
+      assert.ok(result.traces.every(t => t.windows > 0))
+    })
+
+    it('returns empty traces for a machine without a corpus', () => {
+      const svc = new PolygraphService({ projectPath: repoRoot })
+      const result = svc.getTraces(path.join(repoRoot, 'machines', 'app-lifecycle'))
+      assert.deepStrictEqual(result.traces, [])
+    })
+
+    it('validates and replays the dogfood corpus clean',
+      { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {
+        const svc = new PolygraphService({ projectPath: repoRoot })
+        const validation = await svc.validateCorpus(machineDir)
+        assert.strictEqual(validation.success, true, validation.output)
+        const replay = await svc.replayTraces(machineDir)
+        assert.strictEqual(replay.success, true, replay.error || replay.output)
+        assert.strictEqual(replay.summary.consistent, replay.summary.windows)
+      })
+  })
+
   describe('checkAll', () => {
     it('checks every repo machine green',
       { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {

@@ -301,6 +301,27 @@
   font-style: italic;
 }
 
+/* Trace corpus */
+
+.pgwb-trace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.pgwb-trace-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  padding: 3px 8px;
+  color: var(--text-secondary, #999);
+}
+
+.pgwb-trace-row code {
+  font-size: 12px;
+}
+
 .pgwb-concern {
   flex: 1;
   min-width: 180px;

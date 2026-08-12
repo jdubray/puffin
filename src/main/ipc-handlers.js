@@ -371,6 +371,33 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  ipcMain.handle('polygraph:traces', async (event, { machineDir } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return polygraphService.getTraces(machineDir)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:validateCorpus', async (event, { machineDir } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.validateCorpus(machineDir)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:replay', async (event, { machineDir } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.replayTraces(machineDir)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('polygraph:readDiagram', async (event, { svgPath } = {}) => {
     try {
       if (!svgPath) return { success: false, error: 'svgPath is required' }

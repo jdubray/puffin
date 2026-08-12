@@ -997,48 +997,6 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
-  // Assign a plugin to a branch
-  ipcMain.handle('state:assignPluginToBranch', async (event, { pluginId, branchId }) => {
-    try {
-      const branch = await puffinState.assignPluginToBranch(pluginId, branchId)
-
-      return { success: true, branch }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Unassign a plugin from a branch
-  ipcMain.handle('state:unassignPluginFromBranch', async (event, { pluginId, branchId }) => {
-    try {
-      const branch = await puffinState.unassignPluginFromBranch(pluginId, branchId)
-
-      return { success: true, branch }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Get plugins assigned to a branch
-  ipcMain.handle('state:getBranchPlugins', async (event, branchId) => {
-    try {
-      const plugins = puffinState.getBranchPlugins(branchId)
-      return { success: true, plugins }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Get combined skill content for a branch
-  ipcMain.handle('state:getBranchSkillContent', async (event, branchId) => {
-    try {
-      const content = puffinState.getBranchSkillContent(branchId)
-      return { success: true, content }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
   // ============ Claude Code Agent Handlers ============
 
   // Get all installed Claude Code agents
@@ -1059,48 +1017,6 @@ function setupStateHandlers(ipcMain) {
         return { success: false, error: `Agent "${agentId}" not found` }
       }
       return { success: true, agent }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Assign an agent to a branch
-  ipcMain.handle('state:assignAgentToBranch', async (event, { agentId, branchId }) => {
-    try {
-      const branch = await puffinState.assignAgentToBranch(agentId, branchId)
-
-      return { success: true, branch }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Unassign an agent from a branch
-  ipcMain.handle('state:unassignAgentFromBranch', async (event, { agentId, branchId }) => {
-    try {
-      const branch = await puffinState.unassignAgentFromBranch(agentId, branchId)
-
-      return { success: true, branch }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Get agents assigned to a branch
-  ipcMain.handle('state:getBranchAgents', async (event, branchId) => {
-    try {
-      const agents = puffinState.getBranchAgents(branchId)
-      return { success: true, agents }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Get combined agent content for a branch
-  ipcMain.handle('state:getBranchAgentContent', async (event, branchId) => {
-    try {
-      const content = puffinState.getBranchAgentContent(branchId)
-      return { success: true, content }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -1382,20 +1298,12 @@ function setupClaudeHandlers(ipcMain) {
     }
 
     try {
-      // Get branch info for code modification permissions
-      const state = puffinState.getState()
-      const branchId = data.branchId
-      const branch = state.history?.branches?.[branchId]
-      const codeModificationAllowed = branch?.codeModificationAllowed !== false
-
-      console.log('[IPC-GUARD] Starting CLI process for branch:', branchId)
+      console.log('[IPC-GUARD] Starting CLI process')
 
       // Ensure we're using the correct project path
       const submitData = {
         ...data,
-        projectPath: projectPath,
-        codeModificationAllowed,
-        additionalDirs: branch?.additionalDirs || []
+        projectPath: projectPath
       }
 
       // Puppeteer Visual Loop: inject MCP config + prompt suffix when active

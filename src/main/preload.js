@@ -133,20 +133,6 @@ contextBridge.exposeInMainWorld('puffin', {
     // Sync skills/agents from .claude/skills/ and .claude/agents/ into the plugin list
     syncClaudeDirectory: () => ipcRenderer.invoke('state:syncClaudeDirectory'),
 
-    // Assign a plugin to a branch
-    assignPluginToBranch: (pluginId, branchId) =>
-      ipcRenderer.invoke('state:assignPluginToBranch', { pluginId, branchId }),
-
-    // Unassign a plugin from a branch
-    unassignPluginFromBranch: (pluginId, branchId) =>
-      ipcRenderer.invoke('state:unassignPluginFromBranch', { pluginId, branchId }),
-
-    // Get plugins assigned to a branch
-    getBranchPlugins: (branchId) => ipcRenderer.invoke('state:getBranchPlugins', branchId),
-
-    // Get combined skill content for a branch
-    getBranchSkillContent: (branchId) => ipcRenderer.invoke('state:getBranchSkillContent', branchId),
-
     // Database management operations (for development/troubleshooting)
     resetDatabase: (options) => ipcRenderer.invoke('state:resetDatabase', options),
     getDatabaseStatus: () => ipcRenderer.invoke('state:getDatabaseStatus')
@@ -713,24 +699,6 @@ contextBridge.exposeInMainWorld('puffin', {
       const handler = (event, data) => callback(data)
       ipcRenderer.on('plugin:deactivated', handler)
       return () => ipcRenderer.removeListener('plugin:deactivated', handler)
-    },
-
-    // === Named Plugin APIs ===
-    // Convenience wrappers for common plugins
-
-    /**
-     * Claude Config Plugin API
-     * Provides access to CLAUDE.md configuration management
-     */
-    claudeConfig: {
-      getConfig: (options) =>
-        ipcRenderer.invoke('plugin:claude-config-plugin:getConfig', options),
-      getConfigWithContext: (options) =>
-        ipcRenderer.invoke('plugin:claude-config-plugin:getConfigWithContext', options),
-      updateConfig: (content, options) =>
-        ipcRenderer.invoke('plugin:claude-config-plugin:updateConfig', { content, options }),
-      getMetadata: () =>
-        ipcRenderer.invoke('plugin:claude-config-plugin:getMetadata')
     }
   },
 

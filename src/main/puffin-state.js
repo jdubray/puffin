@@ -1323,136 +1323,10 @@ class PuffinState {
     // Remove from in-memory cache
     this.claudePlugins.splice(pluginIndex, 1)
 
-    // Remove plugin from any branch assignments
-    await this.removePluginFromAllBranches(pluginId)
-
     console.log(`[PUFFIN-STATE] Uninstalled Claude plugin: ${plugin.name} (${pluginId})`)
     return true
   }
 
-  /**
-   * Assign a plugin to a branch
-   * @param {string} pluginId - Plugin ID
-   * @param {string} branchId - Branch ID
-   * @returns {Promise<Object>} Updated branch object
-   */
-  async assignPluginToBranch(pluginId, branchId) {
-    // Verify plugin exists
-    const plugin = this.getClaudePlugin(pluginId)
-    if (!plugin) {
-      throw new Error(`Plugin "${pluginId}" not found`)
-    }
-
-    // Verify branch exists
-    const branch = this.history.branches[branchId]
-    if (!branch) {
-      throw new Error(`Branch "${branchId}" not found`)
-    }
-
-    // Initialize assignedPlugins array if not exists
-    if (!branch.assignedPlugins) {
-      branch.assignedPlugins = []
-    }
-
-    // Check if already assigned
-    if (branch.assignedPlugins.includes(pluginId)) {
-      return branch // Already assigned
-    }
-
-    // Add plugin to branch
-    branch.assignedPlugins.push(pluginId)
-    await this.saveHistory()
-
-    console.log(`[PUFFIN-STATE] Assigned plugin "${pluginId}" to branch "${branchId}"`)
-    return branch
-  }
-
-  /**
-   * Unassign a plugin from a branch
-   * @param {string} pluginId - Plugin ID
-   * @param {string} branchId - Branch ID
-   * @returns {Promise<Object>} Updated branch object
-   */
-  async unassignPluginFromBranch(pluginId, branchId) {
-    const branch = this.history.branches[branchId]
-    if (!branch) {
-      throw new Error(`Branch "${branchId}" not found`)
-    }
-
-    if (!branch.assignedPlugins) {
-      return branch // No plugins assigned
-    }
-
-    const index = branch.assignedPlugins.indexOf(pluginId)
-    if (index === -1) {
-      return branch // Plugin not assigned to this branch
-    }
-
-    branch.assignedPlugins.splice(index, 1)
-    await this.saveHistory()
-
-    console.log(`[PUFFIN-STATE] Unassigned plugin "${pluginId}" from branch "${branchId}"`)
-    return branch
-  }
-
-  /**
-   * Get plugins assigned to a branch
-   * @param {string} branchId - Branch ID
-   * @returns {Array} Array of plugin objects assigned to the branch
-   */
-  getBranchPlugins(branchId) {
-    const branch = this.history.branches[branchId]
-    if (!branch || !branch.assignedPlugins) {
-      return []
-    }
-
-    return branch.assignedPlugins
-      .map(pluginId => this.getClaudePlugin(pluginId))
-      .filter(plugin => plugin !== null)
-  }
-
-  /**
-   * Remove plugin from all branches (used during uninstall)
-   * @param {string} pluginId - Plugin ID
-   * @private
-   */
-  async removePluginFromAllBranches(pluginId) {
-    let modified = false
-
-    for (const branchId of Object.keys(this.history.branches)) {
-      const branch = this.history.branches[branchId]
-      if (branch.assignedPlugins) {
-        const index = branch.assignedPlugins.indexOf(pluginId)
-        if (index !== -1) {
-          branch.assignedPlugins.splice(index, 1)
-          modified = true
-        }
-      }
-    }
-
-    if (modified) {
-      await this.saveHistory()
-    }
-  }
-
-  /**
-   * Get combined skill content for a branch
-   * Combines all assigned plugin skills into a single markdown string
-   * @param {string} branchId - Branch ID
-   * @returns {string} Combined skill markdown content
-   */
-  getBranchSkillContent(branchId) {
-    const plugins = this.getBranchPlugins(branchId)
-    if (plugins.length === 0) {
-      return ''
-    }
-
-    const sections = plugins.map(plugin => {
-      return `## ${plugin.name}\n\n${plugin.skillContent}`
-    })
-
-    return `# Assigned Skills\n\n${sections.join('\n\n---\n\n')}`
-  }
 
   // ============ Claude Code Agent Methods ============
 
@@ -1471,106 +1345,6 @@ class PuffinState {
    */
   getClaudeAgent(agentId) {
     return this.claudeAgents?.find(a => a.id === agentId) || null
-  }
-
-  /**
-   * Assign an agent to a branch
-   * @param {string} agentId - Agent ID
-   * @param {string} branchId - Branch ID
-   * @returns {Promise<Object>} Updated branch object
-   */
-  async assignAgentToBranch(agentId, branchId) {
-    // Verify agent exists
-    const agent = this.getClaudeAgent(agentId)
-    if (!agent) {
-      throw new Error(`Agent "${agentId}" not found`)
-    }
-
-    // Verify branch exists
-    const branch = this.history.branches[branchId]
-    if (!branch) {
-      throw new Error(`Branch "${branchId}" not found`)
-    }
-
-    // Initialize assignedAgents array if not exists
-    if (!branch.assignedAgents) {
-      branch.assignedAgents = []
-    }
-
-    // Check if already assigned
-    if (branch.assignedAgents.includes(agentId)) {
-      return branch // Already assigned
-    }
-
-    // Add agent to branch
-    branch.assignedAgents.push(agentId)
-    await this.saveHistory()
-
-    console.log(`[PUFFIN-STATE] Assigned agent "${agentId}" to branch "${branchId}"`)
-    return branch
-  }
-
-  /**
-   * Unassign an agent from a branch
-   * @param {string} agentId - Agent ID
-   * @param {string} branchId - Branch ID
-   * @returns {Promise<Object>} Updated branch object
-   */
-  async unassignAgentFromBranch(agentId, branchId) {
-    const branch = this.history.branches[branchId]
-    if (!branch) {
-      throw new Error(`Branch "${branchId}" not found`)
-    }
-
-    if (!branch.assignedAgents) {
-      return branch // No agents assigned
-    }
-
-    const index = branch.assignedAgents.indexOf(agentId)
-    if (index === -1) {
-      return branch // Agent not assigned to this branch
-    }
-
-    branch.assignedAgents.splice(index, 1)
-    await this.saveHistory()
-
-    console.log(`[PUFFIN-STATE] Unassigned agent "${agentId}" from branch "${branchId}"`)
-    return branch
-  }
-
-  /**
-   * Get agents assigned to a branch
-   * @param {string} branchId - Branch ID
-   * @returns {Array} Array of agent objects assigned to the branch
-   */
-  getBranchAgents(branchId) {
-    const branch = this.history.branches[branchId]
-    if (!branch || !branch.assignedAgents) {
-      return []
-    }
-
-    return branch.assignedAgents
-      .map(agentId => this.getClaudeAgent(agentId))
-      .filter(agent => agent !== null)
-  }
-
-  /**
-   * Get combined agent content for a branch
-   * Combines all assigned agent definitions into a single markdown string
-   * @param {string} branchId - Branch ID
-   * @returns {string} Combined agent markdown content
-   */
-  getBranchAgentContent(branchId) {
-    const agents = this.getBranchAgents(branchId)
-    if (agents.length === 0) {
-      return ''
-    }
-
-    const sections = agents.map(agent => {
-      return `## ${agent.name}\n\n${agent.content}`
-    })
-
-    return `# Assigned Agents\n\n${sections.join('\n\n---\n\n')}`
   }
 
   /**
@@ -1650,9 +1424,6 @@ ${content}`
 
     const agent = this.claudeAgents[agentIndex]
 
-    // Remove from all branches first
-    await this.removeAgentFromAllBranches(agentId)
-
     // Delete agent file
     try {
       await fs.unlink(agent.path)
@@ -1665,30 +1436,6 @@ ${content}`
 
     console.log(`[PUFFIN-STATE] Uninstalled agent: ${agent.name} (${agentId})`)
     return true
-  }
-
-  /**
-   * Remove agent from all branches (used during uninstall)
-   * @param {string} agentId - Agent ID
-   * @private
-   */
-  async removeAgentFromAllBranches(agentId) {
-    let modified = false
-
-    for (const branchId of Object.keys(this.history.branches)) {
-      const branch = this.history.branches[branchId]
-      if (branch.assignedAgents) {
-        const index = branch.assignedAgents.indexOf(agentId)
-        if (index !== -1) {
-          branch.assignedAgents.splice(index, 1)
-          modified = true
-        }
-      }
-    }
-
-    if (modified) {
-      await this.saveHistory()
-    }
   }
 
   /**

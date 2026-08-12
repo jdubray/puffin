@@ -1091,11 +1091,6 @@ class PuffinApp {
       this.intents.updateConfig({ helpMode: !current })
     })
 
-    // CLAUDE.md viewer button
-    document.getElementById('view-claude-config-btn')?.addEventListener('click', () => {
-      this.intents.showModal('claude-config-view', {})
-    })
-
     // Listen for state changes
     document.addEventListener('puffin-state-change', (e) => {
       this.onStateChange(e.detail)

@@ -71,38 +71,13 @@ function getToolEmoji(toolName) {
   return TOOL_EMOJIS[toolName] || TOOL_EMOJIS.default
 }
 
-// Import branch defaults as fallback when plugin is unavailable.
-// Plugins live inside the ASAR in dev but in extraResources (Resources/plugins/)
-// in packaged builds, so the path must be resolved at runtime.
-let getDefaultBranchFocus, getCustomBranchFallback
-try {
-  const { app } = require('electron')
-  const _pluginsDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'plugins')
-    : path.join(__dirname, '..', '..', 'plugins')
-  const branchDefaults = require(path.join(_pluginsDir, 'claude-config-plugin', 'branch-defaults'))
-  getDefaultBranchFocus = branchDefaults.getDefaultBranchFocus
-  getCustomBranchFallback = branchDefaults.getCustomBranchFallback
-} catch {
-  // Electron not available (e.g. test environment) — try direct relative require
-  try {
-    const branchDefaults = require(path.join(__dirname, '..', '..', 'plugins', 'claude-config-plugin', 'branch-defaults'))
-    getDefaultBranchFocus = branchDefaults.getDefaultBranchFocus
-    getCustomBranchFallback = branchDefaults.getCustomBranchFallback
-  } catch {
-    getDefaultBranchFocus = () => ''
-    getCustomBranchFallback = () => ''
-  }
-}
-
 class ClaudeService {
   constructor() {
     this.currentProcess = null
     this.projectPath = null
     this._processLock = false // Prevents multiple CLI spawns
     this._cancelRequested = false // Track explicit cancel to distinguish from errors
-    this._pluginManager = null // Reference to plugin manager for branch focus retrieval
-    this._pendingContextUpdate = null // Queued branch focus update to include in next prompt
+    this._pluginManager = null // Reference to plugin manager for plugin action access
     this._glmMcpConfigPath = null // Project-scoped glm MCP server config (glm-integration)
     this._currentBranchId = null // Track current branch for context updates
     this._pendingQuestionTimeout = null // Auto-answer timer for AskUserQuestion
@@ -233,36 +208,6 @@ class ClaudeService {
    */
   setPluginManager(pluginManager) {
     this._pluginManager = pluginManager
-
-    // Subscribe to branch focus updates from the plugin
-    if (pluginManager) {
-      const registry = pluginManager.getRegistry()
-      if (registry) {
-        registry.on('plugin-event', (eventName, pluginName, data) => {
-          if (eventName === 'branch-focus-updated') {
-            this.handleBranchFocusUpdate(data)
-          }
-        })
-      }
-    }
-  }
-
-  /**
-   * Handle branch focus update from plugin
-   * Queues the update to be included in the next prompt
-   * @param {Object} data - Update data from plugin event
-   * @private
-   */
-  handleBranchFocusUpdate(data) {
-    // Only queue if the update is for the current branch
-    if (data.branchId && data.branchId === this._currentBranchId) {
-      console.log(`[ClaudeService] Branch focus updated for ${data.branchId}, queuing for next prompt`)
-      this._pendingContextUpdate = {
-        branchId: data.branchId,
-        timestamp: Date.now(),
-        source: data.source || 'unknown'
-      }
-    }
   }
 
   /**
@@ -989,38 +934,9 @@ class ClaudeService {
     let prompt = data.prompt
     const isResumingSession = !!data.sessionId
 
-    // Track current branch for context update notifications
+    // Track current branch id for metrics attribution
     if (data.branchId) {
       this._currentBranchId = data.branchId
-    }
-
-    // Check for pending context update (from plugin edits during conversation)
-    const hasPendingUpdate = this._pendingContextUpdate &&
-      this._pendingContextUpdate.branchId === data.branchId
-
-    if (hasPendingUpdate) {
-      // Fetch the updated branch context and notify Claude of the change
-      const updatedContext = await this.getBranchContext(data.branchId, data.codeModificationAllowed)
-      if (updatedContext) {
-        const updateNotice = `<context-update>
-The branch focus instructions have been updated. Please acknowledge and apply these updated instructions:
-
-${updatedContext}
-</context-update>
-
-`
-        prompt = updateNotice + prompt
-        console.log(`[ClaudeService] Included pending context update for ${data.branchId}`)
-      }
-
-      // Clear the pending update
-      this._pendingContextUpdate = null
-    } else if (data.branchId) {
-      // Normal branch context - include on first message or as reminder
-      const branchContext = await this.getBranchContext(data.branchId, data.codeModificationAllowed)
-      if (branchContext) {
-        prompt = branchContext + '\n\n' + prompt
-      }
     }
 
     // GUI description if provided (always include - it's specific to this prompt)
@@ -1132,45 +1048,6 @@ ${updatedContext}
     lines.push('')
 
     return lines.join('\n')
-  }
-
-  /**
-   * Get context/guidance based on the branch type
-   * Retrieves from Claude Config plugin if available, falls back to defaults
-   * @param {string} branchId - The branch identifier
-   * @param {boolean} codeModificationAllowed - Whether code modifications are allowed
-   * @returns {Promise<string|null>} Branch focus content
-   * @private
-   */
-  async getBranchContext(branchId, codeModificationAllowed = true) {
-    if (!branchId) return null
-
-    // Try to get branch focus from plugin
-    if (this._pluginManager) {
-      try {
-        const registry = this._pluginManager.getRegistry()
-        const getBranchFocusAction = registry.getAction('claude-config:getBranchFocus')
-
-        if (getBranchFocusAction) {
-          const result = await getBranchFocusAction(branchId, { codeModificationAllowed })
-          if (result && result.focus) {
-            return result.focus
-          }
-        }
-      } catch (err) {
-        // Plugin unavailable or error - fall back to defaults
-        console.warn(`Failed to get branch focus from plugin: ${err.message}`)
-      }
-    }
-
-    // Fallback to defaults when plugin is unavailable
-    const defaultFocus = getDefaultBranchFocus(branchId)
-    if (defaultFocus) {
-      return defaultFocus
-    }
-
-    // Custom branch fallback
-    return getCustomBranchFallback(branchId, codeModificationAllowed)
   }
 
   /**

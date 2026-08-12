@@ -8,7 +8,6 @@
 /** Plugins enabled by default (all others are opt-in). */
 const DEFAULT_ENABLED = new Set([
   'document-editor-plugin',
-  'claude-config-plugin',
   'stats-plugin',
   'toast-history-plugin',
   'document-viewer-plugin',
@@ -92,7 +91,7 @@ export class FirstRunSetup {
       {
         label: 'Standard',
         description: 'Recommended for most users',
-        names: ['document-editor-plugin', 'claude-config-plugin', 'stats-plugin',
+        names: ['document-editor-plugin', 'stats-plugin',
                 'toast-history-plugin', 'document-viewer-plugin'],
       },
       {

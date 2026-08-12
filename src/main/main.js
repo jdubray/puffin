@@ -659,6 +659,11 @@ app.on('before-quit', async (event) => {
     await shutdownMetricsService()
   } catch (_) { /* ignore — non-critical */ }
 
+  // Kill the managed board runtime (polyrun child process)
+  try {
+    require('./ipc-handlers').stopBoardRuntime()
+  } catch (_) { /* ignore — non-critical */ }
+
   if (pluginManager && !pluginManager.shuttingDown) {
     event.preventDefault()
     try {

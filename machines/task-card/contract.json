@@ -1,0 +1,107 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "cardState",
+      "type": "enum: 'backlog' | 'ready' | 'implementing' | 'validating' | 'done' | 'needsHuman'"
+    },
+    {
+      "name": "reworkCount",
+      "type": "integer 0..2 — validation-failure bends taken since the last fresh start (RESUME resets)"
+    },
+    {
+      "name": "lastSignal",
+      "type": "string, the concrete signal that caused the current position: '' | 'missing-deliverable' | 'verifier-failed' | 'budget-exhausted' | 'escalated'"
+    }
+  ],
+  "initState": {
+    "cardState": "backlog",
+    "reworkCount": 0,
+    "lastSignal": ""
+  },
+  "actions": {
+    "MARK_READY": {
+      "dataFields": {
+        "gate": "string - the DoRC gate verdict ('pass' | 'fail'); the GLM verifier's answer, never a human opinion"
+      }
+    },
+    "START_IMPLEMENTATION": { "dataFields": {} },
+    "SUBMIT_FOR_VALIDATION": { "dataFields": {} },
+    "VALIDATION_PASSED": { "dataFields": {} },
+    "VALIDATION_FAILED": {
+      "dataFields": {
+        "reason": "string - the concrete failure ('missing-deliverable' | 'verifier-failed'); handed to the rework as-is — 'fix this specific thing', never 'redo the job'"
+      }
+    },
+    "ESCALATE": { "dataFields": {} },
+    "RESUME": { "dataFields": {} }
+  },
+  "dataDomain": {
+    "MARK_READY": { "gate": ["pass", "fail"] },
+    "START_IMPLEMENTATION": {},
+    "SUBMIT_FOR_VALIDATION": {},
+    "VALIDATION_PASSED": {},
+    "VALIDATION_FAILED": { "reason": ["missing-deliverable", "verifier-failed"] },
+    "ESCALATE": {},
+    "RESUME": {}
+  },
+  "terminalKey": "cardState",
+  "terminalStates": ["done"],
+  "specialRules": [
+    {
+      "name": "ready-requires-gate-pass",
+      "note": "Entering ready is mechanical: MARK_READY carries the DoRC gate verdict, and only 'pass' is accepted. A failing gate is an observable rejection — the card stays in backlog, and no human can drag it past the gate.",
+      "whenState": "cardState == 'backlog' && data.gate != 'pass'",
+      "whenAction": "MARK_READY"
+    },
+    {
+      "name": "ready-only-from-backlog",
+      "note": "MARK_READY applies only in backlog.",
+      "whenState": "cardState != 'backlog'",
+      "whenAction": "MARK_READY"
+    },
+    {
+      "name": "implement-only-from-ready",
+      "note": "Work starts only on a card that passed the gate.",
+      "whenState": "cardState != 'ready'",
+      "whenAction": "START_IMPLEMENTATION"
+    },
+    {
+      "name": "validate-only-from-implementing",
+      "note": "SUBMIT_FOR_VALIDATION applies only while implementing.",
+      "whenState": "cardState != 'implementing'",
+      "whenAction": "SUBMIT_FOR_VALIDATION"
+    },
+    {
+      "name": "verdict-only-while-validating",
+      "note": "A validation verdict (PASSED or FAILED) outside validating — a late or duplicate verifier event — is absorbed as an observable no-op.",
+      "whenState": "cardState != 'validating'",
+      "whenAction": "VALIDATION_PASSED or VALIDATION_FAILED"
+    },
+    {
+      "name": "bounded-rework-escalates",
+      "note": "The ONLY backward edge in the normal flow is validating -> implementing, taken ONLY by VALIDATION_FAILED carrying its concrete reason, at most 2 times. The third failure does not get another lap: the card moves to needsHuman with lastSignal 'budget-exhausted'. No timer, no 'just in case' retry exists.",
+      "whenState": "cardState == 'validating' && reworkCount >= 2",
+      "whenAction": "VALIDATION_FAILED"
+    },
+    {
+      "name": "escalate-only-while-active",
+      "note": "ESCALATE (a human pulls the cord) applies in ready, implementing, or validating.",
+      "whenState": "cardState in ('backlog','done','needsHuman')",
+      "whenAction": "ESCALATE"
+    },
+    {
+      "name": "resume-only-from-needs-human",
+      "note": "RESUME is the human's decision to send the card back to work: needsHuman -> implementing with a fresh rework budget. It exists nowhere else.",
+      "whenState": "cardState != 'needsHuman'",
+      "whenAction": "RESUME"
+    },
+    {
+      "name": "done-is-terminal",
+      "note": "done is a frozen terminal: re-opening finished work is creating a new card (fresh budget, fresh journal), not mutating a settled one.",
+      "whenState": "cardState == 'done'",
+      "whenAction": "any"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre, never a throw and never a silent return."
+}

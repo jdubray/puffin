@@ -20,6 +20,7 @@ const documentEditService = require('./document-edit-service')
 const { PolygraphService } = require('./polygraph-service')
 const { GlmClient } = require('./glm-client')
 const { setupGlmSessionIntegration } = require('./glm-integration')
+const { BoardRuntime } = require('./board-runtime')
 
 // Polygraph workbench — engine access for any project built with Polygraph
 const polygraphService = new PolygraphService()
@@ -29,6 +30,11 @@ const glmClient = new GlmClient()
 
 // One live GLM subscription at a time (the Specs view's active workspace)
 let glmSubscription = null
+
+// Verified kanban backend — Puffin-managed polyrun child (cards = instances)
+const boardRuntime = new BoardRuntime({
+  polygraphDirResolver: () => polygraphService.resolvePolygraphDir()
+})
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
@@ -175,6 +181,7 @@ function setIpcProjectPath(newProjectPath) {
   projectPath = newProjectPath
   if (claudeService) claudeService.setProjectPath(newProjectPath)
   if (gitService) gitService.setProjectPath(newProjectPath)
+  if (boardRuntime) boardRuntime.setProjectPath(newProjectPath)
   if (polygraphService) {
     polygraphService.setProjectPath(newProjectPath)
     // Config is not loaded yet at project-switch time; state:init applies
@@ -425,6 +432,69 @@ function setupStateHandlers(ipcMain) {
     try {
       if (!svgPath) return { success: false, error: 'svgPath is required' }
       return polygraphService.readDiagram(svgPath)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // ===== Verified kanban board (polyrun-backed cards) =====
+
+  ipcMain.handle('board:status', async () => {
+    try {
+      return { success: true, ...boardRuntime.getStatus() }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('board:start', async () => {
+    try {
+      return await boardRuntime.start()
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('board:createCard', async (event, { instanceId } = {}) => {
+    try {
+      if (!instanceId) return { success: false, error: 'instanceId is required' }
+      return { success: true, ...(await boardRuntime.createCard(instanceId)) }
+    } catch (error) {
+      return { success: false, error: error.message, status: error.status }
+    }
+  })
+
+  ipcMain.handle('board:listCards', async () => {
+    try {
+      return { success: true, ...(await boardRuntime.listCards()) }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('board:dispatch', async (event, { instanceId, action, data, actionId } = {}) => {
+    try {
+      if (!instanceId || !action) return { success: false, error: 'instanceId and action are required' }
+      const result = await boardRuntime.dispatch(instanceId, action, data, actionId)
+      return { success: true, ...result }
+    } catch (error) {
+      return { success: false, error: error.message, status: error.status }
+    }
+  })
+
+  ipcMain.handle('board:getCard', async (event, { instanceId } = {}) => {
+    try {
+      if (!instanceId) return { success: false, error: 'instanceId is required' }
+      return { success: true, ...(await boardRuntime.getCard(instanceId)) }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('board:journal', async (event, { instanceId } = {}) => {
+    try {
+      if (!instanceId) return { success: false, error: 'instanceId is required' }
+      return { success: true, ...(await boardRuntime.getJournal(instanceId)) }
     } catch (error) {
       return { success: false, error: error.message }
     }
@@ -3277,5 +3347,6 @@ module.exports = {
   getVibeService,
   setClaudeServicePluginManager,
   setupVibeHandlers,
-  getMetricsService
+  getMetricsService,
+  stopBoardRuntime: () => boardRuntime.stop()
 }

@@ -780,6 +780,19 @@ contextBridge.exposeInMainWorld('puffin', {
     replay: (args) => ipcRenderer.invoke('polygraph:replay', args)
   },
 
+  // Verified kanban board — cards are polyrun instances of the task-card
+  // machine; a drag is a dispatch the machine may reject.
+  board: {
+    getStatus: () => ipcRenderer.invoke('board:status'),
+    start: () => ipcRenderer.invoke('board:start'),
+    createCard: (args) => ipcRenderer.invoke('board:createCard', args),
+    listCards: () => ipcRenderer.invoke('board:listCards'),
+    // dispatch({ instanceId, action, data?, actionId? }) → { success, decision }
+    dispatch: (args) => ipcRenderer.invoke('board:dispatch', args),
+    getCard: (args) => ipcRenderer.invoke('board:getCard', args),
+    journal: (args) => ipcRenderer.invoke('board:journal', args)
+  },
+
   // GLM — spec-oriented development (sekkei, SCRs, verifier)
   glm: {
     getStatus: () => ipcRenderer.invoke('glm:status'),

@@ -31,13 +31,15 @@ loaded. The managed machine routes pre-load recovery back to `loading`, and the 
 `active-states-imply-loaded` now holds over every reachable state.
 **Next step**: swap the renderer to execute this module (with M1) and emit windows.
 
-### M3 — Kanban story status
-`user_stories.status` (pending → in-progress → completed → archived) mutated via SAM
-acceptors + `state-persistence.js` + repository. Today the columns are just a status field —
-this becomes the Phase 3 verified board machine (cards as polyrun instances, GLM DoRC/
-acceptance gates). Invariants at stake: no un-archival, no completion without its gate,
-bounded rework bends. **Order: Phase 3, designed fresh with `/polygraph:workflow` rather
-than retrofitted.**
+### M3 — Kanban task card ✅ MANAGED (2026-08-12)
+`machines/task-card/`. Designed fresh for the verified board (workflows-not-loops): backlog →
+ready (DoRC gate verdict decides — `ready-requires-gate-pass`) → implementing → validating →
+done (terminal), with the ONLY backward bend validating→implementing taken by
+VALIDATION_FAILED carrying its concrete reason, at most 2 laps, then needsHuman
+(`budget-exhausted`); ESCALATE/RESUME are the human plane. 19 states, 8 reject reasons, 13
+invariants — exhaustively checked. Executed durably by polyrun (a Puffin-managed child under
+the system node — polyrun's store needs node:sqlite; see `src/main/board-runtime.js` and
+`polyrun.config.mjs`); cards ARE instances, the journal is the card's history.
 
 ### M4 — Claude CLI process lifecycle (main process)
 `claude-service.js` — spawn → streaming → settled/cancelled/killed, `_processLock`,

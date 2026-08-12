@@ -37,3 +37,4 @@ tmp/start-with-deepagents.sh
 # Scratch/experiment files
 tmp/pty/
 tmp/sekkei_schema.yaml
+.puffin/board.sqlite*

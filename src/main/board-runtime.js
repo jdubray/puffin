@@ -1,0 +1,188 @@
+/**
+ * Board Runtime — the verified kanban's execution backend.
+ *
+ * Manages a polyrun instance (durable execution: one transaction per step,
+ * journal, snapshot durability) as a PRIVATE, fully Puffin-managed child
+ * process, and exposes an HTTP client over it. Cards ARE polyrun instances
+ * of the task-card machine (machines/task-card/): a drag is a dispatch the
+ * machine may reject, and the journal is the card's history.
+ *
+ * Child process (not in-process) because polyrun's store uses node:sqlite,
+ * which Electron's bundled Node predates — the child runs under the system
+ * node (>= 22.5). Spawned on project open, killed on close/quit.
+ *
+ * @module board-runtime
+ */
+
+const { spawn, spawnSync } = require('child_process')
+const fs = require('fs')
+const path = require('path')
+
+const BOARD_PORT = 7461 // fixed local port, distinct from polyrun's default 7071
+
+class BoardRuntime {
+  constructor(options = {}) {
+    this.projectPath = options.projectPath || null
+    this._proc = null
+    this._nodeBin = undefined
+    this._polygraphDirResolver = options.polygraphDirResolver || null
+  }
+
+  setProjectPath(projectPath) {
+    if (projectPath !== this.projectPath) {
+      this.stop()
+    }
+    this.projectPath = projectPath
+  }
+
+  /**
+   * @private
+   * Resolve a system node >= 22.5 (node:sqlite). Electron's own binary
+   * (even with ELECTRON_RUN_AS_NODE) is too old, so PATH node is required.
+   */
+  _resolveNode() {
+    if (this._nodeBin !== undefined) return this._nodeBin
+    try {
+      const probe = spawnSync('node', ['-e', 'require("node:sqlite"); console.log(process.version)'],
+        { encoding: 'utf-8', windowsHide: true })
+      this._nodeBin = probe.status === 0 ? 'node' : null
+    } catch {
+      this._nodeBin = null
+    }
+    return this._nodeBin
+  }
+
+  /**
+   * The board is available when: a project is open, it carries a
+   * polyrun.config.mjs, a Polygraph checkout provides polyrun, and a
+   * node:sqlite-capable system node exists.
+   */
+  getStatus() {
+    const configPath = this.projectPath
+      ? path.join(this.projectPath, 'polyrun.config.mjs') : null
+    const polygraphDir = this._polygraphDirResolver ? this._polygraphDirResolver() : null
+    const apiBin = polygraphDir
+      ? path.join(polygraphDir, 'polyrun', 'bin', 'polyrun-api.mjs') : null
+    return {
+      running: !!this._proc,
+      hasConfig: !!(configPath && fs.existsSync(configPath)),
+      hasPolyrun: !!(apiBin && fs.existsSync(apiBin)),
+      hasNode: this._resolveNode() !== null,
+      port: BOARD_PORT
+    }
+  }
+
+  /**
+   * Start the managed polyrun child (idempotent).
+   *
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async start() {
+    if (this._proc) return { success: true }
+    const status = this.getStatus()
+    if (!status.hasConfig) return { success: false, error: 'No polyrun.config.mjs in the project' }
+    if (!status.hasPolyrun) return { success: false, error: 'polyrun not found in the Polygraph checkout' }
+    if (!status.hasNode) return { success: false, error: 'System node >= 22.5 (node:sqlite) not found on PATH' }
+
+    const polygraphDir = this._polygraphDirResolver()
+    const apiBin = path.join(polygraphDir, 'polyrun', 'bin', 'polyrun-api.mjs')
+
+    this._proc = spawn(this._resolveNode(), [
+      apiBin,
+      '--config', path.join(this.projectPath, 'polyrun.config.mjs'),
+      '--port', String(BOARD_PORT),
+      '--host', '127.0.0.1',
+      '--workers'
+    ], {
+      cwd: this.projectPath, // config paths (store, machines/) are project-relative
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    this._proc.stdout.on('data', d => console.log('[BOARD-RT]', String(d).trim()))
+    this._proc.stderr.on('data', d => console.warn('[BOARD-RT]', String(d).trim()))
+    this._proc.on('close', (code) => {
+      console.log(`[BOARD-RT] polyrun exited (${code})`)
+      this._proc = null
+    })
+
+    // Wait for the HTTP facade to answer
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 250))
+      if (!this._proc) return { success: false, error: 'polyrun exited during startup' }
+      try {
+        const response = await fetch(`http://127.0.0.1:${BOARD_PORT}/healthz`)
+        if (response.ok) return { success: true }
+      } catch { /* not up yet */ }
+    }
+    this.stop()
+    return { success: false, error: 'polyrun did not become healthy within 10s' }
+  }
+
+  /** Kill the managed child (Windows: whole tree). */
+  stop() {
+    if (!this._proc) return
+    const pid = this._proc.pid
+    this._proc = null
+    try {
+      if (process.platform === 'win32') {
+        spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true })
+      } else {
+        process.kill(pid, 'SIGTERM')
+      }
+    } catch { /* already gone */ }
+  }
+
+  /** @private */
+  async _api(method, apiPath, body) {
+    const response = await fetch(`http://127.0.0.1:${BOARD_PORT}${apiPath}`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    })
+    const text = await response.text()
+    let parsed
+    try { parsed = text ? JSON.parse(text) : null } catch { parsed = { raw: text } }
+    if (!response.ok) {
+      const error = new Error(parsed?.error || `HTTP ${response.status}`)
+      error.status = response.status
+      throw error
+    }
+    return parsed
+  }
+
+  /** Create a card (a task-card instance, born in backlog). */
+  createCard(instanceId, creation) {
+    // creation is an optional {action, data} birth action — omit entirely
+    // when absent ({} would be read as a creation with no action).
+    const body = creation?.action ? { instanceId, creation } : { instanceId }
+    return this._api('POST', '/machines/task-card/instances', body)
+  }
+
+  /** List cards (optionally by status). */
+  listCards() {
+    return this._api('GET', '/machines/task-card/instances')
+  }
+
+  /**
+   * Dispatch an action to a card — the machine may REJECT it (observable
+   * no-op); actionId makes redelivery safe (dedupe).
+   */
+  dispatch(instanceId, action, data = {}, actionId) {
+    return this._api('POST', `/instances/${encodeURIComponent(instanceId)}/actions`, {
+      action, data,
+      actionId: actionId || `${instanceId}:${action}:${Math.random().toString(36).slice(2)}`
+    })
+  }
+
+  /** Current state of a card. */
+  getCard(instanceId) {
+    return this._api('GET', `/instances/${encodeURIComponent(instanceId)}`)
+  }
+
+  /** Full journal of a card — its history/audit/replay. */
+  getJournal(instanceId) {
+    return this._api('GET', `/instances/${encodeURIComponent(instanceId)}/journal`)
+  }
+}
+
+module.exports = { BoardRuntime, BOARD_PORT }

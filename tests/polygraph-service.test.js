@@ -24,7 +24,7 @@ describe('PolygraphService', () => {
       const svc = new PolygraphService({ projectPath: repoRoot })
       const machines = svc.discoverMachines(path.join(repoRoot, 'machines'))
       const names = machines.map(m => m.name).sort()
-      assert.deepStrictEqual(names, ['app-lifecycle', 'prompt-lifecycle'])
+      assert.deepStrictEqual(names, ['app-lifecycle', 'prompt-lifecycle', 'task-card'])
       for (const m of machines) {
         assert.strictEqual(m.moduleFile, 'next.cjs')
         assert.strictEqual(m.hasInvariants, true)
@@ -237,7 +237,7 @@ describe('PolygraphService', () => {
       { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {
         const svc = new PolygraphService({ projectPath: repoRoot })
         const results = await svc.checkAll(path.join(repoRoot, 'machines'))
-        assert.strictEqual(results.length, 2)
+        assert.strictEqual(results.length, 3)
         for (const r of results) {
           assert.strictEqual(r.check.success, true, `${r.name}: ${r.check.output}`)
         }

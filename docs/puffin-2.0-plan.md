@@ -101,7 +101,17 @@ Engine access: sibling checkout / `POLYGRAPH_DIR` (the PolySec pattern) via a ma
 - `withSamTracing` capture (self-capturing app) + in-process `check()` + CI gate.
 - Split `model.js` into small machines: session, prompt lifecycle, board, config.
 
-### Phase 2 — GLM spine, branches/threads retired (2–4 weeks)
+### Phase 2 — GLM spine, branches/threads retired — DONE 2026-08-12
+
+Shipped: glm-client (REST + live WS with replay catch-up; required a GLM-side fix for
+solo-token WS upgrades), Specs view (workspace selector, stratum dashboard, sekkei tree,
+7-gate verifier), sekkei node editor (edit locks + heartbeat, JSON body, recycled
+spec-authoring AI assist), glm-mcp + /glm-* commands wired into spawned sessions, SCR
+panel (create + status FSM), and the branch/workspace system removed (single implicit
+prompt stream with one-time history.json migration; handoffs, branch focus injection,
+claude-config-plugin, workspace sidebar, sprint-era coach all gone — ~8,900 LOC removed).
+
+Original scope:
 - `src/main/glm-client.js`: REST + WS (`replay since:` reconnect) against `:3300`, token from
   `~/.glm/config.json`. No server-side LLM calls (GLM ADR-0006 — client-side credential, matches
   Puffin spawning Claude Code).

@@ -136,6 +136,34 @@ class GlmClient {
     return data.scrs || data || []
   }
 
+  /**
+   * Update a node (partial: title, description, body — server defaults fill
+   * the rest). The server appends change-log/audit entries and publishes
+   * node.changed on the workspace channel.
+   */
+  async updateNode(workspaceId, glmId, input) {
+    return this._request('PUT',
+      `/workspaces/${workspaceId}/nodes/${encodeURIComponent(glmId)}`, input)
+  }
+
+  /** Acquire the node edit lock (423 with holder info when taken). */
+  async acquireLock(workspaceId, glmId) {
+    return this._request('POST',
+      `/workspaces/${workspaceId}/nodes/${encodeURIComponent(glmId)}/lock`, {})
+  }
+
+  /** Heartbeat the held lock (keeps the TTL alive during long edits). */
+  async heartbeatLock(workspaceId, glmId) {
+    return this._request('PUT',
+      `/workspaces/${workspaceId}/nodes/${encodeURIComponent(glmId)}/lock/heartbeat`, {})
+  }
+
+  /** Release the node edit lock. */
+  async releaseLock(workspaceId, glmId) {
+    return this._request('DELETE',
+      `/workspaces/${workspaceId}/nodes/${encodeURIComponent(glmId)}/lock`)
+  }
+
   /** Run the 7-gate sekkei verifier. */
   async verify(workspaceId) {
     return this._request('POST', `/workspaces/${workspaceId}/verify`, {})

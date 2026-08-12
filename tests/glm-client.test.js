@@ -88,6 +88,36 @@ describe('GlmClient', () => {
       assert.strictEqual(status, 'open')
     })
 
+    it('locks, updates, and restores a node (round-trip)', async (t) => {
+      if (!available) return t.skip('GLM server not running')
+      const workspaces = await client.listWorkspaces()
+      let target = null
+      for (const ws of workspaces) {
+        const nodes = await client.listNodes(ws.id)
+        if (nodes.length > 0) { target = { ws, node: nodes[0] }; break }
+      }
+      if (!target) return t.skip('no populated workspace')
+      const { ws, node } = target
+
+      await client.acquireLock(ws.id, node.glmId)
+      try {
+        const updated = await client.updateNode(ws.id, node.glmId, {
+          description: `${node.description || ''} [puffin-test]`.trim()
+        })
+        assert.match(updated.node.description, /\[puffin-test\]$/)
+        // NOTE: contentHash covers the canonical BODY only — a
+        // description-only edit leaves it unchanged by design.
+
+        // restore the original content
+        const restored = await client.updateNode(ws.id, node.glmId, {
+          description: node.description || ''
+        })
+        assert.strictEqual(restored.node.description, node.description || '')
+      } finally {
+        await client.releaseLock(ws.id, node.glmId)
+      }
+    })
+
     it('lists nodes with glm ids', async (t) => {
       if (!available) return t.skip('GLM server not running')
       const workspaces = await client.listWorkspaces()

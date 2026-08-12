@@ -17,6 +17,41 @@ function esc(text) {
 
 const STRATUM_ORDER = ['system', 'capability', 'component', 'interaction', 'spec']
 
+/**
+ * The recycled spec-authoring focus (formerly the 'specifications' workspace
+ * prompt), retargeted at sekkei nodes: the AI edits ONE node's content and
+ * returns it as JSON that must pass the 7-gate verifier — never code, never
+ * free-form markdown.
+ */
+function buildNodeAssistPrompt(node, instruction) {
+  const editable = {
+    title: node.title || '',
+    description: node.description || '',
+    body: node.body ?? {}
+  }
+  return `You are a sekkei (設計) node editor for a GLM workspace — a specifications
+author, not a coder. Focus on requirements clarity, feature definitions and scope,
+business rules, edge cases, constraints, and testable acceptance criteria.
+
+Sekkei authoring rules:
+- The node is the authoritative design artifact; write it so a coding agent could
+  implement from it without guessing.
+- Stay at this node's altitude: a '${node.stratum}' node${node.specKind ? ` (spec kind '${node.specKind}')` : ''} —
+  do not inline content that belongs in child nodes.
+- Keep identifiers, spec_kind vocabulary, and field names exactly as they are.
+- Acceptance criteria must be mechanically checkable; business rules must be
+  unambiguous declarative statements.
+- Do NOT write or reference source code changes.
+
+Current node ${node.glmId}:
+${JSON.stringify(editable, null, 2)}
+
+Instruction: ${instruction}
+
+Return ONLY a JSON object with exactly the keys "title", "description", and "body"
+(the revised node content). No prose, no markdown fences.`
+}
+
 export class SpecsViewComponent {
   constructor(intents) {
     this.intents = intents
@@ -35,6 +70,9 @@ export class SpecsViewComponent {
     this.socketStatus = null
     this.lastEvent = null
     this._refreshTimer = null
+    // Node editor state
+    this.editing = null // { glmId, title, description, bodyText, error, isSaving, isAssisting, aiDraft }
+    this._heartbeatTimer = null
   }
 
   init() {
@@ -68,6 +106,7 @@ export class SpecsViewComponent {
   _scheduleLiveRefresh(event) {
     const type = event?.type || ''
     if (!/^(node|scr|drift|generation|variant|git)\./.test(type)) return
+    if (this.editing) return // never reload under the user's cursor
     if (this._refreshTimer) return
     this._refreshTimer = setTimeout(async () => {
       this._refreshTimer = null
@@ -155,6 +194,138 @@ export class SpecsViewComponent {
     this.render()
   }
 
+  // ===== Node editor =====
+
+  async startEdit() {
+    const node = this.selectedNode
+    if (!node) return
+    const lock = await window.puffin.glm.lock({
+      workspaceId: this.workspaceId, glmId: node.glmId
+    })
+    if (!lock.success && lock.status === 423) {
+      this.editing = { glmId: node.glmId, error: `Locked: ${lock.error}`, lockDenied: true }
+      this.render()
+      return
+    }
+    this.editing = {
+      glmId: node.glmId,
+      title: node.title || '',
+      description: node.description || '',
+      bodyText: JSON.stringify(node.body ?? {}, null, 2),
+      error: null
+    }
+    // Keep the lock alive during long edits (TTL heartbeat)
+    this._heartbeatTimer = setInterval(() => {
+      window.puffin.glm.lock({
+        workspaceId: this.workspaceId, glmId: node.glmId, op: 'heartbeat'
+      })
+    }, 60000)
+    this.render()
+  }
+
+  async _endEdit(release = true) {
+    if (this._heartbeatTimer) {
+      clearInterval(this._heartbeatTimer)
+      this._heartbeatTimer = null
+    }
+    if (release && this.editing && !this.editing.lockDenied) {
+      await window.puffin.glm.lock({
+        workspaceId: this.workspaceId, glmId: this.editing.glmId, op: 'release'
+      })
+    }
+    this.editing = null
+  }
+
+  _readEditorInputs() {
+    const title = this.container.querySelector('#specs-edit-title')?.value ?? this.editing.title
+    const description = this.container.querySelector('#specs-edit-desc')?.value ?? this.editing.description
+    const bodyText = this.container.querySelector('#specs-edit-body')?.value ?? this.editing.bodyText
+    Object.assign(this.editing, { title, description, bodyText })
+  }
+
+  async saveEdit() {
+    if (!this.editing) return
+    this._readEditorInputs()
+    let body
+    try {
+      body = JSON.parse(this.editing.bodyText || '{}')
+    } catch (parseError) {
+      this.editing.error = `Body is not valid JSON: ${parseError.message}`
+      this.render()
+      return
+    }
+    this.editing.isSaving = true
+    this.editing.error = null
+    this.render()
+    const result = await window.puffin.glm.updateNode({
+      workspaceId: this.workspaceId,
+      glmId: this.editing.glmId,
+      input: { title: this.editing.title, description: this.editing.description, body }
+    })
+    if (!result.success) {
+      this.editing.isSaving = false
+      this.editing.error = result.error
+      this.render()
+      return
+    }
+    await this._endEdit()
+    this.selectedNode = result.node
+    // The node.changed event also arrives on the socket; local update is
+    // immediate, the debounced reload reconciles the tree.
+    this.render()
+  }
+
+  async cancelEdit() {
+    await this._endEdit()
+    this.render()
+  }
+
+  /** AI assist: revise the node draft via the configured doc-edit provider. */
+  async assistEdit() {
+    if (!this.editing) return
+    this._readEditorInputs()
+    const instruction = this.container.querySelector('#specs-assist-input')?.value?.trim()
+    if (!instruction) return
+
+    let draftBody
+    try {
+      draftBody = JSON.parse(this.editing.bodyText || '{}')
+    } catch {
+      draftBody = {}
+    }
+    const draftNode = {
+      ...this.selectedNode,
+      title: this.editing.title,
+      description: this.editing.description,
+      body: draftBody
+    }
+
+    this.editing.isAssisting = true
+    this.editing.error = null
+    this.render()
+    const result = await window.puffin.ai.editDocument({
+      prompt: buildNodeAssistPrompt(draftNode, instruction)
+    })
+    this.editing.isAssisting = false
+    if (!result.success) {
+      this.editing.error = result.error || 'AI assist failed'
+      this.render()
+      return
+    }
+    try {
+      const text = String(result.response || '')
+        .replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+      const revised = JSON.parse(text)
+      this.editing.title = typeof revised.title === 'string' ? revised.title : this.editing.title
+      this.editing.description = typeof revised.description === 'string' ? revised.description : this.editing.description
+      this.editing.bodyText = JSON.stringify(revised.body ?? draftBody, null, 2)
+      this.editing.aiDraft = true
+    } catch {
+      this.editing.error = 'AI returned unparseable output — draft unchanged'
+    }
+    this.render()
+  }
+
   /** glm id → path segments after the org:project prefix */
   _segments(glmId) {
     if (!glmId) return []
@@ -193,15 +364,25 @@ export class SpecsViewComponent {
         else this.expanded.add(key)
         this.render()
       }
+      else if (action === 'edit-node') this.startEdit()
+      else if (action === 'save-node') this.saveEdit()
+      else if (action === 'cancel-edit') this.cancelEdit()
+      else if (action === 'assist-node') this.assistEdit()
       return
     }
-    if (nodeRow) {
+    if (nodeRow && !this.editing) {
       this.selectNode(nodeRow.dataset.glmId)
     }
   }
 
   render() {
     if (!this.container) return
+    // A re-render rebuilds the editor's inputs — capture in-progress edits
+    // first so no keystroke is ever lost.
+    if (this.editing && !this.editing.lockDenied &&
+        this.container.querySelector('#specs-edit-title')) {
+      this._readEditorInputs()
+    }
     this.container.innerHTML = `
       <div class="specs-toolbar">
         ${this._renderStatus()}
@@ -338,11 +519,15 @@ export class SpecsViewComponent {
     if (!node) {
       return '<div class="specs-empty">Select a node to inspect it.</div>'
     }
+    if (this.editing && this.editing.glmId === node.glmId) {
+      return this._renderEditor(node)
+    }
     const body = node.body && typeof node.body === 'object' ? node.body : null
     return `
       <div class="specs-detail-header">
         <span class="specs-stratum specs-stratum-${esc(node.stratum)}">${esc(node.stratum)}</span>
         <h3>${esc(node.title || node.glmId)}</h3>
+        <button class="btn btn-secondary btn-sm specs-edit-btn" data-action="edit-node">Edit</button>
       </div>
       <div class="specs-detail-meta">
         <code>${esc(node.glmId)}</code>
@@ -355,6 +540,51 @@ export class SpecsViewComponent {
         ${node.authoredBy ? `authored by ${esc(node.authoredBy)}` : ''}
         ${node.updatedAt ? ` · updated ${esc(String(node.updatedAt).slice(0, 10))}` : ''}
         ${node.contentHash ? ` · <code>${esc(String(node.contentHash).slice(0, 12))}</code>` : ''}
+      </div>
+    `
+  }
+
+  _renderEditor(node) {
+    const edit = this.editing
+    if (edit.lockDenied) {
+      return `
+        <div class="specs-detail-header">
+          <span class="specs-stratum specs-stratum-${esc(node.stratum)}">${esc(node.stratum)}</span>
+          <h3>${esc(node.title || node.glmId)}</h3>
+        </div>
+        <div class="specs-editor-error">✗ ${esc(edit.error)}</div>
+        <button class="btn btn-secondary btn-sm" data-action="cancel-edit">Back</button>
+      `
+    }
+    const busy = edit.isSaving || edit.isAssisting
+    return `
+      <div class="specs-detail-header">
+        <span class="specs-stratum specs-stratum-${esc(node.stratum)}">${esc(node.stratum)}</span>
+        <h3>Editing <code>${esc(node.glmId)}</code></h3>
+      </div>
+      ${edit.aiDraft ? '<div class="specs-ai-note">AI draft — review before saving; the ledger records you as the author.</div>' : ''}
+      ${edit.error ? `<div class="specs-editor-error">✗ ${esc(edit.error)}</div>` : ''}
+      <div class="specs-editor">
+        <label>Title</label>
+        <input type="text" id="specs-edit-title" class="form-control" value="${esc(edit.title)}" ${busy ? 'disabled' : ''}>
+        <label>Description</label>
+        <textarea id="specs-edit-desc" rows="3" ${busy ? 'disabled' : ''}>${esc(edit.description)}</textarea>
+        <label>Body <span class="specs-hint">(JSON — validated by the stratum's schema on save)</span></label>
+        <textarea id="specs-edit-body" class="specs-edit-body" rows="14" spellcheck="false" ${busy ? 'disabled' : ''}>${esc(edit.bodyText)}</textarea>
+        <div class="specs-assist-row">
+          <input type="text" id="specs-assist-input" class="form-control"
+            placeholder="AI assist — e.g. 'tighten the acceptance criteria', 'add edge cases for concurrent edits'"
+            ${busy ? 'disabled' : ''}>
+          <button class="btn btn-secondary btn-sm" data-action="assist-node" ${busy ? 'disabled' : ''}>
+            ${edit.isAssisting ? 'Assisting…' : 'Assist'}
+          </button>
+        </div>
+        <div class="specs-editor-actions">
+          <button class="btn btn-primary btn-sm" data-action="save-node" ${busy ? 'disabled' : ''}>
+            ${edit.isSaving ? 'Saving…' : 'Save'}
+          </button>
+          <button class="btn btn-secondary btn-sm" data-action="cancel-edit" ${busy ? 'disabled' : ''}>Cancel</button>
+        </div>
       </div>
     `
   }

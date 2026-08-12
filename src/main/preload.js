@@ -821,6 +821,9 @@ contextBridge.exposeInMainWorld('puffin', {
     getNode: (args) => ipcRenderer.invoke('glm:node', args),
     listScrs: (args) => ipcRenderer.invoke('glm:scrs', args),
     verify: (args) => ipcRenderer.invoke('glm:verify', args),
+    // Node editing (partial update; edit locks with 423 on contention)
+    updateNode: (args) => ipcRenderer.invoke('glm:updateNode', args),
+    lock: (args) => ipcRenderer.invoke('glm:lock', args),
     // Live workspace channel (main-process socket, forwarded events)
     subscribe: (args) => ipcRenderer.invoke('glm:subscribe', args),
     unsubscribe: () => ipcRenderer.invoke('glm:unsubscribe'),

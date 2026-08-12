@@ -245,6 +245,83 @@
   white-space: pre-wrap;
 }
 
+/* Node editor */
+
+.specs-edit-btn { margin-left: auto; }
+
+.specs-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.specs-editor label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #999);
+  margin-top: 6px;
+}
+
+.specs-editor input,
+.specs-editor textarea {
+  width: 100%;
+  padding: 6px 9px;
+  font-size: 13px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--text-primary, #ddd);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.specs-edit-body {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.specs-hint {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.specs-assist-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.specs-assist-row input { flex: 1; }
+
+.specs-editor-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.specs-editor-error {
+  color: var(--error-color, #e06258);
+  background: rgba(224, 98, 88, 0.1);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  margin-bottom: 8px;
+}
+
+.specs-ai-note {
+  color: var(--warning-color, #e0a030);
+  background: rgba(224, 160, 48, 0.1);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
 .specs-empty {
   padding: 30px 20px;
   text-align: center;

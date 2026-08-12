@@ -477,6 +477,29 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  ipcMain.handle('glm:updateNode', async (event, { workspaceId, glmId, input } = {}) => {
+    try {
+      if (!workspaceId || !glmId || !input) {
+        return { success: false, error: 'workspaceId, glmId, and input are required' }
+      }
+      return { success: true, node: (await glmClient.updateNode(workspaceId, glmId, input))?.node }
+    } catch (error) {
+      return { success: false, error: error.message, status: error.status }
+    }
+  })
+
+  ipcMain.handle('glm:lock', async (event, { workspaceId, glmId, op } = {}) => {
+    try {
+      if (!workspaceId || !glmId) return { success: false, error: 'workspaceId and glmId are required' }
+      if (op === 'release') await glmClient.releaseLock(workspaceId, glmId)
+      else if (op === 'heartbeat') await glmClient.heartbeatLock(workspaceId, glmId)
+      else await glmClient.acquireLock(workspaceId, glmId)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message, status: error.status }
+    }
+  })
+
   // Live workspace events: one subscription (the Specs view's workspace),
   // forwarded to the renderer as 'glm:event' / 'glm:socket-status'.
   ipcMain.handle('glm:subscribe', async (event, { workspaceId } = {}) => {

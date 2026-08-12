@@ -425,6 +425,9 @@ export class ProjectFormComponent {
    */
   populateForm(config) {
     if (!config) return
+    // Retain config fields whose form elements were removed from the UI
+    // (e.g. vibeModel) so saving the form doesn't silently wipe them
+    this._loadedConfig = config
 
     const nameInput = document.getElementById('project-name-input')
     const descInput = document.getElementById('project-description')
@@ -659,7 +662,8 @@ export class ProjectFormComponent {
       websiteServePath: this.getElementValue('website-serve-path-input', 'dist').trim() || 'dist',
       defaultProvider: this.getElementValue('default-provider', 'claude'),
       mistralApiKey: this.getElementValue('mistral-api-key-input', '').trim(),
-      vibeModel: this.getElementValue('vibe-model-input', '').trim(),
+      // vibe-model-input no longer exists in the UI — carry the loaded value
+      vibeModel: (this._loadedConfig?.vibeModel || '').trim(),
       deepagentsCmd: this.getElementValue('deepagents-cmd-input', '').trim(),
       ollamaHost: this.getElementValue('ollama-host-input', '').trim(),
       ollamaModel: this.getElementValue('ollama-model-input', '').trim(),

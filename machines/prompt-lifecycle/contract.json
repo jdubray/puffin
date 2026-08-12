@@ -1,0 +1,78 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "promptState",
+      "type": "enum: 'idle' | 'composing' | 'submitted' | 'awaiting' | 'completed' | 'failed'"
+    },
+    {
+      "name": "hasResponse",
+      "type": "boolean — true once at least one response chunk has been received for the in-flight prompt"
+    },
+    {
+      "name": "endedVia",
+      "type": "string, how the last prompt run ended: '' (none yet / in flight), 'completed', 'error', 'cancelled'"
+    }
+  ],
+  "initState": {
+    "promptState": "idle",
+    "hasResponse": false,
+    "endedVia": ""
+  },
+  "actions": {
+    "START_COMPOSE": { "dataFields": {} },
+    "SUBMIT_PROMPT": { "dataFields": {} },
+    "RECEIVE_RESPONSE_CHUNK": { "dataFields": {} },
+    "COMPLETE_RESPONSE": { "dataFields": {} },
+    "RESPONSE_ERROR": { "dataFields": {} },
+    "CANCEL_PROMPT": { "dataFields": {} }
+  },
+  "dataDomain": {
+    "START_COMPOSE": {},
+    "SUBMIT_PROMPT": {},
+    "RECEIVE_RESPONSE_CHUNK": {},
+    "COMPLETE_RESPONSE": {},
+    "RESPONSE_ERROR": {},
+    "CANCEL_PROMPT": {}
+  },
+  "terminalStates": [],
+  "specialRules": [
+    {
+      "name": "compose-only-from-settled",
+      "note": "A new prompt may start composing only from idle, completed, or failed. Starting a new composition while one is in flight (composing/submitted/awaiting) is a reject — the UI must cancel or finish first.",
+      "whenState": "promptState in ('composing','submitted','awaiting')",
+      "whenAction": "START_COMPOSE"
+    },
+    {
+      "name": "submit-only-from-composing",
+      "note": "SUBMIT_PROMPT is legal only while composing. Double-submit (already submitted/awaiting) is an observable reject, not a second CLI spawn.",
+      "whenState": "promptState != 'composing'",
+      "whenAction": "SUBMIT_PROMPT"
+    },
+    {
+      "name": "chunk-only-while-in-flight",
+      "note": "Response chunks are accepted only in submitted (first chunk) or awaiting (subsequent chunks). A late chunk arriving after completion, failure, or cancel is absorbed as a reject — post == pre.",
+      "whenState": "promptState not in ('submitted','awaiting')",
+      "whenAction": "RECEIVE_RESPONSE_CHUNK"
+    },
+    {
+      "name": "complete-only-from-awaiting",
+      "note": "Faithful to the legacy promptFsm: completion requires at least one chunk to have arrived (submitted -> awaiting on first chunk). A zero-chunk completion is a reject; callers that can complete chunklessly must emit their final payload as a chunk first.",
+      "whenState": "promptState != 'awaiting'",
+      "whenAction": "COMPLETE_RESPONSE"
+    },
+    {
+      "name": "error-only-while-in-flight",
+      "note": "RESPONSE_ERROR applies only in submitted or awaiting. A late error after settle/cancel is absorbed as a reject.",
+      "whenState": "promptState not in ('submitted','awaiting')",
+      "whenAction": "RESPONSE_ERROR"
+    },
+    {
+      "name": "cancel-only-while-active",
+      "note": "CANCEL_PROMPT applies in composing, submitted, or awaiting, and always returns to idle with endedVia 'cancelled' (for submitted/awaiting) or '' (composing — nothing ran). Cancelling from idle/completed/failed is a reject.",
+      "whenState": "promptState in ('idle','completed','failed')",
+      "whenAction": "CANCEL_PROMPT"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre, never a throw and never a silent return."
+}

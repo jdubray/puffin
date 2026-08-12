@@ -122,7 +122,11 @@
       "Bash(sed -n '35,60p' src/renderer/lib/workflow-state-tracker.js)",
       "Bash(sed -n '180,210p' src/renderer/lib/workflow-state-tracker.js)",
       "Skill(claude-api)",
-      "Bash(awk 'NR>=1707 && NR<=1980' C:/Users/jjdub/code/puffin/src/main/claude-service.js)"
+      "Bash(awk 'NR>=1707 && NR<=1980' C:/Users/jjdub/code/puffin/src/main/claude-service.js)",
+      "Bash(sort -t: -k2 -rn)",
+      "Read(//c/Users/jjdub/code/glm/**)",
+      "Bash(sed -n '/workspaces\\\\/:id\\\\/summary/,/^  }\\);/p' src/server/routes/workspaces.ts)",
+      "Artifact"
     ]
   },
   "enableAllProjectMcpServers": true,

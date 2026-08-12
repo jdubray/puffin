@@ -139,6 +139,44 @@ describe('PolygraphService', () => {
     })
   })
 
+  describe('invariant elicitation (polynv)', () => {
+    const machineDir = path.join(repoRoot, 'machines', 'prompt-lifecycle')
+
+    it('rejects a record call without id/disposition/author', async () => {
+      const svc = new PolygraphService({ projectPath: repoRoot })
+      const result = await svc.recordDisposition(machineDir, { id: 'x', disposition: 'confirm' })
+      assert.strictEqual(result.success, false)
+      assert.match(result.error, /required/)
+    })
+
+    it('rejects an invalid disposition', async () => {
+      const svc = new PolygraphService({ projectPath: repoRoot })
+      const result = await svc.recordDisposition(machineDir,
+        { id: 'x', disposition: 'yolo', author: 'test' })
+      assert.strictEqual(result.success, false)
+    })
+
+    it('reads the elicitation report for the dogfood machine',
+      { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {
+        const svc = new PolygraphService({ projectPath: repoRoot })
+        const result = await svc.getElicitationReport(machineDir)
+        assert.strictEqual(result.success, true, result.error)
+        assert.ok(result.report === null || typeof result.report.total === 'number')
+      })
+
+    it('fetches the next pre-checked question',
+      { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {
+        const svc = new PolygraphService({ projectPath: repoRoot })
+        const result = await svc.getQuestions(machineDir)
+        assert.strictEqual(result.success, true, result.error)
+        // question is null once the ledger converges; when present it is pre-checked
+        if (result.question) {
+          assert.ok(result.question.id)
+          assert.ok(['HOLDS', 'FAILS'].includes(result.question.precheck))
+        }
+      })
+  })
+
   describe('checkAll', () => {
     it('checks every repo machine green',
       { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {

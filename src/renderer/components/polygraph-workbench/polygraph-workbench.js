@@ -52,6 +52,8 @@ export class PolygraphWorkbenchComponent {
     this.machines = []
     this.results = new Map() // machineDir -> check result
     this.diagrams = new Map() // machineDir -> { svgs: [{name, markup}] }
+    this.elicitation = new Map() // machineDir -> { report, question, lastOutput, pending }
+    this.author = 'puffin-user'
     this.isBusy = false
     this.hasScanned = false
   }
@@ -156,10 +158,63 @@ export class PolygraphWorkbenchComponent {
     this.render()
   }
 
+  /** Open (or refresh) the elicitation section for a machine */
+  async openElicitation(machineDir) {
+    this.elicitation.set(machineDir, { pending: true })
+    this.render()
+    try {
+      const [reportRes, questionRes] = await Promise.all([
+        window.puffin.polygraph.nvReport({ machineDir }),
+        window.puffin.polygraph.nvQuestions({ machineDir })
+      ])
+      this.elicitation.set(machineDir, {
+        report: reportRes.success ? reportRes.report : null,
+        question: questionRes.success ? questionRes.question : null,
+        error: !reportRes.success ? (reportRes.error || 'polynv unavailable') : null
+      })
+    } catch (error) {
+      this.elicitation.set(machineDir, { error: error.message })
+    }
+    this.render()
+  }
+
+  async harvest(machineDir) {
+    this.elicitation.set(machineDir, { pending: true })
+    this.render()
+    const result = await window.puffin.polygraph.nvHarvest({ machineDir })
+    await this.openElicitation(machineDir)
+    const entry = this.elicitation.get(machineDir)
+    if (entry) {
+      entry.lastOutput = result.output || result.error
+      this.render()
+    }
+  }
+
+  async record(machineDir, disposition) {
+    const concernInput = this.container.querySelector(
+      `input[data-concern-for="${CSS.escape(machineDir)}"]`)
+    const concern = concernInput?.value?.trim() || undefined
+    const entry = this.elicitation.get(machineDir)
+    const questionId = entry?.question?.id
+    if (!questionId) return
+
+    this.elicitation.set(machineDir, { ...entry, pending: true })
+    this.render()
+    const result = await window.puffin.polygraph.nvRecord({
+      machineDir, id: questionId, disposition, author: this.author, concern
+    })
+    await this.openElicitation(machineDir)
+    const refreshed = this.elicitation.get(machineDir)
+    if (refreshed) {
+      refreshed.lastOutput = result.output || result.error
+      this.render()
+    }
+  }
+
   _onClick(e) {
     const button = e.target.closest('button[data-action]')
     if (!button || this.isBusy && button.dataset.action !== 'refresh') return
-    const { action, dir } = button.dataset
+    const { action, dir, disposition } = button.dataset
 
     if (action === 'refresh') this.refresh()
     else if (action === 'check-all') this.checkAll()
@@ -169,6 +224,13 @@ export class PolygraphWorkbenchComponent {
       this.diagrams.delete(dir)
       this.render()
     }
+    else if (action === 'elicit' && dir) this.openElicitation(dir)
+    else if (action === 'hide-elicit' && dir) {
+      this.elicitation.delete(dir)
+      this.render()
+    }
+    else if (action === 'harvest' && dir) this.harvest(dir)
+    else if (action === 'record' && dir && disposition) this.record(dir, disposition)
   }
 
   render() {
@@ -225,6 +287,7 @@ export class PolygraphWorkbenchComponent {
   _renderMachine(machine) {
     const result = this.results.get(machine.dir)
     const diagram = this.diagrams.get(machine.dir)
+    const elicitation = this.elicitation.get(machine.dir)
 
     return `<div class="pgwb-machine">
       <div class="pgwb-machine-header">
@@ -245,10 +308,81 @@ export class PolygraphWorkbenchComponent {
           <button class="btn btn-secondary btn-sm" data-action="${diagram ? 'hide-diagrams' : 'diagrams'}"
             data-dir="${esc(machine.dir)}"
             ${!this.status?.polyviz ? 'disabled' : ''}>${diagram ? 'Hide diagrams' : 'Diagrams'}</button>
+          <button class="btn btn-secondary btn-sm" data-action="${elicitation ? 'hide-elicit' : 'elicit'}"
+            data-dir="${esc(machine.dir)}"
+            ${!this.status?.available ? 'disabled' : ''}>${elicitation ? 'Hide invariants' : 'Invariants'}</button>
         </div>
       </div>
       ${result ? this._renderResult(result) : ''}
       ${diagram ? this._renderDiagrams(diagram) : ''}
+      ${elicitation ? this._renderElicitation(machine, elicitation) : ''}
+    </div>`
+  }
+
+  _renderElicitation(machine, entry) {
+    if (entry.pending) {
+      return '<div class="pgwb-result pgwb-result-pending">polynv running…</div>'
+    }
+    if (entry.error) {
+      return `<div class="pgwb-result pgwb-result-fail">✗ ${esc(entry.error)}</div>`
+    }
+
+    const report = entry.report
+    const statusLine = report
+      ? `<div class="pgwb-elicit-status">
+          <span class="pgwb-badge">${esc(report.verdict || '')}</span>
+          ${report.total ? `<span>${report.counts?.open ?? 0} open of ${report.total} candidates</span>` : ''}
+          ${(report.findings?.length ?? 0) > 0 ? `<span class="pgwb-badge pgwb-badge-warn">${report.findings.length} live finding${report.findings.length === 1 ? '' : 's'}</span>` : ''}
+        </div>`
+      : ''
+
+    let body
+    if (!report || !report.total) {
+      body = `<div class="pgwb-elicit-empty">
+        No intent ledger yet. Harvest proposes candidate invariants from the machine's own
+        vocabulary (terminal states, typed fields, reject rules) — each pre-checked against
+        the machine before you're asked.
+        <div><button class="btn btn-primary btn-sm" data-action="harvest" data-dir="${esc(machine.dir)}">Harvest candidates</button></div>
+      </div>`
+    } else if (entry.question) {
+      body = this._renderQuestion(machine, entry.question)
+    } else {
+      body = `<div class="pgwb-elicit-empty">
+        No open questions — the ledger has converged for now.
+        <button class="btn btn-secondary btn-sm" data-action="harvest" data-dir="${esc(machine.dir)}">Re-harvest</button>
+      </div>`
+    }
+
+    return `<div class="pgwb-elicit">
+      <div class="pgwb-elicit-header">Invariant elicitation ${statusLine}</div>
+      ${body}
+      ${entry.lastOutput ? `<pre class="pgwb-output">${esc(entry.lastOutput)}</pre>` : ''}
+    </div>`
+  }
+
+  _renderQuestion(machine, q) {
+    const holds = q.precheck === 'HOLDS'
+    return `<div class="pgwb-question">
+      <div class="pgwb-question-head">
+        <code>${esc(q.id)}</code>
+        <span class="pgwb-badge ${holds ? '' : 'pgwb-badge-warn'}">${esc(q.precheck)}${holds ? '' : ` — ${esc(q.precheckDetail || '')}`}</span>
+      </div>
+      <div class="pgwb-question-text">${esc(q.question)}</div>
+      ${q.evidence ? `<div class="pgwb-question-evidence">Evidence — ${esc(q.evidence.from)}: “${esc(q.evidence.quote)}”</div>` : ''}
+      ${q.predicate ? `<pre class="pgwb-question-pred">${esc(q.predicate)}</pre>` : ''}
+      ${!holds && q.counterexample ? `<div class="pgwb-question-cex">
+        <div class="pgwb-question-cex-title">Counterexample (shortest path from init)</div>
+        <pre class="pgwb-output">${esc(q.counterexample.join('\n'))}</pre>
+      </div>` : ''}
+      ${!holds ? '<div class="pgwb-question-note">Confirming a FAILS rule records a live finding: the machine reachably violates it, and the counterexample above is the repro.</div>' : ''}
+      <div class="pgwb-question-actions">
+        <input type="text" class="pgwb-concern" placeholder="concern / rationale (optional)"
+          data-concern-for="${esc(machine.dir)}">
+        <button class="btn btn-primary btn-sm" data-action="record" data-disposition="confirm" data-dir="${esc(machine.dir)}">Confirm</button>
+        <button class="btn btn-secondary btn-sm" data-action="record" data-disposition="reject" data-dir="${esc(machine.dir)}">Reject</button>
+        <button class="btn btn-secondary btn-sm" data-action="record" data-disposition="defer" data-dir="${esc(machine.dir)}">Defer</button>
+        <button class="btn btn-secondary btn-sm" data-action="record" data-disposition="abandon" data-dir="${esc(machine.dir)}">Abandon</button>
+      </div>
     </div>`
   }
 

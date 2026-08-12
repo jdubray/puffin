@@ -1,0 +1,94 @@
+{
+  "format": "polynv-ledger/1",
+  "records": [
+    {
+      "id": "set-once:endedVia",
+      "source": "template",
+      "target": "transition",
+      "question": "'endedVia' starts empty (''). Once it is set to a non-empty value, may it ever change again? The template proposes: set once, then immutable.",
+      "evidence": {
+        "from": "contract.stateKeys.endedVia.type + initState",
+        "quote": "string, how the last prompt run ended: '' (none yet / in flight), 'completed', 'error', 'cancelled' (initState: '')"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "set-once",
+            "field": "endedVia",
+            "empty": ""
+          },
+          "js": "(pre, action, data, post) => pre[\"endedVia\"] === \"\" || post[\"endedVia\"] === pre[\"endedVia\"]",
+          "date": "2026-08-12T04:18:40.493Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "FAILS",
+        "detail": "violated by START_COMPOSE",
+        "kind": "transition",
+        "counterexample": [
+          {
+            "action": null,
+            "data": null,
+            "state": {
+              "promptState": "idle",
+              "hasResponse": false,
+              "endedVia": ""
+            }
+          },
+          {
+            "action": "START_COMPOSE",
+            "data": {},
+            "state": {
+              "promptState": "composing",
+              "hasResponse": false,
+              "endedVia": ""
+            }
+          },
+          {
+            "action": "SUBMIT_PROMPT",
+            "data": {},
+            "state": {
+              "promptState": "submitted",
+              "hasResponse": false,
+              "endedVia": ""
+            }
+          },
+          {
+            "action": "RESPONSE_ERROR",
+            "data": {},
+            "state": {
+              "promptState": "failed",
+              "hasResponse": false,
+              "endedVia": "error"
+            }
+          },
+          {
+            "action": "START_COMPOSE",
+            "data": {},
+            "state": {
+              "promptState": "composing",
+              "hasResponse": false,
+              "endedVia": ""
+            }
+          }
+        ],
+        "statesExplored": 8,
+        "date": "2026-08-12T04:18:40.493Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-08-12T04:18:40.493Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "FAILS",
+          "date": "2026-08-12T04:18:40.493Z"
+        }
+      ]
+    }
+  ]
+}

@@ -306,6 +306,42 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  ipcMain.handle('polygraph:nvHarvest', async (event, { machineDir } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.harvestInvariants(machineDir)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:nvQuestions', async (event, { machineDir, all } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.getQuestions(machineDir, { all })
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:nvRecord', async (event, { machineDir, ...params } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.recordDisposition(machineDir, params)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('polygraph:nvReport', async (event, { machineDir } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.getElicitationReport(machineDir)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('polygraph:readDiagram', async (event, { svgPath } = {}) => {
     try {
       if (!svgPath) return { success: false, error: 'svgPath is required' }

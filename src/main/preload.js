@@ -797,7 +797,12 @@ contextBridge.exposeInMainWorld('puffin', {
     // renderDiagrams({ machineDir, diagram?, theme? }) → { success, svgs, outDir }
     renderDiagrams: (args) => ipcRenderer.invoke('polygraph:renderDiagrams', args),
     // readDiagram({ svgPath }) → { success, svg }
-    readDiagram: (args) => ipcRenderer.invoke('polygraph:readDiagram', args)
+    readDiagram: (args) => ipcRenderer.invoke('polygraph:readDiagram', args),
+    // Invariant elicitation (polynv): harvest → questions → record → report
+    nvHarvest: (args) => ipcRenderer.invoke('polygraph:nvHarvest', args),
+    nvQuestions: (args) => ipcRenderer.invoke('polygraph:nvQuestions', args),
+    nvRecord: (args) => ipcRenderer.invoke('polygraph:nvRecord', args),
+    nvReport: (args) => ipcRenderer.invoke('polygraph:nvReport', args)
   },
 
   /**

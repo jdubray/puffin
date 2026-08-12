@@ -296,6 +296,111 @@ class PolygraphService {
   }
 
   /**
+   * @private
+   * Locate the polynv CLI inside the Polygraph checkout.
+   */
+  _polynvBin() {
+    const polygraphDir = this.resolvePolygraphDir()
+    if (!polygraphDir) return null
+    const bin = path.join(polygraphDir, 'polynv', 'bin', 'polynv.mjs')
+    return fs.existsSync(bin) ? bin : null
+  }
+
+  /**
+   * Harvest invariant candidates from a machine's own vocabulary into its
+   * intent ledger (polynv harvest — mechanical templates, no LLM, no key).
+   *
+   * @param {string} machineDir
+   * @returns {Promise<{success: boolean, output?: string, error?: string}>}
+   */
+  async harvestInvariants(machineDir) {
+    const bin = this._polynvBin()
+    if (!bin) return { success: false, error: 'polynv not found in the Polygraph checkout' }
+    const { code, stdout, stderr } = await this._run(process.execPath,
+      [bin, 'harvest', '--artifacts', machineDir])
+    return { success: code === 0, output: `${stdout}${stderr}`.trim() }
+  }
+
+  /**
+   * Get the next open, pre-checked elicitation question (or all of them).
+   *
+   * @param {string} machineDir
+   * @param {Object} [options]
+   * @param {boolean} [options.all] - Return every open question
+   * @returns {Promise<{success: boolean, question?: Object|null, questions?: Object[], error?: string}>}
+   */
+  async getQuestions(machineDir, options = {}) {
+    const bin = this._polynvBin()
+    if (!bin) return { success: false, error: 'polynv not found in the Polygraph checkout' }
+    const args = [bin, 'questions', '--artifacts', machineDir, '--json']
+    if (!options.all) args.push('--next')
+    const { code, stdout, stderr } = await this._run(process.execPath, args)
+    if (code !== 0) return { success: false, error: `${stdout}${stderr}`.trim() }
+    try {
+      const parsed = JSON.parse(stdout)
+      return options.all
+        ? { success: true, questions: Array.isArray(parsed) ? parsed : [parsed] }
+        : { success: true, question: Array.isArray(parsed) ? (parsed[0] ?? null) : parsed }
+    } catch {
+      // No open questions renders as prose, not JSON
+      return options.all
+        ? { success: true, questions: [] }
+        : { success: true, question: null }
+    }
+  }
+
+  /**
+   * Record a disposition for one elicitation question (append-only ledger).
+   *
+   * @param {string} machineDir
+   * @param {Object} params
+   * @param {string} params.id - Question/record id
+   * @param {'confirm'|'reject'|'abandon'|'defer'|'modify'} params.disposition
+   * @param {string} params.author - Attributed human author
+   * @param {string} [params.concern] - Why (recorded on the ledger)
+   * @param {string} [params.js] - Revised predicate (modify only)
+   * @returns {Promise<{success: boolean, output?: string, error?: string}>}
+   */
+  async recordDisposition(machineDir, { id, disposition, author, concern, js } = {}) {
+    const bin = this._polynvBin()
+    if (!bin) return { success: false, error: 'polynv not found in the Polygraph checkout' }
+    const validDispositions = ['confirm', 'reject', 'abandon', 'defer', 'modify']
+    if (!id || !validDispositions.includes(disposition) || !author) {
+      return { success: false, error: 'id, a valid disposition, and author are required' }
+    }
+    const args = [bin, 'record', '--artifacts', machineDir,
+      '--id', id, '--disposition', disposition, '--author', author]
+    if (concern) args.push('--concern', concern)
+    if (js) args.push('--js', js)
+    const { code, stdout, stderr } = await this._run(process.execPath, args)
+    return { success: code === 0, output: `${stdout}${stderr}`.trim() }
+  }
+
+  /**
+   * Elicitation convergence report for a machine (polynv report --json).
+   *
+   * @param {string} machineDir
+   * @returns {Promise<{success: boolean, report?: Object, error?: string}>}
+   */
+  async getElicitationReport(machineDir) {
+    const bin = this._polynvBin()
+    if (!bin) return { success: false, error: 'polynv not found in the Polygraph checkout' }
+    // NOTE: report's exit code is a convergence gate (PARTIAL → nonzero),
+    // not an error signal — parse the JSON regardless.
+    const { stdout, stderr } = await this._run(process.execPath,
+      [bin, 'report', '--artifacts', machineDir, '--json'])
+    try {
+      return { success: true, report: JSON.parse(stdout) }
+    } catch {
+      const text = `${stdout}${stderr}`.trim()
+      // An empty/absent ledger renders as prose — report that as "no ledger"
+      return text.includes('Error')
+        ? { success: false, error: text }
+        : { success: true, report: null }
+    }
+  }
+
+  /**
    * Read a rendered diagram's SVG markup for inline display.
    *
    * Only files produced by renderDiagrams are readable: the path must be an

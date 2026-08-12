@@ -100,7 +100,7 @@ export class FirstRunSetup {
         label: 'Power Tools',
         description: 'Useful for advanced workflows',
         names: ['prompt-template-plugin', 'excalidraw-plugin',
-                'outcome-lifecycle-plugin', 'rlm-document-plugin', 'hdsl-viewer-plugin'],
+                'outcome-lifecycle-plugin', 'rlm-document-plugin'],
       },
     ]
 

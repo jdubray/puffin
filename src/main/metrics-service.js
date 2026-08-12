@@ -29,10 +29,6 @@ const MetricEventType = {
  */
 const MetricComponent = {
   CLAUDE_SERVICE: 'claude-service',
-  CRE_PLAN: 'cre-plan',
-  CRE_RIS: 'cre-ris',
-  CRE_ASSERTION: 'cre-assertion',
-  HDSL_ENGINE: 'hdsl-engine',
   MEMORY_PLUGIN: 'memory-plugin',
   OUTCOMES_PLUGIN: 'outcomes-plugin',
   SKILLS_SYSTEM: 'skills-system'

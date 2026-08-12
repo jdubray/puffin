@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --enable-logging",
-    "test": "node --test tests/",
+    "test": "node --test \"tests/**/*.test.js\"",
     "build:excalidraw": "esbuild plugins/excalidraw-plugin/renderer/excalidraw-bundle-entry.js --bundle --outfile=plugins/excalidraw-plugin/renderer/excalidraw-bundle.js --format=iife --platform=browser --target=chrome120 --loader:.js=jsx --define:process.env.NODE_ENV=\\\"production\\\" --define:process.env.IS_PREACT=\\\"false\\\"",
     "package": "electron-builder",
     "postinstall": "electron-rebuild"
@@ -21,10 +21,7 @@
   "author": "jdubray",
   "license": "MIT",
   "dependencies": {
-    "@cognitive-fab/sam-fsm": "1.0.0",
-    "@cognitive-fab/sam-pattern": "^1.6.1",
     "@excalidraw/excalidraw": "^0.17.0",
-    "@puffin/hdsl-types": "file:shared/hdsl-types",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "better-sqlite3": "^11.6.0",

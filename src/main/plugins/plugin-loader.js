@@ -221,6 +221,11 @@ class PluginLoader extends EventEmitter {
           continue
         }
 
+        // A ".disabled" suffix opts a plugin out of discovery entirely
+        if (entry.name.endsWith('.disabled')) {
+          continue
+        }
+
         const pluginDir = path.join(this.pluginsDir, entry.name)
         const manifestPath = path.join(pluginDir, 'puffin-plugin.json')
 

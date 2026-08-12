@@ -86,10 +86,6 @@ describe('MetricsService', () => {
   describe('MetricComponent constants', () => {
     it('should define all component identifiers', () => {
       assert.strictEqual(MetricComponent.CLAUDE_SERVICE, 'claude-service')
-      assert.strictEqual(MetricComponent.CRE_PLAN, 'cre-plan')
-      assert.strictEqual(MetricComponent.CRE_RIS, 'cre-ris')
-      assert.strictEqual(MetricComponent.CRE_ASSERTION, 'cre-assertion')
-      assert.strictEqual(MetricComponent.HDSL_ENGINE, 'hdsl-engine')
       assert.strictEqual(MetricComponent.MEMORY_PLUGIN, 'memory-plugin')
       assert.strictEqual(MetricComponent.OUTCOMES_PLUGIN, 'outcomes-plugin')
     })

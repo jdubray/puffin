@@ -1568,9 +1568,12 @@ function setupClaudeHandlers(ipcMain) {
       }
     }
 
+    // Claude 5 family, by CLI alias (stable across point releases — the
+    // claude CLI resolves fable/opus/sonnet/haiku to the current models)
     return {
       models: [
-        { id: 'claude-opus-4-7', name: 'Claude Opus', description: 'Most capable' },
+        { id: 'fable', name: 'Claude Fable 5', description: 'Most intelligent' },
+        { id: 'opus', name: 'Claude Opus', description: 'Most capable' },
         { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced' },
         { id: 'haiku', name: 'Claude Haiku', description: 'Fast' }
       ],

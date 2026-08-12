@@ -630,7 +630,7 @@ export class ProjectFormComponent {
       assumptions: this.assumptions.filter(a => a.trim()),
       technicalArchitecture: this.getElementValue('technical-architecture'),
       dataModel: this.getElementValue('data-model'),
-      defaultModel: this.getElementValue('default-model', 'optus'),
+      defaultModel: this.getElementValue('default-model', 'sonnet'),
       options: {
         programmingStyle: this.getElementValue('programming-style', 'hybrid'),
         testingApproach: this.getElementValue('testing-approach', 'bdd'),

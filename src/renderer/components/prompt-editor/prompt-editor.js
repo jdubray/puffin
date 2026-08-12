@@ -1185,11 +1185,13 @@ export class PromptEditorComponent {
         finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
         console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
 
-        // Upgrade to opus for think-harder and superthink (Claude Code only — not applicable to local LLMs)
+        // Upgrade the model tier for deep thinking budgets (Claude Code only —
+        // not applicable to local LLMs, and never a DOWNGRADE from fable):
+        // superthink → fable, think-harder → opus.
         if ((thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') &&
-            !selectedModel.startsWith('ollama:')) {
-          selectedModel = 'opus'
-          console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
+            !selectedModel.startsWith('ollama:') && !selectedModel.includes('fable')) {
+          selectedModel = thinkingBudget === 'superthink' ? 'fable' : 'opus'
+          console.log(`[PROMPT-EDITOR] Upgraded model to ${selectedModel} for ${thinkingBudget}`)
         }
       }
 
@@ -1356,10 +1358,12 @@ export class PromptEditorComponent {
         finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
         console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
 
-        // Upgrade to opus for think-harder and superthink
-        if (thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') {
-          selectedModel = 'opus'
-          console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
+        // Upgrade the model tier for deep thinking budgets — superthink →
+        // fable, think-harder → opus; never a DOWNGRADE from fable.
+        if ((thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') &&
+            !selectedModel.includes('fable')) {
+          selectedModel = thinkingBudget === 'superthink' ? 'fable' : 'opus'
+          console.log(`[PROMPT-EDITOR] Upgraded model to ${selectedModel} for ${thinkingBudget}`)
         }
       }
 

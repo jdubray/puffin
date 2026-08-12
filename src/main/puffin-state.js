@@ -34,7 +34,6 @@ const UI_GUIDELINES_FILE = 'ui-guidelines.json'
 const STYLESHEETS_DIR = 'stylesheets'
 const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directory
 const CLAUDE_AGENTS_DIR = 'agents' // Puffin-managed agents directory (in .puffin/)
-const ACTIVE_SPRINT_FILE = 'active-sprint.json' // JSON backup of active sprint
 const TOAST_HISTORY_FILE = 'toast-history.json' // Toast notification history
 const SYNC_INBOX_FILE = 'sync-inbox.json' // Incoming syncs from CLI
 

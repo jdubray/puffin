@@ -148,20 +148,6 @@ describe('UserStoryRepository', () => {
       assert.ok(sql.includes('OFFSET 5'))
     })
 
-    it('should build findBySprintId query with join', () => {
-      const sprintId = 'sprint-1'
-      const sql = `
-        SELECT us.* FROM user_stories us
-        INNER JOIN sprint_stories ss ON us.id = ss.story_id
-        WHERE ss.sprint_id = '${sprintId}'
-        ORDER BY ss.added_at ASC
-      `
-
-      assert.ok(sql.includes('INNER JOIN sprint_stories'))
-      assert.ok(sql.includes('ss.sprint_id'))
-      assert.ok(sql.includes('ORDER BY ss.added_at'))
-    })
-
     it('should build search query with LIKE pattern', () => {
       const query = 'test'
       const searchPattern = `%${query}%`

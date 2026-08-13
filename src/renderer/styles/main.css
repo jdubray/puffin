@@ -372,6 +372,14 @@ a:hover {
   padding: 0;
 }
 
+/* Multi-column working views (Sekkei, Workflow, Polygraph) fill the window
+   — the 1200px reading measure above is for form/document views only. */
+.view-content.full-width {
+  max-width: none;
+  margin: 0;
+  padding: 1rem;
+}
+
 /* Forms */
 .form-group {
   margin-bottom: 1.25rem;

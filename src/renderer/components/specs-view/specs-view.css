@@ -18,7 +18,8 @@
 }
 
 .specs-ws-select {
-  min-width: 220px;
+  min-width: 0;
+  max-width: 160px;
   padding: 5px 9px;
   font-size: 13px;
   background: var(--bg-primary, #1a1a1a);
@@ -249,9 +250,10 @@
 
 .specs-3col {
   display: grid;
-  grid-template-columns: minmax(280px, 24%) minmax(300px, 1fr) minmax(300px, 1.05fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1.15fr);
   gap: 12px;
-  height: calc(100vh - 150px);
+  width: 100%;
+  height: calc(100vh - 140px);
   min-height: 0;
 }
 
@@ -284,6 +286,7 @@
 
 .specs-col-head-actions {
   margin-left: auto;
+  min-width: 0;
   display: flex;
   gap: 6px;
   align-items: center;

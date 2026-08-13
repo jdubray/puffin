@@ -784,6 +784,17 @@ class ClaudeService {
       args.push('--disallowedTools', ...data.disallowedTools)
     }
 
+    // Pre-approve tools so the session doesn't stall on a permission prompt the
+    // GUI has no way to answer. `--permission-mode acceptEdits` covers file
+    // edits only — MCP tools still ask, so the GLM server (whose sole job is
+    // editing the sekkei the user just asked us to edit) is allowed by name.
+    // `mcp__<server>` grants every tool on that server.
+    const allowedTools = [...(data.allowedTools || [])]
+    if (this._glmMcpConfigPath) allowedTools.push('mcp__glm')
+    if (allowedTools.length > 0) {
+      args.push('--allowedTools', ...allowedTools)
+    }
+
     // Additional directories (per-branch --add-dir support)
     const additionalDirs = data.additionalDirs || []
     for (const dir of additionalDirs) {

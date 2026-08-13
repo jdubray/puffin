@@ -139,6 +139,12 @@ export class SpecsViewComponent {
     // Composer context sources + voice
     this.designDocs = []
     this.guiDesigns = []
+    this.selectedDocs = []
+    this.selectedGuis = []
+    this.openMenu = null // 'docs' | 'gui'
+    this.quickMode = false
+    this.models = []
+    this.defaultModel = ''
     this.isRecording = false
     this._recorder = null
     this._chunks = []
@@ -230,6 +236,13 @@ export class SpecsViewComponent {
         const designs = await window.puffin.state.listGuiDesigns()
         this.guiDesigns = designs?.designs || designs || []
       } catch { this.guiDesigns = [] }
+      // The composer renders after startup's loadModels(), so it fetches
+      // its own list rather than inheriting empty options.
+      try {
+        const res = await window.puffin.claude.getModels()
+        this.models = res?.models || []
+        this.defaultModel = res?.default || ''
+      } catch { this.models = [] }
       this.hasLoaded = true
     } catch (error) {
       console.error('[SPECS-VIEW] Refresh failed:', error)
@@ -348,6 +361,15 @@ export class SpecsViewComponent {
       sessionId: null
     })
     if (input && !overrideInstruction) input.value = ''
+  }
+
+  _togglePick(field, value) {
+    if (!value) return
+    const list = this[field]
+    const at = list.indexOf(value)
+    if (at >= 0) list.splice(at, 1)
+    else list.push(value)
+    this.render()
   }
 
   /** Review the sekkei itself — gaps, ambiguity, altitude errors. */
@@ -756,7 +778,13 @@ coding agent would have to guess at. List findings worst-first with the glm id e
 
   _onClick(e) {
     const nodeRow = e.target.closest('[data-glm-id]')
-    const button = e.target.closest('button[data-action]')
+    const button = e.target.closest('[data-action]')
+    // A click outside an open menu closes it
+    if (this.openMenu && !e.target.closest('.dropdown')) {
+      this.openMenu = null
+      this.render()
+      return
+    }
 
     if (button) {
       const { action } = button.dataset
@@ -872,11 +900,9 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       if (isCheck) el.checked = value
       else if ([...el.options].some(o => o.value === value)) el.value = value
     }
+    set('#sekkei-provider', opts.provider)
     set('#sekkei-model', opts.model)
     set('#sekkei-thinking', opts.thinking)
-    set('#sekkei-quick', opts.quick, true)
-    set('#sekkei-docs', opts.docs)
-    set('#sekkei-gui', opts.gui)
   }
 
   /**
@@ -902,53 +928,91 @@ coding agent would have to guess at. List findings worst-first with the glm id e
         <textarea id="specs-author-input" class="specs-author-input" rows="3"
           placeholder="e.g. add a capability for run scheduling, with a component per queue"
           ${a.isRunning ? 'disabled' : ''}></textarea>
-        <div class="specs-composer-options">
-          <label class="specs-copt"><span>Model</span>
-            <select id="sekkei-model" class="specs-copt-select" ${a.isRunning ? 'disabled' : ''}>
-              <option value="">default</option>
+
+        <div class="prompt-options">
+          <div class="prompt-option-group">
+            <label for="sekkei-provider" class="prompt-select-label">Provider:</label>
+            <select id="sekkei-provider" class="prompt-model-select" ${a.isRunning ? 'disabled' : ''}>
+              <option value="claude">Claude</option>
+              <option value="vibe">Mistral Vibe</option>
+              <option value="local">Local LLM</option>
             </select>
-          </label>
-          <label class="specs-copt"><span>Thinking</span>
-            <select id="sekkei-thinking" class="specs-copt-select" ${a.isRunning ? 'disabled' : ''}>
+          </div>
+          <div class="prompt-option-group">
+            <label for="sekkei-model" class="prompt-select-label">Model:</label>
+            <select id="sekkei-model" class="prompt-model-select" ${a.isRunning ? 'disabled' : ''}>
+              ${this.models.length === 0
+                ? '<option value="">Loading models…</option>'
+                : this.models.map(m => `<option value="${esc(m.id)}"${m.id === this.defaultModel ? ' selected' : ''}>${esc(m.name)} — ${esc(m.description)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="prompt-option-group">
+            <label for="sekkei-thinking" class="prompt-select-label">Thinking Budget:</label>
+            <select id="sekkei-thinking" class="prompt-model-select" ${a.isRunning ? 'disabled' : ''}>
               <option value="none">None</option>
               <option value="think">Think</option>
               <option value="think-hard">Think hard</option>
               <option value="think-harder">Think harder</option>
-              <option value="ultrathink">Ultrathink</option>
+              <option value="ultrathink">Ultrathink (max)</option>
             </select>
-          </label>
-          <label class="specs-copt specs-copt-check">
-            <input type="checkbox" id="sekkei-quick" ${a.isRunning ? 'disabled' : ''}>
-            <span title="Ask without changing anything — read-only">Quick Q</span>
-          </label>
-          <label class="specs-copt"><span>Docs</span>
-            <select id="sekkei-docs" class="specs-copt-select" ${a.isRunning ? 'disabled' : ''}>
-              <option value="">none</option>
-              ${this.designDocs.map(d => `<option value="${esc(d.path || d.filename)}">${esc(d.name || d.filename)}</option>`).join('')}
-            </select>
-          </label>
-          <label class="specs-copt"><span>GUI</span>
-            <select id="sekkei-gui" class="specs-copt-select" ${a.isRunning ? 'disabled' : ''}>
-              <option value="">none</option>
-              ${this.guiDesigns.map(g => `<option value="${esc(g.filename || g)}">${esc(g.name || g.filename || g)}</option>`).join('')}
-            </select>
-          </label>
+          </div>
         </div>
-        <div class="specs-composer-actions">
-          <button class="btn btn-secondary btn-sm" data-action="review-specs"
+
+        <div class="prompt-actions specs-composer-actions">
+          <button class="btn outline ${this.quickMode ? 'active' : ''}" data-action="toggle-quick"
+            title="Ask about the sekkei without changing anything">💬 Quick Q</button>
+          <button class="btn outline" data-action="review-specs"
             ${a.isRunning || !this.workspaceId ? 'disabled' : ''}
             title="Review this sekkei for gaps, ambiguity and altitude errors">🔍 Review specs</button>
-          <button class="btn btn-secondary btn-sm" data-action="new-work-item"
+          <button class="btn outline" data-action="new-work-item"
             ${!this.selectedGlmId ? 'disabled' : ''}
             title="${this.selectedGlmId ? 'Queue the selected spec onto the Workflow' : 'Select a node first'}">+ Work item</button>
-          <button class="btn btn-secondary btn-sm specs-mic ${this.isRecording ? 'recording' : ''}"
-            data-action="mic" ${a.isRunning ? 'disabled' : ''}
-            title="Voice input">${this.isRecording ? '⏹' : '🎙'}</button>
+
+          <div class="dropdown ${this.openMenu === 'docs' ? 'open' : ''}" id="sekkei-docs-dropdown">
+            <button class="btn secondary" data-action="menu-docs" title="Include design documents as reference">
+              Include Docs${this.selectedDocs.length ? ` (${this.selectedDocs.length})` : ''} ▾
+            </button>
+            <div class="dropdown-menu">${this._renderMenuItems(this.designDocs, this.selectedDocs, 'doc', 'No documents in docs/')}</div>
+          </div>
+
+          <div class="dropdown ${this.openMenu === 'gui' ? 'open' : ''}" id="sekkei-gui-dropdown">
+            <button class="btn secondary" data-action="menu-gui" title="Include a GUI design as visual context">
+              Include GUI${this.selectedGuis.length ? ` (${this.selectedGuis.length})` : ''} ▾
+            </button>
+            <div class="dropdown-menu">${this._renderMenuItems(this.guiDesigns, this.selectedGuis, 'gui', 'No GUI designs yet')}</div>
+          </div>
+
+          <button class="mic-btn ${this.isRecording ? 'recording' : ''}" data-action="mic"
+            ${a.isRunning ? 'disabled' : ''} title="Voice input (speech-to-text)">🎙</button>
+
           ${a.isRunning
-            ? '<button class="btn btn-secondary btn-sm" data-action="cancel-author">Cancel</button>'
-            : `<button class="btn btn-primary btn-sm" data-action="author" ${!this.workspaceId ? 'disabled' : ''}>Author</button>`}
+            ? '<button class="btn secondary" data-action="cancel-author">Cancel</button>'
+            : `<button class="btn primary" data-action="author" ${!this.workspaceId ? 'disabled' : ''}>Author</button>`}
         </div>
       </div>`
+  }
+
+  /** Multi-select menu items, in the prompt view's shape. */
+  _renderMenuItems(items, selected, kind, emptyLabel) {
+    if (!items || items.length === 0) {
+      return `<div class="dropdown-item disabled"><span class="item-label">${esc(emptyLabel)}</span></div>`
+    }
+    const rows = items.map(item => {
+      const value = item.filename || item.path || item.name || String(item)
+      const label = item.name || item.filename || String(item)
+      const isSelected = selected.includes(value)
+      return `<div class="dropdown-item ${isSelected ? 'selected' : ''}"
+        data-action="pick-${kind}" data-value="${esc(value)}">
+        <span class="item-checkbox">${isSelected ? '☑' : '☐'}</span>
+        <span class="item-label">${esc(label)}</span>
+      </div>`
+    }).join('')
+    const clear = selected.length > 0
+      ? `<div class="dropdown-item clear-selection" data-action="clear-${kind}">
+           <span class="item-icon">✕</span><span class="item-label">Clear Selection</span>
+         </div><div class="dropdown-divider"></div>`
+      : ''
+    return clear + rows
   }
 
   _renderChanges() {

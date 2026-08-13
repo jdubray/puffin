@@ -991,7 +991,6 @@ class ClaudeService {
       hasGuiDescription: !!data.guiDescription,
       threadFilesModified: data.threadFilesModified?.length || 0,
       hasBranchContext: !!data.branchId,
-      hasPendingContextUpdate: hasPendingUpdate,
       promptLength: prompt.length
     })
 

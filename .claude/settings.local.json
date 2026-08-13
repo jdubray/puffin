@@ -137,7 +137,8 @@
       "Bash(where bun *)",
       "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' http://localhost:3300/api/v1/workspaces/fe0ac53e-9dec-4c99-a3a6-082c3bae8d08/scrs)",
       "Bash(awk -F: '$1 > 700 && $1 < 780')",
-      "Bash(awk -F: '$1>800 && $1<850')"
+      "Bash(awk -F: '$1>800 && $1<850')",
+      "Bash(npx eslint *)"
     ]
   },
   "enableAllProjectMcpServers": true,

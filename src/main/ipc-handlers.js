@@ -2861,10 +2861,11 @@ function setupViewRegistryHandlers(ipcMain, viewRegistry, mainWindow) {
   // Note: plugins:isFirstRun is registered early in setupIpcHandlers (uses pluginManagerRef)
   ipcMain.handle('plugins:completeSetup', async (event, { disabledPlugins = [] } = {}) => {
     try {
+      if (!pluginManagerRef) return { success: false, error: 'Plugin manager not ready' }
       for (const name of disabledPlugins) {
-        await pluginManager.disablePlugin(name)
+        await pluginManagerRef.disablePlugin(name)
       }
-      await pluginManager.getStateStore().markSetupComplete()
+      await pluginManagerRef.getStateStore().markSetupComplete()
       return { success: true }
     } catch (error) {
       return { success: false, error: error.message }

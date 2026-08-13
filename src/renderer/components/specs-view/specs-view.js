@@ -17,6 +17,41 @@ function esc(text) {
 
 const STRATUM_ORDER = ['system', 'capability', 'component', 'interaction', 'spec']
 
+/**
+ * The sekkei authoring prompt. Same conversational loop as the Prompt tab,
+ * but the artifact is the DESIGN, not the code: the session edits sekkei
+ * nodes through the glm_* MCP tools Puffin wires into every session.
+ */
+function buildAuthoringPrompt(instruction, { workspaceSlug, workspaceId, selectedGlmId, nodeCount }) {
+  return `You are authoring a sekkei (設計) — the design of record for this project.
+You edit SPECIFICATIONS, never source code.
+
+Workspace: ${workspaceSlug} (id ${workspaceId}) — currently ${nodeCount} node(s).
+${selectedGlmId ? `Currently selected node: ${selectedGlmId}\n` : ''}
+Use the glm_* MCP tools for every change:
+  glm_status, glm_list_components, glm_get_node — read the current design
+  glm_create_node — add a node (system | capability | component | interaction | spec)
+  glm_apply_patch — update an existing node's body (JSON-Patch)
+  glm_verify — run the 7-gate verifier when the change is complete
+
+Sekkei authoring rules:
+- Strata nest: system → capability → component → interaction → spec. Put content at
+  the altitude it belongs to; never inline a child's content into its parent.
+- glm ids follow <org>:<project>.<capability>.<component>[.spec.<kind>] — reuse the
+  workspace's existing prefix exactly.
+- Specs are the machine-runnable leaves: acceptance specs carry deliverables and a
+  verifier command; prompt specs carry the context bundle and template that let a
+  coding agent regenerate the component with no human input.
+- Acceptance criteria must be mechanically checkable. Business rules must be
+  unambiguous declarative statements.
+- Do NOT create, modify, or delete source files. Implementation happens later, in a
+  code workflow driven from these specs.
+
+Report what you changed as a short list of glm ids with the operation applied.
+
+Request: ${instruction}`
+}
+
 /** Legal SCR events per status (mirror of GLM's domain/scr.ts FSM) */
 const SCR_EVENTS = {
   'Draft': ['submit'],
@@ -96,6 +131,11 @@ export class SpecsViewComponent {
     this.isBinding = false
     this.borrowing = false // read-only peek at another project's sekkei
     this.projectName = ''
+    // Authoring loop (the Prompt tab's shape, aimed at the design)
+    this.authoring = { isRunning: false, response: '', error: null, lastInstruction: '' }
+    // Changes since the last code generation → the workflow's inbox
+    this.lastGenerationAt = null
+    this.queueNote = null
   }
 
   init() {
@@ -171,7 +211,9 @@ export class SpecsViewComponent {
       }
       try {
         const state = await window.puffin.state.get()
-        this.projectName = state?.state?.projectName || state?.projectName || ''
+        const resolved = state?.state || state || {}
+        this.projectName = resolved.projectName || ''
+        this.lastGenerationAt = resolved.config?.glmLastGenerationAt || null
       } catch { /* project name is cosmetic */ }
       this.hasLoaded = true
     } catch (error) {
@@ -225,6 +267,115 @@ export class SpecsViewComponent {
     this.render()
     const res = await window.puffin.glm.verify({ workspaceId: this.workspaceId })
     this.verifyResult = res.success ? res.result : { error: res.error }
+    this.render()
+  }
+
+  // ===== Authoring loop =====
+
+  /** Submit a spec-authoring request — the session edits nodes via glm_* MCP. */
+  submitAuthoring() {
+    const input = this.container.querySelector('#specs-author-input')
+    const instruction = input?.value?.trim()
+    if (!instruction || this.authoring.isRunning || !this.workspaceId || this.borrowing) return
+
+    this.authoring = { isRunning: true, response: '', error: null, lastInstruction: instruction }
+    this.render()
+
+    if (!this._authoringSubscribed) {
+      this._authoringSubscribed = true
+      window.puffin.claude.onResponse((chunk) => {
+        if (!this.authoring.isRunning) return
+        this.authoring.response += typeof chunk === 'string' ? chunk : (chunk?.content || '')
+        this._renderAuthoringOnly()
+      })
+      window.puffin.claude.onComplete(() => {
+        if (!this.authoring.isRunning) return
+        this.authoring.isRunning = false
+        // Node changes already streamed in over the GLM channel; reload to
+        // be certain the tree matches the design after the edit.
+        this._loadWorkspace({ keepSelection: true }).then(() => this.render())
+      })
+      window.puffin.claude.onError((error) => {
+        if (!this.authoring.isRunning) return
+        this.authoring.isRunning = false
+        this.authoring.error = typeof error === 'string' ? error : (error?.message || 'failed')
+        this.render()
+      })
+    }
+
+    window.puffin.claude.submit({
+      prompt: buildAuthoringPrompt(instruction, {
+        workspaceSlug: this.binding?.slug || '',
+        workspaceId: this.workspaceId,
+        selectedGlmId: this.selectedGlmId,
+        nodeCount: this.nodes.length
+      }),
+      sessionId: null
+    })
+    if (input) input.value = ''
+  }
+
+  /** Re-render just the authoring pane so streaming never disturbs the tree. */
+  _renderAuthoringOnly() {
+    const pane = this.container.querySelector('#specs-author-response')
+    if (pane) {
+      pane.textContent = this.authoring.response
+      pane.scrollTop = pane.scrollHeight
+    }
+  }
+
+  cancelAuthoring() {
+    window.puffin.claude.cancel()
+    this.authoring.isRunning = false
+    this.render()
+  }
+
+  // ===== Changes since the last generation =====
+
+  /** Nodes touched since the last code generation — the workflow's inbox. */
+  _changedNodes() {
+    if (!this.lastGenerationAt) return this.nodes.filter(n => n.stratum === 'component' || n.stratum === 'spec')
+    const since = new Date(this.lastGenerationAt).getTime()
+    return this.nodes.filter(n =>
+      (n.stratum === 'component' || n.stratum === 'spec') &&
+      new Date(n.updatedAt || n.authoredAt || 0).getTime() > since)
+  }
+
+  /** Queue the changed specs onto the workflow as cards — when the user says so. */
+  async queueChangesToWorkflow() {
+    const changed = this._changedNodes()
+    if (changed.length === 0) return
+    this.queueNote = { pending: true }
+    this.render()
+
+    const status = await window.puffin.board.getStatus()
+    if (!status.running) {
+      const started = await window.puffin.board.start()
+      if (!started.success) {
+        this.queueNote = { error: started.error }
+        this.render()
+        return
+      }
+    }
+    const existing = new Set(((await window.puffin.board.listCards()).instances || [])
+      .map(c => c.instanceId || c.id))
+
+    let added = 0
+    for (const node of changed) {
+      const instanceId = String(node.glmId).replace(/[^a-zA-Z0-9._-]/g, '-')
+      if (existing.has(instanceId)) continue
+      const result = await window.puffin.board.createCard({ instanceId })
+      if (result.success) added++
+    }
+    this.queueNote = { added, skipped: changed.length - added }
+    this.render()
+  }
+
+  /** Mark this design as generated — resets the change window. */
+  async markGenerated() {
+    this.lastGenerationAt = new Date().toISOString()
+    await window.puffin.state.updateConfig({ glmLastGenerationAt: this.lastGenerationAt })
+    this.queueNote = null
     this.render()
   }
 
@@ -527,6 +678,10 @@ export class SpecsViewComponent {
       else if (action === 'scr-event') {
         this.driveScr(button.dataset.scrId, button.dataset.event)
       }
+      else if (action === 'author') this.submitAuthoring()
+      else if (action === 'cancel-author') this.cancelAuthoring()
+      else if (action === 'queue-changes') this.queueChangesToWorkflow()
+      else if (action === 'mark-generated') this.markGenerated()
       else if (action === 'create-bind') this.createAndBind()
       else if (action === 'bind-existing') this.bindExisting()
       else if (action === 'stop-borrowing') this.stopBorrowing()
@@ -564,6 +719,8 @@ export class SpecsViewComponent {
           <button class="btn btn-secondary btn-sm" data-action="stop-borrowing">Back to my sekkei</button>
         </div>` : ''}
         ${this._renderSummary()}
+        ${this.borrowing ? '' : this._renderAuthoring()}
+        ${this.borrowing ? '' : this._renderChanges()}
         ${this._renderVerify()}
         ${this.borrowing ? '' : this._renderScrs()}
         <div class="specs-body">
@@ -572,6 +729,55 @@ export class SpecsViewComponent {
         </div>
       `}
     `
+  }
+
+  _renderAuthoring() {
+    const a = this.authoring
+    return `<div class="specs-author">
+      <div class="specs-author-row">
+        <textarea id="specs-author-input" class="specs-author-input" rows="2"
+          placeholder="Describe the design change — e.g. 'add a capability for run scheduling with a component per queue' — the session edits the sekkei, never the code."
+          ${a.isRunning ? 'disabled' : ''}></textarea>
+        ${a.isRunning
+          ? '<button class="btn btn-secondary" data-action="cancel-author">Cancel</button>'
+          : `<button class="btn btn-primary" data-action="author" ${!this.workspaceId ? 'disabled' : ''}>Author</button>`}
+      </div>
+      ${a.error ? `<div class="specs-editor-error">✗ ${esc(a.error)}</div>` : ''}
+      ${(a.isRunning || a.response) ? `
+        <div class="specs-author-result">
+          <div class="specs-author-status">
+            ${a.isRunning ? '⟳ authoring the sekkei…' : '✓ done'}
+            ${a.lastInstruction ? `<span class="specs-author-echo">${esc(a.lastInstruction)}</span>` : ''}
+          </div>
+          <pre id="specs-author-response" class="specs-output">${esc(a.response)}</pre>
+        </div>` : ''}
+    </div>`
+  }
+
+  _renderChanges() {
+    const changed = this._changedNodes()
+    const note = this.queueNote
+    return `<div class="specs-changes">
+      <div class="specs-changes-line">
+        <b>${changed.length}</b> spec${changed.length === 1 ? '' : 's'} changed
+        ${this.lastGenerationAt
+          ? `since the last generation (${esc(String(this.lastGenerationAt).slice(0, 16).replace('T', ' '))})`
+          : '— nothing generated from this sekkei yet'}
+        <span class="specs-changes-actions">
+          <button class="btn btn-primary btn-sm" data-action="queue-changes"
+            ${changed.length === 0 || note?.pending ? 'disabled' : ''}>
+            ${note?.pending ? 'Queueing…' : 'Queue to Workflow'}
+          </button>
+          <button class="btn btn-secondary btn-sm" data-action="mark-generated"
+            title="Reset the change window — the current design is what the code reflects">Mark generated</button>
+        </span>
+      </div>
+      ${note?.error ? `<div class="specs-editor-error">✗ ${esc(note.error)}</div>` : ''}
+      ${note && note.added !== undefined ? `<div class="specs-changes-note">
+        Queued ${note.added} card${note.added === 1 ? '' : 's'} onto the Workflow${note.skipped ? ` (${note.skipped} already there)` : ''} —
+        open the Workflow tab to run them.
+      </div>` : ''}
+    </div>`
   }
 
   _renderBindingChip() {

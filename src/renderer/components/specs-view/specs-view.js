@@ -372,6 +372,71 @@ export class SpecsViewComponent {
     this.render()
   }
 
+  /** Queue the selected spec onto the Workflow as a work item. */
+  async createWorkItem() {
+    if (!this.selectedGlmId) return
+    const instanceId = String(this.selectedGlmId).replace(/[^a-zA-Z0-9._-]/g, '-')
+    this.queueNote = { pending: true }
+    this.render()
+    const status = await window.puffin.board.getStatus()
+    if (!status.running) {
+      const started = await window.puffin.board.start()
+      if (!started.success) {
+        this.queueNote = { error: started.error }
+        this.render()
+        return
+      }
+    }
+    const result = await window.puffin.board.createCard({ instanceId })
+    this.queueNote = result.success ? { added: 1, skipped: 0 } : { error: result.error }
+    this.render()
+  }
+
+  /** Voice input — record, transcribe, drop the text into the composer. */
+  async toggleMic() {
+    if (this.isRecording) {
+      this._recorder?.stop()
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus' : 'audio/webm'
+      this._recorder = new MediaRecorder(stream, { mimeType })
+      this._chunks = []
+      this._recorder.ondataavailable = (e) => { if (e.data.size > 0) this._chunks.push(e.data) }
+      this._recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        this.isRecording = false
+        this.render()
+        try {
+          const blob = new Blob(this._chunks, { type: mimeType })
+          const buffer = await blob.arrayBuffer()
+          const result = await window.puffin.speech.transcribe(Array.from(new Uint8Array(buffer)))
+          const text = result?.text || result?.transcript
+          const input = this.container.querySelector('#specs-author-input')
+          if (text && input) {
+            input.value = input.value ? `${input.value} ${text}` : text
+            this._composerDraft = input.value
+            input.focus()
+          } else if (!text) {
+            this.authoring.error = result?.error || 'Transcription returned nothing (set the Speech API key in Config)'
+            this.render()
+          }
+        } catch (error) {
+          this.authoring.error = `Transcription failed: ${error.message}`
+          this.render()
+        }
+      }
+      this._recorder.start()
+      this.isRecording = true
+      this.render()
+    } catch (error) {
+      this.authoring.error = `Microphone unavailable: ${error.message}`
+      this.render()
+    }
+  }
+
   /** Review the sekkei itself — gaps, ambiguity, altitude errors. */
   reviewSpecs() {
     this.submitAuthoring(
@@ -823,6 +888,16 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       else if (action === 'create-bind') this.createAndBind()
       else if (action === 'bind-existing') this.bindExisting()
       else if (action === 'stop-borrowing') this.stopBorrowing()
+      else if (action === 'review-specs') this.reviewSpecs()
+      else if (action === 'new-work-item') this.createWorkItem()
+      else if (action === 'mic') this.toggleMic()
+      else if (action === 'toggle-quick') { this.quickMode = !this.quickMode; this.render() }
+      else if (action === 'menu-docs') { this.openMenu = this.openMenu === 'docs' ? null : 'docs'; this.render() }
+      else if (action === 'menu-gui') { this.openMenu = this.openMenu === 'gui' ? null : 'gui'; this.render() }
+      else if (action === 'pick-doc') this._togglePick('selectedDocs', button.dataset.value)
+      else if (action === 'pick-gui') this._togglePick('selectedGuis', button.dataset.value)
+      else if (action === 'clear-doc') { this.selectedDocs = []; this.render() }
+      else if (action === 'clear-gui') { this.selectedGuis = []; this.render() }
       return
     }
     if (nodeRow && !this.editing) {

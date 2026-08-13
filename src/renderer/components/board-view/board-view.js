@@ -15,6 +15,15 @@ function esc(text) {
   return div.innerHTML
 }
 
+/**
+ * A card's instanceId is derived from its sekkei node's glm id — the work
+ * IS the spec. Lossy but deterministic, so the node is found by comparing
+ * derived ids (no side table to drift).
+ */
+function cardIdForNode(glmId) {
+  return String(glmId).replace(/[^a-zA-Z0-9._-]/g, '-')
+}
+
 const COLUMNS = [
   { state: 'backlog', label: 'Backlog' },
   { state: 'ready', label: 'Ready' },
@@ -44,6 +53,8 @@ export class BoardViewComponent {
     this.journalFor = null // { instanceId, entries }
     this.binding = null // this project's bound sekkei (the gate's source)
     this.glmWorkspaceId = '' // '' = unbound → ungated, disclosed in the toolbar
+    this.sekkeiNodes = [] // implementable nodes of the bound sekkei
+    this.picker = null // { candidates } — nodes with no card yet
     this.isBusy = false
     this.hasLoaded = false
     this._pollTimer = null
@@ -99,6 +110,12 @@ export class BoardViewComponent {
           const bindingRes = await window.puffin.glm.getBinding()
           this.binding = bindingRes.success ? bindingRes.binding : null
           this.glmWorkspaceId = this.binding?.workspaceId || ''
+          if (this.glmWorkspaceId) {
+            const nodesRes = await window.puffin.glm.listNodes({ workspaceId: this.glmWorkspaceId })
+            // Components and spec leaves are the implementable units
+            this.sekkeiNodes = (nodesRes.success ? nodesRes.nodes : [])
+              .filter(n => n.stratum === 'component' || n.stratum === 'spec')
+          }
         }
       } catch { this.binding = null; this.glmWorkspaceId = '' }
       this.hasLoaded = true
@@ -174,6 +191,29 @@ export class BoardViewComponent {
     }
   }
 
+  /** Open the picker of sekkei nodes that have no card yet. */
+  openPicker() {
+    const existing = new Set(this.cards.map(c => c.instanceId || c.id))
+    this.picker = {
+      candidates: this.sekkeiNodes.filter(n => !existing.has(cardIdForNode(n.glmId)))
+    }
+    this.render()
+  }
+
+  /** Pull one spec onto the board — the card IS the work of implementing it. */
+  async addFromSekkei(glmId) {
+    const instanceId = cardIdForNode(glmId)
+    const result = await window.puffin.board.createCard({ instanceId })
+    if (!result.success) this.rejection = { instanceId, reason: result.error }
+    await this._reloadCards()
+    if (this.picker) this.openPicker()
+  }
+
+  /** The sekkei node behind a card, when the card came from a spec. */
+  _nodeForCard(instanceId) {
+    return this.sekkeiNodes.find(n => cardIdForNode(n.glmId) === instanceId) || null
+  }
+
   async showJournal(instanceId) {
     const res = await window.puffin.board.journal({ instanceId })
     this.journalFor = {
@@ -194,6 +234,9 @@ export class BoardViewComponent {
     const { action, id, reason } = button.dataset
     if (action === 'refresh') this.refresh()
     else if (action === 'create-card') this.createCard()
+    else if (action === 'open-picker') this.openPicker()
+    else if (action === 'close-picker') { this.picker = null; this.render() }
+    else if (action === 'add-node' && id) this.addFromSekkei(id)
     else if (action === 'journal' && id) this.showJournal(id)
     else if (action === 'close-journal') { this.journalFor = null; this.render() }
     else if (action === 'validation-pass' && id) this.dispatch(id, 'VALIDATION_PASSED')
@@ -262,28 +305,61 @@ export class BoardViewComponent {
               ? `⛓ gate: ${esc(this.binding.name)}`
               : 'ungated — bind a sekkei in Specs'}
           </span>
-          <input type="text" id="board-new-card" class="board-input" placeholder="New card title…">
-          <button class="btn btn-primary btn-sm" data-action="create-card" ${!this.status?.running ? 'disabled' : ''}>Add card</button>
+          <button class="btn btn-primary btn-sm" data-action="open-picker"
+            ${!this.status?.running || !this.binding ? 'disabled' : ''}
+            title="${this.binding ? 'Pull a spec from the sekkei onto the board' : 'Bind a sekkei in the Sekkei tab first'}">
+            Add from sekkei
+          </button>
+          <input type="text" id="board-new-card" class="board-input" placeholder="ad-hoc card…">
+          <button class="btn btn-secondary btn-sm" data-action="create-card" ${!this.status?.running ? 'disabled' : ''}>Add</button>
           <button class="btn btn-secondary btn-sm" data-action="refresh" ${this.isBusy ? 'disabled' : ''}>${this.isBusy ? 'Loading…' : 'Refresh'}</button>
         </div>
       </div>
       ${this.rejection ? `<div class="board-rejection ${this.rejection.pending ? 'board-rejection-pending' : ''}">
         ${this.rejection.pending ? '⏳' : '⤺'} <code>${esc(this.rejection.instanceId)}</code> — ${esc(this.rejection.reason)}
       </div>` : ''}
+      ${this.picker ? this._renderPicker() : ''}
       ${this._renderBody()}
       ${this.journalFor ? this._renderJournal() : ''}
     `
+  }
+
+  _renderPicker() {
+    const { candidates } = this.picker
+    return `<div class="board-picker">
+      <div class="board-picker-header">
+        Specs to implement — <b>${esc(this.binding?.name || '')}</b>
+        <button class="btn btn-secondary btn-sm" data-action="close-picker">Close</button>
+      </div>
+      ${candidates.length === 0 ? `<div class="board-picker-empty">
+        Every implementable node in this sekkei is already on the board.
+        ${this.sekkeiNodes.length === 0 ? 'This sekkei has no components or spec leaves yet — author them in the Sekkei tab.' : ''}
+      </div>` : `
+        <div class="board-picker-list">
+          ${candidates.map(node => `
+            <div class="board-picker-row">
+              <span class="board-picker-stratum">${esc(node.stratum)}</span>
+              <span class="board-picker-title">${esc(node.title || node.glmId)}</span>
+              <code class="board-picker-id">${esc(node.glmId)}</code>
+              <button class="btn btn-sm" data-action="add-node" data-id="${esc(node.glmId)}">+ add</button>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>`
   }
 
   _renderStatus() {
     const s = this.status
     if (!s) return '<div class="board-status">Verified board</div>'
     if (s.error) return `<div class="board-status board-status-warn">✗ ${esc(s.error)}</div>`
-    if (!s.hasConfig) return '<div class="board-status board-status-warn">No polyrun.config.mjs in this project — the board needs a task-card machine.</div>'
+    if (!s.hasProject) return '<div class="board-status board-status-warn">No project open.</div>'
+    if (!s.hasConfig) return '<div class="board-status board-status-warn">Puffin\'s bundled task-card machine is missing from this install.</div>'
     if (!s.hasPolyrun) return '<div class="board-status board-status-warn">polyrun not found — clone polygraph as a sibling or set the engines path.</div>'
     if (!s.hasNode) return '<div class="board-status board-status-warn">System node ≥ 22.5 not found on PATH (polyrun needs node:sqlite).</div>'
     return `<div class="board-status">
       ${s.running ? '<span class="board-live">● polyrun</span>' : '○ starting…'}
+      ${s.usingProjectConfig ? '· project workflow' : '· default workflow'}
       · every move is a machine dispatch — illegal drags bounce with their reason
     </div>`
   }
@@ -317,8 +393,10 @@ export class BoardViewComponent {
     const id = card.instanceId || card.id
     const state = card.state || {}
     const isDone = state.cardState === 'done'
+    const node = this._nodeForCard(id)
     return `<div class="board-card ${isDone ? 'board-card-done' : ''}" draggable="${!isDone}" data-card-id="${esc(id)}">
-      <div class="board-card-title">${esc(id)}</div>
+      <div class="board-card-title">${esc(node?.title || id)}</div>
+      ${node ? `<div class="board-card-node"><span class="board-card-stratum">${esc(node.stratum)}</span> ${esc(node.glmId)}</div>` : ''}
       <div class="board-card-meta">
         ${state.reworkCount > 0 ? `<span class="board-badge board-badge-warn">rework ${state.reworkCount}/2</span>` : ''}
         ${state.lastSignal ? `<span class="board-badge">${esc(state.lastSignal)}</span>` : ''}

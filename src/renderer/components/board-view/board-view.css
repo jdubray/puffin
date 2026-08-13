@@ -168,6 +168,86 @@
 .board-btn-pass { color: var(--success-color, #4cae6f); }
 .board-btn-fail { color: var(--error-color, #e06258); }
 
+.board-card-node {
+  font-size: 10.5px;
+  color: var(--text-secondary, #888);
+  font-family: var(--font-mono, monospace);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-card-stratum {
+  color: var(--accent-color, #5f97d6);
+  text-transform: uppercase;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+}
+
+/* Spec picker */
+
+.board-picker {
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  background: var(--bg-secondary, #252525);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.board-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #999);
+  margin-bottom: 8px;
+}
+
+.board-picker-empty {
+  font-size: 13px;
+  color: var(--text-secondary, #999);
+  padding: 8px 0;
+}
+
+.board-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.board-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--bg-tertiary, #2b2b2b);
+}
+
+.board-picker-stratum {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-color, #5f97d6);
+  min-width: 66px;
+}
+
+.board-picker-title { flex: 1; }
+
+.board-picker-id {
+  font-size: 11px;
+  color: var(--text-secondary, #888);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+
 .board-journal {
   margin-top: 14px;
   border: 1px solid var(--border-color, #3a3a3a);

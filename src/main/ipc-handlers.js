@@ -518,6 +518,82 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // The project↔sekkei binding: one project, one sekkei. Stored in the
+  // project config (Puffin's half) and as the workspace's sourceDir (GLM's
+  // half), so either side can recognize the pairing.
+  ipcMain.handle('glm:getBinding', async () => {
+    try {
+      const config = puffinState?.getState?.()?.config || {}
+      const workspaces = await glmClient.listWorkspaces()
+
+      // Bound explicitly?
+      let bound = config.glmWorkspaceId
+        ? workspaces.find(w => w.id === config.glmWorkspaceId)
+        : null
+
+      // Not bound (or stale): adopt a workspace whose sourceDir IS this
+      // project — the pairing GLM already records.
+      let autoDetected = false
+      if (!bound && projectPath) {
+        for (const workspace of workspaces) {
+          const detail = await glmClient.getSummary(workspace.id).catch(() => null)
+          const sourceDir = detail?.workspace?.sourceDir
+          if (sourceDir && path.resolve(sourceDir) === path.resolve(projectPath)) {
+            bound = workspace
+            autoDetected = true
+            break
+          }
+        }
+        if (bound) {
+          await puffinState.updateConfig({ glmWorkspaceId: bound.id, glmWorkspaceSlug: bound.slug })
+        }
+      }
+
+      return {
+        success: true,
+        binding: bound ? { workspaceId: bound.id, slug: bound.slug, name: bound.name, autoDetected } : null,
+        stale: !!(config.glmWorkspaceId && !bound),
+        workspaces
+      }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:bindWorkspace', async (event, { workspaceId, create, slug, name } = {}) => {
+    try {
+      if (!projectPath) return { success: false, error: 'No project open' }
+
+      let workspace
+      if (create) {
+        if (!slug) return { success: false, error: 'slug is required' }
+        const created = await glmClient.createWorkspace({ slug, name })
+        workspace = created.workspace || created
+      } else {
+        if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+        workspace = (await glmClient.listWorkspaces()).find(w => w.id === workspaceId)
+        if (!workspace) return { success: false, error: 'workspace not found' }
+      }
+
+      // GLM's half: the workspace governs this project's code
+      await glmClient.setSourceDir(workspace.id, projectPath).catch(err => {
+        console.warn('[GLM] Could not set sourceDir (non-fatal):', err.message)
+      })
+      // Puffin's half: the project remembers its sekkei
+      await puffinState.updateConfig({
+        glmWorkspaceId: workspace.id,
+        glmWorkspaceSlug: workspace.slug
+      })
+
+      return {
+        success: true,
+        binding: { workspaceId: workspace.id, slug: workspace.slug, name: workspace.name }
+      }
+    } catch (error) {
+      return { success: false, error: error.message, status: error.status }
+    }
+  })
+
   ipcMain.handle('glm:summary', async (event, { workspaceId } = {}) => {
     try {
       if (!workspaceId) return { success: false, error: 'workspaceId is required' }

@@ -38,6 +38,15 @@
 
 .board-input { min-width: 200px; }
 
+.board-gate-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: var(--bg-tertiary, #2e2e2e);
+  color: var(--text-secondary, #aaa);
+  white-space: nowrap;
+}
+
 .board-rejection {
   padding: 8px 12px;
   margin-bottom: 10px;

@@ -90,6 +90,12 @@ export class SpecsViewComponent {
     this.showScrs = false
     this.scrForm = null // { title, problem, scrClass, error, isSaving }
     this.scrError = null
+    // One project, one sekkei
+    this.binding = null // { workspaceId, slug, name, autoDetected }
+    this.bindError = null
+    this.isBinding = false
+    this.borrowing = false // read-only peek at another project's sekkei
+    this.projectName = ''
   }
 
   init() {
@@ -149,15 +155,24 @@ export class SpecsViewComponent {
     try {
       this.status = await window.puffin.glm.getStatus()
       if (this.status.available) {
-        const res = await window.puffin.glm.listWorkspaces()
-        this.workspaces = res.success ? res.workspaces : []
-        if (!this.workspaceId && this.workspaces.length > 0) {
-          this.workspaceId = this.workspaces[0].id
-        }
-        if (this.workspaceId) {
+        const bindingRes = await window.puffin.glm.getBinding()
+        this.binding = bindingRes.success ? bindingRes.binding : null
+        this.workspaces = bindingRes.success ? (bindingRes.workspaces || []) : []
+        this.bindError = bindingRes.success
+          ? (bindingRes.stale ? 'The sekkei this project was bound to no longer exists.' : null)
+          : bindingRes.error
+        // The bound sekkei is THE sekkei — no picking unless borrowing
+        if (this.binding && !this.borrowing) {
+          this.workspaceId = this.binding.workspaceId
           await this._loadWorkspace()
+        } else if (!this.binding) {
+          this.workspaceId = null
         }
       }
+      try {
+        const state = await window.puffin.state.get()
+        this.projectName = state?.state?.projectName || state?.projectName || ''
+      } catch { /* project name is cosmetic */ }
       this.hasLoaded = true
     } catch (error) {
       console.error('[SPECS-VIEW] Refresh failed:', error)
@@ -210,6 +225,73 @@ export class SpecsViewComponent {
     this.render()
     const res = await window.puffin.glm.verify({ workspaceId: this.workspaceId })
     this.verifyResult = res.success ? res.result : { error: res.error }
+    this.render()
+  }
+
+  // ===== Binding (one project, one sekkei) =====
+
+  /** Create an empty sekkei for this project and bind it. */
+  async createAndBind() {
+    const slugInput = this.container.querySelector('#specs-bind-slug')
+    const slug = slugInput?.value?.trim()
+    if (!slug) {
+      this.bindError = 'A slug is required'
+      this.render()
+      return
+    }
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(slug)) {
+      this.bindError = 'Slug must be lowercase letters, digits and dashes, starting with a letter'
+      this.render()
+      return
+    }
+    await this._bind({ create: true, slug, name: this.projectName || slug })
+  }
+
+  async bindExisting() {
+    const select = this.container.querySelector('#specs-bind-existing')
+    const workspaceId = select?.value
+    if (!workspaceId) return
+    await this._bind({ workspaceId })
+  }
+
+  async _bind(args) {
+    this.isBinding = true
+    this.bindError = null
+    this.render()
+    const result = await window.puffin.glm.bindWorkspace(args)
+    this.isBinding = false
+    if (!result.success) {
+      this.bindError = result.error
+      this.render()
+      return
+    }
+    this.binding = result.binding
+    this.borrowing = false
+    this.workspaceId = result.binding.workspaceId
+    await this._loadWorkspace()
+    this.render()
+  }
+
+  /** Peek at another project's sekkei — read-only, never rebinds. */
+  async borrowWorkspace(workspaceId) {
+    this.borrowing = true
+    this.workspaceId = workspaceId
+    this.isBusy = true
+    this.render()
+    await this._loadWorkspace()
+    this.isBusy = false
+    this.render()
+  }
+
+  async stopBorrowing() {
+    this.borrowing = false
+    this.workspaceId = this.binding?.workspaceId || null
+    if (this.workspaceId) {
+      this.isBusy = true
+      this.render()
+      await this._loadWorkspace()
+      this.isBusy = false
+    }
     this.render()
   }
 
@@ -404,14 +486,10 @@ export class SpecsViewComponent {
   }
 
   _onChange(e) {
-    if (e.target.id === 'specs-workspace-select') {
-      this.workspaceId = e.target.value
-      this.isBusy = true
-      this.render()
-      this._loadWorkspace().finally(() => {
-        this.isBusy = false
-        this.render()
-      })
+    if (e.target.id === 'specs-borrow-select') {
+      const workspaceId = e.target.value
+      if (workspaceId) this.borrowWorkspace(workspaceId)
+      else this.stopBorrowing()
     }
   }
 
@@ -449,6 +527,9 @@ export class SpecsViewComponent {
       else if (action === 'scr-event') {
         this.driveScr(button.dataset.scrId, button.dataset.event)
       }
+      else if (action === 'create-bind') this.createAndBind()
+      else if (action === 'bind-existing') this.bindExisting()
+      else if (action === 'stop-borrowing') this.stopBorrowing()
       return
     }
     if (nodeRow && !this.editing) {
@@ -468,27 +549,75 @@ export class SpecsViewComponent {
       <div class="specs-toolbar">
         ${this._renderStatus()}
         <div class="specs-toolbar-actions">
-          ${this.workspaces.length > 0 ? `
-            <select id="specs-workspace-select" class="form-control specs-ws-select">
-              ${this.workspaces.map(w => `
-                <option value="${esc(w.id)}" ${w.id === this.workspaceId ? 'selected' : ''}>${esc(w.name)} (${esc(w.slug)})</option>
-              `).join('')}
-            </select>` : ''}
+          ${this._renderBindingChip()}
           <button class="btn btn-secondary" data-action="refresh" ${this.isBusy ? 'disabled' : ''}>
             ${this.isBusy ? 'Loading…' : 'Refresh'}
           </button>
           <button class="btn btn-primary" data-action="verify"
-            ${this.isBusy || !this.workspaceId ? 'disabled' : ''}>Run verifier</button>
+            ${this.isBusy || !this.workspaceId || this.borrowing ? 'disabled' : ''}>Run verifier</button>
         </div>
       </div>
-      ${this._renderSummary()}
-      ${this._renderVerify()}
-      ${this._renderScrs()}
-      <div class="specs-body">
-        <div class="specs-tree">${this._renderTree()}</div>
-        <div class="specs-detail">${this._renderDetail()}</div>
-      </div>
+      ${!this.binding && this.status?.available ? this._renderBindScreen() : `
+        ${this.borrowing ? `<div class="specs-borrow-banner">
+          Viewing another project's sekkei — read-only. This does not change what
+          <b>${esc(this.projectName || 'this project')}</b> is bound to.
+          <button class="btn btn-secondary btn-sm" data-action="stop-borrowing">Back to my sekkei</button>
+        </div>` : ''}
+        ${this._renderSummary()}
+        ${this._renderVerify()}
+        ${this.borrowing ? '' : this._renderScrs()}
+        <div class="specs-body">
+          <div class="specs-tree">${this._renderTree()}</div>
+          <div class="specs-detail">${this._renderDetail()}</div>
+        </div>
+      `}
     `
+  }
+
+  _renderBindingChip() {
+    if (!this.status?.available) return ''
+    if (!this.binding) return ''
+    const others = this.workspaces.filter(w => w.id !== this.binding.workspaceId)
+    return `
+      <span class="specs-bound" title="This project's sekkei">
+        ⛓ ${esc(this.binding.name)} <code>${esc(this.binding.slug)}</code>
+      </span>
+      ${others.length > 0 ? `
+        <select id="specs-borrow-select" class="form-control specs-ws-select"
+          title="Peek at another project's sekkei (read-only)">
+          <option value="">borrow from…</option>
+          ${others.map(w => `<option value="${esc(w.id)}" ${this.borrowing && w.id === this.workspaceId ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+        </select>` : ''}
+    `
+  }
+
+  _renderBindScreen() {
+    const suggested = (this.projectName || '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64)
+      .replace(/^[^a-z]*/, '') || 'my-project'
+    return `<div class="specs-bind">
+      <h3>This project has no sekkei yet</h3>
+      <p>A Puffin project is bound to exactly one sekkei — its design of record.
+      Create an empty one for <b>${esc(this.projectName || 'this project')}</b>, or bind a sekkei
+      that already exists. Binding also points the sekkei at this project's directory,
+      so generation and acceptance verifiers run here.</p>
+      ${this.bindError ? `<div class="specs-editor-error">✗ ${esc(this.bindError)}</div>` : ''}
+      <div class="specs-bind-row">
+        <input type="text" id="specs-bind-slug" class="form-control"
+          value="${esc(suggested)}" placeholder="sekkei slug" ${this.isBinding ? 'disabled' : ''}>
+        <button class="btn btn-primary" data-action="create-bind" ${this.isBinding ? 'disabled' : ''}>
+          ${this.isBinding ? 'Creating…' : 'Create empty sekkei'}
+        </button>
+      </div>
+      ${this.workspaces.length > 0 ? `
+        <div class="specs-bind-row specs-bind-existing">
+          <select id="specs-bind-existing" class="form-control" ${this.isBinding ? 'disabled' : ''}>
+            <option value="">bind an existing sekkei…</option>
+            ${this.workspaces.map(w => `<option value="${esc(w.id)}">${esc(w.name)} (${esc(w.slug)})</option>`).join('')}
+          </select>
+          <button class="btn btn-secondary" data-action="bind-existing" ${this.isBinding ? 'disabled' : ''}>Bind</button>
+        </div>` : ''}
+    </div>`
   }
 
   _renderStatus() {

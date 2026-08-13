@@ -42,8 +42,8 @@ export class BoardViewComponent {
     this.cards = []
     this.rejection = null // { instanceId, reason }
     this.journalFor = null // { instanceId, entries }
-    this.glmWorkspaces = []
-    this.glmWorkspaceId = '' // '' = no gate wired (disclosed on the card)
+    this.binding = null // this project's bound sekkei (the gate's source)
+    this.glmWorkspaceId = '' // '' = unbound → ungated, disclosed in the toolbar
     this.isBusy = false
     this.hasLoaded = false
     this._pollTimer = null
@@ -91,14 +91,16 @@ export class BoardViewComponent {
         }
         if (this.status.running) await this._reloadCards()
       }
-      // GLM workspaces for the DoRC gate (optional)
+      // The DoRC gate runs against THIS project's bound sekkei — one
+      // project, one sekkei; nothing to choose here.
       try {
         const glm = await window.puffin.glm.getStatus()
         if (glm.available) {
-          const res = await window.puffin.glm.listWorkspaces()
-          this.glmWorkspaces = res.success ? res.workspaces : []
+          const bindingRes = await window.puffin.glm.getBinding()
+          this.binding = bindingRes.success ? bindingRes.binding : null
+          this.glmWorkspaceId = this.binding?.workspaceId || ''
         }
-      } catch { this.glmWorkspaces = [] }
+      } catch { this.binding = null; this.glmWorkspaceId = '' }
       this.hasLoaded = true
     } catch (error) {
       this.status = { error: error.message }
@@ -184,12 +186,7 @@ export class BoardViewComponent {
 
   // ===== events =====
 
-  _onChange(e) {
-    if (e.target.id === 'board-glm-workspace') {
-      this.glmWorkspaceId = e.target.value
-      this.render()
-    }
-  }
+  _onChange() { /* no board-level selectors — the gate follows the binding */ }
 
   _onClick(e) {
     const button = e.target.closest('button[data-action]')
@@ -260,12 +257,11 @@ export class BoardViewComponent {
       <div class="board-toolbar">
         ${this._renderStatus()}
         <div class="board-toolbar-actions">
-          <select id="board-glm-workspace" class="board-select" title="GLM workspace for the DoRC gate">
-            <option value="">no DoRC gate (ungated)</option>
-            ${this.glmWorkspaces.map(w => `
-              <option value="${esc(w.id)}" ${w.id === this.glmWorkspaceId ? 'selected' : ''}>gate: ${esc(w.name)}</option>
-            `).join('')}
-          </select>
+          <span class="board-gate-chip" title="The Ready gate runs this project's sekkei verifier">
+            ${this.binding
+              ? `⛓ gate: ${esc(this.binding.name)}`
+              : 'ungated — bind a sekkei in Specs'}
+          </span>
           <input type="text" id="board-new-card" class="board-input" placeholder="New card title…">
           <button class="btn btn-primary btn-sm" data-action="create-card" ${!this.status?.running ? 'disabled' : ''}>Add card</button>
           <button class="btn btn-secondary btn-sm" data-action="refresh" ${this.isBusy ? 'disabled' : ''}>${this.isBusy ? 'Loading…' : 'Refresh'}</button>

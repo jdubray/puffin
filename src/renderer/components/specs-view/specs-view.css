@@ -245,6 +245,64 @@
   white-space: pre-wrap;
 }
 
+/* Project ↔ sekkei binding */
+
+.specs-bound {
+  font-size: 12.5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: var(--bg-tertiary, #2e2e2e);
+  color: var(--text-primary, #ddd);
+  white-space: nowrap;
+}
+
+.specs-bound code { font-size: 11px; color: var(--text-secondary, #999); }
+
+.specs-bind {
+  max-width: 640px;
+  margin: 30px auto;
+  padding: 22px 24px;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 8px;
+  background: var(--bg-secondary, #252525);
+}
+
+.specs-bind h3 { margin: 0 0 8px; font-size: 17px; }
+.specs-bind p { font-size: 13.5px; line-height: 1.6; color: var(--text-secondary, #999); }
+
+.specs-bind-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  align-items: center;
+}
+
+.specs-bind-row input,
+.specs-bind-row select {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 13px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--text-primary, #ddd);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 4px;
+}
+
+.specs-bind-existing { padding-top: 12px; border-top: 1px solid var(--border-color, #3a3a3a); }
+
+.specs-borrow-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--warning-color, #e0a030);
+  background: rgba(224, 160, 48, 0.1);
+}
+
 /* SCR panel */
 
 .specs-scrs {

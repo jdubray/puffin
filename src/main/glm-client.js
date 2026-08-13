@@ -113,6 +113,23 @@ class GlmClient {
     return data.workspaces || []
   }
 
+  /**
+   * Create a workspace (an empty sekkei).
+   *
+   * @param {{slug: string, name?: string}} params - slug must match ^[a-z][a-z0-9-]{0,63}$
+   */
+  async createWorkspace({ slug, name }) {
+    return this._request('POST', '/workspaces', { slug, name: name || slug })
+  }
+
+  /**
+   * Point a workspace at the code it governs (GLM's half of the binding —
+   * generation writes there and acceptance verifiers run there).
+   */
+  async setSourceDir(workspaceId, sourceDir) {
+    return this._request('PATCH', `/workspaces/${workspaceId}`, { sourceDir })
+  }
+
   /** One-call dashboard payload: node/SCR/drift counts, recent activity. */
   async getSummary(workspaceId) {
     return this._request('GET', `/workspaces/${workspaceId}/summary`)

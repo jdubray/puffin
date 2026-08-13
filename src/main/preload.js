@@ -797,6 +797,10 @@ contextBridge.exposeInMainWorld('puffin', {
   glm: {
     getStatus: () => ipcRenderer.invoke('glm:status'),
     listWorkspaces: () => ipcRenderer.invoke('glm:workspaces'),
+    // One project, one sekkei: the binding (config + workspace sourceDir)
+    getBinding: () => ipcRenderer.invoke('glm:getBinding'),
+    // bindWorkspace({ workspaceId }) or ({ create: true, slug, name })
+    bindWorkspace: (args) => ipcRenderer.invoke('glm:bindWorkspace', args),
     getSummary: (args) => ipcRenderer.invoke('glm:summary', args),
     listNodes: (args) => ipcRenderer.invoke('glm:nodes', args),
     getNode: (args) => ipcRenderer.invoke('glm:node', args),

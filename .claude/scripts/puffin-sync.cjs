@@ -3,14 +3,12 @@
  * Puffin Sync Script
  *
  * Receives a session summary from Claude Code CLI and writes it to
- * Puffin's history.json under the specified branch (defaults to "improvements").
+ * Puffin's history.json — a single implicit prompt stream ("main").
  *
- * Usage: echo '{"title":"...", "content":"...", "files":[]}' | node puffin-sync.cjs [branch-name]
+ * Usage: echo '{"title":"...", "content":"...", "files":[]}' | node puffin-sync.cjs
  *
- * Examples:
+ * Example:
  *   echo '{"title":"Fix bug", "content":"..."}' | node puffin-sync.cjs
- *   echo '{"title":"New feature", "content":"..."}' | node puffin-sync.cjs ui
- *   echo '{"title":"API changes", "content":"..."}' | node puffin-sync.cjs backend
  */
 
 const fs = require('fs');
@@ -55,11 +53,6 @@ async function readStdin() {
 
 async function main() {
   try {
-    // Parse command line argument for branch name
-    const argBranch = process.argv[2];
-    const branchId = argBranch ? argBranch.toLowerCase().replace(/\s+/g, '-') : 'improvements';
-    const branchName = argBranch || 'Improvements';
-
     // Find .puffin directory
     const puffinDir = findPuffinDir();
     if (!puffinDir) {
@@ -67,18 +60,7 @@ async function main() {
       process.exit(1);
     }
 
-    const historyPath = path.join(puffinDir, 'history.json');
     const inboxPath = path.join(puffinDir, 'sync-inbox.json');
-
-    // Read existing history to validate branch
-    let history;
-    try {
-      const content = fs.readFileSync(historyPath, 'utf8');
-      history = JSON.parse(content);
-    } catch {
-      console.error('Error: Could not read history.json');
-      process.exit(1);
-    }
 
     // Read input from stdin
     const input = await readStdin();
@@ -94,22 +76,6 @@ async function main() {
     // Validate input
     if (!summary.title || !summary.content) {
       console.error('Error: Missing required fields (title, content)');
-      process.exit(1);
-    }
-
-    // Get list of valid branch names
-    const validBranches = Object.keys(history.branches);
-
-    // Validate target branch exists (except for default "improvements" which can be created)
-    if (!history.branches[branchId] && branchId !== 'improvements') {
-      // Invalid branch specified - show error with valid options
-      console.error(`Error: Branch "${argBranch}" not found.`);
-      console.error('');
-      console.error('Valid branches:');
-      validBranches.forEach(b => {
-        const branch = history.branches[b];
-        console.error(`  - ${b}${branch.name !== b ? ` (${branch.name})` : ''}`);
-      });
       process.exit(1);
     }
 
@@ -150,8 +116,6 @@ async function main() {
 
     // Add to inbox (will be processed by Puffin on next load/refresh)
     inbox.push({
-      branchId,
-      branchName,
       prompt,
       addedAt: timestamp
     });
@@ -160,7 +124,6 @@ async function main() {
     fs.writeFileSync(inboxPath, JSON.stringify(inbox, null, 2));
 
     console.log(`Successfully queued for Puffin: "${summary.title}"`);
-    console.log(`Branch: ${branchName}`);
     console.log(`Prompt ID: ${promptId}`);
     console.log('Note: Restart Puffin or refresh to see the synced entry.');
 

@@ -606,14 +606,15 @@
                       <option value="">Loading models…</option>
                     </select>
                   </div>
-                  <div class="prompt-option-group" id="thinking-budget-group">
-                    <label for="thinking-budget" class="prompt-select-label">Thinking Budget:</label>
-                    <select id="thinking-budget" class="prompt-model-select" title="Set thinking budget for extended reasoning">
-                      <option value="none" selected>None</option>
-                      <option value="think">Think</option>
-                      <option value="think-hard">Think hard</option>
-                      <option value="think-harder">Think harder</option>
-                      <option value="ultrathink">Ultrathink (max)</option>
+                  <div class="prompt-option-group" id="effort-level-group">
+                    <label for="effort-level" class="prompt-select-label">Effort:</label>
+                    <select id="effort-level" class="prompt-model-select" title="Reasoning effort for this Task (passed to the CLI as --effort)">
+                      <option value="" selected>Default</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="xhigh">X-High</option>
+                      <option value="max">Max</option>
                     </select>
                   </div>
                 </div>

@@ -20,6 +20,12 @@ const { v4: uuidv4 } = require('uuid')
 const { getMetricsService, MetricComponent, MetricEventType } = require('./metrics-service')
 
 /**
+ * Reasoning effort levels accepted by `claude --effort`.
+ * @type {string[]}
+ */
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+
+/**
  * Tool emoji mapping for different tool types
  */
 const TOOL_EMOJIS = {
@@ -754,6 +760,13 @@ class ClaudeService {
     // Add model if specified
     if (data.model) {
       args.push('--model', data.model)
+    }
+
+    // Reasoning effort for this session (low | medium | high | xhigh | max).
+    // Omitted => the CLI's own default. Whitelisted so a stale renderer value
+    // can never inject an arbitrary CLI argument.
+    if (data.effort && EFFORT_LEVELS.includes(data.effort)) {
+      args.push('--effort', data.effort)
     }
 
     // Resume session if provided (for conversation continuity)

@@ -23,8 +23,8 @@ export class PromptEditorComponent {
     this.modelSelect = null
     this.defaultModel = '__uninitialized__' // Sentinel value - will be updated from project config on first state load
     this.defaultProvider = 'claude' // Mirrors config.defaultProvider; updated on every state change
-    // Thinking budget selector
-    this.thinkingBudgetSelect = null
+    // Reasoning effort selector
+    this.effortSelect = null
     // Design documents dropdown
     this.includeDocsBtn = null
     this.includeDocsDropdown = null
@@ -66,8 +66,8 @@ export class PromptEditorComponent {
     this.modelSelect = document.getElementById('thread-model')
     // Provider selector (Claude vs Mistral Vibe)
     this.providerSelect = document.getElementById('provider-select')
-    // Thinking budget selector
-    this.thinkingBudgetSelect = document.getElementById('thinking-budget')
+    // Reasoning effort selector
+    this.effortSelect = document.getElementById('effort-level')
     // Design documents dropdown
     this.includeDocsBtn = document.getElementById('include-docs-btn')
     this.includeDocsDropdown = document.getElementById('include-docs-dropdown')
@@ -1177,23 +1177,10 @@ export class PromptEditorComponent {
       // Store image paths for cleanup after submission
       const attachedImagePaths = this.attachedImages.map(img => img.filePath)
 
-      // Handle thinking budget - wrap prompt and potentially upgrade model
-      const thinkingBudget = this.thinkingBudgetSelect?.value || 'none'
-      let selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
-
-      if (thinkingBudget !== 'none') {
-        finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
-        console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
-
-        // Upgrade the model tier for deep thinking budgets (Claude Code only —
-        // not applicable to local LLMs, and never a DOWNGRADE from fable):
-        // superthink → fable, think-harder → opus.
-        if ((thinkingBudget === 'think-harder' || thinkingBudget === 'ultrathink' || thinkingBudget === 'superthink') &&
-            !selectedModel.startsWith('ollama:') && !selectedModel.includes('fable')) {
-          selectedModel = (thinkingBudget === 'ultrathink' || thinkingBudget === 'superthink') ? 'fable' : 'opus'
-          console.log(`[PROMPT-EDITOR] Upgraded model to ${selectedModel} for ${thinkingBudget}`)
-        }
-      }
+      // Reasoning effort — passed to the CLI as --effort; empty = CLI default.
+      const effort = this.effortSelect?.value || ''
+      const selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+      if (effort) console.log(`[PROMPT-EDITOR] Effort: ${effort}`)
 
       if (activeProvider === 'vibe') {
         this._submitViaVibe(finalPrompt)
@@ -1219,6 +1206,7 @@ export class PromptEditorComponent {
           // Files modified anywhere in this thread so far
           threadFilesModified: threadFilesModified,
           model: selectedModel,
+          effort: effort || undefined,
           maxTurns: 100, // Max turns per request
           // Puppeteer Visual Feedback Loop (Website Edition)
           puppeteerLoop: !!state.puppeteerLoop,
@@ -1252,9 +1240,9 @@ export class PromptEditorComponent {
     this._pendingReviewAction = null
     this._updateReviewButton()
 
-    // Reset thinking budget to none for new threads
-    if (this.thinkingBudgetSelect) {
-      this.thinkingBudgetSelect.value = 'none'
+    // Reset effort to the CLI default for new threads
+    if (this.effortSelect) {
+      this.effortSelect.value = ''
     }
 
     // Keep submit button state based on textarea content
@@ -1341,9 +1329,9 @@ export class PromptEditorComponent {
 
       console.log('[CONTEXT-DEBUG] Submit mode: NEW thread (fresh conversation)')
 
-      // Handle thinking budget - wrap prompt and potentially upgrade model
-      const thinkingBudget = this.thinkingBudgetSelect?.value || 'none'
-      let selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
+      // Reasoning effort — passed to the CLI as --effort; empty = CLI default.
+      const effort = this.effortSelect?.value || ''
+      const selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
       let finalPrompt = content
 
       // Prepend image attachments to prompt if any
@@ -1354,18 +1342,7 @@ export class PromptEditorComponent {
       }
       const attachedImagePathsNT = this.attachedImages.map(img => img.filePath)
 
-      if (thinkingBudget !== 'none') {
-        finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
-        console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
-
-        // Upgrade the model tier for deep thinking budgets — superthink →
-        // fable, think-harder → opus; never a DOWNGRADE from fable.
-        if ((thinkingBudget === 'think-harder' || thinkingBudget === 'ultrathink' || thinkingBudget === 'superthink') &&
-            !selectedModel.includes('fable')) {
-          selectedModel = (thinkingBudget === 'ultrathink' || thinkingBudget === 'superthink') ? 'fable' : 'opus'
-          console.log(`[PROMPT-EDITOR] Upgraded model to ${selectedModel} for ${thinkingBudget}`)
-        }
-      }
+      if (effort) console.log(`[PROMPT-EDITOR] Effort: ${effort}`)
 
       if (activeProviderNT === 'vibe') {
         this._submitViaVibe(finalPrompt)
@@ -1388,6 +1365,7 @@ export class PromptEditorComponent {
           guiDescription: guiDescription,
           threadFilesModified: threadFilesModified,
           model: selectedModel,
+          effort: effort || undefined,
           maxTurns: 100 // Max turns per request
         })
       }
@@ -2071,50 +2049,6 @@ export class PromptEditorComponent {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
-  }
-
-  /**
-   * Wrap prompt with thinking budget instructions
-   * @param {string} prompt - Original prompt
-   * @param {string} budget - Thinking budget level (think, think-hard, think-harder, superthink)
-   * @returns {string} - Wrapped prompt with thinking instructions
-   */
-  wrapPromptWithThinkingBudget(prompt, budget) {
-    // Claude Code escalates extended thinking on the LITERAL keywords below,
-    // in this order: think < think hard < think harder < ultrathink. The
-    // keyword must survive into the prompt text verbatim.
-    const budgetConfig = {
-      'think': {
-        keyword: 'think',
-        instruction: 'think about this before responding.'
-      },
-      'think-hard': {
-        keyword: 'think hard',
-        instruction: 'think hard about this — analyze thoroughly before responding.'
-      },
-      'think-harder': {
-        keyword: 'think harder',
-        instruction: 'think harder about this: consider multiple approaches and their trade-offs before responding.'
-      },
-      'ultrathink': {
-        keyword: 'ultrathink',
-        instruction: 'ultrathink: deliberate extensively — multiple angles, edge cases, trade-offs — before responding.'
-      },
-      // legacy alias (pre-Claude-5 label)
-      'superthink': {
-        keyword: 'ultrathink',
-        instruction: 'ultrathink: deliberate extensively — multiple angles, edge cases, trade-offs — before responding.'
-      }
-    }
-
-    const config = budgetConfig[budget]
-    if (!config) return prompt
-
-    return `${config.instruction}
-
----
-
-${prompt}`
   }
 
   // ── Voice Input (MediaRecorder + Whisper API) ───────────────────────

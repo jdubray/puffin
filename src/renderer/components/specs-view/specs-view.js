@@ -308,7 +308,7 @@ export class SpecsViewComponent {
 
     // Composer options
     const model = this.container.querySelector('#sekkei-model')?.value || undefined
-    const budget = this.container.querySelector('#sekkei-thinking')?.value || 'none'
+    const effort = this.container.querySelector('#sekkei-effort')?.value || ''
     const isQuick = !!this.container.querySelector('#sekkei-quick')?.checked
     const docPath = this.container.querySelector('#sekkei-docs')?.value || ''
     const guiName = this.container.querySelector('#sekkei-gui')?.value || ''
@@ -318,11 +318,6 @@ export class SpecsViewComponent {
     if (guiName) body += `\n\nReference GUI design: .puffin/gui-definitions/${guiName}`
     if (isQuick) {
       body = `Answer this question about the sekkei. Do NOT create, update or delete any node — this is a read-only question.\n\n${body}`
-    }
-    if (budget !== 'none') {
-      const keyword = { 'think': 'think', 'think-hard': 'think hard',
-        'think-harder': 'think harder', 'ultrathink': 'ultrathink' }[budget]
-      if (keyword) body = `${keyword} about this before responding.\n\n---\n\n${body}`
     }
 
     this.authoring = { isRunning: true, response: '', error: null, lastInstruction: instruction }
@@ -358,6 +353,7 @@ export class SpecsViewComponent {
         nodeCount: this.nodes.length
       }),
       model,
+      effort: effort || undefined,
       sessionId: null
     })
     if (input && !overrideInstruction) input.value = ''
@@ -913,6 +909,17 @@ coding agent would have to guess at. List findings worst-first with the glm id e
         this.container.querySelector('#specs-edit-title')) {
       this._readEditorInputs()
     }
+    // Same for the composer: the draft and the option choices survive re-render.
+    const draftEl = this.container.querySelector('#specs-author-input')
+    if (draftEl) {
+      this._composerDraft = draftEl.value
+      const val = (id) => this.container.querySelector(id)?.value
+      this._composerOpts = {
+        provider: val('#sekkei-provider'),
+        model: val('#sekkei-model'),
+        effort: val('#sekkei-effort')
+      }
+    }
     // Three areas: prompting (left) · the sekkei and its GLM controls
     // (centre) · the selected node (right).
     this.container.innerHTML = !this.binding && this.status?.available
@@ -977,7 +984,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     }
     set('#sekkei-provider', opts.provider)
     set('#sekkei-model', opts.model)
-    set('#sekkei-thinking', opts.thinking)
+    set('#sekkei-effort', opts.effort)
   }
 
   /**
@@ -1022,13 +1029,14 @@ coding agent would have to guess at. List findings worst-first with the glm id e
             </select>
           </div>
           <div class="prompt-option-group">
-            <label for="sekkei-thinking" class="prompt-select-label">Thinking Budget:</label>
-            <select id="sekkei-thinking" class="prompt-model-select" ${a.isRunning ? 'disabled' : ''}>
-              <option value="none">None</option>
-              <option value="think">Think</option>
-              <option value="think-hard">Think hard</option>
-              <option value="think-harder">Think harder</option>
-              <option value="ultrathink">Ultrathink (max)</option>
+            <label for="sekkei-effort" class="prompt-select-label">Effort:</label>
+            <select id="sekkei-effort" class="prompt-model-select" ${a.isRunning ? 'disabled' : ''}>
+              <option value="">Default</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">X-High</option>
+              <option value="max">Max</option>
             </select>
           </div>
         </div>

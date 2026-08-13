@@ -245,21 +245,103 @@
   white-space: pre-wrap;
 }
 
-/* Layout: authoring pane on the left, the sekkei in the centre */
+/* Three areas: prompting · sekkei (+ GLM controls) · node */
 
-.specs-layout {
+.specs-3col {
   display: grid;
-  grid-template-columns: minmax(300px, 28%) 1fr;
-  gap: 14px;
-  align-items: stretch;
+  grid-template-columns: minmax(280px, 24%) minmax(300px, 1fr) minmax(300px, 1.05fr);
+  gap: 12px;
+  height: calc(100vh - 150px);
+  min-height: 0;
 }
 
-.specs-side {
+.specs-col {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  min-width: 0;
   min-height: 0;
-  max-height: calc(100vh - 320px);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  background: var(--bg-secondary, #252525);
+  overflow: hidden;
+}
+
+.specs-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-color, #3a3a3a);
+  background: var(--bg-tertiary, #2b2b2b);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary, #999);
+  flex: none;
+}
+
+.specs-col-head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.specs-col-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+/* The prompting column: reply grows, composer stays pinned at the bottom */
+
+.specs-col-prompt {
+  padding: 0;
+}
+
+.specs-col-prompt .specs-reply {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.specs-col-prompt .specs-composer {
+  border: none;
+  border-top: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 0;
+  background: var(--bg-tertiary, #2b2b2b);
+}
+
+/* Panels inside a column are flush — the column IS the frame */
+
+.specs-col-scroll .specs-summary,
+.specs-col-scroll .specs-changes,
+.specs-col-scroll .specs-scrs,
+.specs-col-scroll .specs-tree {
+  max-height: none;
+}
+
+.specs-col-scroll .specs-tree {
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  overflow: visible;
+  padding: 6px 0;
+}
+
+.specs-col-node .specs-detail {
+  border: none;
+  border-radius: 0;
+  background: none;
+  max-height: none;
+  padding: 12px 14px;
 }
 
 /* Reply window above… */
@@ -268,6 +350,7 @@
   flex: 1;
   min-height: 120px;
   overflow-y: auto;
+  padding: 10px 12px;
   border: 1px solid var(--border-color, #3a3a3a);
   border-radius: 6px;
   background: var(--bg-secondary, #252525);
@@ -375,9 +458,14 @@
   border-color: var(--error-color, #e06258);
 }
 
-@media (max-width: 1000px) {
-  .specs-layout { grid-template-columns: 1fr; }
-  .specs-side { max-height: none; }
+@media (max-width: 1250px) {
+  .specs-3col { grid-template-columns: minmax(260px, 30%) 1fr; height: auto; }
+  .specs-col-node { grid-column: 1 / -1; min-height: 320px; }
+}
+
+@media (max-width: 820px) {
+  .specs-3col { grid-template-columns: 1fr; }
+  .specs-col { min-height: 280px; }
 }
 
 .specs-changes {

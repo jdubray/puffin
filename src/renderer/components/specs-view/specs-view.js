@@ -810,36 +810,52 @@ coding agent would have to guess at. List findings worst-first with the glm id e
         this.container.querySelector('#specs-edit-title')) {
       this._readEditorInputs()
     }
-    this.container.innerHTML = `
-      <div class="specs-toolbar">
-        ${this._renderStatus()}
-        <div class="specs-toolbar-actions">
-          ${this._renderBindingChip()}
-          <button class="btn btn-secondary" data-action="refresh" ${this.isBusy ? 'disabled' : ''}>
-            ${this.isBusy ? 'Loading…' : 'Refresh'}
-          </button>
-          <button class="btn btn-primary" data-action="verify"
-            ${this.isBusy || !this.workspaceId || this.borrowing ? 'disabled' : ''}>Run verifier</button>
-        </div>
-      </div>
-      ${!this.binding && this.status?.available ? this._renderBindScreen() : `
-        ${this.borrowing ? `<div class="specs-borrow-banner">
-          Viewing another project's sekkei — read-only. This does not change what
-          <b>${esc(this.projectName || 'this project')}</b> is bound to.
-          <button class="btn btn-secondary btn-sm" data-action="stop-borrowing">Back to my sekkei</button>
-        </div>` : ''}
-        ${this._renderSummary()}
-        ${this.borrowing ? '' : this._renderChanges()}
-        ${this._renderVerify()}
-        ${this.borrowing ? '' : this._renderScrs()}
-        <div class="specs-layout">
-          ${this.borrowing ? '' : `<div class="specs-side">${this._renderAuthoring()}</div>`}
-          <div class="specs-body">
-            <div class="specs-tree">${this._renderTree()}</div>
-            <div class="specs-detail">${this._renderDetail()}</div>
+    // Three areas: prompting (left) · the sekkei and its GLM controls
+    // (centre) · the selected node (right).
+    this.container.innerHTML = !this.binding && this.status?.available
+      ? `<div class="specs-toolbar">${this._renderStatus()}</div>${this._renderBindScreen()}`
+      : `
+      <div class="specs-3col">
+
+        <section class="specs-col specs-col-prompt">
+          <div class="specs-col-head">Prompt</div>
+          ${this.borrowing
+            ? '<div class="specs-reply-empty">Authoring is disabled while borrowing another sekkei.</div>'
+            : this._renderAuthoring()}
+        </section>
+
+        <section class="specs-col specs-col-sekkei">
+          <div class="specs-col-head">
+            Sekkei
+            <span class="specs-col-head-actions">
+              ${this._renderBindingChip()}
+              <button class="btn btn-secondary btn-sm" data-action="refresh" ${this.isBusy ? 'disabled' : ''}>
+                ${this.isBusy ? 'Loading…' : 'Refresh'}
+              </button>
+              <button class="btn btn-primary btn-sm" data-action="verify"
+                ${this.isBusy || !this.workspaceId || this.borrowing ? 'disabled' : ''}>Run verifier</button>
+            </span>
           </div>
-        </div>
-      `}
+          <div class="specs-col-scroll">
+            ${this._renderStatus()}
+            ${this.borrowing ? `<div class="specs-borrow-banner">
+              Read-only — borrowed sekkei. <b>${esc(this.projectName || 'This project')}</b>'s binding is unchanged.
+              <button class="btn btn-secondary btn-sm" data-action="stop-borrowing">Back to my sekkei</button>
+            </div>` : ''}
+            ${this._renderSummary()}
+            ${this.borrowing ? '' : this._renderChanges()}
+            ${this._renderVerify()}
+            ${this.borrowing ? '' : this._renderScrs()}
+            <div class="specs-tree">${this._renderTree()}</div>
+          </div>
+        </section>
+
+        <section class="specs-col specs-col-node">
+          <div class="specs-col-head">Node</div>
+          <div class="specs-col-scroll specs-detail">${this._renderDetail()}</div>
+        </section>
+
+      </div>
     `
     this._restoreComposer()
   }

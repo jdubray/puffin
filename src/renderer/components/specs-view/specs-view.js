@@ -136,6 +136,12 @@ export class SpecsViewComponent {
     // Changes since the last code generation → the workflow's inbox
     this.lastGenerationAt = null
     this.queueNote = null
+    // Composer context sources + voice
+    this.designDocs = []
+    this.guiDesigns = []
+    this.isRecording = false
+    this._recorder = null
+    this._chunks = []
   }
 
   init() {
@@ -215,6 +221,15 @@ export class SpecsViewComponent {
         this.projectName = resolved.projectName || ''
         this.lastGenerationAt = resolved.config?.glmLastGenerationAt || null
       } catch { /* project name is cosmetic */ }
+      // Context sources for the composer (both optional)
+      try {
+        const docs = await window.puffin.state.getDesignDocuments()
+        this.designDocs = docs?.documents || docs || []
+      } catch { this.designDocs = [] }
+      try {
+        const designs = await window.puffin.state.listGuiDesigns()
+        this.guiDesigns = designs?.designs || designs || []
+      } catch { this.guiDesigns = [] }
       this.hasLoaded = true
     } catch (error) {
       console.error('[SPECS-VIEW] Refresh failed:', error)
@@ -273,10 +288,29 @@ export class SpecsViewComponent {
   // ===== Authoring loop =====
 
   /** Submit a spec-authoring request — the session edits nodes via glm_* MCP. */
-  submitAuthoring() {
+  submitAuthoring(overrideInstruction) {
     const input = this.container.querySelector('#specs-author-input')
-    const instruction = input?.value?.trim()
+    const instruction = overrideInstruction || input?.value?.trim()
     if (!instruction || this.authoring.isRunning || !this.workspaceId || this.borrowing) return
+
+    // Composer options
+    const model = this.container.querySelector('#sekkei-model')?.value || undefined
+    const budget = this.container.querySelector('#sekkei-thinking')?.value || 'none'
+    const isQuick = !!this.container.querySelector('#sekkei-quick')?.checked
+    const docPath = this.container.querySelector('#sekkei-docs')?.value || ''
+    const guiName = this.container.querySelector('#sekkei-gui')?.value || ''
+
+    let body = instruction
+    if (docPath) body += `\n\nReference document (read it before answering): ${docPath}`
+    if (guiName) body += `\n\nReference GUI design: .puffin/gui-definitions/${guiName}`
+    if (isQuick) {
+      body = `Answer this question about the sekkei. Do NOT create, update or delete any node — this is a read-only question.\n\n${body}`
+    }
+    if (budget !== 'none') {
+      const keyword = { 'think': 'think', 'think-hard': 'think hard',
+        'think-harder': 'think harder', 'ultrathink': 'ultrathink' }[budget]
+      if (keyword) body = `${keyword} about this before responding.\n\n---\n\n${body}`
+    }
 
     this.authoring = { isRunning: true, response: '', error: null, lastInstruction: instruction }
     this.render()
@@ -304,15 +338,91 @@ export class SpecsViewComponent {
     }
 
     window.puffin.claude.submit({
-      prompt: buildAuthoringPrompt(instruction, {
+      prompt: buildAuthoringPrompt(body, {
         workspaceSlug: this.binding?.slug || '',
         workspaceId: this.workspaceId,
         selectedGlmId: this.selectedGlmId,
         nodeCount: this.nodes.length
       }),
+      model,
       sessionId: null
     })
-    if (input) input.value = ''
+    if (input && !overrideInstruction) input.value = ''
+  }
+
+  /** Review the sekkei itself — gaps, ambiguity, altitude errors. */
+  reviewSpecs() {
+    this.submitAuthoring(
+      `Review this sekkei as a specification reviewer, and report findings only — do NOT change any node.
+Look for: missing or thin acceptance criteria; ambiguous business rules; content sitting at the wrong
+stratum; components with no spec leaves; interactions that no component references; and anything a
+coding agent would have to guess at. List findings worst-first with the glm id each one is about.`)
+  }
+
+  /** Queue the selected spec onto the Workflow as a work item. */
+  async createWorkItem() {
+    if (!this.selectedGlmId) return
+    const instanceId = String(this.selectedGlmId).replace(/[^a-zA-Z0-9._-]/g, '-')
+    this.queueNote = { pending: true }
+    this.render()
+    const status = await window.puffin.board.getStatus()
+    if (!status.running) {
+      const started = await window.puffin.board.start()
+      if (!started.success) {
+        this.queueNote = { error: started.error }
+        this.render()
+        return
+      }
+    }
+    const result = await window.puffin.board.createCard({ instanceId })
+    this.queueNote = result.success
+      ? { added: 1, skipped: 0 }
+      : { error: result.error }
+    this.render()
+  }
+
+  /** Voice input — record, transcribe, drop the text into the composer. */
+  async toggleMic() {
+    if (this.isRecording) {
+      this._recorder?.stop()
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus' : 'audio/webm'
+      this._recorder = new MediaRecorder(stream, { mimeType })
+      this._chunks = []
+      this._recorder.ondataavailable = (e) => { if (e.data.size > 0) this._chunks.push(e.data) }
+      this._recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        this.isRecording = false
+        this.render()
+        try {
+          const blob = new Blob(this._chunks, { type: mimeType })
+          const buffer = await blob.arrayBuffer()
+          const result = await window.puffin.speech.transcribe(Array.from(new Uint8Array(buffer)))
+          const text = result?.text || result?.transcript
+          const input = this.container.querySelector('#specs-author-input')
+          if (text && input) {
+            input.value = input.value ? `${input.value} ${text}` : text
+            input.focus()
+          } else if (!text) {
+            this.authoring.error = result?.error || 'Transcription returned nothing (is the Speech API key set in Config?)'
+            this.render()
+          }
+        } catch (error) {
+          this.authoring.error = `Transcription failed: ${error.message}`
+          this.render()
+        }
+      }
+      this._recorder.start()
+      this.isRecording = true
+      this.render()
+    } catch (error) {
+      this.authoring.error = `Microphone unavailable: ${error.message}`
+      this.render()
+    }
   }
 
   /** Re-render just the authoring pane so streaming never disturbs the tree. */
@@ -719,39 +829,110 @@ export class SpecsViewComponent {
           <button class="btn btn-secondary btn-sm" data-action="stop-borrowing">Back to my sekkei</button>
         </div>` : ''}
         ${this._renderSummary()}
-        ${this.borrowing ? '' : this._renderAuthoring()}
         ${this.borrowing ? '' : this._renderChanges()}
         ${this._renderVerify()}
         ${this.borrowing ? '' : this._renderScrs()}
-        <div class="specs-body">
-          <div class="specs-tree">${this._renderTree()}</div>
-          <div class="specs-detail">${this._renderDetail()}</div>
+        <div class="specs-layout">
+          ${this.borrowing ? '' : `<div class="specs-side">${this._renderAuthoring()}</div>`}
+          <div class="specs-body">
+            <div class="specs-tree">${this._renderTree()}</div>
+            <div class="specs-detail">${this._renderDetail()}</div>
+          </div>
         </div>
       `}
     `
+    this._restoreComposer()
   }
 
+  /** Put the draft and option choices back after innerHTML replacement. */
+  _restoreComposer() {
+    const composer = this.container.querySelector('#specs-author-input')
+    if (!composer) return
+    if (this._composerDraft) composer.value = this._composerDraft
+    const opts = this._composerOpts || {}
+    const set = (id, value, isCheck) => {
+      const el = this.container.querySelector(id)
+      if (!el || value === undefined) return
+      if (isCheck) el.checked = value
+      else if ([...el.options].some(o => o.value === value)) el.value = value
+    }
+    set('#sekkei-model', opts.model)
+    set('#sekkei-thinking', opts.thinking)
+    set('#sekkei-quick', opts.quick, true)
+    set('#sekkei-docs', opts.docs)
+    set('#sekkei-gui', opts.gui)
+  }
+
+  /**
+   * The authoring pane: the reply window above, the composer pinned below —
+   * the Prompt tab's shape, aimed at the design.
+   */
   _renderAuthoring() {
     const a = this.authoring
-    return `<div class="specs-author">
-      <div class="specs-author-row">
-        <textarea id="specs-author-input" class="specs-author-input" rows="2"
-          placeholder="Describe the design change — e.g. 'add a capability for run scheduling with a component per queue' — the session edits the sekkei, never the code."
-          ${a.isRunning ? 'disabled' : ''}></textarea>
-        ${a.isRunning
-          ? '<button class="btn btn-secondary" data-action="cancel-author">Cancel</button>'
-          : `<button class="btn btn-primary" data-action="author" ${!this.workspaceId ? 'disabled' : ''}>Author</button>`}
+    return `
+      <div class="specs-reply" id="specs-author-response-wrap">
+        ${a.lastInstruction ? `<div class="specs-reply-echo">${esc(a.lastInstruction)}</div>` : ''}
+        ${a.error ? `<div class="specs-editor-error">✗ ${esc(a.error)}</div>` : ''}
+        ${(a.isRunning || a.response)
+          ? `<pre id="specs-author-response" class="specs-reply-body">${esc(a.response)}</pre>`
+          : `<div class="specs-reply-empty">
+               Describe a design change and the session edits this sekkei —
+               creating, updating and deleting nodes. It never touches source code;
+               implementation happens later, as a workflow.
+             </div>`}
+        ${a.isRunning ? '<div class="specs-reply-status">⟳ authoring…</div>' : ''}
       </div>
-      ${a.error ? `<div class="specs-editor-error">✗ ${esc(a.error)}</div>` : ''}
-      ${(a.isRunning || a.response) ? `
-        <div class="specs-author-result">
-          <div class="specs-author-status">
-            ${a.isRunning ? '⟳ authoring the sekkei…' : '✓ done'}
-            ${a.lastInstruction ? `<span class="specs-author-echo">${esc(a.lastInstruction)}</span>` : ''}
-          </div>
-          <pre id="specs-author-response" class="specs-output">${esc(a.response)}</pre>
-        </div>` : ''}
-    </div>`
+      <div class="specs-composer">
+        <textarea id="specs-author-input" class="specs-author-input" rows="3"
+          placeholder="e.g. add a capability for run scheduling, with a component per queue"
+          ${a.isRunning ? 'disabled' : ''}></textarea>
+        <div class="specs-composer-options">
+          <label class="specs-copt"><span>Model</span>
+            <select id="sekkei-model" class="specs-copt-select" ${a.isRunning ? 'disabled' : ''}>
+              <option value="">default</option>
+            </select>
+          </label>
+          <label class="specs-copt"><span>Thinking</span>
+            <select id="sekkei-thinking" class="specs-copt-select" ${a.isRunning ? 'disabled' : ''}>
+              <option value="none">None</option>
+              <option value="think">Think</option>
+              <option value="think-hard">Think hard</option>
+              <option value="think-harder">Think harder</option>
+              <option value="ultrathink">Ultrathink</option>
+            </select>
+          </label>
+          <label class="specs-copt specs-copt-check">
+            <input type="checkbox" id="sekkei-quick" ${a.isRunning ? 'disabled' : ''}>
+            <span title="Ask without changing anything — read-only">Quick Q</span>
+          </label>
+          <label class="specs-copt"><span>Docs</span>
+            <select id="sekkei-docs" class="specs-copt-select" ${a.isRunning ? 'disabled' : ''}>
+              <option value="">none</option>
+              ${this.designDocs.map(d => `<option value="${esc(d.path || d.filename)}">${esc(d.name || d.filename)}</option>`).join('')}
+            </select>
+          </label>
+          <label class="specs-copt"><span>GUI</span>
+            <select id="sekkei-gui" class="specs-copt-select" ${a.isRunning ? 'disabled' : ''}>
+              <option value="">none</option>
+              ${this.guiDesigns.map(g => `<option value="${esc(g.filename || g)}">${esc(g.name || g.filename || g)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <div class="specs-composer-actions">
+          <button class="btn btn-secondary btn-sm" data-action="review-specs"
+            ${a.isRunning || !this.workspaceId ? 'disabled' : ''}
+            title="Review this sekkei for gaps, ambiguity and altitude errors">🔍 Review specs</button>
+          <button class="btn btn-secondary btn-sm" data-action="new-work-item"
+            ${!this.selectedGlmId ? 'disabled' : ''}
+            title="${this.selectedGlmId ? 'Queue the selected spec onto the Workflow' : 'Select a node first'}">+ Work item</button>
+          <button class="btn btn-secondary btn-sm specs-mic ${this.isRecording ? 'recording' : ''}"
+            data-action="mic" ${a.isRunning ? 'disabled' : ''}
+            title="Voice input">${this.isRecording ? '⏹' : '🎙'}</button>
+          ${a.isRunning
+            ? '<button class="btn btn-secondary btn-sm" data-action="cancel-author">Cancel</button>'
+            : `<button class="btn btn-primary btn-sm" data-action="author" ${!this.workspaceId ? 'disabled' : ''}>Author</button>`}
+        </div>
+      </div>`
   }
 
   _renderChanges() {

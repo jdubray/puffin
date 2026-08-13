@@ -245,46 +245,140 @@
   white-space: pre-wrap;
 }
 
-/* Authoring loop (the Prompt tab's shape, aimed at the design) */
+/* Layout: authoring pane on the left, the sekkei in the centre */
 
-.specs-author {
+.specs-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 28%) 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.specs-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  max-height: calc(100vh - 320px);
+}
+
+/* Reply window above… */
+
+.specs-reply {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
   border: 1px solid var(--border-color, #3a3a3a);
   border-radius: 6px;
   background: var(--bg-secondary, #252525);
   padding: 10px 12px;
-  margin-bottom: 12px;
 }
 
-.specs-author-row {
+.specs-reply-echo {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-secondary, #999);
+  border-left: 2px solid var(--border-color, #3a3a3a);
+  padding-left: 8px;
+  margin-bottom: 8px;
+}
+
+.specs-reply-body {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary, #ddd);
+  background: none;
+  padding: 0;
+}
+
+.specs-reply-empty {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary, #999);
+}
+
+.specs-reply-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+}
+
+/* …composer pinned below */
+
+.specs-composer {
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  background: var(--bg-secondary, #252525);
+  padding: 8px 10px;
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
 }
 
 .specs-author-input {
-  flex: 1;
+  width: 100%;
   padding: 8px 10px;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
   resize: vertical;
+  box-sizing: border-box;
   background: var(--bg-primary, #1a1a1a);
   color: var(--text-primary, #ddd);
   border: 1px solid var(--border-color, #3a3a3a);
   border-radius: 4px;
 }
 
-.specs-author-result { margin-top: 8px; }
-
-.specs-author-status {
-  font-size: 12px;
-  color: var(--text-secondary, #999);
+.specs-composer-options {
   display: flex;
-  gap: 10px;
-  align-items: baseline;
+  gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
-.specs-author-echo { font-style: italic; }
+.specs-copt {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, #888);
+}
+
+.specs-copt-select {
+  padding: 2px 5px;
+  font-size: 11.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  max-width: 118px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--text-primary, #ddd);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 3px;
+}
+
+.specs-copt-check { cursor: pointer; }
+
+.specs-composer-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.specs-mic.recording {
+  color: var(--error-color, #e06258);
+  border-color: var(--error-color, #e06258);
+}
+
+@media (max-width: 1000px) {
+  .specs-layout { grid-template-columns: 1fr; }
+  .specs-side { max-height: none; }
+}
 
 .specs-changes {
   border: 1px solid var(--border-color, #3a3a3a);

@@ -273,7 +273,7 @@ class PuffinApp {
         `<option value="${esc(m.id)}"${m.id === selectedId ? ' selected' : ''}>${esc(m.name)} — ${esc(m.description)}</option>`
       ).join('\n')
 
-      for (const id of ['thread-model', 'default-model']) {
+      for (const id of ['thread-model', 'default-model', 'sekkei-model']) {
         const el = document.getElementById(id)
         if (el) el.innerHTML = optionsHtml
       }

@@ -1188,9 +1188,9 @@ export class PromptEditorComponent {
         // Upgrade the model tier for deep thinking budgets (Claude Code only —
         // not applicable to local LLMs, and never a DOWNGRADE from fable):
         // superthink → fable, think-harder → opus.
-        if ((thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') &&
+        if ((thinkingBudget === 'think-harder' || thinkingBudget === 'ultrathink' || thinkingBudget === 'superthink') &&
             !selectedModel.startsWith('ollama:') && !selectedModel.includes('fable')) {
-          selectedModel = thinkingBudget === 'superthink' ? 'fable' : 'opus'
+          selectedModel = (thinkingBudget === 'ultrathink' || thinkingBudget === 'superthink') ? 'fable' : 'opus'
           console.log(`[PROMPT-EDITOR] Upgraded model to ${selectedModel} for ${thinkingBudget}`)
         }
       }
@@ -1360,9 +1360,9 @@ export class PromptEditorComponent {
 
         // Upgrade the model tier for deep thinking budgets — superthink →
         // fable, think-harder → opus; never a DOWNGRADE from fable.
-        if ((thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') &&
+        if ((thinkingBudget === 'think-harder' || thinkingBudget === 'ultrathink' || thinkingBudget === 'superthink') &&
             !selectedModel.includes('fable')) {
-          selectedModel = thinkingBudget === 'superthink' ? 'fable' : 'opus'
+          selectedModel = (thinkingBudget === 'ultrathink' || thinkingBudget === 'superthink') ? 'fable' : 'opus'
           console.log(`[PROMPT-EDITOR] Upgraded model to ${selectedModel} for ${thinkingBudget}`)
         }
       }
@@ -2080,31 +2080,37 @@ export class PromptEditorComponent {
    * @returns {string} - Wrapped prompt with thinking instructions
    */
   wrapPromptWithThinkingBudget(prompt, budget) {
+    // Claude Code escalates extended thinking on the LITERAL keywords below,
+    // in this order: think < think hard < think harder < ultrathink. The
+    // keyword must survive into the prompt text verbatim.
     const budgetConfig = {
       'think': {
-        percentage: '25%',
-        instruction: 'Think carefully before responding.'
+        keyword: 'think',
+        instruction: 'think about this before responding.'
       },
       'think-hard': {
-        percentage: '50%',
-        instruction: 'Think hard about this problem. Take your time to analyze thoroughly before responding.'
+        keyword: 'think hard',
+        instruction: 'think hard about this — analyze thoroughly before responding.'
       },
       'think-harder': {
-        percentage: '75%',
-        instruction: 'Think harder about this. Use extended reasoning to deeply analyze the problem, consider multiple approaches, and provide a well-reasoned response.'
+        keyword: 'think harder',
+        instruction: 'think harder about this: consider multiple approaches and their trade-offs before responding.'
       },
+      'ultrathink': {
+        keyword: 'ultrathink',
+        instruction: 'ultrathink: deliberate extensively — multiple angles, edge cases, trade-offs — before responding.'
+      },
+      // legacy alias (pre-Claude-5 label)
       'superthink': {
-        percentage: '100%',
-        instruction: 'Use maximum thinking budget. Engage in extensive deliberation: analyze the problem from multiple angles, consider edge cases, evaluate trade-offs, and provide the most thorough and well-reasoned response possible.'
+        keyword: 'ultrathink',
+        instruction: 'ultrathink: deliberate extensively — multiple angles, edge cases, trade-offs — before responding.'
       }
     }
 
     const config = budgetConfig[budget]
     if (!config) return prompt
 
-    return `[Thinking Budget: ${config.percentage}]
-
-${config.instruction}
+    return `${config.instruction}
 
 ---
 

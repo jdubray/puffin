@@ -4,6 +4,8 @@
  * Displays Claude's responses with markdown rendering and streaming support.
  */
 
+import { renderMarkdown } from '../../lib/markdown.js'
+
 const WAITING_PHRASES = [
   'Consulting the weights\u2026',
   'Counting attention heads\u2026',
@@ -359,201 +361,16 @@ export class ResponseViewerComponent {
   }
 
   /**
-   * Parse markdown to HTML
-   * Uses a simple parser if marked.js isn't loaded
+   * Parse markdown to HTML.
+   *
+   * Delegates to lib/markdown so this pane and the Sekkei reply pane render
+   * replies identically; kept as a method because callers use this.parseMarkdown().
+   *
+   * @param {string} content - Raw markdown
+   * @returns {string} HTML
    */
   parseMarkdown(content) {
-    if (!content) return ''
-
-    let html = ''
-    // Try to use marked if available
-    if (window.marked) {
-      html = window.marked.parse(content)
-    } else {
-      // Simple markdown parsing fallback
-      html = this.simpleMarkdown(content)
-    }
-
-    // Post-process: Add line breaks after emojis
-    html = this.addLineBreaksAfterEmojis(html)
-
-    return html
-  }
-
-  /**
-   * Add line breaks after emojis so they don't run into the next text
-   * Matches emoji unicode ranges and adds <br> if not already followed by a break
-   */
-  addLineBreaksAfterEmojis(html) {
-    if (!html) return html
-
-    // Comprehensive emoji unicode ranges covering all common emojis:
-    // - \u{1F600}-\u{1F64F}: Emoticons
-    // - \u{1F300}-\u{1F5FF}: Misc Symbols and Pictographs
-    // - \u{1F680}-\u{1F6FF}: Transport and Map
-    // - \u{1F700}-\u{1F77F}: Alchemical Symbols
-    // - \u{1F780}-\u{1F7FF}: Geometric Shapes Extended
-    // - \u{1F800}-\u{1F8FF}: Supplemental Arrows-C
-    // - \u{1F900}-\u{1F9FF}: Supplemental Symbols and Pictographs
-    // - \u{1FA00}-\u{1FA6F}: Chess Symbols
-    // - \u{1FA70}-\u{1FAFF}: Symbols and Pictographs Extended-A
-    // - \u{2600}-\u{26FF}: Miscellaneous Symbols
-    // - \u{2700}-\u{27BF}: Dingbats
-    // - \u{1F1E0}-\u{1F1FF}: Regional Indicator Symbols (flags)
-    // This regex matches emojis followed by whitespace and text (but not already followed by HTML tags)
-    const emojiRegex = /([\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E0}-\u{1F1FF}\u{FE0F}\u{200D}]+)(\s*)(?=[A-Z])/gu
-
-    // Replace emoji followed by space and capital letter with emoji + <br> + newline + space
-    return html.replace(emojiRegex, (match, emoji, space) => {
-      // Only add break if there's content after (lookahead ensures this)
-      return `${emoji}<br>\n`
-    })
-  }
-
-  /**
-   * Simple markdown parser for basic formatting
-   */
-  simpleMarkdown(text) {
-    // Escape HTML first
-    let html = this.escapeHtml(text)
-
-    // Code blocks
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-      return `<pre><code class="language-${lang}">${code}</code></pre>`
-    })
-
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-
-    // Tables - parse markdown tables into HTML
-    html = this.parseMarkdownTables(html)
-
-    // Headers
-    html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>')
-    html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>')
-    html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>')
-
-    // Bold
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-
-    // Italic
-    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
-
-    // Lists
-    html = html.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>')
-    html = html.replace(/(<li>.*<\/li>)\n(?=<li>)/g, '$1')
-    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
-
-    // Numbered lists
-    html = html.replace(/^\s*\d+\.\s+(.*)$/gm, '<li>$1</li>')
-
-    // Links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-
-    // Paragraphs
-    html = html.replace(/\n\n/g, '</p><p>')
-    html = `<p>${html}</p>`
-
-    // Clean up empty paragraphs
-    html = html.replace(/<p>\s*<\/p>/g, '')
-    html = html.replace(/<p>(<h[1-6]>)/g, '$1')
-    html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1')
-    html = html.replace(/<p>(<pre>)/g, '$1')
-    html = html.replace(/(<\/pre>)<\/p>/g, '$1')
-    html = html.replace(/<p>(<ul>)/g, '$1')
-    html = html.replace(/(<\/ul>)<\/p>/g, '$1')
-    html = html.replace(/<p>(<div class="table-wrapper">)/g, '$1')
-    html = html.replace(/(<\/table><\/div>)<\/p>/g, '$1')
-
-    return html
-  }
-
-  /**
-   * Parse markdown tables into HTML tables
-   */
-  parseMarkdownTables(text) {
-    const lines = text.split('\n')
-    const result = []
-    let inTable = false
-    let tableRows = []
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim()
-
-      // Check if this looks like a table row (starts and ends with |, or has | separators)
-      const isTableRow = line.startsWith('|') && line.endsWith('|')
-      const isSeparatorRow = /^\|[\s\-:|\s]+\|$/.test(line)
-
-      if (isTableRow || isSeparatorRow) {
-        if (!inTable) {
-          inTable = true
-          tableRows = []
-        }
-        tableRows.push(line)
-      } else {
-        // If we were in a table, process it
-        if (inTable && tableRows.length >= 2) {
-          result.push(this.renderTable(tableRows))
-        } else if (inTable) {
-          // Not enough rows for a table, just add them back
-          result.push(...tableRows)
-        }
-        inTable = false
-        tableRows = []
-        result.push(lines[i])
-      }
-    }
-
-    // Handle table at end of text
-    if (inTable && tableRows.length >= 2) {
-      result.push(this.renderTable(tableRows))
-    } else if (inTable) {
-      result.push(...tableRows)
-    }
-
-    return result.join('\n')
-  }
-
-  /**
-   * Render table rows into HTML table
-   */
-  renderTable(rows) {
-    if (rows.length < 2) return rows.join('\n')
-
-    // Parse cells from each row
-    const parseCells = (row) => {
-      return row
-        .split('|')
-        .slice(1, -1) // Remove empty first and last elements from split
-        .map(cell => cell.trim())
-    }
-
-    const headerCells = parseCells(rows[0])
-
-    // Check if second row is a separator (contains only -, :, |, and spaces)
-    const isSeparator = /^[\s\-:|]+$/.test(rows[1].replace(/\|/g, ''))
-
-    let bodyStartIndex = isSeparator ? 2 : 1
-
-    // Build table HTML
-    let tableHtml = '<div class="table-wrapper"><table>\n<thead>\n<tr>'
-
-    for (const cell of headerCells) {
-      tableHtml += `<th>${cell}</th>`
-    }
-    tableHtml += '</tr>\n</thead>\n<tbody>\n'
-
-    for (let i = bodyStartIndex; i < rows.length; i++) {
-      const cells = parseCells(rows[i])
-      tableHtml += '<tr>'
-      for (const cell of cells) {
-        tableHtml += `<td>${cell}</td>`
-      }
-      tableHtml += '</tr>\n'
-    }
-
-    tableHtml += '</tbody>\n</table></div>'
-    return tableHtml
+    return renderMarkdown(content)
   }
 
   /**

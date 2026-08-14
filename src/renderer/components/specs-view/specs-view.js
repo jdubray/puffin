@@ -8,6 +8,8 @@
  * editor (repurposed document-editor surface).
  */
 
+import { renderMarkdown } from '../../lib/markdown.js'
+
 /** Escape text for safe interpolation into HTML */
 function esc(text) {
   const div = document.createElement('div')
@@ -787,11 +789,15 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     }
   }
 
-  /** Re-render just the authoring pane so streaming never disturbs the tree. */
+  /**
+   * Re-render just the authoring pane so streaming never disturbs the tree.
+   * Markdown is re-rendered per chunk: a half-arrived `**bold` would otherwise
+   * sit as literal asterisks until the turn ended.
+   */
   _renderAuthoringOnly() {
     const pane = this.container.querySelector('#specs-author-response')
     if (pane) {
-      pane.textContent = this.authoring.response
+      pane.innerHTML = renderMarkdown(this.authoring.response)
       pane.scrollTop = pane.scrollHeight
     }
   }
@@ -1311,7 +1317,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
         ${a.lastInstruction ? `<div class="specs-reply-echo">${esc(a.lastInstruction)}</div>` : ''}
         ${a.error ? `<div class="specs-editor-error">✗ ${esc(a.error)}</div>` : ''}
         ${(a.isRunning || a.response)
-          ? `<pre id="specs-author-response" class="specs-reply-body">${esc(a.response)}</pre>`
+          ? `<div id="specs-author-response" class="specs-reply-body markdown-body">${renderMarkdown(a.response)}</div>`
           : `<div class="specs-reply-empty">
                Describe a design change and the session edits this sekkei —
                creating, updating and deleting nodes. It never touches source code;

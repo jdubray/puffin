@@ -796,6 +796,11 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   // GLM — spec-oriented development (sekkei, SCRs, verifier)
+  // Doctor — a single health report across CLI, GLM, Polygraph, board, project
+  doctor: {
+    run: () => ipcRenderer.invoke('doctor:run')
+  },
+
   glm: {
     getStatus: () => ipcRenderer.invoke('glm:status'),
     listWorkspaces: () => ipcRenderer.invoke('glm:workspaces'),

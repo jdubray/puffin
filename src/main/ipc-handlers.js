@@ -18,6 +18,7 @@ const { GitService } = require('./git-service')
 const { scaffoldCommands } = require('./command-scaffolder')
 const documentEditService = require('./document-edit-service')
 const { PolygraphService } = require('./polygraph-service')
+const { DoctorService } = require('./doctor-service')
 const { GlmClient } = require('./glm-client')
 const { setupGlmSessionIntegration } = require('./glm-integration')
 const { BoardRuntime } = require('./board-runtime')
@@ -35,6 +36,9 @@ let glmSubscription = null
 const boardRuntime = new BoardRuntime({
   polygraphDirResolver: () => polygraphService.resolvePolygraphDir()
 })
+// One health report across every integration Puffin wires
+const doctorService = new DoctorService({ polygraphService, boardRuntime })
+
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
@@ -379,6 +383,17 @@ function setupStateHandlers(ipcMain) {
     try {
       if (!machineDir) return { success: false, error: 'machineDir is required' }
       return await polygraphService.getElicitationReport(machineDir)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Doctor — one report across the CLI, GLM, Polygraph, the board and the
+  // project, so diagnosing does not mean visiting four tabs.
+  ipcMain.handle('doctor:run', async () => {
+    try {
+      doctorService.setProjectPath(projectPath)
+      return { success: true, ...(await doctorService.run()) }
     } catch (error) {
       return { success: false, error: error.message }
     }

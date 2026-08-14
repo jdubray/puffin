@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="components/specs-view/specs-view.css">
   <link rel="stylesheet" href="components/board-view/board-view.css">
   <link rel="stylesheet" href="components/docs-view/docs-view.css">
+  <link rel="stylesheet" href="components/doctor-panel/doctor-panel.css">
 </head>
 <body>
   <!-- Toast Notifications Container -->
@@ -125,7 +126,10 @@
           <div class="view-content">
             <div class="view-header-with-actions">
               <h2>Project Configuration</h2>
+              <button id="doctor-btn" class="btn btn-secondary btn-sm"
+                data-help="Check every integration at once: the Claude CLI, GLM, Polygraph, the workflow runtime and this project's state.">🩺 Doctor</button>
             </div>
+            <div id="doctor-panel" class="doctor-panel hidden"></div>
             <form id="config-form" class="project-form">
               <div class="form-group">
                 <label for="project-name-input">Project Name</label>

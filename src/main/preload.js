@@ -771,6 +771,8 @@ contextBridge.exposeInMainWorld('puffin', {
     nvQuestions: (args) => ipcRenderer.invoke('polygraph:nvQuestions', args),
     nvRecord: (args) => ipcRenderer.invoke('polygraph:nvRecord', args),
     nvReport: (args) => ipcRenderer.invoke('polygraph:nvReport', args),
+    // Confirmed invariants as references, for linking into a sekkei spec
+    confirmedInvariants: (args) => ipcRenderer.invoke('polygraph:confirmedInvariants', args),
     // Evolution gate (polyvers): working machine vs git baseline
     evolution: (args) => ipcRenderer.invoke('polygraph:evolution', args),
     scaffoldMigration: (args) => ipcRenderer.invoke('polygraph:scaffoldMigration', args),

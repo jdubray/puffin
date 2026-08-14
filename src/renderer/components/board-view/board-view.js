@@ -54,6 +54,8 @@ export class BoardViewComponent {
     this.binding = null // this project's bound sekkei (the gate's source)
     this.glmWorkspaceId = '' // '' = unbound → ungated, disclosed in the toolbar
     this.sekkeiNodes = [] // implementable nodes of the bound sekkei
+    this.machines = [] // Polygraph machines discovered in this project
+    this.linkNote = null // { instanceId, message, ok } — result of a spec link
     this.picker = null // { candidates } — nodes with no card yet
     this.isBusy = false
     this.hasLoaded = false
@@ -118,6 +120,14 @@ export class BoardViewComponent {
           }
         }
       } catch { this.binding = null; this.glmWorkspaceId = '' }
+
+      // Machines discovered in this project, so a card can reach the
+      // elicitation for the machine implementing it.
+      try {
+        const machines = await window.puffin.polygraph.discover()
+        this.machines = machines.success ? (machines.machines || []) : []
+      } catch { this.machines = [] }
+
       this.hasLoaded = true
     } catch (error) {
       this.status = { error: error.message }
@@ -200,6 +210,102 @@ export class BoardViewComponent {
     this.render()
   }
 
+  /**
+   * The Polygraph machine implementing a card, matched on the glm id's last
+   * segment (`…kernel.kernel_core` → a machine named `kernel-core`). Names are
+   * compared with `_` and `-` treated alike, since the sekkei writes snake_case
+   * ids and machine directories are conventionally kebab-case.
+   *
+   * @param {Object} card
+   * @returns {Object|null} The discovered machine, or null when none matches
+   * @private
+   */
+  _machineFor(card) {
+    const instanceId = card?.instanceId || card?.id
+    if (!instanceId || !this.machines.length) return null
+    const norm = s => String(s).toLowerCase().replace(/[_-]/g, '')
+    const leaf = norm(String(instanceId).split('.').pop())
+    if (!leaf) return null
+    return this.machines.find(m => norm(m.name) === leaf) || null
+  }
+
+  /**
+   * Open the invariant elicitation for the machine implementing this card.
+   *
+   * The dialog itself already lives in the Polygraph workbench (and, properly,
+   * in the polynv skill) — this is the way in from the work, so you don't have
+   * to go find the machine by hand.
+   */
+  openInvariants(instanceId) {
+    const card = this.cards.find(c => (c.instanceId || c.id) === instanceId)
+    const machine = this._machineFor(card)
+    if (!machine) return
+    this.intents?.switchView?.('polygraph')
+    document.dispatchEvent(new CustomEvent('puffin-open-elicitation', {
+      detail: { machineDir: machine.dir }
+    }))
+  }
+
+  /**
+   * Record the machine's confirmed invariants on the sekkei spec — as a
+   * reference to the ledger, never a copy of the predicates.
+   *
+   * The predicate has one home (the machine's ledger, where polynv maintains
+   * it); the spec records that these constraints exist, who confirmed them and
+   * when, so a reader of the design sees what the code guarantees and GLM's
+   * drift detection has something to compare. Copying the JavaScript here
+   * would give the same fact two homes and guarantee they diverge.
+   */
+  async linkInvariantsToSpec(instanceId) {
+    const card = this.cards.find(c => (c.instanceId || c.id) === instanceId)
+    const machine = this._machineFor(card)
+    if (!machine || !this.glmWorkspaceId) return
+
+    // The card id is the glm id with unsafe characters replaced; find the node
+    // it came from rather than trying to reverse that.
+    const node = this.sekkeiNodes.find(n => cardIdForNode(n.glmId) === instanceId)
+    if (!node) {
+      this.linkNote = { instanceId, ok: false, message: 'no sekkei node behind this card' }
+      return this.render()
+    }
+
+    this.linkNote = { instanceId, ok: true, message: 'reading the ledger…' }
+    this.render()
+
+    try {
+      const res = await window.puffin.polygraph.confirmedInvariants({ machineDir: machine.dir })
+      if (!res.success) throw new Error(res.error)
+      if (!res.invariants.length) {
+        this.linkNote = { instanceId, ok: false, message: 'no confirmed invariants yet — elicit first' }
+        return this.render()
+      }
+
+      const current = await window.puffin.glm.getNode({
+        workspaceId: this.glmWorkspaceId, glmId: node.glmId
+      })
+      const body = { ...(current?.node?.body || current?.body || {}) }
+      body.invariants = {
+        source: 'polygraph:intent-ledger',
+        machine: machine.relDir || machine.name,
+        ledger: `${machine.relDir || machine.name}/intent-ledger.json`,
+        confirmed: res.invariants
+      }
+
+      const saved = await window.puffin.glm.updateNode({
+        workspaceId: this.glmWorkspaceId, glmId: node.glmId, input: { body }
+      })
+      if (!saved?.success && saved?.error) throw new Error(saved.error)
+
+      this.linkNote = {
+        instanceId, ok: true,
+        message: `linked ${res.invariants.length} confirmed invariant(s) to ${node.glmId}`
+      }
+    } catch (error) {
+      this.linkNote = { instanceId, ok: false, message: error.message }
+    }
+    this.render()
+  }
+
   /** Pull one spec onto the board — the card IS the work of implementing it. */
   async addFromSekkei(glmId) {
     const instanceId = cardIdForNode(glmId)
@@ -237,6 +343,8 @@ export class BoardViewComponent {
     else if (action === 'open-picker') this.openPicker()
     else if (action === 'close-picker') { this.picker = null; this.render() }
     else if (action === 'add-node' && id) this.addFromSekkei(id)
+    else if (action === 'invariants' && id) this.openInvariants(id)
+    else if (action === 'link-invariants' && id) this.linkInvariantsToSpec(id)
     else if (action === 'journal' && id) this.showJournal(id)
     else if (action === 'close-journal') { this.journalFor = null; this.render() }
     else if (action === 'validation-pass' && id) this.dispatch(id, 'VALIDATION_PASSED')
@@ -394,10 +502,13 @@ export class BoardViewComponent {
     const state = card.state || {}
     const isDone = state.cardState === 'done'
     const node = this._nodeForCard(id)
+    const machine = this._machineFor(card)
+    const note = this.linkNote?.instanceId === id ? this.linkNote : null
     return `<div class="board-card ${isDone ? 'board-card-done' : ''}" draggable="${!isDone}" data-card-id="${esc(id)}">
       <div class="board-card-title">${esc(node?.title || id)}</div>
       ${node ? `<div class="board-card-node"><span class="board-card-stratum">${esc(node.stratum)}</span> ${esc(node.glmId)}</div>` : ''}
       <div class="board-card-meta">
+        ${machine ? `<span class="board-badge board-badge-machine" title="Implemented by ${esc(machine.relDir || machine.name)}">◇ ${esc(machine.name)}</span>` : ''}
         ${state.reworkCount > 0 ? `<span class="board-badge board-badge-warn">rework ${state.reworkCount}/2</span>` : ''}
         ${state.lastSignal ? `<span class="board-badge">${esc(state.lastSignal)}</span>` : ''}
       </div>
@@ -409,8 +520,18 @@ export class BoardViewComponent {
         ${state.cardState === 'needsHuman' ? `
           <button class="btn btn-sm" data-action="resume" data-id="${esc(id)}" title="Resume with a fresh budget">resume</button>
         ` : ''}
+        ${machine ? `
+          <button class="btn btn-sm" data-action="invariants" data-id="${esc(id)}"
+            title="Invariant elicitation for ${esc(machine.name)}">◇ invariants</button>
+          <button class="btn btn-sm" data-action="link-invariants" data-id="${esc(id)}"
+            ${this.glmWorkspaceId ? '' : 'disabled'}
+            title="${this.glmWorkspaceId
+              ? 'Record the confirmed invariants on this spec (a reference, not a copy)'
+              : 'No sekkei bound'}">↗ to spec</button>
+        ` : ''}
         <button class="btn btn-sm board-btn-journal" data-action="journal" data-id="${esc(id)}" title="Card history (journal)">☰</button>
       </div>
+      ${note ? `<div class="board-link-note ${note.ok ? '' : 'board-link-note-warn'}">${esc(note.message)}</div>` : ''}
     </div>`
   }
 

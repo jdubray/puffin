@@ -68,6 +68,17 @@ export class PolygraphWorkbenchComponent {
     }
     this.render()
     this.container.addEventListener('click', (e) => this._onClick(e))
+
+    // The Workflow board sends work here: a card asks for the elicitation of
+    // the machine implementing it, rather than making you find it by hand.
+    document.addEventListener('puffin-open-elicitation', async (e) => {
+      const machineDir = e.detail?.machineDir
+      if (!machineDir) return
+      if (!this.hasScanned && !this.isBusy) await this.refresh()
+      await this.openElicitation(machineDir)
+      this.container.querySelector(`[data-machine-dir="${CSS.escape(machineDir)}"]`)
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    })
   }
 
   /** Called when the view becomes visible */
@@ -401,7 +412,7 @@ export class PolygraphWorkbenchComponent {
     const evolution = this.evolution.get(machine.dir)
     const traces = this.traces.get(machine.dir)
 
-    return `<div class="pgwb-machine">
+    return `<div class="pgwb-machine" data-machine-dir="${esc(machine.dir)}">
       <div class="pgwb-machine-header">
         <div class="pgwb-machine-title">
           <span class="pgwb-machine-name">${esc(machine.name)}</span>

@@ -407,6 +407,72 @@ class PolygraphService {
   }
 
   /**
+   * The confirmed invariants of a machine, as references — never predicates.
+   *
+   * A sekkei spec that wants to record what the code guarantees links to the
+   * ledger records rather than copying their JavaScript: a copied predicate is
+   * a second home for the same fact, and the two drift the moment one is
+   * edited. The reference carries what a reader needs to find and judge the
+   * record (id, what it constrains, who confirmed it, when) and nothing that
+   * can fall out of date silently.
+   *
+   * @param {string} machineDir - Absolute path to a machine's artifacts dir
+   * @returns {Promise<{success: boolean, ledgerPath?: string, invariants?: Array, error?: string}>}
+   */
+  async getConfirmedInvariants(machineDir) {
+    try {
+      const dir = this._containMachineDir(machineDir)
+      if (!dir) return { success: false, error: 'machine directory is outside the project' }
+
+      const ledgerPath = path.join(dir, 'intent-ledger.json')
+      if (!fs.existsSync(ledgerPath)) {
+        return { success: true, ledgerPath: null, invariants: [] }
+      }
+
+      const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf-8'))
+      const records = Array.isArray(ledger?.records) ? ledger.records : []
+      const invariants = records
+        .filter(r => r.status === 'confirmed')
+        .map(r => {
+          const latest = Array.isArray(r.versions) && r.versions.length
+            ? r.versions[r.versions.length - 1]
+            : null
+          return {
+            id: r.id,
+            target: r.target || null,        // 'state' | 'transition'
+            question: r.question || '',       // what was asked, not how it's enforced
+            author: latest?.author || null,
+            confirmedAt: latest?.date || null
+          }
+        })
+        .sort((a, b) => a.id.localeCompare(b.id))
+
+      return { success: true, ledgerPath, invariants }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  }
+
+  /**
+   * @private
+   * Resolve a machine dir and refuse anything outside the project — the path
+   * arrives from the renderer, so it is not trusted.
+   *
+   * @param {string} machineDir
+   * @returns {string|null}
+   */
+  _containMachineDir(machineDir) {
+    if (!machineDir || !this.projectPath) return null
+    try {
+      const realRoot = fs.realpathSync(path.resolve(this.projectPath))
+      const real = fs.realpathSync(path.resolve(machineDir))
+      return (real === realRoot || real.startsWith(realRoot + path.sep)) ? real : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
    * @private
    * Locate the polyvers CLI inside the Polygraph checkout.
    */

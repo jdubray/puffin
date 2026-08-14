@@ -384,6 +384,17 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  // Confirmed invariants as references (id/target/question/author) — never the
+  // predicate source, which stays in the machine's ledger as the single home.
+  ipcMain.handle('polygraph:confirmedInvariants', async (event, { machineDir } = {}) => {
+    try {
+      if (!machineDir) return { success: false, error: 'machineDir is required' }
+      return await polygraphService.getConfirmedInvariants(machineDir)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('polygraph:evolution', async (event, { machineDir, ref, snapshotsPath } = {}) => {
     try {
       if (!machineDir) return { success: false, error: 'machineDir is required' }

@@ -153,6 +153,28 @@
   background: rgba(224, 160, 48, 0.12);
 }
 
+/* The machine implementing this card — the way through to its invariants */
+.board-badge-machine {
+  color: var(--accent-primary, #6aa9ff);
+  background: rgba(106, 169, 255, 0.12);
+}
+
+/* Result of linking confirmed invariants onto the spec */
+.board-link-note {
+  margin-top: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary, #9ad0a8);
+  background: rgba(110, 231, 168, 0.08);
+  border-radius: 3px;
+}
+
+.board-link-note-warn {
+  color: var(--warning-color, #e0a030);
+  background: rgba(224, 160, 48, 0.1);
+}
+
 .board-card-actions {
   display: flex;
   gap: 4px;

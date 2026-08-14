@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sekkei to Verified Code</title>
+<style>
+  /* ── Drafting sheet ────────────────────────────────────────────────
+     A sekkei (設計) is a drawing. So the page is a drawing sheet: title
+     block, hairline rules, stamped gates, numbered stations. Neutrals are
+     biased toward the drafting blue; the seal red is spent only on gates. */
+
+  :root {
+    --paper:      #e9ecf0;
+    --sheet:      #f7f8fa;
+    --panel:      #ffffff;
+    --ink:        #161b22;
+    --ink-soft:   #4d5866;
+    --ink-faint:  #7d8899;
+    --rule:       #c3cbd6;
+    --rule-soft:  #dde2e9;
+    --blue:       #2c5ea8;
+    --blue-wash:  rgba(44, 94, 168, 0.09);
+    --seal:       #b23a2c;
+    --seal-wash:  rgba(178, 58, 44, 0.09);
+    --green:      #2c6b4c;
+    --green-wash: rgba(44, 107, 76, 0.10);
+    --amber:      #8a6212;
+    --amber-wash: rgba(138, 98, 18, 0.11);
+
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Inter Tight", "Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0e1116;
+      --sheet:      #14181f;
+      --panel:      #191e26;
+      --ink:        #e4e8ee;
+      --ink-soft:   #9aa5b4;
+      --ink-faint:  #6c7787;
+      --rule:       #2a323d;
+      --rule-soft:  #222932;
+      --blue:       #7fa9e8;
+      --blue-wash:  rgba(127, 169, 232, 0.12);
+      --seal:       #e08472;
+      --seal-wash:  rgba(224, 132, 114, 0.12);
+      --green:      #6fbf94;
+      --green-wash: rgba(111, 191, 148, 0.12);
+      --amber:      #d8a44a;
+      --amber-wash: rgba(216, 164, 74, 0.13);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #0e1116;
+    --sheet:      #14181f;
+    --panel:      #191e26;
+    --ink:        #e4e8ee;
+    --ink-soft:   #9aa5b4;
+    --ink-faint:  #6c7787;
+    --rule:       #2a323d;
+    --rule-soft:  #222932;
+    --blue:       #7fa9e8;
+    --blue-wash:  rgba(127, 169, 232, 0.12);
+    --seal:       #e08472;
+    --seal-wash:  rgba(224, 132, 114, 0.12);
+    --green:      #6fbf94;
+    --green-wash: rgba(111, 191, 148, 0.12);
+    --amber:      #d8a44a;
+    --amber-wash: rgba(216, 164, 74, 0.13);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: clamp(16px, 4vw, 48px) clamp(14px, 4vw, 40px) 64px;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 1120px;
+    margin: 0 auto;
+    background: var(--sheet);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+
+  /* ── Title block ─────────────────────────────────────────────── */
+
+  .titleblock {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 20px 32px;
+    align-items: end;
+    padding: clamp(20px, 4vw, 34px) clamp(18px, 4vw, 36px) 22px;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(26px, 5vw, 40px);
+    line-height: 1.08;
+    font-weight: 640;
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+
+  .lede {
+    margin: 10px 0 0;
+    max-width: 62ch;
+    color: var(--ink-soft);
+    font-size: clamp(14.5px, 1.6vw, 16.5px);
+  }
+
+  .stamp {
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.75;
+    color: var(--ink-faint);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .stamp b { color: var(--ink-soft); font-weight: 600; }
+
+  /* ── Sections ────────────────────────────────────────────────── */
+
+  section { padding: clamp(22px, 4vw, 36px) clamp(18px, 4vw, 36px); }
+  section + section { border-top: 1px solid var(--rule-soft); }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 0 0 4px;
+  }
+
+  .sec-no {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    color: var(--blue);
+  }
+
+  h2 {
+    margin: 0;
+    font-size: clamp(17px, 2.4vw, 21px);
+    font-weight: 620;
+    letter-spacing: -0.012em;
+  }
+
+  .sec-note {
+    margin: 0 0 22px;
+    max-width: 74ch;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+
+  h3 {
+    margin: 26px 0 10px;
+    font-size: 13px;
+    font-weight: 640;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  p { margin: 0 0 12px; max-width: 76ch; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.875em;
+    padding: 1px 5px;
+    background: var(--blue-wash);
+    border-radius: 3px;
+    word-break: break-word;
+  }
+
+  /* ── The spine: numbered stations with gates between ──────────── */
+
+  .spine {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 14px;
+    margin: 0 0 6px;
+  }
+
+  .station {
+    position: relative;
+    padding: 15px 16px 16px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--blue);
+    border-radius: 2px;
+  }
+
+  .station.is-unwired { border-top-color: var(--amber); }
+  .station.is-terminal { border-top-color: var(--green); }
+
+  .station-no {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    color: var(--ink-faint);
+  }
+
+  .station-name {
+    margin: 3px 0 8px;
+    font-size: 16px;
+    font-weight: 620;
+    letter-spacing: -0.01em;
+  }
+
+  .station p { margin: 0 0 8px; font-size: 13.2px; color: var(--ink-soft); }
+  .station p:last-child { margin-bottom: 0; }
+
+  .station-where {
+    display: block;
+    margin-bottom: 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    color: var(--blue);
+  }
+
+  /* Gate stamps — the only place the seal red is spent */
+  .gate {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 4px 9px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--seal);
+    background: var(--seal-wash);
+    border: 1px solid currentColor;
+    border-radius: 2px;
+  }
+  .gate.is-open { color: var(--amber); background: var(--amber-wash); }
+
+  /* The one legal backward bend */
+  .bend {
+    margin: 18px 0 0;
+    padding: 14px 16px;
+    background: var(--amber-wash);
+    border-left: 3px solid var(--amber);
+    border-radius: 2px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .bend b { color: var(--ink); font-weight: 620; }
+
+  /* ── Tables ──────────────────────────────────────────────────── */
+
+  .scroll { overflow-x: auto; margin: 0 0 4px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+
+  th, td {
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  td:first-child { white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .engine { font-family: var(--mono); font-size: 12.5px; color: var(--blue); font-weight: 600; }
+
+  /* ── Status marks ────────────────────────────────────────────── */
+
+  .mark {
+    display: inline-block;
+    padding: 2px 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .mark-on   { color: var(--green); background: var(--green-wash); }
+  .mark-part { color: var(--blue);  background: var(--blue-wash); }
+  .mark-off  { color: var(--amber); background: var(--amber-wash); }
+
+  /* ── Card lifecycle ──────────────────────────────────────────── */
+
+  .states {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 16px;
+  }
+
+  .state {
+    padding: 6px 11px;
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+  .state.is-terminal { border-color: var(--green); color: var(--green); }
+  .state.is-human { border-color: var(--amber); color: var(--amber); }
+
+  /* ── Phases ──────────────────────────────────────────────────── */
+
+  .phases { margin: 0; padding: 0; list-style: none; counter-reset: phase; }
+
+  .phase {
+    position: relative;
+    padding: 0 0 18px 46px;
+    counter-increment: phase;
+  }
+  .phase::before {
+    content: counter(phase, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 1px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--blue);
+    padding: 2px 7px;
+    background: var(--blue-wash);
+    border-radius: 2px;
+  }
+  .phase:last-child { padding-bottom: 0; }
+  .phase-name { font-weight: 620; margin: 0 0 3px; }
+  .phase p { margin: 0; color: var(--ink-soft); font-size: 13.6px; }
+
+  ul.plain { margin: 0 0 14px; padding-left: 20px; color: var(--ink-soft); font-size: 13.8px; }
+  ul.plain li { margin: 4px 0; }
+  ul.plain b { color: var(--ink); font-weight: 620; }
+
+  /* ── Colophon ────────────────────────────────────────────────── */
+
+  .colophon {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 26px;
+    padding: 18px clamp(18px, 4vw, 36px) 22px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 620px) {
+    .titleblock { grid-template-columns: 1fr; align-items: start; }
+    .stamp { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="titleblock">
+    <div>
+      <h1>Sekkei to Verified Code</h1>
+      <p class="lede">
+        How a specification becomes running code in Puffin — the five stations
+        between a sekkei node and a frozen <code>done</code>, which engine owns
+        each one, and which gate decides you may pass. The pipeline is the
+        same whatever the project; Puffin holds no knowledge of yours.
+      </p>
+    </div>
+    <div class="stamp">
+      <b>TOOL</b> Puffin 4.0<br>
+      <b>STRATA</b> 5 · GATES 8<br>
+      <b>SHEET</b> 1 of 1 · rev A<br>
+      <b>DATE</b> 2026-08-14
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">01</span><h2>The spine</h2></div>
+    <p class="sec-note">
+      Work moves in one direction. Every station has an owner and an exit
+      condition, and the exit is decided by a gate — a mechanical check — not by
+      a judgement call. Where a gate isn't wired yet, the station says so rather
+      than pretending.
+    </p>
+
+    <div class="spine">
+
+      <div class="station">
+        <div class="station-no">STATION 01</div>
+        <div class="station-name">Author</div>
+        <span class="station-where">Sekkei tab · GLM</span>
+        <p>
+          A session edits the design through the <code>glm_*</code> tools —
+          creating, patching and wiring nodes across the strata
+          <em>system → capability → component → interaction → spec</em>.
+          It never touches source code.
+        </p>
+        <span class="gate">GATE · none</span>
+      </div>
+
+      <div class="station">
+        <div class="station-no">STATION 02</div>
+        <div class="station-name">Ready</div>
+        <span class="station-where">Workflow tab · task-card</span>
+        <p>
+          A spec becomes a card. Dragging it to <code>ready</code> runs GLM's
+          verifier and dispatches <code>MARK_READY</code> with the verdict — the
+          gate answers, not you.
+        </p>
+        <span class="gate">GATE · DoRC · 8 checks</span>
+      </div>
+
+      <div class="station is-unwired">
+        <div class="station-no">STATION 03</div>
+        <div class="station-name">Implement</div>
+        <span class="station-where">session · polygen · polynv</span>
+        <p>
+          The node's <em>prompt spec</em> is the brief: context bundle,
+          regeneration template, verifier command. State machines are authored
+          by polygen and arrive pre-verified; polynv then elicits invariants
+          against the real state graph.
+        </p>
+        <span class="gate is-open">GATE · model check</span>
+      </div>
+
+      <div class="station is-unwired">
+        <div class="station-no">STATION 04</div>
+        <div class="station-name">Validate</div>
+        <span class="station-where">acceptance spec · GLM</span>
+        <p>
+          The acceptance spec carries deliverables and a verifier command. Its
+          exit status decides the transition —
+          <code>VALIDATION_PASSED</code> or <code>VALIDATION_FAILED</code> with
+          a named signal.
+        </p>
+        <span class="gate is-open">GATE · acceptance verifier</span>
+      </div>
+
+      <div class="station is-terminal">
+        <div class="station-no">STATION 05</div>
+        <div class="station-name">Done</div>
+        <span class="station-where">task-card · frozen</span>
+        <p>
+          A terminal state the machine will not leave. After this point a change
+          to the spec is an SCR and a version question, not an edit.
+        </p>
+        <span class="gate">GATE · polyvers on change</span>
+      </div>
+
+    </div>
+
+    <p class="bend">
+      <b>One backward bend, and it carries evidence.</b>
+      A failed validation returns the card to <code>implement</code> with the
+      concrete signal that caused it — <code>missing-deliverable</code> or
+      <code>verifier-failed</code> — never a bare “try again”. The budget is
+      <b>two</b> bends; the third failure sends the card to
+      <code>needsHuman</code> with <code>budget-exhausted</code>.
+      <code>RESUME</code> grants a fresh budget deliberately. There is no
+      re-plan action, and no loop.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">02</span><h2>The card's states</h2></div>
+    <p class="sec-note">
+      The board's columns are not labels — they are the states of a verified
+      machine, and a drag is a dispatch the machine may reject with its reason.
+      Six states, seven actions, model-checked before it shipped.
+    </p>
+
+    <div class="states">
+      <span class="state">backlog</span>
+      <span class="state">ready</span>
+      <span class="state">implementing</span>
+      <span class="state">validating</span>
+      <span class="state is-human">needsHuman</span>
+      <span class="state is-terminal">done · frozen</span>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Action</th><th>From → to</th><th>Decided by</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>MARK_READY</code></td><td>backlog → ready</td><td>DoRC gate verdict</td></tr>
+          <tr><td><code>START_IMPLEMENTATION</code></td><td>ready → implementing</td><td>you, once the spec is ready</td></tr>
+          <tr><td><code>SUBMIT_FOR_VALIDATION</code></td><td>implementing → validating</td><td>deliverables exist</td></tr>
+          <tr><td><code>VALIDATION_PASSED</code></td><td>validating → done</td><td>acceptance verifier</td></tr>
+          <tr><td><code>VALIDATION_FAILED</code></td><td>validating → implementing</td><td>verifier, with a named signal</td></tr>
+          <tr><td><code>ESCALATE</code></td><td>any → needsHuman</td><td>you</td></tr>
+          <tr><td><code>RESUME</code></td><td>needsHuman → implementing</td><td>you — grants a fresh budget</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">03</span><h2>Who owns what</h2></div>
+    <p class="sec-note">
+      Seven engines, each with one job. Everything below runs locally and
+      without an API key except the sessions themselves — generation is always
+      client-side, which is why the design store never holds a key.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Engine</th><th>Owns</th><th>Produces</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="engine">GLM</span></td>
+            <td>The sekkei — nodes, strata, edges, change requests, drift</td>
+            <td>The verifier's verdict (DoRC), the SCR status FSM</td>
+          </tr>
+          <tr>
+            <td><span class="engine">polygen</span></td>
+            <td>Authoring new stateful code from a contract</td>
+            <td>SAM v2 module + invariants + trace corpus, self-repaired</td>
+          </tr>
+          <tr>
+            <td><span class="engine">polygraph</span></td>
+            <td>Verification — replay and model check</td>
+            <td>Counterexamples, reachable-state coverage</td>
+          </tr>
+          <tr>
+            <td><span class="engine">polynv</span></td>
+            <td>Invariant elicitation against the real state graph</td>
+            <td>An append-only intent-ledger of confirmed constraints</td>
+          </tr>
+          <tr>
+            <td><span class="engine">polyvers</span></td>
+            <td>Version change — is this safe against the fleet?</td>
+            <td>A compatibility verdict and a migration scaffold</td>
+          </tr>
+          <tr>
+            <td><span class="engine">polyrun</span></td>
+            <td>Durable execution — every card is an instance</td>
+            <td>The board's state and its journal</td>
+          </tr>
+          <tr>
+            <td><span class="engine">polyviz</span></td>
+            <td>Figures</td>
+            <td>Deterministic SVG, no model call at render time</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Where invariants come from</h3>
+    <p>
+      polynv mines candidates by <em>enumerating the machine's state graph</em>,
+      so it cannot elicit from a spec that has no code behind it. Invariants are
+      not a pre-code step. The order is:
+      <code>spec → contract → polygen (draft invariants) → polynv (confirm them)</code>.
+      What lands back on the spec is a <b>reference</b> to the ledger record —
+      id, what it constrains, who confirmed it, when — never a copy of the
+      predicate. The predicate has one home, so there is nothing to diverge.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">04</span><h2>What runs today</h2></div>
+    <p class="sec-note">
+      The honest ledger. Two seams are still open, and they are the same seam:
+      the board tracks the work but does not yet start or finish it.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Capability</th><th>State</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Sekkei authoring</td><td><span class="mark mark-on">wired</span></td><td>Threaded, resumable, over MCP on HTTP</td></tr>
+          <tr><td>DoRC gate</td><td><span class="mark mark-on">wired</span></td><td>backlog → ready asks the verifier</td></tr>
+          <tr><td>Board dispatch</td><td><span class="mark mark-on">wired</span></td><td>Illegal drags bounce with the machine's reason</td></tr>
+          <tr><td>Model check · diagrams</td><td><span class="mark mark-on">wired</span></td><td>Polygraph workbench, per machine</td></tr>
+          <tr><td>Invariant elicitation</td><td><span class="mark mark-on">wired</span></td><td>Reachable from the card that implements the machine</td></tr>
+          <tr><td>Invariants on the spec</td><td><span class="mark mark-on">wired</span></td><td>Reference to the ledger, not a copy</td></tr>
+          <tr><td>Evolution gate</td><td><span class="mark mark-part">manual</span></td><td>polyvers runs from the workbench, not from a card</td></tr>
+          <tr><td>Start implementation</td><td><span class="mark mark-off">open</span></td><td>The card advances; no session is spawned</td></tr>
+          <tr><td>Acceptance validation</td><td><span class="mark mark-off">open</span></td><td>You press ✓ / ✗; the verifier should</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">05</span><h2>Starting a project</h2></div>
+    <p class="sec-note">
+      The order the pipeline expects on a sekkei that is authored but has no
+      code behind it yet — where the integration gate is red for the one honest
+      reason, and everything else is green.
+    </p>
+
+    <ol class="phases">
+      <li class="phase">
+        <p class="phase-name">Scaffold, and turn gate 7 green</p>
+        <p>
+          One card that creates <code>package.json</code>, <code>tsconfig.json</code>
+          and installs the compiler at <code>source_dir</code>. Not a component —
+          it exists so every later card validates against a real project.
+        </p>
+      </li>
+      <li class="phase">
+        <p class="phase-name">One component at a time</p>
+        <p>
+          DoRC gate decides <code>ready</code>. The prompt spec briefs the
+          session; wherever the component is a state machine, polygen authors it
+          and it is verified before it is read. Elicit invariants, link them to
+          the spec, then let the acceptance verifier decide <code>done</code>.
+        </p>
+      </li>
+      <li class="phase">
+        <p class="phase-name">Change becomes a version question</p>
+        <p>
+          Once code exists, a spec change is an SCR, and the SCR is gated by
+          polyvers: compatibility lanes, replay against fleet snapshots, and a
+          migration scaffold when the shape moved. Drift stops being invisible.
+        </p>
+      </li>
+    </ol>
+
+    <h3>Two decisions this shape assumes</h3>
+    <ul class="plain">
+      <li><b>Puffin owns the card, not the pipeline.</b> When a card starts work it should invoke GLM's <code>/glm-build</code> — generate, verify, attest — rather than reimplementing that orchestration on the Puffin side.</li>
+      <li><b>Doneness is mechanical or it is disclosed.</b> Where no gate is wired, the card carries an <code>ungated</code> mark instead of a green tick. A verdict nobody computed is worse than an admitted gap.</li>
+    </ul>
+  </section>
+
+  <footer class="colophon">
+    <span>PUFFIN 4.0</span>
+    <span>GLM · POLYGRAPH FAMILY</span>
+    <span>SEKKEI 設計 — THE DESIGN OF RECORD</span>
+  </footer>
+
+</div>
+</body>
+</html>

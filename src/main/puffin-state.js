@@ -36,6 +36,10 @@ const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directo
 const CLAUDE_AGENTS_DIR = 'agents' // Puffin-managed agents directory (in .puffin/)
 const TOAST_HISTORY_FILE = 'toast-history.json' // Toast notification history
 const SYNC_INBOX_FILE = 'sync-inbox.json' // Incoming syncs from CLI
+// docs/ is browsable: markdown and self-contained HTML, nested as deep as the
+// project files them, bounded so a stray symlink loop can't walk forever.
+const DOCS_EXTENSIONS = ['.md', '.html', '.htm']
+const DOCS_MAX_DEPTH = 6
 
 class PuffinState {
   constructor() {
@@ -2133,43 +2137,51 @@ ${content}`
    * Scan the docs/ directory for markdown files
    * @returns {Promise<Array>} Array of document objects with name and path
    */
+  /**
+   * Walk `docs/` for readable documents.
+   *
+   * Recursive, because docs grow subdirectories (design/, plans/, reference/…)
+   * and a flat top-level scan silently hides everything filed away. Filenames
+   * are returned as posix-style paths relative to `docs/`, which is what
+   * loadDesignDocument takes back.
+   *
+   * @returns {Promise<Array<{filename: string, name: string, path: string, kind: string}>>}
+   */
   async scanDesignDocuments() {
-    // Debug: write to file for visibility
-    const debugLog = async (msg) => {
-      const debugPath = path.join(this.projectPath || '.', '.puffin', 'design-docs-debug.log')
-      try {
-        await fs.appendFile(debugPath, `${new Date().toISOString()} - ${msg}\n`)
-      } catch (e) {
-        // Ignore debug write errors
-      }
-    }
-
-    await debugLog(`scanDesignDocuments called`)
-    await debugLog(`projectPath: ${this.projectPath}`)
-
     const docsPath = path.join(this.projectPath, 'docs')
-    await debugLog(`docsPath: ${docsPath}`)
+    const found = []
 
-    try {
-      const files = await fs.readdir(docsPath)
-      await debugLog(`Found ${files.length} total files`)
-      const mdFiles = files.filter(f => f.endsWith('.md'))
-      await debugLog(`Found ${mdFiles.length} .md files: ${mdFiles.join(', ')}`)
-
-      return mdFiles.map(filename => ({
-        filename,
-        name: filename.replace(/\.md$/, ''),
-        path: path.join(docsPath, filename)
-      }))
-    } catch (err) {
-      // docs/ directory doesn't exist or is not accessible
-      await debugLog(`Error: ${err.code} - ${err.message}`)
-      if (err.code === 'ENOENT') {
-        return []
+    const walk = async (dir, relPrefix, depth) => {
+      if (depth > DOCS_MAX_DEPTH) return
+      let entries
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true })
+      } catch (err) {
+        if (err.code === 'ENOENT') return
+        throw err
       }
-      throw err
+      for (const entry of entries) {
+        if (entry.name.startsWith('.') || entry.name === 'node_modules') continue
+        const rel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name
+        if (entry.isDirectory()) {
+          await walk(path.join(dir, entry.name), rel, depth + 1)
+          continue
+        }
+        const ext = path.extname(entry.name).toLowerCase()
+        if (!DOCS_EXTENSIONS.includes(ext)) continue
+        found.push({
+          filename: rel,
+          name: rel.replace(/\.(md|html?)$/i, ''),
+          path: path.join(dir, entry.name),
+          kind: ext === '.md' ? 'markdown' : 'html'
+        })
+      }
     }
+
+    await walk(docsPath, '', 0)
+    return found.sort((a, b) => a.filename.localeCompare(b.filename))
   }
+
 
   /**
    * Get list of available design documents
@@ -2189,36 +2201,56 @@ ${content}`
    * @param {string} filename - The document filename (e.g., 'DESIGN.md')
    * @returns {Promise<Object>} Document object with name and content
    */
+  /**
+   * Read one document out of `docs/`.
+   *
+   * `filename` is a path relative to `docs/` (subdirectories included), so the
+   * old "no slashes" rule can't do the guarding any more. The resolved path is
+   * realpath-compared against `docs/` instead, which also refuses a symlink
+   * pointing out of the tree.
+   *
+   * @param {string} filename - Path relative to docs/
+   * @returns {Promise<{filename: string, name: string, path: string, kind: string, content: string}>}
+   */
   async loadDesignDocument(filename) {
-    // Validate filename to prevent path traversal
     if (!filename || typeof filename !== 'string') {
       throw new Error('Invalid filename: must be a non-empty string')
     }
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      throw new Error('Invalid filename: path traversal not allowed')
-    }
-    if (!filename.endsWith('.md')) {
-      throw new Error('Invalid filename: must be a .md file')
+    const ext = path.extname(filename).toLowerCase()
+    if (!DOCS_EXTENSIONS.includes(ext)) {
+      throw new Error('Invalid filename: only .md, .html and .htm documents can be opened')
     }
 
     const docsPath = path.join(this.projectPath, 'docs')
-    const filepath = path.join(docsPath, filename)
+    const filepath = path.resolve(docsPath, filename)
 
+    let realDocs
     try {
-      const content = await fs.readFile(filepath, 'utf-8')
-      return {
-        filename,
-        name: filename.replace(/\.md$/, ''),
-        path: filepath,
-        content
-      }
+      realDocs = await fs.realpath(docsPath)
+    } catch {
+      throw new Error(`Design document not found: ${filename}`)
+    }
+    let realFile
+    try {
+      realFile = await fs.realpath(filepath)
     } catch (err) {
-      if (err.code === 'ENOENT') {
-        throw new Error(`Design document not found: ${filename}`)
-      }
+      if (err.code === 'ENOENT') throw new Error(`Design document not found: ${filename}`)
       throw err
     }
+    if (realFile !== realDocs && !realFile.startsWith(realDocs + path.sep)) {
+      throw new Error('Invalid filename: path escapes the docs directory')
+    }
+
+    const content = await fs.readFile(realFile, 'utf-8')
+    return {
+      filename,
+      name: filename.replace(/\.(md|html?)$/i, ''),
+      path: realFile,
+      kind: ext === '.md' ? 'markdown' : 'html',
+      content
+    }
   }
+
 
   /**
    * Load story generations or create default

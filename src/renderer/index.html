@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="components/polygraph-workbench/polygraph-workbench.css">
   <link rel="stylesheet" href="components/specs-view/specs-view.css">
   <link rel="stylesheet" href="components/board-view/board-view.css">
+  <link rel="stylesheet" href="components/docs-view/docs-view.css">
 </head>
 <body>
   <!-- Toast Notifications Container -->
@@ -69,6 +70,7 @@
         <button class="nav-btn" data-view="specs" data-help="Browse this project's sekkei (設計 — the design of record): nodes, SCRs, and the 7-gate verifier.">Sekkei</button>
         <button class="nav-btn" data-view="board" data-help="The workflow: specs to implement as cards. Cards are durable machine instances; a drag is a dispatch the machine may reject.">Workflow</button>
         <!-- Designer is now provided by designer-plugin -->
+        <button class="nav-btn" data-view="docs" data-help="Read this project's docs/ tree — markdown rendered inline, HTML in a sandboxed frame.">Docs</button>
         <button class="nav-btn" data-view="user-stories" data-help="View and manage your Task backlog on the Kanban board.">Backlog</button>
         <button class="nav-btn" data-view="cli-output" data-help="View the live Claude Code CLI output stream and raw JSON messages.">CLI Output</button>
         <button class="nav-btn" data-view="polygraph" data-help="Polygraph workbench: discover, model-check, and visualize this project's verified state machines.">Polygraph</button>
@@ -809,6 +811,15 @@
               <span id="cli-status" class="cli-status">Idle</span>
               <span id="cli-session-info" class="cli-session-info"></span>
               <span id="cli-cost-info" class="cli-cost-info"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Docs view — the project's docs/ tree -->
+        <section id="docs-view" class="view">
+          <div class="view-content full-width">
+            <div id="docs-view-root">
+              <!-- Rendered dynamically by DocsViewComponent -->
             </div>
           </div>
         </section>

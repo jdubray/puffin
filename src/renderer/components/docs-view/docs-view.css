@@ -1,0 +1,227 @@
+/* Docs view — the project's docs/ tree, read in place */
+
+.docs-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color, #3a3a3a);
+  margin-bottom: 12px;
+}
+
+.docs-count {
+  font-size: 13px;
+  color: var(--text-secondary, #999);
+}
+
+.docs-error {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--error-color, #e06258);
+  background: rgba(224, 98, 88, 0.1);
+  border-radius: 4px;
+}
+
+.docs-body {
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+/* ── Index ─────────────────────────────────────────────────────── */
+
+.docs-index {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.docs-search {
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--text-primary, #ddd);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 4px;
+}
+
+.docs-search:focus {
+  outline: none;
+  border-color: var(--accent-primary, #6aa9ff);
+}
+
+.docs-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(100vh - 260px);
+  padding: 6px;
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+}
+
+.docs-group + .docs-group { margin-top: 10px; }
+
+.docs-group-name {
+  padding: 4px 6px;
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #888);
+}
+
+.docs-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-primary, #ddd);
+  background: none;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.docs-item:hover { background: var(--bg-tertiary, #2e2e2e); }
+.docs-item.active { background: var(--accent-bg, rgba(95, 151, 214, 0.15)); }
+
+.docs-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docs-kind {
+  flex: none;
+  padding: 1px 5px;
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 3px;
+}
+
+.docs-kind-markdown { color: #5f97d6; background: rgba(95, 151, 214, 0.18); }
+.docs-kind-html { color: #d9a53d; background: rgba(217, 165, 61, 0.18); }
+
+/* ── Reader ────────────────────────────────────────────────────── */
+
+.docs-reader {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.docs-reader-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, #3a3a3a);
+}
+
+.docs-reader-title {
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docs-placeholder {
+  padding: 24px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary, #999);
+}
+
+/* A sandboxed frame paints its own background — give it a white ground so a
+   document that assumes a light page is legible inside a dark app. */
+.docs-frame {
+  flex: 1;
+  width: 100%;
+  min-height: calc(100vh - 260px);
+  border: none;
+  background: #ffffff;
+}
+
+.docs-markdown {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(100vh - 300px);
+  padding: 16px 20px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-primary, #ddd);
+  word-break: break-word;
+}
+
+.docs-markdown > *:first-child { margin-top: 0; }
+.docs-markdown h1 { font-size: 20px; margin: 20px 0 8px; }
+.docs-markdown h2 { font-size: 16.5px; margin: 20px 0 8px; }
+.docs-markdown h3 { font-size: 14px; margin: 16px 0 6px; }
+.docs-markdown p { margin: 0 0 10px; }
+.docs-markdown ul, .docs-markdown ol { margin: 0 0 10px; padding-left: 22px; }
+.docs-markdown li { margin: 3px 0; }
+.docs-markdown strong { color: var(--text-primary, #fff); }
+
+.docs-markdown code {
+  padding: 1px 5px;
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 12px;
+  background: var(--bg-primary, #1a1a1a);
+  border-radius: 3px;
+}
+
+.docs-markdown pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: var(--bg-primary, #1a1a1a);
+  border-radius: 4px;
+}
+
+.docs-markdown pre code { padding: 0; background: none; }
+
+.docs-markdown a {
+  color: var(--accent-primary, #6aa9ff);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.docs-markdown .table-wrapper { overflow-x: auto; margin: 0 0 10px; }
+.docs-markdown table { border-collapse: collapse; font-size: 12.5px; }
+
+.docs-markdown th,
+.docs-markdown td {
+  padding: 5px 9px;
+  text-align: left;
+  border: 1px solid var(--border-color, #3a3a3a);
+}
+
+.docs-markdown th { background: var(--bg-tertiary, #2e2e2e); font-weight: 600; }
+
+.docs-empty {
+  padding: 14px 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary, #888);
+}
+
+@media (max-width: 900px) {
+  .docs-body { grid-template-columns: 1fr; }
+  .docs-list { max-height: 200px; }
+}

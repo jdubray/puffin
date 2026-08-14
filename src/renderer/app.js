@@ -37,6 +37,7 @@ import { StoryGenerationsComponent } from './components/story-generations/story-
 import { GitPanelComponent } from './components/git-panel/git-panel.js'
 import { PolygraphWorkbenchComponent } from './components/polygraph-workbench/polygraph-workbench.js'
 import { SpecsViewComponent } from './components/specs-view/specs-view.js'
+import { DocsViewComponent } from './components/docs-view/docs-view.js'
 import { BoardViewComponent } from './components/board-view/board-view.js'
 
 // Plugin system
@@ -992,7 +993,8 @@ class PuffinApp {
       gitPanel: new GitPanelComponent(this.intents),
       polygraphWorkbench: new PolygraphWorkbenchComponent(this.intents),
       specsView: new SpecsViewComponent(this.intents),
-      boardView: new BoardViewComponent(this.intents)
+      boardView: new BoardViewComponent(this.intents),
+      docsView: new DocsViewComponent(this.intents)
     }
 
     Object.values(this.components).forEach(component => {
@@ -1833,6 +1835,10 @@ class PuffinApp {
     // First display of the Board starts the managed polyrun backend
     if (currentView === 'board') {
       this.components?.boardView?.onShow()
+    }
+    // First display of Docs scans the project's docs/ tree
+    if (currentView === 'docs') {
+      this.components?.docsView?.onShow()
     }
   }
 

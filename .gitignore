@@ -38,3 +38,7 @@ tmp/start-with-deepagents.sh
 tmp/pty/
 tmp/sekkei_schema.yaml
 .puffin/board.sqlite*
+
+# Per-machine Claude Code settings: tool allowlists carry absolute paths from
+# whoever's machine approved them, so this is local state, not product surface.
+.claude/settings.local.json

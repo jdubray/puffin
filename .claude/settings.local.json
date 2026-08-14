@@ -147,7 +147,8 @@
       "Read(//c/Users/jjdub/code/glm/logs/**)",
       "Read(//c/Users/jjdub/code/polysim/**)",
       "Bash(npx tsx *)",
-      "Bash(curl -s -m 8 -X POST http://127.0.0.1:3300/mcp -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"puffin-probe\",\"version\":\"1\"}}}')"
+      "Bash(curl -s -m 8 -X POST http://127.0.0.1:3300/mcp -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"puffin-probe\",\"version\":\"1\"}}}')",
+      "Bash(awk '/^  _renderAuthoring\\\\\\(\\\\\\) \\\\{/,/^  _renderComposer|^  \\\\/\\\\*\\\\*$/' src/renderer/components/specs-view/specs-view.js)"
     ]
   },
   "enableAllProjectMcpServers": true,

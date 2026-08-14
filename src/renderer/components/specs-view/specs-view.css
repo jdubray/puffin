@@ -246,6 +246,70 @@
   white-space: pre-wrap;
 }
 
+/* Proposed next steps — the reply's own offers, as a checklist */
+
+.specs-followups {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: var(--bg-secondary, #232323);
+  border: 1px solid var(--border-color, #333);
+  border-left: 3px solid var(--accent-primary, #6aa9ff);
+  border-radius: 4px;
+}
+
+.specs-followups-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #888);
+  margin-bottom: 8px;
+}
+
+.specs-followup {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 5px 6px;
+  border-radius: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+}
+
+.specs-followup:hover { background: var(--bg-hover, #2c2c2c); }
+.specs-followup.checked { color: var(--text-primary, #ddd); }
+
+.specs-followup input {
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.specs-followups-go {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.specs-followup-note {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--text-primary, #ddd);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 3px;
+}
+
+.specs-followup-note:focus {
+  outline: none;
+  border-color: var(--accent-primary, #6aa9ff);
+}
+
 /* Node body: JSON rendered for reading, with navigable references */
 
 .specs-json {

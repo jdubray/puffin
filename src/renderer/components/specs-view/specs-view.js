@@ -141,6 +141,68 @@ Report what you changed as a short list of glm ids with the operation applied.
 Request: ${instruction}`
 }
 
+/**
+ * Openings a session uses when it proposes the next piece of work:
+ * "Want me to author the missing acceptance specs?", "Should I …", etc.
+ */
+const OFFER_RE = /\b(want me to|would you like me to|shall i|should i|do you want me to|do you want|i can)\b/i
+
+/** A bullet or numbered list item. */
+const LIST_ITEM_RE = /^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$/
+
+/**
+ * Pull the offered next steps out of a reply so they can be ticked off instead
+ * of retyped.
+ *
+ * A session almost always ends by proposing work — "Want me to author the
+ * missing acceptance and prompt specs for the 8 components now?" — and the
+ * only way to accept was to paraphrase it back. Two shapes are recognised: an
+ * offer sentence on its own, and an offer that introduces a list (in which
+ * case the list items are the choices, since that's where the detail lives).
+ *
+ * Deliberately conservative: no offer, no checklist. A wrong guess here costs
+ * more than a missing one — the composer is right there.
+ *
+ * @param {string} text - The reply
+ * @returns {Array<{id: string, text: string}>}
+ */
+function extractFollowUps(text) {
+  if (!text || typeof text !== 'string') return []
+  const lines = text.split('\n')
+  const offers = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line || LIST_ITEM_RE.test(line)) continue
+    if (!OFFER_RE.test(line)) continue
+
+    // A list directly under the offer carries the real choices
+    const items = []
+    for (let j = i + 1; j < lines.length; j++) {
+      const match = lines[j].match(LIST_ITEM_RE)
+      if (match) { items.push(match[1]); continue }
+      if (lines[j].trim() === '' && items.length === 0) continue // blank before the list
+      break
+    }
+
+    if (items.length > 0) {
+      offers.push(...items)
+    } else {
+      // Just the offer sentence — trim it to the proposal itself
+      const sentence = (line.match(/[^.!?]*\?/) || [line])[0].trim()
+      offers.push(sentence.replace(/^[-*•]\s*/, ''))
+    }
+  }
+
+  // Dedupe, cap, and drop anything too short to be a real instruction
+  const seen = new Set()
+  return offers
+    .map(t => t.replace(/\s+/g, ' ').trim())
+    .filter(t => t.length >= 12 && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+    .slice(0, 8)
+    .map((t, i) => ({ id: `fu-${i}`, text: t }))
+}
+
 /** Legal SCR events per status (mirror of GLM's domain/scr.ts FSM) */
 const SCR_EVENTS = {
   'Draft': ['submit'],
@@ -188,6 +250,8 @@ Return ONLY a JSON object with exactly the keys "title", "description", and "bod
 (the revised node content). No prose, no markdown fences.`
 }
 
+export { extractFollowUps }
+
 export class SpecsViewComponent {
   constructor(intents) {
     this.intents = intents
@@ -227,6 +291,10 @@ export class SpecsViewComponent {
     // fresh conversation.
     this.authoringSessionId = null
     this.authoringThreadId = null
+    // Next steps the last reply offered, as a checklist
+    this.followUps = []
+    this.selectedFollowUps = []
+    this.followUpNote = ''
     // Changes since the last code generation → the workflow's inbox
     this.lastGenerationAt = null
     this.queueNote = null
@@ -422,7 +490,16 @@ export class SpecsViewComponent {
       body = `Answer this question about the sekkei. Do NOT create, update or delete any node — this is a read-only question.\n\n${body}`
     }
 
+    // Clear the composer BEFORE rendering. render() snapshots the draft so a
+    // re-render can't eat a half-typed instruction — which also means a draft
+    // cleared after render is restored on the next one.
+    if (input && !overrideInstruction) input.value = ''
+    this._composerDraft = ''
+
     this.authoring = { isRunning: true, response: '', error: null, lastInstruction: instruction }
+    this.followUps = []
+    this.selectedFollowUps = []
+    this.followUpNote = ''
     this.render()
 
     if (!this._authoringSubscribed) {
@@ -438,6 +515,9 @@ export class SpecsViewComponent {
         // Keep the CLI session so the next instruction continues this design
         // conversation instead of re-reading the whole sekkei from scratch.
         if (response?.sessionId) this.authoringSessionId = response.sessionId
+        this.followUps = extractFollowUps(this.authoring.response)
+        this.selectedFollowUps = this.followUps.map(f => f.id) // offered work is usually wanted
+        this.followUpNote = ''
         // Node changes already streamed in over the GLM channel; reload to
         // be certain the tree matches the design after the edit.
         this._loadWorkspace({ keepSelection: true }).then(() => this.render())
@@ -483,7 +563,41 @@ export class SpecsViewComponent {
       // Continue the open design conversation; null starts a fresh one
       sessionId: this.authoringSessionId || null
     })
-    if (input && !overrideInstruction) input.value = ''
+  }
+
+  /** Tick / untick one proposed next step. @private */
+  _toggleFollowUp(id) {
+    if (!id) return
+    // Keep the note the user may have typed before re-rendering
+    const note = this.container.querySelector('#specs-followup-note')
+    if (note) this.followUpNote = note.value
+    const at = this.selectedFollowUps.indexOf(id)
+    if (at >= 0) this.selectedFollowUps.splice(at, 1)
+    else this.selectedFollowUps.push(id)
+    this.render()
+  }
+
+  /**
+   * Accept the ticked next steps: send them back as one instruction on the
+   * same session, so the model already has the context it proposed them from.
+   */
+  runFollowUps() {
+    if (this.authoring.isRunning || !this.selectedFollowUps.length) return
+    const note = this.container.querySelector('#specs-followup-note')?.value?.trim() || ''
+    const chosen = this.followUps
+      .filter(f => this.selectedFollowUps.includes(f.id))
+      .map(f => f.text)
+
+    const instruction = [
+      'Yes — go ahead with the following, in order:',
+      ...chosen.map((t, i) => `${i + 1}. ${t}`),
+      note ? `\nOne adjustment: ${note}` : ''
+    ].filter(Boolean).join('\n')
+
+    this.followUps = []
+    this.selectedFollowUps = []
+    this.followUpNote = ''
+    this.submitAuthoring(instruction)
   }
 
   /**
@@ -494,6 +608,9 @@ export class SpecsViewComponent {
     this.authoringSessionId = null
     this.authoringThreadId = null
     this.authoring = { isRunning: false, response: '', error: null, lastInstruction: '' }
+    this.followUps = []
+    this.selectedFollowUps = []
+    this.followUpNote = ''
     this._composerDraft = ''
     this.render()
   }
@@ -515,6 +632,9 @@ export class SpecsViewComponent {
       error: null,
       lastInstruction: prompt.content || ''
     }
+    this.followUps = extractFollowUps(this.authoring.response)
+    this.selectedFollowUps = []
+    this.followUpNote = ''
     this.render()
   }
 
@@ -1047,6 +1167,8 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       else if (action === 'new-work-item') this.createWorkItem()
       else if (action === 'mic') this.toggleMic()
       else if (action === 'new-authoring-thread') this.newAuthoringThread()
+      else if (action === 'toggle-followup') this._toggleFollowUp(button.dataset.value)
+      else if (action === 'run-followups') this.runFollowUps()
       else if (action === 'toggle-quick') { this.quickMode = !this.quickMode; this.render() }
       else if (action === 'menu-docs') { this.openMenu = this.openMenu === 'docs' ? null : 'docs'; this.render() }
       else if (action === 'menu-gui') { this.openMenu = this.openMenu === 'gui' ? null : 'gui'; this.render() }
@@ -1153,6 +1275,35 @@ coding agent would have to guess at. List findings worst-first with the glm id e
    * The authoring pane: the reply window above, the composer pinned below —
    * the Prompt tab's shape, aimed at the design.
    */
+  /**
+   * The next steps the reply offered, as a checklist. Tick what you want, add
+   * a note if it needs steering, and Go sends it back on the same session —
+   * the alternative being to retype the session's own proposal at it.
+   */
+  _renderFollowUps() {
+    if (!this.followUps?.length) return ''
+    const chosen = this.selectedFollowUps.length
+    return `
+      <div class="specs-followups">
+        <div class="specs-followups-head">Proposed next steps</div>
+        ${this.followUps.map(f => `
+          <label class="specs-followup ${this.selectedFollowUps.includes(f.id) ? 'checked' : ''}">
+            <input type="checkbox" data-action="toggle-followup" data-value="${escAttr(f.id)}"
+              ${this.selectedFollowUps.includes(f.id) ? 'checked' : ''}>
+            <span>${esc(f.text)}</span>
+          </label>
+        `).join('')}
+        <div class="specs-followups-go">
+          <input type="text" id="specs-followup-note" class="specs-followup-note"
+            placeholder="Optional: anything to change about it"
+            value="${escAttr(this.followUpNote || '')}">
+          <button class="btn primary btn-sm" data-action="run-followups" ${chosen ? '' : 'disabled'}>
+            ▶ Go${chosen ? ` (${chosen})` : ''}
+          </button>
+        </div>
+      </div>`
+  }
+
   _renderAuthoring() {
     const a = this.authoring
     return `
@@ -1167,6 +1318,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
                implementation happens later, as a workflow.
              </div>`}
         ${a.isRunning ? '<div class="specs-reply-status">⟳ authoring…</div>' : ''}
+        ${a.isRunning ? '' : this._renderFollowUps()}
       </div>
       <div class="specs-composer">
         <textarea id="specs-author-input" class="specs-author-input" rows="3"

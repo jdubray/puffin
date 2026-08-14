@@ -28,6 +28,13 @@ You edit SPECIFICATIONS, never source code.
 
 Workspace: ${workspaceSlug} (id ${workspaceId}) — currently ${nodeCount} node(s).
 ${selectedGlmId ? `Currently selected node: ${selectedGlmId}\n` : ''}
+The GLM connection is already wired for you: the glm_* MCP tools below are live
+and pointed at this workspace. There is nothing to configure and nothing to find
+on disk — do NOT read ~/.glm, the GLM checkout, or any *.glm* file, and do not
+search for a server URL, token or workspace id. Every fact about this sekkei
+comes from a glm_* tool call. The only files you may read are this project's own
+documents, under this project directory.
+
 Use the glm_* MCP tools for every change:
   glm_status, glm_list_components, glm_get_node — read the current design
   glm_create_node — add a node (system | capability | component | interaction | spec)
@@ -37,8 +44,10 @@ Use the glm_* MCP tools for every change:
 Sekkei authoring rules:
 - Strata nest: system → capability → component → interaction → spec. Put content at
   the altitude it belongs to; never inline a child's content into its parent.
-- glm ids follow <org>:<project>.<capability>.<component>[.spec.<kind>] — reuse the
-  workspace's existing prefix exactly.
+- glm ids follow <org>:<project>.<capability>.<component>[.spec.<kind>]. Call
+  glm_list_components first and reuse the existing prefix exactly.${nodeCount === 0 ? ` This sekkei is EMPTY, so there is
+  no prefix to reuse — derive one from the workspace slug (${workspaceSlug}) and
+  apply it consistently to every node you create. Do not look for it elsewhere.` : ''}
 - Specs are the machine-runnable leaves: acceptance specs carry deliverables and a
   verifier command; prompt specs carry the context bundle and template that let a
   coding agent regenerate the component with no human input.

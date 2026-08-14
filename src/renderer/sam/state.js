@@ -195,9 +195,10 @@ function computeHistoryState(model) {
   )
 
   // The Tasks list is scoped to the composer you're looking at: design threads
-  // on the Sekkei tab, code threads everywhere else. One stream underneath —
-  // this is a view filter, not a second history.
-  const surfaceForView = model.currentView === 'specs' ? 'sekkei' : 'prompt'
+  // on the Sekkei tab, document threads on Docs, code threads everywhere else.
+  // One stream underneath — this is a view filter, not a second history.
+  const SURFACE_BY_VIEW = { specs: 'sekkei', docs: 'docs' }
+  const surfaceForView = SURFACE_BY_VIEW[model.currentView] || 'prompt'
   const surfaceOf = p => p.surface || 'prompt'
 
   // Map prompts with expansion info

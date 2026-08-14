@@ -174,11 +174,11 @@ describe('glm-integration', () => {
     const glmConfigPath = makeGlmConfig({ port: 3300, token: 'tok', workspace: 'global-default' })
     try {
       const bound = setupGlmSessionIntegration({
-        projectPath: scratch, workspace: 'ws-polysim-id', glmConfigPath
+        projectPath: scratch, workspace: 'ws-bound-id', glmConfigPath
       })
       const url = JSON.parse(fs.readFileSync(bound.mcpConfigPath, 'utf-8')).mcpServers.glm.url
-      assert.strictEqual(url, 'http://127.0.0.1:3300/mcp?workspace=ws-polysim-id')
-      assert.strictEqual(bound.workspace, 'ws-polysim-id')
+      assert.strictEqual(url, 'http://127.0.0.1:3300/mcp?workspace=ws-bound-id')
+      assert.strictEqual(bound.workspace, 'ws-bound-id')
 
       // Unbound projects fall back to ~/.glm's global default
       const unbound = setupGlmSessionIntegration({ projectPath: scratch, glmConfigPath })

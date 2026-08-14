@@ -1,6 +1,6 @@
 # Polygraph Inventory — Puffin's Stateful Units
 
-Date: 2026-08-11. Phase 1 of the VSSpecs re-scope (`docs/puffin-2.0-plan.md`): every state
+Date: 2026-08-11. Phase 1 of the spec-first re-scope (`docs/puffin-2.0-plan.md`): every state
 machine managed by the Polygraph toolset. This inventory ranks Puffin's stateful units by
 invariant at stake, blast radius, and capture cost, and orders the migration.
 

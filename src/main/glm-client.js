@@ -2,7 +2,7 @@
  * GLM Client
  *
  * Main-process client for the always-on GLM server (Generative Lifecycle
- * Management) — the spec-oriented backbone of Puffin 2.0 / VSSpecs.
+ * Management) — the spec-oriented backbone of Puffin 4.0.
  *
  * Speaks the same REST API as the GLM web UI (solo-mode spec §3.3), with
  * the bearer token from ~/.glm/config.json. Puffin never talks LLMs

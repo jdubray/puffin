@@ -5,7 +5,7 @@ This file is the working roadmap.
 
 ## Vision
 
-**Puffin 2.0 is "VSCode for specs" (VSSpecs).** Everything centers on a sekkei. The sekkei tree is
+**Puffin 2.0 is a specification-first IDE.** Everything centers on a sekkei. The sekkei tree is
 the primary navigation surface — hierarchical structure like code: explorer = sekkei DAG, editor
 tabs = sekkei nodes, problems panel = verifier gate findings, source control = SCRs, terminal =
 spawned Claude Code sessions. 100% of documents become sekkei nodes; if a document has no natural

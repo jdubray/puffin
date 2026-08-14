@@ -1,5 +1,5 @@
 /**
- * Specs View Component (VSSpecs)
+ * Sekkei View Component
  *
  * The GLM spine of Puffin 2.0: everything centers on a sekkei. This view is
  * the explorer — workspace selector, summary dashboard, the sekkei DAG as a

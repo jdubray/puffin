@@ -64,17 +64,38 @@ const TOOL_EMOJIS = {
   EnterPlanMode: '📋',
   ExitPlanMode: '✅',
 
+  // GLM sekkei operations (arrive as mcp__glm__<name>). Writing the design is
+  // the headline act in the Sekkei tab, so it reads as an edit — not as the
+  // anonymous ⚙️ every unmapped tool would otherwise get.
+  glm_create_node: '✏️',
+  glm_apply_patch: '✏️',
+  glm_create_workspace: '✏️',
+  glm_record_generation: '📝',
+  glm_status: '📖',
+  glm_get_node: '📖',
+  glm_get_component_spec: '📖',
+  glm_list_components: '📖',
+  glm_verify: '🧪',
+  glm_run_acceptance_verifier: '🧪',
+
   // Default fallback
   default: '⚙️'
 }
 
 /**
  * Get emoji for a tool name
+ *
+ * MCP tools arrive namespaced as `mcp__<server>__<tool>`; the bare tool name is
+ * what the map is keyed on, so the prefix is stripped before lookup.
+ *
  * @param {string} toolName - The name of the tool
  * @returns {string} The corresponding emoji
  */
 function getToolEmoji(toolName) {
-  return TOOL_EMOJIS[toolName] || TOOL_EMOJIS.default
+  if (!toolName) return TOOL_EMOJIS.default
+  if (TOOL_EMOJIS[toolName]) return TOOL_EMOJIS[toolName]
+  const bare = toolName.startsWith('mcp__') ? toolName.split('__').pop() : toolName
+  return TOOL_EMOJIS[bare] || TOOL_EMOJIS.default
 }
 
 class ClaudeService {

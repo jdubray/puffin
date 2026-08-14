@@ -1,13 +1,15 @@
 /**
  * Markdown rendering for assistant replies.
  *
- * Lifted verbatim out of response-viewer so the Prompt and Sekkei panes render
- * the same text the same way — two copies of a parser is the drift we keep
- * paying down. Uses marked.js when the page has loaded it, and falls back to
- * the built-in parser (headings, bold/italic, code, lists, links, tables).
+ * Lifted out of response-viewer so the Prompt and Sekkei panes render the same
+ * text the same way — two copies of a parser is the drift we keep paying down.
+ * Covers what a reply actually uses: headings, bold/italic, code, lists, links,
+ * tables.
  *
- * Everything is escaped before any markup is applied: replies are model
- * output, so raw HTML in them is never trusted.
+ * Everything is escaped before any markup is applied: replies are model output,
+ * so raw HTML in them is never trusted. The output is inserted with innerHTML
+ * in a renderer that holds the preload bridge, so the rule is that no HTML
+ * reaches the DOM which this file did not construct itself.
  *
  * @module lib/markdown
  */
@@ -73,48 +75,26 @@ export function isSafeUrl(url) {
 }
 
 /**
- * Neutralise the markup a third-party parser may emit.
- *
- * The built-in parser escapes before it marks up, so this is a no-op there.
- * It exists for the `window.marked` path: marked does not sanitize, and its
- * output would otherwise reach innerHTML unfiltered. Not a substitute for a
- * real sanitizer — if marked is ever actually loaded, ship DOMPurify and call
- * it here instead.
- *
- * @param {string} html
- * @returns {string}
- * @private
- */
-function scrubDangerousMarkup(html) {
-  return html
-    // Executable and navigational tags, with any content they wrap
-    .replace(/<\s*(script|iframe|object|embed|meta|link|base|form)\b[\s\S]*?(?:<\s*\/\s*\1\s*>|>)/gi, '')
-    // Inline event handlers: onclick=, onerror=, …
-    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    // href/src pointing anywhere we don't allow
-    .replace(/\s(href|src)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi,
-      (match, attr, _raw, dq, sq, bare) => {
-        const value = dq ?? sq ?? bare ?? ''
-        return isSafeUrl(value) ? match : ` ${attr}="#"`
-      })
-}
-
-/**
  * Render markdown to HTML.
  *
- * Output is inserted with innerHTML, so it must be safe by construction: the
- * built-in parser escapes the whole reply before applying any markup, links
- * are scheme-checked, and third-party parser output is scrubbed.
+ * Output goes to innerHTML in the renderer, which holds the window.puffin
+ * preload bridge, and the input is model output. So safety here is structural,
+ * not filtered: simpleMarkdown escapes the entire reply before it applies any
+ * markup, and link targets are scheme-checked. There is no HTML in the output
+ * that this file did not put there.
+ *
+ * There is deliberately no marked.js branch. marked does not sanitize, so its
+ * output would reach innerHTML unfiltered; the regex scrubber that briefly
+ * guarded it was bypassable and offered false assurance. To use marked (or any
+ * parser that passes raw HTML through), add DOMPurify as a real dependency and
+ * sanitize here — do not reintroduce a hand-rolled filter.
  *
  * @param {string} content - Raw markdown (assistant output)
  * @returns {string} HTML
  */
 export function renderMarkdown(content) {
   if (!content) return ''
-  const html = (typeof window !== 'undefined' && window.marked)
-    ? scrubDangerousMarkup(window.marked.parse(content))
-    : simpleMarkdown(content)
-  return addLineBreaksAfterEmojis(html)
+  return addLineBreaksAfterEmojis(simpleMarkdown(content))
 }
 
 /**

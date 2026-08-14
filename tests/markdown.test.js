@@ -89,9 +89,19 @@ describe('renderMarkdown', () => {
     assert.strictEqual(escapeHtml('a "b" <c> & d'), 'a &quot;b&quot; &lt;c&gt; &amp; d')
   })
 
-  it('renders identically whether called directly or through the fallback', () => {
+  it('never delegates to a third-party parser, whatever the page has loaded', () => {
+    // A marked.js on window must not become a path to unescaped HTML: no
+    // regex scrubber is a match for a real parser's output.
     const text = '**bold** and `code`'
-    assert.strictEqual(renderMarkdown(text), simpleMarkdown(text))
+    const before = renderMarkdown(text)
+    globalThis.window = { marked: { parse: () => '<img src=x onerror=alert(1)>' } }
+    try {
+      assert.strictEqual(renderMarkdown(text), before)
+      assert.ok(!renderMarkdown(text).includes('onerror'))
+    } finally {
+      delete globalThis.window
+    }
+    assert.strictEqual(before, simpleMarkdown(text))
   })
 })
 

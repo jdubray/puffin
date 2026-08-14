@@ -246,6 +246,56 @@
   white-space: pre-wrap;
 }
 
+/* Node body: JSON rendered for reading, with navigable references */
+
+.specs-json {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 460px;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, 'Cascadia Code', Consolas, monospace);
+  font-size: 11.5px;
+  line-height: 1.65;
+  background: var(--bg-primary, #1a1a1a);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  tab-size: 2;
+}
+
+.specs-json .j-key {
+  color: var(--accent-primary, #6aa9ff);
+  font-weight: 600;
+}
+
+.specs-json .j-str { color: var(--text-primary, #ddd); }
+.specs-json .j-num { color: #c99bf5; }
+.specs-json .j-null { color: var(--text-secondary, #888); font-style: italic; }
+.specs-json .j-punct { color: var(--text-secondary, #777); }
+
+.specs-json .j-link {
+  color: #6ee7a8;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.specs-json .j-link:hover {
+  color: #a5f3c8;
+  text-decoration-style: solid;
+}
+
+/* A reference shaped like a glm id with no node behind it */
+.specs-json .j-missing {
+  color: #e0a34a;
+  text-decoration: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #a8702040;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
 /* Three areas: prompting · sekkei (+ GLM controls) · node */
 
 .specs-3col {

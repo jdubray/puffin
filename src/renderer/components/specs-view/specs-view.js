@@ -15,7 +15,87 @@ function esc(text) {
   return div.innerHTML
 }
 
+/** Escape for an HTML attribute value (esc() leaves quotes alone). */
+function escAttr(text) {
+  return esc(text).replace(/"/g, '&quot;')
+}
+
 const STRATUM_ORDER = ['system', 'capability', 'component', 'interaction', 'spec']
+
+/** English plurals for the summary tiles — 'capabilitys' is not a word. */
+const STRATUM_PLURAL = {
+  system: 'systems',
+  capability: 'capabilities',
+  component: 'components',
+  interaction: 'interactions',
+  spec: 'specs'
+}
+
+/** A glm id: <org>:<project>[.<segment>…] — the dot is what makes it a path. */
+const GLM_ID_RE = /^[a-z][a-z0-9_-]*:[a-z0-9][a-z0-9._-]*$/i
+const URL_RE = /^https?:\/\/[^\s"]+$/i
+
+/**
+ * Render a node body as readable, syntax-coloured JSON. Structure is preserved
+ * (braces, brackets, keys) so the shape stays recognisable, but string quotes
+ * are dropped and the two kinds of reference are made navigable: a glm id
+ * becomes a link that selects that node in this sekkei, a URL opens externally.
+ * A glm-id-shaped string with no node behind it is flagged rather than linked —
+ * a dangling depends_on is exactly the kind of thing worth seeing.
+ *
+ * @param {*} value - Any JSON value
+ * @param {Set<string>} knownIds - glm ids present in the loaded sekkei
+ * @param {number} indent - Current depth (2 spaces per level)
+ * @returns {string} HTML
+ */
+function renderJson(value, knownIds, indent = 0) {
+  const pad = '  '.repeat(indent)
+  const padIn = '  '.repeat(indent + 1)
+  const comma = '<span class="j-punct">,</span>\n'
+
+  if (value === null || value === undefined) return '<span class="j-null">null</span>'
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '<span class="j-punct">[]</span>'
+    const items = value
+      .map(v => padIn + renderJson(v, knownIds, indent + 1))
+      .join(comma)
+    return `<span class="j-punct">[</span>\n${items}\n${pad}<span class="j-punct">]</span>`
+  }
+
+  if (typeof value === 'object') {
+    const keys = Object.keys(value)
+    if (keys.length === 0) return '<span class="j-punct">{}</span>'
+    const items = keys
+      .map(k => `${padIn}<span class="j-key">${esc(k)}</span><span class="j-punct">: </span>` +
+        renderJson(value[k], knownIds, indent + 1))
+      .join(comma)
+    return `<span class="j-punct">{</span>\n${items}\n${pad}<span class="j-punct">}</span>`
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return `<span class="j-num">${esc(String(value))}</span>`
+  }
+
+  return renderJsonString(String(value), knownIds, indent)
+}
+
+/** String leaf: link a glm id, link a URL, wrap long prose. @private */
+function renderJsonString(text, knownIds, indent) {
+  if (text.includes('.') && GLM_ID_RE.test(text)) {
+    return knownIds.has(text)
+      ? `<a class="j-link" data-glm-id="${escAttr(text)}" title="Go to ${escAttr(text)}">${esc(text)}</a>`
+      : `<span class="j-str j-missing" title="No such node in this sekkei">${esc(text)}</span>`
+  }
+  if (URL_RE.test(text)) {
+    return `<a class="j-link" data-action="open-url" data-url="${escAttr(text)}" title="${escAttr(text)}">${esc(text)}</a>`
+  }
+  if (text.includes('\n')) {
+    const pad = '  '.repeat(indent + 1)
+    return `<span class="j-str">${text.split('\n').map(esc).join('\n' + pad)}</span>`
+  }
+  return `<span class="j-str">${esc(text)}</span>`
+}
 
 /**
  * The sekkei authoring prompt. Same conversational loop as the Prompt tab,
@@ -901,6 +981,8 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       else if (action === 'menu-gui') { this.openMenu = this.openMenu === 'gui' ? null : 'gui'; this.render() }
       else if (action === 'pick-doc') this._togglePick('selectedDocs', button.dataset.value)
       else if (action === 'pick-gui') this._togglePick('selectedGuis', button.dataset.value)
+      // shell:openExternal is exposed under the github namespace in the preload
+      else if (action === 'open-url') window.puffin.github?.openExternal?.(button.dataset.url)
       else if (action === 'clear-doc') { this.selectedDocs = []; this.render() }
       else if (action === 'clear-gui') { this.selectedGuis = []; this.render() }
       return
@@ -1206,7 +1288,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     const activeScrs = Object.entries(scrs).filter(([, count]) => count > 0)
     return `<div class="specs-summary">
       ${STRATUM_ORDER.map(k => `
-        <div class="specs-stat"><span class="v">${strata[k] ?? 0}</span><span class="k">${esc(k)}${(strata[k] ?? 0) === 1 ? '' : 's'}</span></div>
+        <div class="specs-stat"><span class="v">${strata[k] ?? 0}</span><span class="k">${esc((strata[k] ?? 0) === 1 ? k : STRATUM_PLURAL[k])}</span></div>
       `).join('')}
       <div class="specs-stat"><span class="v">${s.scrs?.active ?? 0}</span><span class="k">active SCRs</span></div>
       <div class="specs-stat"><span class="v">${s.drift?.drifted ?? 0}</span><span class="k">drifted</span></div>
@@ -1363,7 +1445,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
         ${node.specKind ? `<span class="specs-badge">${esc(node.specKind)}</span>` : ''}
       </div>
       ${node.description ? `<p class="specs-detail-desc">${esc(node.description)}</p>` : ''}
-      ${body ? `<pre class="specs-output">${esc(JSON.stringify(body, null, 2))}</pre>` : ''}
+      ${body ? `<pre class="specs-json">${renderJson(body, new Set(this.nodes.map(n => n.glmId)))}</pre>` : ''}
       <div class="specs-detail-prov">
         ${node.authoredBy ? `authored by ${esc(node.authoredBy)}` : ''}
         ${node.updatedAt ? ` · updated ${esc(String(node.updatedAt).slice(0, 10))}` : ''}

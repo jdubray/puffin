@@ -93,14 +93,22 @@ export const setPendingPromptId = (promptId) => ({
   payload: { promptId }
 })
 
-// Submit prompt to Claude
+// Submit prompt to Claude.
+// `surface` records which composer the turn came from — 'prompt' (code) or
+// 'sekkei' (design). One history stream, filtered per view, so a design
+// conversation survives a restart the same way a coding one does.
 export const submitPrompt = (data) => ({
   type: 'SUBMIT_PROMPT',
   payload: {
-    id: generateId(),
+    // Callers may supply the id when they need to know it up front (the
+    // Sekkei composer threads follow-ups onto the turn it just created).
+    id: data.id || generateId(),
     branchId: data.branchId,
     parentId: data.parentId || null,
     content: data.content,
+    surface: data.surface || 'prompt',
+    workspaceId: data.workspaceId || null,
+    title: data.title || null,
     timestamp: Date.now()
   }
 })

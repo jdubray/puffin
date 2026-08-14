@@ -138,7 +138,16 @@
       "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' http://localhost:3300/api/v1/workspaces/fe0ac53e-9dec-4c99-a3a6-082c3bae8d08/scrs)",
       "Bash(awk -F: '$1 > 700 && $1 < 780')",
       "Bash(awk -F: '$1>800 && $1<850')",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Read(//c/Users/jjdub/code/glm/src/server/routes//**)",
+      "Read(//c/Users/jjdub/code/glm/src/repository/**)",
+      "Bash(curl -s -m 5 -X DELETE -H 'Authorization: Bearer __CMDSUB_OUTPUT__' http://localhost:3300/api/v1/workspaces/05e6b84e-346f-4e5d-a552-f1af6c2961f8/nodes/__probe__?hard=true)",
+      "Bash(curl -s -m 5 -H 'Authorization: Bearer __CMDSUB_OUTPUT__' http://localhost:3300/api/v1/workspaces/05e6b84e-346f-4e5d-a552-f1af6c2961f8/summary)",
+      "PowerShell($conn = Get-NetTCPConnection -LocalPort 3300 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if \\($conn\\) { $p = Get-CimInstance Win32_Process -Filter \"ProcessId = $\\($conn.OwningProcess\\)\"; \"$\\($p.Name\\) pid=$\\($p.ProcessId\\)\"; \"cmd: $\\($p.CommandLine\\)\" } else { \"no listener on 3300\" })",
+      "Read(//c/Users/jjdub/code/glm/logs/**)",
+      "Read(//c/Users/jjdub/code/polysim/**)",
+      "Bash(npx tsx *)",
+      "Bash(curl -s -m 8 -X POST http://127.0.0.1:3300/mcp -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"puffin-probe\",\"version\":\"1\"}}}')"
     ]
   },
   "enableAllProjectMcpServers": true,

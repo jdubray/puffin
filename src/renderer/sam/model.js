@@ -361,6 +361,10 @@ export const submitPromptAcceptor = model => proposal => {
       parentId: proposal.payload.parentId,
       content: proposal.payload.content,
       title: proposal.payload.title || null,
+      // Which composer this turn came from; older entries have no surface and
+      // are read as 'prompt'.
+      surface: proposal.payload.surface || 'prompt',
+      workspaceId: proposal.payload.workspaceId || null,
       timestamp: proposal.payload.timestamp,
       response: null,
       children: []

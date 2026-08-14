@@ -21,6 +21,30 @@ const DEFAULT_PORT = 3300
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 30000
 
+/**
+ * Read the solo-mode GLM config (~/.glm/config.json).
+ *
+ * Shared with glm-integration, which needs the same port and bearer token to
+ * point spawned sessions at the server's /mcp endpoint. Missing or malformed
+ * config is not an error — it means "GLM isn't set up here".
+ *
+ * @param {string} [configPath] - Override for tests
+ * @returns {{port: number, token: string|null, workspace: string|null}}
+ */
+function readGlmConfig(configPath) {
+  const file = configPath || path.join(os.homedir(), '.glm', 'config.json')
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf-8'))
+    return {
+      port: raw.port || DEFAULT_PORT,
+      token: raw.token || null,
+      workspace: raw.workspace || null
+    }
+  } catch {
+    return { port: DEFAULT_PORT, token: null, workspace: null }
+  }
+}
+
 class GlmClient {
   constructor(options = {}) {
     this._configPath = options.configPath ||
@@ -33,17 +57,7 @@ class GlmClient {
    * Read (and cache) ~/.glm/config.json.
    */
   _readConfig() {
-    if (this._config) return this._config
-    try {
-      const raw = JSON.parse(fs.readFileSync(this._configPath, 'utf-8'))
-      this._config = {
-        port: raw.port || DEFAULT_PORT,
-        token: raw.token || null,
-        workspace: raw.workspace || null
-      }
-    } catch {
-      this._config = { port: DEFAULT_PORT, token: null, workspace: null }
-    }
+    if (!this._config) this._config = readGlmConfig(this._configPath)
     return this._config
   }
 
@@ -283,4 +297,4 @@ class GlmClient {
   }
 }
 
-module.exports = { GlmClient }
+module.exports = { GlmClient, readGlmConfig }

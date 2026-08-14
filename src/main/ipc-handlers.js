@@ -214,11 +214,12 @@ function setupStateHandlers(ipcMain) {
       try {
         const glmSetup = setupGlmSessionIntegration({
           projectPath,
-          configuredDir: state?.config?.glmDir
+          configuredDir: state?.config?.glmDir,
+          workspace: state?.config?.glmWorkspaceId
         })
         claudeService.setGlmMcpConfigPath(glmSetup.mcpConfigPath)
-        if (glmSetup.glmDir) {
-          console.log(`[GLM-INTEGRATION] Sessions wired: ${glmSetup.commands.length} /glm-* commands, mcp=${!!glmSetup.mcpConfigPath}`)
+        if (glmSetup.mcpConfigPath || glmSetup.glmDir) {
+          console.log(`[GLM-INTEGRATION] Sessions wired: mcp=${glmSetup.transport || 'none'}, ${glmSetup.commands.length} /glm-* commands`)
         }
       } catch (glmErr) {
         console.warn('[IPC] GLM session integration failed (non-fatal):', glmErr.message)
@@ -584,6 +585,19 @@ function setupStateHandlers(ipcMain) {
         glmWorkspaceId: workspace.id,
         glmWorkspaceSlug: workspace.slug
       })
+
+      // Re-point spawned sessions at the newly bound sekkei — the MCP endpoint
+      // takes its default workspace from the URL, so the config is stale now.
+      try {
+        const rewired = setupGlmSessionIntegration({
+          projectPath,
+          configuredDir: puffinState.config?.glmDir,
+          workspace: workspace.id
+        })
+        claudeService.setGlmMcpConfigPath(rewired.mcpConfigPath)
+      } catch (rewireErr) {
+        console.warn('[GLM] Could not re-point the MCP config (non-fatal):', rewireErr.message)
+      }
 
       return {
         success: true,

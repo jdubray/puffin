@@ -194,9 +194,16 @@ function computeHistoryState(model) {
       .map(([id, _]) => id)
   )
 
+  // The Tasks list is scoped to the composer you're looking at: design threads
+  // on the Sekkei tab, code threads everywhere else. One stream underneath —
+  // this is a view filter, not a second history.
+  const surfaceForView = model.currentView === 'specs' ? 'sekkei' : 'prompt'
+  const surfaceOf = p => p.surface || 'prompt'
+
   // Map prompts with expansion info
   const mappedPrompts = promptTree.map(p => ({
     ...p,
+    surface: surfaceOf(p),
     preview: truncate(p.type === 'story-thread' ? `📖 ${p.title}` : p.content, 50),
     hasResponse: !!p.response,
     isSelected: p.id === activePromptId,
@@ -212,8 +219,9 @@ function computeHistoryState(model) {
     completedAt: p.completedAt || null
   }))
 
-  // Filter out children of collapsed threads
+  // Filter out children of collapsed threads, and threads from the other surface
   const visiblePrompts = mappedPrompts.filter(p => {
+    if (p.surface !== surfaceForView) return false
     // Root level prompts (no parent) are always visible
     if (!p.parentId) return true
     // Check if all ancestors are expanded
@@ -244,6 +252,8 @@ function computeHistoryState(model) {
     selectedPrompt: selectedPrompt ? {
       id: selectedPrompt.id,
       type: selectedPrompt.type || 'prompt',
+      surface: selectedPrompt.surface || 'prompt',
+      workspaceId: selectedPrompt.workspaceId || null,
       content: selectedPrompt.content,
       timestamp: selectedPrompt.timestamp,
       response: selectedPrompt.response,

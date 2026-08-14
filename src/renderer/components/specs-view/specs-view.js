@@ -222,6 +222,11 @@ export class SpecsViewComponent {
     this.projectName = ''
     // Authoring loop (the Prompt tab's shape, aimed at the design)
     this.authoring = { isRunning: false, response: '', error: null, lastInstruction: '' }
+    // The open design conversation: its CLI session (resumed on follow-ups)
+    // and the history entry follow-ups thread onto. Null = next turn starts a
+    // fresh conversation.
+    this.authoringSessionId = null
+    this.authoringThreadId = null
     // Changes since the last code generation → the workflow's inbox
     this.lastGenerationAt = null
     this.queueNote = null
@@ -259,6 +264,14 @@ export class SpecsViewComponent {
       if (workspaceId !== this.workspaceId) return
       this.socketStatus = status
       this.render()
+    })
+
+    // Selecting a design thread in the Tasks list reopens it here.
+    document.addEventListener('puffin-state-change', (e) => {
+      const selected = e.detail?.state?.history?.selectedPrompt
+      if (!selected || selected.surface !== 'sekkei') return
+      if (selected.id === this.authoringThreadId) return
+      this.restoreAuthoringThread(selected)
     })
   }
 
@@ -419,9 +432,12 @@ export class SpecsViewComponent {
         this.authoring.response += typeof chunk === 'string' ? chunk : (chunk?.content || '')
         this._renderAuthoringOnly()
       })
-      window.puffin.claude.onComplete(() => {
+      window.puffin.claude.onComplete((response) => {
         if (!this.authoring.isRunning) return
         this.authoring.isRunning = false
+        // Keep the CLI session so the next instruction continues this design
+        // conversation instead of re-reading the whole sekkei from scratch.
+        if (response?.sessionId) this.authoringSessionId = response.sessionId
         // Node changes already streamed in over the GLM channel; reload to
         // be certain the tree matches the design after the edit.
         this._loadWorkspace({ keepSelection: true }).then(() => this.render())
@@ -434,6 +450,27 @@ export class SpecsViewComponent {
       })
     }
 
+    // Record the turn in the one history stream, tagged as a design turn, so
+    // it survives a restart and lands in the Tasks list for this tab. Also
+    // sets pendingPromptId, which is what makes the global response listeners
+    // persist the reply against this entry.
+    const turnId = `sk-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+    try {
+      this.intents?.submitPrompt?.({
+        id: turnId,
+        branchId: 'main',
+        // Follow-ups hang off the conversation's first turn, so one sitting is
+        // one thread in the list rather than one entry per message.
+        parentId: this.authoringThreadId || null,
+        content: instruction,
+        surface: 'sekkei',
+        workspaceId: this.workspaceId
+      })
+      if (!this.authoringThreadId) this.authoringThreadId = turnId
+    } catch (error) {
+      console.warn('[SPECS-VIEW] Could not record the authoring turn:', error.message)
+    }
+
     window.puffin.claude.submit({
       prompt: buildAuthoringPrompt(body, {
         workspaceSlug: this.binding?.slug || '',
@@ -443,9 +480,42 @@ export class SpecsViewComponent {
       }),
       model,
       effort: effort || undefined,
-      sessionId: null
+      // Continue the open design conversation; null starts a fresh one
+      sessionId: this.authoringSessionId || null
     })
     if (input && !overrideInstruction) input.value = ''
+  }
+
+  /**
+   * Start a fresh design conversation: the next instruction opens a new CLI
+   * session (and a new thread) instead of continuing this one.
+   */
+  newAuthoringThread() {
+    this.authoringSessionId = null
+    this.authoringThreadId = null
+    this.authoring = { isRunning: false, response: '', error: null, lastInstruction: '' }
+    this._composerDraft = ''
+    this.render()
+  }
+
+  /**
+   * Reopen a design thread from the Tasks list: its reply comes back into the
+   * pane and its CLI session is resumed, so a restart never strands work.
+   *
+   * @param {Object} prompt - state.history.selectedPrompt
+   */
+  restoreAuthoringThread(prompt) {
+    if (!prompt || prompt.surface !== 'sekkei') return
+    if (this.authoring.isRunning) return
+    this.authoringSessionId = prompt.response?.sessionId || null
+    this.authoringThreadId = prompt.id
+    this.authoring = {
+      isRunning: false,
+      response: prompt.response?.content || '',
+      error: null,
+      lastInstruction: prompt.content || ''
+    }
+    this.render()
   }
 
   _togglePick(field, value) {
@@ -976,6 +1046,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       else if (action === 'review-specs') this.reviewSpecs()
       else if (action === 'new-work-item') this.createWorkItem()
       else if (action === 'mic') this.toggleMic()
+      else if (action === 'new-authoring-thread') this.newAuthoringThread()
       else if (action === 'toggle-quick') { this.quickMode = !this.quickMode; this.render() }
       else if (action === 'menu-docs') { this.openMenu = this.openMenu === 'docs' ? null : 'docs'; this.render() }
       else if (action === 'menu-gui') { this.openMenu = this.openMenu === 'gui' ? null : 'gui'; this.render() }
@@ -1133,6 +1204,11 @@ coding agent would have to guess at. List findings worst-first with the glm id e
         </div>
 
         <div class="prompt-actions specs-composer-actions">
+          <button class="btn outline" data-action="new-authoring-thread"
+            ${a.isRunning ? 'disabled' : ''}
+            title="${this.authoringSessionId
+              ? 'Start a fresh design conversation (the current one stays in Tasks)'
+              : 'Already a fresh conversation'}">＋ New design thread</button>
           <button class="btn outline ${this.quickMode ? 'active' : ''}" data-action="toggle-quick"
             title="Ask about the sekkei without changing anything">💬 Quick Q</button>
           <button class="btn outline" data-action="review-specs"

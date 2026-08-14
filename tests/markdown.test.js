@@ -10,10 +10,10 @@
 const { describe, it, before } = require('node:test')
 const assert = require('node:assert/strict')
 
-let renderMarkdown, simpleMarkdown, escapeHtml
+let renderMarkdown, simpleMarkdown, escapeHtml, isSafeUrl
 
 before(async () => {
-  ;({ renderMarkdown, simpleMarkdown, escapeHtml } =
+  ;({ renderMarkdown, simpleMarkdown, escapeHtml, isSafeUrl } =
     await import('../src/renderer/lib/markdown.js'))
 })
 
@@ -92,5 +92,41 @@ describe('renderMarkdown', () => {
   it('renders identically whether called directly or through the fallback', () => {
     const text = '**bold** and `code`'
     assert.strictEqual(renderMarkdown(text), simpleMarkdown(text))
+  })
+})
+
+describe('link safety', () => {
+  it('refuses javascript: links but keeps the text visible', () => {
+    const html = renderMarkdown('[click me](javascript:fetch("/steal"))')
+    assert.ok(!/<a/.test(html), 'must not become a clickable anchor')
+    assert.ok(!html.includes('href'))
+    assert.ok(html.includes('click me'))
+  })
+
+  it('refuses data:, vbscript: and file: targets', () => {
+    for (const url of ['data:text/html;base64,PHN2Zz4=', 'vbscript:msgbox(1)', 'file:///etc/passwd']) {
+      assert.strictEqual(isSafeUrl(url), false, url)
+      assert.ok(!/<a/.test(renderMarkdown(`[x](${url})`)), url)
+    }
+  })
+
+  it('sees through entity-encoded and control-character schemes', () => {
+    assert.strictEqual(isSafeUrl('java&#115;cript:alert(1)'), false)
+    assert.strictEqual(isSafeUrl('&#106;avascript:alert(1)'), false)
+    assert.strictEqual(isSafeUrl('java\u0000script:alert(1)'), false)
+    assert.strictEqual(isSafeUrl('  javascript:alert(1)'), false)
+    assert.strictEqual(isSafeUrl('JaVaScRiPt:alert(1)'), false)
+  })
+
+  it('allows the schemes a reply legitimately uses', () => {
+    for (const url of ['https://example.com/spec', 'http://127.0.0.1:3300/mcp',
+      'mailto:jj@example.com', '#gate-7', '/docs/architecture.md', './notes.md']) {
+      assert.strictEqual(isSafeUrl(url), true, url)
+    }
+  })
+
+  it('gives external links rel="noopener noreferrer"', () => {
+    const html = renderMarkdown('[the spec](https://example.com/spec)')
+    assert.match(html, /<a href="https:\/\/example\.com\/spec" target="_blank" rel="noopener noreferrer">/)
   })
 })

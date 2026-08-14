@@ -39,7 +39,72 @@ export function addLineBreaksAfterEmojis(html) {
 }
 
 /**
+ * URL schemes a link in a reply may use.
+ *
+ * Everything else — `javascript:`, `data:`, `vbscript:`, `file:` — is refused.
+ * This pane runs in the renderer, which holds the `window.puffin` preload
+ * bridge, so a clickable `javascript:` URL is code execution with IPC access,
+ * and replies are model output: a poisoned document or sekkei node the session
+ * read is enough to get one emitted. Relative and fragment links are fine.
+ * @private
+ */
+const SAFE_URL_RE = /^(?:https?:\/\/|mailto:|#|\/|\.{1,2}\/)/i
+
+/**
+ * Whether a link target is safe to make clickable.
+ *
+ * The value arrives HTML-escaped, and entities are decoded before the scheme
+ * is inspected so `java&#115;cript:` can't slip past. Control characters are
+ * stripped for the same reason — browsers ignore them inside a scheme.
+ *
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isSafeUrl(url) {
+  if (!url) return false
+  const decoded = String(url)
+    .replace(/&amp;/gi, '&')
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(parseInt(dec, 10)))
+    // Control characters and whitespace: browsers ignore them inside a scheme
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0020]/g, '')
+  return SAFE_URL_RE.test(decoded)
+}
+
+/**
+ * Neutralise the markup a third-party parser may emit.
+ *
+ * The built-in parser escapes before it marks up, so this is a no-op there.
+ * It exists for the `window.marked` path: marked does not sanitize, and its
+ * output would otherwise reach innerHTML unfiltered. Not a substitute for a
+ * real sanitizer — if marked is ever actually loaded, ship DOMPurify and call
+ * it here instead.
+ *
+ * @param {string} html
+ * @returns {string}
+ * @private
+ */
+function scrubDangerousMarkup(html) {
+  return html
+    // Executable and navigational tags, with any content they wrap
+    .replace(/<\s*(script|iframe|object|embed|meta|link|base|form)\b[\s\S]*?(?:<\s*\/\s*\1\s*>|>)/gi, '')
+    // Inline event handlers: onclick=, onerror=, …
+    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    // href/src pointing anywhere we don't allow
+    .replace(/\s(href|src)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+      (match, attr, _raw, dq, sq, bare) => {
+        const value = dq ?? sq ?? bare ?? ''
+        return isSafeUrl(value) ? match : ` ${attr}="#"`
+      })
+}
+
+/**
  * Render markdown to HTML.
+ *
+ * Output is inserted with innerHTML, so it must be safe by construction: the
+ * built-in parser escapes the whole reply before applying any markup, links
+ * are scheme-checked, and third-party parser output is scrubbed.
  *
  * @param {string} content - Raw markdown (assistant output)
  * @returns {string} HTML
@@ -47,7 +112,7 @@ export function addLineBreaksAfterEmojis(html) {
 export function renderMarkdown(content) {
   if (!content) return ''
   const html = (typeof window !== 'undefined' && window.marked)
-    ? window.marked.parse(content)
+    ? scrubDangerousMarkup(window.marked.parse(content))
     : simpleMarkdown(content)
   return addLineBreaksAfterEmojis(html)
 }
@@ -89,8 +154,12 @@ export function simpleMarkdown(text) {
   // Numbered lists
   html = html.replace(/^\s*\d+\.\s+(.*)$/gm, '<li>$1</li>')
 
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+  // Links — only schemes on the allowlist become clickable. A refused target
+  // still shows its URL as text, so nothing is silently swallowed.
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) =>
+    isSafeUrl(url)
+      ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      : `${label} (${url})`)
 
   // Paragraphs
   html = html.replace(/\n\n/g, '</p><p>')

@@ -286,8 +286,11 @@ class ClaudeService {
       spawnOptions.stdio = ['pipe', 'pipe', 'pipe']
       this.currentProcess = spawn(agentExe, [...agentPrefixArgs, ...args], spawnOptions)
 
+      this._resetStreamLayout()
+
       let fullOutput = ''
       let streamedContent = '' // Accumulate ALL streamed assistant text
+      let atMarkerRun = false  // streamedContent currently ends in a tool-marker run
       let lastAssistantMessage = '' // Track the last complete assistant message
       let errorOutput = ''
       let resultData = null
@@ -332,11 +335,11 @@ class ClaudeService {
               let messageText = ''
               for (const block of json.message.content) {
                 if (block.type === 'text') {
-                  // Add line break before text if content doesn't end with newline
-                  // This ensures text starts on a new line after tool emojis
+                  // Break off any marker run so prose starts on its own line
                   if (streamedContent.length > 0 && !streamedContent.endsWith('\n')) {
                     streamedContent += '\n'
                   }
+                  atMarkerRun = false
                   messageText += block.text
                   streamedContent += block.text
                 } else if (block.type === 'tool_use' && block.name === 'AskUserQuestion') {
@@ -370,14 +373,14 @@ class ClaudeService {
                       autoAnswerDelayMs: ClaudeService.QUESTION_AUTO_ANSWER_DELAY_MS
                     })
                   }
-                  streamedContent += '\n❓'
+                  if (streamedContent.length > 0 && !atMarkerRun) streamedContent += '\n'
+                  streamedContent += '❓'
+                  atMarkerRun = true
                 } else if (block.type === 'tool_use') {
-                  // Add tool emoji indicator to content with line break
-                  const toolEmoji = getToolEmoji(block.name)
-                  if (streamedContent.length > 0 && !streamedContent.endsWith('\n')) {
-                    streamedContent += '\n'
-                  }
-                  streamedContent += toolEmoji
+                  // Markers pack onto one line — only break away from prose
+                  if (streamedContent.length > 0 && !atMarkerRun) streamedContent += '\n'
+                  streamedContent += getToolEmoji(block.name)
+                  atMarkerRun = true
                 }
               }
               // Keep track of the last assistant message with substantial text
@@ -859,6 +862,52 @@ class ClaudeService {
   }
 
   /**
+   * Reset the stream-layout state. Called once per CLI run, before any chunk.
+   * @private
+   */
+  _resetStreamLayout() {
+    this._streamHasOutput = false      // anything emitted yet this run?
+    this._streamInMarkerRun = false    // last thing emitted was a bare tool marker
+    this._streamAtLineStart = true     // next chunk would begin a fresh line
+  }
+
+  /**
+   * Emit a tool/status marker.
+   *
+   * Markers pack onto one line: consecutive tool calls read as `⚙️⚙️📖📖`,
+   * not as a column of single-emoji lines. A newline is spent only where it
+   * separates markers from prose — before the run when text preceded it, and
+   * after the marker when the marker carries a message of its own.
+   *
+   * @param {Function} onChunk - Stream sink
+   * @param {string} emoji - The marker glyph
+   * @param {string} [text] - Optional message; goes on its own line below
+   * @private
+   */
+  _emitMarker(onChunk, emoji, text = '') {
+    const needsBreak = this._streamHasOutput && !this._streamInMarkerRun && !this._streamAtLineStart
+    onChunk(text ? `${needsBreak ? '\n' : ''}${emoji}\n${text}\n` : `${needsBreak ? '\n' : ''}${emoji}`)
+    this._streamHasOutput = true
+    // A marker with a message ends on prose, so the run is broken.
+    this._streamInMarkerRun = !text
+    this._streamAtLineStart = !!text
+  }
+
+  /**
+   * Emit assistant prose, breaking the line off any preceding marker run.
+   * @param {Function} onChunk - Stream sink
+   * @param {string} text - Assistant text
+   * @private
+   */
+  _emitText(onChunk, text) {
+    if (!text) return
+    onChunk(this._streamInMarkerRun ? '\n' + text : text)
+    this._streamHasOutput = true
+    this._streamInMarkerRun = false
+    this._streamAtLineStart = text.endsWith('\n')
+  }
+
+  /**
    * Handle streaming JSON messages from CLI
    * @private
    */
@@ -869,10 +918,9 @@ class ClaudeService {
         if (json.message?.content) {
           for (const block of json.message.content) {
             if (block.type === 'text') {
-              onChunk(block.text)
+              this._emitText(onChunk, block.text)
             } else if (block.type === 'tool_use') {
-              // Show tool emoji with line break for readability
-              onChunk('\n' + getToolEmoji(block.name))
+              this._emitMarker(onChunk, getToolEmoji(block.name))
             }
           }
         }
@@ -893,7 +941,7 @@ class ClaudeService {
       case 'system':
         // System messages (initialization, etc.)
         if (json.message) {
-          onChunk(`\n⚙️ ${json.message}\n`)
+          this._emitMarker(onChunk, '⚙️', json.message)
         }
         break
 
@@ -905,7 +953,7 @@ class ClaudeService {
         const info = json.rate_limit_info || {}
         if (info.status !== 'allowed') {
           // Actually limited — show details in the CLI stream
-          let msg = `\n⏸️ Rate limited`
+          let msg = 'Rate limited'
           if (info.rateLimitType) {
             msg += ` (${info.rateLimitType.replace(/_/g, ' ')} window)`
           }
@@ -913,8 +961,7 @@ class ClaudeService {
             const resetsIn = Math.ceil((new Date(info.resetsAt * 1000) - Date.now()) / 60000)
             msg += ` — resets in ~${resetsIn} min`
           }
-          msg += '\n'
-          onChunk(msg)
+          this._emitMarker(onChunk, '⏸️', msg)
         }
         // Always forward full rate limit info to the header widget
         if (onRateLimit) {
@@ -933,7 +980,7 @@ class ClaudeService {
       case 'notification':
         // Claude Code /btw-style notification — non-blocking sidebar message
         if (json.message) {
-          onChunk(`\n💬 ${json.message}\n`)
+          this._emitMarker(onChunk, '💬', json.message)
         }
         break
 

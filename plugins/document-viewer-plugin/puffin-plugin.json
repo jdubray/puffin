@@ -24,7 +24,7 @@
     "views": [
       {
         "id": "document-viewer-view",
-        "name": "Docs",
+        "name": "Doc tree",
         "location": "nav",
         "icon": "📁",
         "order": 55,

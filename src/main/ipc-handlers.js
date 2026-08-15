@@ -601,7 +601,13 @@ function setupStateHandlers(ipcMain) {
         language,
         stateful: validationLaneFor({ isStateMachine: true, language: language.language })
       }
-      return buildComponentPrompt({ nodes, glmId, stage, lane })
+      // Somewhere to put throwaway work that is neither the repo nor /tmp.
+      // Per card, so two cards cannot overwrite each other's probe scripts.
+      const scratchDir = path.join(
+        os.tmpdir(), 'puffin-card-scratch', String(glmId).replace(/[^a-zA-Z0-9._-]/g, '-'))
+      try { fs.mkdirSync(scratchDir, { recursive: true }) } catch { /* fall back to none */ }
+      const built = buildComponentPrompt({ nodes, glmId, stage, lane, scratchDir })
+      return built.success ? { ...built, scratchDir } : built
     } catch (error) {
       return { success: false, error: error.message }
     }

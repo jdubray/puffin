@@ -326,6 +326,10 @@ export class BoardViewComponent {
       // acceptEdits lets the session write files but not test them, and the
       // turn burns down asking for an approval this panel cannot give.
       allowedTools: built.allowedTools || [],
+      // The session may write here as well as in the project. Without it the
+      // only writable place is the repo, and every probe script the session
+      // writes becomes an undeclared change on the card.
+      additionalDirs: built.scratchDir ? [{ path: built.scratchDir }] : [],
       unattended: this.unattended === true
     })
   }

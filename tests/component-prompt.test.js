@@ -167,6 +167,23 @@ describe('what the session may run', () => {
   })
 })
 
+describe('scratch space', () => {
+  it('points throwaway work outside the repository', () => {
+    // The session reached for /tmp and was blocked - only the project is
+    // writable - and writing probe scripts into the project instead would
+    // dirty the tree the out-of-scope check reads.
+    const result = build({ stage: 'implement', scratchDir: 'C:/tmp/puffin-card-scratch/x' })
+    assert.match(result.prompt, /SCRATCH/)
+    assert.match(result.prompt, /C:\/tmp\/puffin-card-scratch\/x/)
+    assert.match(result.prompt, /\/tmp is NOT writable/)
+    assert.match(result.prompt, /changes this card did not declare/)
+  })
+
+  it('says nothing about scratch when none was provided', () => {
+    assert.doesNotMatch(build().prompt, /SCRATCH/)
+  })
+})
+
 describe('the proof lane', () => {
   it('names capture-ready where polygen cannot emit', () => {
     const result = build({

@@ -151,7 +151,7 @@ function resolveBundle(ids, byId) {
  * @returns {{success: boolean, prompt?: string, error?: string, outputs?: string[],
  *            verifier?: string, title?: string, missingContext?: string[]}}
  */
-function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, sourceDir = '' }) {
+function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, sourceDir = '', scratchDir = '' }) {
   const byId = new Map(nodes.map(n => [n.glmId, n]))
   const component = byId.get(glmId)
   if (!component) return { success: false, error: `No node '${glmId}' in this sekkei` }
@@ -202,6 +202,17 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
       : '',
     lane ? laneBrief(lane, stage) : '',
     stage === 'implement' ? IMPLEMENT_RULES : PLAN_RULES,
+    // Scratch work needs somewhere to go, and it must not be the repo. A
+    // session reaching for /tmp is blocked (only the project is writable), and
+    // a session dropping probe scripts next to the source dirties the working
+    // tree - which now feeds the out-of-scope check and would report the
+    // session's own scaffolding as an undeclared change.
+    scratchDir
+      ? `SCRATCH: for throwaway files - probe scripts, captured output, notes to ` +
+        `yourself - use ${scratchDir}. It is writable and outside the repository. ` +
+        `/tmp is NOT writable in this session, and scratch files written into the ` +
+        `project will be reported as changes this card did not declare.`
+      : '',
     // Say what the session may run. Without this it discovers the boundary by
     // hitting it, and a refused command reads to the model as a transient
     // failure worth retrying rather than a rule.

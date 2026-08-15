@@ -13,6 +13,8 @@
  */
 const FILE_ICONS = {
   '.md': '📄',
+  '.html': '🌐',
+  '.htm': '🌐',
   '.txt': '📝',
   '.json': '📋',
   '.yaml': '⚙️',
@@ -699,6 +701,9 @@ export class DocumentViewerComponent {
     if (content.isImage) {
       previewClass = 'image'
       previewContent = this.renderImage(content)
+    } else if (content.isHtml) {
+      previewClass = 'html'
+      previewContent = this.renderHtmlDocument(content)
     } else if (content.isMarkdown) {
       previewClass = 'markdown'
       previewContent = this.renderMarkdown(content.content)
@@ -717,6 +722,29 @@ export class DocumentViewerComponent {
         </div>
       </div>
     `
+  }
+
+/**
+   * Render an HTML document inside a sandboxed frame.
+   *
+   * The markup is a checked-in file, which makes it exactly as trustworthy as
+   * whoever committed it — and this window holds the `window.puffin` preload
+   * bridge. `sandbox=""` denies scripts, same-origin access, forms and top
+   * navigation, so the document renders without being able to reach anything.
+   * The content is assigned as a property after insertion, never interpolated
+   * into markup.
+   *
+   * @param {Object} content - The scanned file
+   * @returns {string} HTML
+   */
+  renderHtmlDocument(content) {
+    // Deferred so the element exists before srcdoc is set
+    queueMicrotask(() => {
+      const frame = document.getElementById('doc-viewer-frame')
+      if (frame) frame.srcdoc = content.content
+    })
+    return `<iframe id="doc-viewer-frame" class="doc-viewer-frame" sandbox=""
+      title="${this.escapeHtml(content.name)}" referrerpolicy="no-referrer"></iframe>`
   }
 
   /**

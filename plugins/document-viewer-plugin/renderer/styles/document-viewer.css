@@ -508,6 +508,26 @@
    Image Viewer
    =========================================== */
 
+/* ===========================================
+   HTML documents — rendered in a sandboxed frame
+   =========================================== */
+
+/* The frame gets the whole panel and no padding: the document brings its own
+   layout. A white ground because a page written for print or for a light
+   viewer should stay legible inside a dark app. */
+.preview-content.html {
+  padding: 0;
+  display: flex;
+}
+
+.doc-viewer-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 100%;
+  border: none;
+  background: #ffffff;
+}
+
 .preview-content.image {
   display: flex;
   flex-direction: column;

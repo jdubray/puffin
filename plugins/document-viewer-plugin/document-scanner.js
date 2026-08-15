@@ -11,7 +11,14 @@ const path = require('path')
 /**
  * Supported document file extensions
  */
-const SUPPORTED_EXTENSIONS = ['.md', '.txt', '.json', '.yaml', '.yml']
+// HTML is supported for reading: a generated document lands in docs/ as a
+// self-contained page, and refusing to open it made the viewer useless for
+// exactly the artifacts this project now produces. It is rendered in a
+// sandboxed frame, never injected into the app's own document.
+const SUPPORTED_EXTENSIONS = ['.md', '.txt', '.json', '.yaml', '.yml', '.html', '.htm']
+
+/** Extensions rendered as a document rather than as text. */
+const HTML_EXTENSIONS = ['.html', '.htm']
 
 /**
  * Supported image file extensions
@@ -210,6 +217,7 @@ class DocumentScanner {
           size: stats.size,
           modified: stats.mtime.toISOString(),
           isMarkdown: false,
+          isHtml: false,
           isImage: true
         }
       }
@@ -231,6 +239,7 @@ class DocumentScanner {
         size: stats.size,
         modified: stats.mtime.toISOString(),
         isMarkdown: ext === '.md',
+        isHtml: HTML_EXTENSIONS.includes(ext),
         isImage: false
       }
     } catch (err) {
@@ -452,4 +461,4 @@ class DocumentScanner {
   }
 }
 
-module.exports = { DocumentScanner, SUPPORTED_EXTENSIONS, IMAGE_EXTENSIONS, isImageExtension }
+module.exports = { DocumentScanner, SUPPORTED_EXTENSIONS, HTML_EXTENSIONS, IMAGE_EXTENSIONS, isImageExtension }

@@ -10,6 +10,7 @@ const { describe, it } = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const fs = require('node:fs')
+const os = require('node:os')
 
 const { PolygraphService } = require('../src/main/polygraph-service.js')
 
@@ -27,7 +28,30 @@ describe('PolygraphService', () => {
       assert.deepStrictEqual(names, ['app-lifecycle', 'generation', 'prompt-lifecycle', 'task-card'])
       for (const m of machines) {
         assert.strictEqual(m.moduleFile, 'next.cjs')
+        assert.strictEqual(m.kind, 'machine')
         assert.strictEqual(m.hasInvariants, true)
+      }
+    })
+
+    it('reports a contract with no JS module as a corpus artifact, not a miss', () => {
+      // How a non-JS component appears: capture-ready keeps the module in its
+      // own language and only the trace corpus crosses over, so the directory
+      // is verifiable by replay even though the checker cannot execute it.
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'puffin-corpus-'))
+      try {
+        const dir = path.join(scratch, 'kernel_core')
+        fs.mkdirSync(path.join(dir, 'traces'), { recursive: true })
+        fs.writeFileSync(path.join(dir, 'contract.json'), '{}')
+        fs.writeFileSync(path.join(dir, 'traces', 'happy.ndjson'), '{}\n')
+
+        const svc = new PolygraphService({ projectPath: scratch })
+        const [found] = svc.discoverMachines(scratch)
+        assert.ok(found, 'a contract with traces but no module must still be found')
+        assert.strictEqual(found.kind, 'corpus')
+        assert.strictEqual(found.moduleFile, null)
+        assert.strictEqual(found.traceFiles, 1)
+      } finally {
+        fs.rmSync(scratch, { recursive: true, force: true })
       }
     })
 

@@ -63,6 +63,14 @@ describe('detectProjectLanguage', () => {
 })
 
 describe('validationLaneFor', () => {
+  it('names capture-ready as the skill for every language polygen cannot serve', () => {
+    for (const language of ['python', 'go', 'rust', 'java', null]) {
+      const lane = validationLaneFor({ isStateMachine: true, language })
+      assert.strictEqual(lane.lane, 'captured', String(language))
+      assert.strictEqual(lane.skill, 'capture-ready', String(language))
+    }
+  })
+
   it('sends a JS state machine down the generated lane', () => {
     const lane = validationLaneFor({ isStateMachine: true, language: 'javascript' })
     assert.strictEqual(lane.lane, 'generated')
@@ -70,11 +78,16 @@ describe('validationLaneFor', () => {
     assert.match(lane.proof, /model check/)
   })
 
-  it('keeps the model check for a state machine polygen cannot write', () => {
+  it('proves a non-JS state machine by its corpus, and says so plainly', () => {
     const lane = validationLaneFor({ isStateMachine: true, language: 'python' })
-    assert.strictEqual(lane.lane, 'authored')
+    assert.strictEqual(lane.lane, 'captured')
     assert.strictEqual(lane.generator, null, 'nothing generates it')
-    assert.match(lane.proof, /model check/, 'but it is still checked exhaustively')
+    assert.strictEqual(lane.skill, 'capture-ready', 'the skill that makes the corpus fall out')
+    // The correction that matters: the checker derives its transition relation
+    // from a SAM v2 JS module, so it cannot explore a Python one. Claiming a
+    // model check here would be claiming a proof nobody ran.
+    assert.doesNotMatch(lane.proof, /model check/)
+    assert.match(lane.proof, /corpus|replay/)
     assert.match(lane.why, /python/)
   })
 

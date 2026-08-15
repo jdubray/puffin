@@ -203,26 +203,74 @@ export class BoardViewComponent {
       return this.dispatch(instanceId, 'SUBMIT_FOR_VALIDATION', { check: 'not-applicable' })
     }
 
-    this.rejection = { instanceId, reason: `model-checking ${machine.name}…`, pending: true }
+    const label = machine.kind === 'corpus'
+      ? `replaying ${machine.name}'s corpus…`
+      : `model-checking ${machine.name}…`
+    this.rejection = { instanceId, reason: label, pending: true }
     this.render()
+
     try {
-      const result = await window.puffin.polygraph.check({ machineDir: machine.dir })
-      const passed = result.success && !(result.violations?.length > 0)
+      const verdict = machine.kind === 'corpus'
+        ? await this._replayCorpus(machine)
+        : await this._modelCheck(machine)
+
       await this.dispatch(instanceId, 'SUBMIT_FOR_VALIDATION', {
-        check: passed ? 'pass' : 'fail'
+        check: verdict.passed ? 'pass' : 'fail'
       })
-      if (!passed && !this.rejection) {
-        // The counterexample is the point: name what the checker found.
-        this.rejection = {
-          instanceId,
-          reason: `model check failed — ${result.violations?.[0]?.name ||
-            result.error || 'an invariant is reachable'}`
-        }
+      if (!verdict.passed && !this.rejection) {
+        this.rejection = { instanceId, reason: verdict.reason }
         this.render()
       }
     } catch (error) {
-      this.rejection = { instanceId, reason: `model check could not run: ${error.message}` }
+      this.rejection = { instanceId, reason: `the gate could not run: ${error.message}` }
       this.render()
+    }
+  }
+
+  /** Exhaustive exploration — available when the module is JS. @private */
+  async _modelCheck(machine) {
+    const result = await window.puffin.polygraph.check({ machineDir: machine.dir })
+    const passed = result.success && !(result.violations?.length > 0)
+    return {
+      passed,
+      // The counterexample is the point: name what the checker found.
+      reason: `model check failed — ${result.violations?.[0]?.name ||
+        result.error || 'an invariant is reachable'}`
+    }
+  }
+
+  /**
+   * Corpus validation and replay — the gate for a component whose module lives
+   * in a language the checker cannot execute.
+   *
+   * capture-ready shapes such a module so a step listener emits
+   * {pre, action, data, post} windows; those windows cross the language
+   * boundary and are what gets proved here. It samples where the checker
+   * exhausts, so an EMPTY corpus is a failure rather than a pass: "nothing was
+   * captured" must never read as "nothing was wrong".
+   *
+   * @private
+   */
+  async _replayCorpus(machine) {
+    if (!machine.traceFiles) {
+      return {
+        passed: false,
+        reason: `no trace corpus for ${machine.name} — author it capture-ready and ` +
+          'register the step listener; an unproved component cannot pass the gate'
+      }
+    }
+
+    const validation = await window.puffin.polygraph.validateCorpus({ machineDir: machine.dir })
+    if (!validation.success) {
+      return { passed: false, reason: `corpus is not well-formed — ${validation.error || 'see the workbench'}` }
+    }
+
+    const replay = await window.puffin.polygraph.replay({ machineDir: machine.dir })
+    const passed = replay.success && !(replay.mismatches?.length > 0)
+    return {
+      passed,
+      reason: `replay failed — ${replay.mismatches?.[0]?.window ||
+        replay.error || 'the corpus disagrees with the contract'}`
     }
   }
 
@@ -562,7 +610,11 @@ export class BoardViewComponent {
       <div class="board-card-title">${esc(node?.title || id)}</div>
       ${node ? `<div class="board-card-node"><span class="board-card-stratum">${esc(node.stratum)}</span> ${esc(node.glmId)}</div>` : ''}
       <div class="board-card-meta">
-        ${machine ? `<span class="board-badge board-badge-machine" title="Implemented by ${esc(machine.relDir || machine.name)}">◇ ${esc(machine.name)}</span>` : ''}
+        ${machine ? `<span class="board-badge board-badge-machine"
+          title="${machine.kind === 'corpus'
+            ? `${esc(machine.relDir || machine.name)} — non-JS module: gated on corpus replay (capture-ready)`
+            : `${esc(machine.relDir || machine.name)} — gated on the model check`}"
+        >◇ ${esc(machine.name)}${machine.kind === 'corpus' ? ' · corpus' : ''}</span>` : ''}
         ${state.reworkCount > 0 ? `<span class="board-badge board-badge-warn">rework ${state.reworkCount}/2</span>` : ''}
         ${state.lastSignal ? `<span class="board-badge">${esc(state.lastSignal)}</span>` : ''}
       </div>

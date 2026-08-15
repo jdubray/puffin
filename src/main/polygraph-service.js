@@ -137,9 +137,11 @@ class PolygraphService {
       if (names.has('contract.json')) {
         const moduleFile = ['next.cjs', 'machine.cjs', 'next.js', 'reference.js']
           .find(f => names.has(f))
-        if (moduleFile) {
-          machines.push(this._describeMachine(dir, moduleFile, names, rootPath))
-        }
+        // A contract with no JS module is not a broken machine — it is how a
+        // non-JS component appears. capture-ready keeps the module in its own
+        // language and sends only the corpus across, so what is verifiable
+        // here is the trace corpus, not a state graph.
+        machines.push(this._describeMachine(dir, moduleFile || null, names, rootPath))
       }
 
       for (const entry of entries) {
@@ -170,6 +172,10 @@ class PolygraphService {
       dir,
       relDir: path.relative(rootPath, dir) || '.',
       moduleFile,
+      // 'machine' — a JS module the checker can explore exhaustively.
+      // 'corpus'  — a contract and traces from a module in another language;
+      //             replay and corpus validation apply, model checking does not.
+      kind: moduleFile ? 'machine' : 'corpus',
       hasInvariants: names.has('invariants.mjs'),
       hasIntentLedger: names.has('intent-ledger.json'),
       hasEffects: names.has('effects.cjs') || names.has('effects.manifest.json'),

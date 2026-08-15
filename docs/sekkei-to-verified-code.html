@@ -503,8 +503,8 @@
           </tr>
           <tr>
             <td>Holds state, other language</td>
-            <td>Authored by the session — polygen emits JavaScript only</td>
-            <td>Model check still applies (it reads the machine's artifacts), then the acceptance verifier</td>
+            <td>Authored by the session under <b>capture-ready</b> — polygen emits JavaScript only</td>
+            <td>Trace-corpus validation and replay, then the acceptance verifier</td>
           </tr>
           <tr>
             <td>Everything else</td>
@@ -520,6 +520,17 @@
       sample; the checker exhausts. So the stronger lane is used wherever it is
       available — and where it isn't, the spec says so rather than implying the
       weaker one is equivalent.
+    </p>
+    <p>
+      The middle row is the one people get wrong, including this sheet in its
+      first revision. The checker derives its transition relation mechanically
+      from a SAM v2 <em>JavaScript</em> module, so it cannot explore a Python or
+      Go one — losing polygen there costs the exhaustive proof, not just the
+      head start. What crosses the language boundary is the <b>corpus</b>: the
+      <code>capture-ready</code> skill shapes the module so one step listener
+      emits <code>{pre, action, data, post}</code> windows, and those windows
+      feed corpus validation, replay and polyvers' stimuli gate unchanged. The
+      module stays in its language; only the evidence travels.
     </p>
 
     <p class="bend">

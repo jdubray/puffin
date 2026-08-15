@@ -98,15 +98,24 @@ function validationLaneFor({ isStateMachine, language } = {}) {
     return {
       lane: 'generated',
       generator: 'polygen',
+      skill: 'polygen',
       proof: 'model check over reachable states, then the acceptance verifier',
       why: 'a state machine in a language polygen emits — generated pre-verified, then proved exhaustively'
     }
   }
+  // The checker derives its transition relation mechanically from a SAM v2 JS
+  // module, so there is no exhaustive exploration of a Python or Go module.
+  // What crosses the language boundary is the CORPUS: capture-ready shapes the
+  // module so a step listener emits {pre, action, data, post} windows, and
+  // replay plus corpus validation prove conformance over the runs captured.
+  // That is weaker than a model check — it samples where the checker exhausts —
+  // and saying so is the point.
   return {
-    lane: 'authored',
+    lane: 'captured',
     generator: null,
-    proof: 'model check over reachable states, then the acceptance verifier',
-    why: `a state machine, but polygen does not emit ${language || 'this language'} — author the machine by hand; the checker still applies`
+    skill: 'capture-ready',
+    proof: 'trace-corpus validation and replay, then the acceptance verifier',
+    why: `a state machine, but polygen emits JavaScript — author it capture-ready in ${language || 'this language'} so a step listener yields a Polygraph corpus; the model checker cannot explore a module it cannot execute`
   }
 }
 

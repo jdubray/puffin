@@ -17,7 +17,7 @@ const path = require('node:path')
 
 const {
   DocumentScanner, SUPPORTED_EXTENSIONS, HTML_EXTENSIONS
-} = require('../../plugins/document-viewer-plugin/document-scanner.js')
+} = require('../../plugins/document-viewer-plugin.disabled/document-scanner.js')
 
 let projectDir
 let scanner

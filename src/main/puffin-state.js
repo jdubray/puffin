@@ -36,10 +36,21 @@ const CLAUDE_PLUGINS_DIR = 'claude-plugins' // Claude Code skill plugins directo
 const CLAUDE_AGENTS_DIR = 'agents' // Puffin-managed agents directory (in .puffin/)
 const TOAST_HISTORY_FILE = 'toast-history.json' // Toast notification history
 const SYNC_INBOX_FILE = 'sync-inbox.json' // Incoming syncs from CLI
-// docs/ is browsable: markdown and self-contained HTML, nested as deep as the
-// project files them, bounded so a stray symlink loop can't walk forever.
-const DOCS_EXTENSIONS = ['.md', '.html', '.htm']
+// docs/ is browsable: prose, self-contained HTML, and the images they refer to,
+// nested as deep as the project files them and bounded so a stray symlink loop
+// can't walk forever. This is the WHY of a project — problem statements,
+// rationale, generated reports. The design itself lives in the sekkei.
+const DOCS_TEXT_EXTENSIONS = ['.md', '.html', '.htm']
+const DOCS_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']
+const DOCS_EXTENSIONS = [...DOCS_TEXT_EXTENSIONS, ...DOCS_IMAGE_EXTENSIONS]
 const DOCS_MAX_DEPTH = 6
+
+/** How a document should be rendered. @private */
+function docKindFor(ext) {
+  if (ext === '.md') return 'markdown'
+  if (DOCS_IMAGE_EXTENSIONS.includes(ext)) return 'image'
+  return 'html'
+}
 
 class PuffinState {
   constructor() {
@@ -2171,9 +2182,9 @@ ${content}`
         if (!DOCS_EXTENSIONS.includes(ext)) continue
         found.push({
           filename: rel,
-          name: rel.replace(/\.(md|html?)$/i, ''),
+          name: rel.replace(/\.[^.]+$/, ''),
           path: path.join(dir, entry.name),
-          kind: ext === '.md' ? 'markdown' : 'html'
+          kind: docKindFor(ext)
         })
       }
     }
@@ -2218,7 +2229,7 @@ ${content}`
     }
     const ext = path.extname(filename).toLowerCase()
     if (!DOCS_EXTENSIONS.includes(ext)) {
-      throw new Error('Invalid filename: only .md, .html and .htm documents can be opened')
+      throw new Error('Invalid filename: only documents and images under docs/ can be opened')
     }
 
     const docsPath = path.join(this.projectPath, 'docs')
@@ -2241,12 +2252,16 @@ ${content}`
       throw new Error('Invalid filename: path escapes the docs directory')
     }
 
-    const content = await fs.readFile(realFile, 'utf-8')
+    const kind = docKindFor(ext)
+    // An image is referenced by path, never decoded as text — reading a PNG as
+    // utf-8 would return mojibake and hand it to a renderer as if it were prose.
+    const content = kind === 'image' ? null : await fs.readFile(realFile, 'utf-8')
+
     return {
       filename,
-      name: filename.replace(/\.(md|html?)$/i, ''),
+      name: filename.replace(/\.[^.]+$/, ''),
       path: realFile,
-      kind: ext === '.md' ? 'markdown' : 'html',
+      kind,
       content
     }
   }

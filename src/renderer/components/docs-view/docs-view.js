@@ -259,9 +259,9 @@ export class DocsViewComponent {
 
   /** The open document, when the composer is set to revise it. @private */
   _reviseTarget() {
-    return (this.reviseOpen && this.selected && !this.selected.pending)
-      ? this.selected.filename
-      : null
+    if (!this.reviseOpen || !this.selected || this.selected.pending) return null
+    // An image is not something the composer can revise.
+    return this.selected.kind === 'image' ? null : this.selected.filename
   }
 
   /** @private */
@@ -433,7 +433,9 @@ export class DocsViewComponent {
           const isOpen = this.selected?.filename === doc.filename
           return `<button class="docs-item ${isOpen ? 'active' : ''}"
             data-action="open-doc" data-value="${esc(doc.filename)}" title="${esc(doc.filename)}">
-            <span class="docs-kind docs-kind-${esc(doc.kind)}">${doc.kind === 'html' ? 'HTM' : 'MD'}</span>
+            <span class="docs-kind docs-kind-${esc(doc.kind)}">${
+              { html: 'HTM', markdown: 'MD', image: 'IMG' }[doc.kind] || '?'
+            }</span>
             <span class="docs-item-name">${esc(label)}</span>
           </button>`
         }).join('')}
@@ -456,6 +458,15 @@ export class DocsViewComponent {
         <span class="docs-reader-title">${esc(doc.filename)}</span>
         <button class="btn btn-secondary btn-sm" data-action="close-doc">Close</button>
       </div>`
+
+    if (doc.kind === 'image') {
+      // file: is allowed by the app's CSP for images; nothing is decoded here.
+      return `${header}
+        <div class="docs-image-wrap">
+          <img class="docs-image" src="file:///${esc(String(doc.path).split('\\').join('/'))}"
+            alt="${esc(doc.filename)}">
+        </div>`
+    }
 
     if (doc.kind === 'html') {
       // sandbox="" — no scripts, no same-origin, no forms, no top navigation.

@@ -31,6 +31,7 @@ before(() => {
   fs.writeFileSync(path.join(docs, 'pipeline.html'), '<!DOCTYPE html><title>P</title><p>hi')
   fs.writeFileSync(path.join(docs, 'design', 'sekkei.md'), '# Sekkei\n\nNested.')
   fs.writeFileSync(path.join(docs, 'design', 'notes.txt'), 'not a document')
+  fs.writeFileSync(path.join(docs, 'diagram.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
   fs.writeFileSync(path.join(docs, '.hidden', 'secret.md'), 'should not be listed')
   fs.writeFileSync(path.join(projectDir, 'outside.md'), 'outside the docs tree')
 
@@ -44,14 +45,21 @@ describe('scanDesignDocuments', () => {
   it('walks subdirectories and reports paths relative to docs/', async () => {
     const docs = await state.scanDesignDocuments()
     assert.deepStrictEqual(docs.map(d => d.filename),
-      ['design/sekkei.md', 'pipeline.html', 'readme.md'])
+      ['design/sekkei.md', 'diagram.png', 'pipeline.html', 'readme.md'])
   })
 
-  it('takes markdown and HTML, and nothing else', async () => {
+  it('takes prose, HTML and the images they refer to — nothing else', async () => {
     const docs = await state.scanDesignDocuments()
     assert.deepStrictEqual(
-      docs.map(d => d.kind).sort(), ['html', 'markdown', 'markdown'])
+      docs.map(d => d.kind).sort(), ['html', 'image', 'markdown', 'markdown'])
     assert.ok(!docs.some(d => d.filename.endsWith('.txt')))
+  })
+
+  it('never decodes an image as text', async () => {
+    const image = await state.loadDesignDocument('diagram.png')
+    assert.strictEqual(image.kind, 'image')
+    assert.strictEqual(image.content, null, 'a PNG read as utf-8 would be mojibake')
+    assert.ok(image.path.endsWith('diagram.png'), 'it is referenced by path instead')
   })
 
   it('skips dot directories', async () => {
@@ -98,9 +106,9 @@ describe('loadDesignDocument', () => {
 
   it('refuses a file type it will not render', async () => {
     await assert.rejects(() => state.loadDesignDocument('design/notes.txt'),
-      /only \.md, \.html and \.htm/)
+      /only documents and images/)
     await assert.rejects(() => state.loadDesignDocument('../../.ssh/id_rsa'),
-      /only \.md, \.html and \.htm/)
+      /only documents and images/)
   })
 
   it('refuses a symlink that points outside docs/', async (t) => {

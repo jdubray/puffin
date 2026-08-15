@@ -330,3 +330,23 @@
   gap: 6px;
   margin-left: auto;
 }
+
+/* Images referenced by the docs — shown, not decoded */
+
+.docs-image-wrap {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  padding: 16px;
+  background: var(--bg-primary, #1a1a1a);
+}
+
+.docs-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.docs-kind-image { color: #9b8cd8; background: rgba(155, 140, 216, 0.18); }

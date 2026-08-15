@@ -223,9 +223,14 @@ export default {
     return this._api('POST', '/machines/generation/instances', { instanceId })
   }
 
-  /** List generations. */
-  listGenerations() {
-    return this._api('GET', '/machines/generation/instances')
+  /**
+   * List generations, as `{ instances }`.
+   *
+   * Wrapped for the same reason as {@link listCards}: polyrun answers with a
+   * bare array, and every caller here reaches for a named field.
+   */
+  async listGenerations() {
+    return { instances: await this._api('GET', '/machines/generation/instances') }
   }
 
   /** Create a card (a task-card instance, born in backlog). */
@@ -236,9 +241,18 @@ export default {
     return this._api('POST', '/machines/task-card/instances', body)
   }
 
-  /** List cards (optionally by status). */
-  listCards() {
-    return this._api('GET', '/machines/task-card/instances')
+  /**
+   * List cards, as `{ instances }`.
+   *
+   * polyrun answers this endpoint with a bare ARRAY. The IPC layer spreads
+   * whatever it gets into `{ success: true, ... }`, and spreading an array
+   * yields `{0: card, 1: card}` with no `instances` field at all - so the board
+   * read an empty list and rendered empty columns over a store full of cards.
+   * Normalising here, at the one place that knows the wire shape, keeps every
+   * caller honest.
+   */
+  async listCards() {
+    return { instances: await this._api('GET', '/machines/task-card/instances') }
   }
 
   /**

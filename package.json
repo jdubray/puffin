@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "verify:machines": "node scripts/verify-machines.mjs",
     "build:excalidraw": "esbuild plugins/excalidraw-plugin/renderer/excalidraw-bundle-entry.js --bundle --outfile=plugins/excalidraw-plugin/renderer/excalidraw-bundle.js --format=iife --platform=browser --target=chrome120 --loader:.js=jsx --define:process.env.NODE_ENV=\\\"production\\\" --define:process.env.IS_PREACT=\\\"false\\\"",
+    "prepackage": "node scripts/clean-plugin-bins.mjs",
     "package": "electron-builder"
   },
   "keywords": [
@@ -56,7 +57,12 @@
     "extraResources": [
       {
         "from": "plugins",
-        "to": "plugins"
+        "to": "plugins",
+        "filter": [
+          "**/*",
+          "!**/node_modules/.bin/**",
+          "!**/*.disabled/**"
+        ]
       }
     ],
     "mac": {

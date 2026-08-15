@@ -431,3 +431,15 @@
 }
 
 .board-unattended input { cursor: pointer; }
+
+/* A session has run against this card — so "build it" cannot read as
+   "nothing has happened yet" */
+.board-badge-ran {
+  color: var(--success-color, #4cae6f);
+  background: rgba(76, 174, 111, 0.12);
+}
+
+.board-session-next {
+  display: block;
+  margin-top: 8px;
+}

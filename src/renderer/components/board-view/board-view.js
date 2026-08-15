@@ -91,6 +91,9 @@ export class BoardViewComponent {
     this.cards = []
     this.generations = []
     this.session = null
+    // instanceId -> {stage, at, ok}: which sessions have run, so a card can
+    // show it and a button can say 'again' instead of implying nothing happened.
+    this.sessionLog = {}
     // Off by default: skipping permission prompts is the user's call to make,
     // once, in the open - not a default they discover after the fact.
     this.unattended = false   // the one running card session, if any
@@ -329,6 +332,14 @@ export class BoardViewComponent {
     window.puffin.claude.onComplete(() => {
       if (!this.session?.running) return
       this.session.running = false
+      // Record it on the card. Without this the only trace of a finished
+      // session is a panel the user closes, and the button still reads
+      // "build it" — which is indistinguishable from never having run.
+      this.sessionLog[this.session.instanceId] = {
+        stage: this.session.stage,
+        at: new Date().toISOString(),
+        ok: true
+      }
       // The card does NOT advance here. A finished turn is not a passed gate:
       // planning ends when a person says the plan is ready, and implementing
       // ends at the model check - both are decisions the machine owns.
@@ -338,6 +349,11 @@ export class BoardViewComponent {
       if (!this.session?.running) return
       this.session.running = false
       this.session.error = typeof error === 'string' ? error : (error?.message || 'failed')
+      this.sessionLog[this.session.instanceId] = {
+        stage: this.session.stage,
+        at: new Date().toISOString(),
+        ok: false
+      }
       this.render()
     })
   }
@@ -700,6 +716,7 @@ export class BoardViewComponent {
     else if (action === 'resume' && id) this.dispatch(id, 'RESUME')
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')
     else if (action === 'start-work' && id) this.startWork(id)
+    else if (action === 'validate' && id) this.checkAndSubmit(id)
     else if (action === 'implement' && id) this.runImplementation(id)
     else if (action === 'close-session') { this.session = null; this.render() }
     else if (action === 'cancel-session') this.cancelSession()
@@ -746,7 +763,13 @@ export class BoardViewComponent {
       // Two legal ways in: starting work, or a human resuming an escalated
       // card — which returns to planning because whatever exhausted the budget
       // invalidated the plan.
-      return this.dispatch(instanceId, from === 'needsHuman' ? 'RESUME' : 'START_WORK')
+      //
+      // Starting work goes through startWork, the same path as the button, so
+      // a drag and a click cannot mean different things. They did: dragging
+      // dispatched START_WORK alone, so the card landed in planning with "plan
+      // ready" already offered and no plan ever written.
+      if (from === 'needsHuman') return this.dispatch(instanceId, 'RESUME')
+      return this.startWork(instanceId)
     }
     const action = DRAG_ACTIONS[target]
     if (action) return this.dispatch(instanceId, action)
@@ -817,9 +840,17 @@ export class BoardViewComponent {
       ${session.error ? `<div class="board-rejection">&#10007; ${esc(session.error)}</div>` : ''}
       <pre class="board-session-body" id="board-session-body">${esc(session.text)}</pre>
       ${!session.running && !session.error ? `<div class="board-session-note">
-        The turn is over; the card has not moved. ${session.stage === 'plan'
-          ? 'Read the plan, then use <b>plan ready</b> when it is.'
-          : 'Move the card to validating when the code is in &mdash; the model check answers there.'}
+        <b>The turn is over and the card has not moved.</b> ${session.stage === 'plan'
+          ? 'A finished turn is not a plan you have agreed to, so read it first.'
+          : 'A finished turn is not a passed gate: the session ran the acceptance verifier, ' +
+            'the model check has not run yet.'}
+        <span class="board-session-next">
+          ${session.stage === 'plan'
+            ? `<button class="btn btn-primary btn-sm" data-action="plan-ready"
+                 data-id="${esc(session.instanceId)}">The plan is ready &rarr; implementing</button>`
+            : `<button class="btn btn-primary btn-sm" data-action="validate"
+                 data-id="${esc(session.instanceId)}">Run the model check &rarr; validating</button>`}
+        </span>
       </div>` : ''}
     </div>`
   }
@@ -931,6 +962,7 @@ export class BoardViewComponent {
     const node = this._nodeForCard(id)
     const machine = this._machineFor(card)
     const note = this.linkNote?.instanceId === id ? this.linkNote : null
+    const ran = this.sessionLog[id] || null
     return `<div class="board-card ${isDone ? 'board-card-done' : ''}" draggable="${!isDone}" data-card-id="${esc(id)}">
       <div class="board-card-title">${esc(node?.title || id)}</div>
       ${node ? `<div class="board-card-node"><span class="board-card-stratum">${esc(node.stratum)}</span> ${esc(node.glmId)}</div>` : ''}
@@ -940,6 +972,9 @@ export class BoardViewComponent {
             ? `${esc(machine.relDir || machine.name)} — non-JS module: gated on corpus replay (capture-ready)`
             : `${esc(machine.relDir || machine.name)} — gated on the model check`}"
         >◇ ${esc(machine.name)}${machine.kind === 'corpus' ? ' · corpus' : ''}</span>` : ''}
+        ${ran ? `<span class="board-badge ${ran.ok ? 'board-badge-ran' : 'board-badge-warn'}"
+          title="${esc(ran.stage === 'plan' ? 'A planning session finished' : 'An implementation session finished')} at ${esc(String(ran.at).slice(11, 16))} — the card does not move on its own"
+        >${ran.stage === 'plan' ? 'planned' : 'built'}${ran.ok ? '' : ' ✗'}</span>` : ''}
         ${state.reworkCount > 0 ? `<span class="board-badge board-badge-warn">rework ${state.reworkCount}/2</span>` : ''}
         ${state.lastSignal ? `<span class="board-badge">${esc(state.lastSignal)}</span>` : ''}
       </div>
@@ -953,7 +988,7 @@ export class BoardViewComponent {
             ${node && !this.session?.running ? '' : 'disabled'}
             title="${node
               ? 'Start work: run a planning session from this component&apos;s prompt spec'
-              : 'This card is not backed by a sekkei node'}">▶ plan it</button>
+              : 'This card is not backed by a sekkei node'}">▶ ${ran?.stage === 'plan' ? 'plan again' : 'plan it'}</button>
         ` : ''}
         ${state.cardState === 'planning' ? `
           <button class="btn btn-sm board-btn-pass" data-action="plan-ready" data-id="${esc(id)}" title="The plan is written — start implementing">plan ready</button>
@@ -963,7 +998,7 @@ export class BoardViewComponent {
             ${node && !this.session?.running ? '' : 'disabled'}
             title="${node
               ? 'Run the implementation session: write the files the spec names, against its verifier'
-              : 'This card is not backed by a sekkei node'}">▶ build it</button>
+              : 'This card is not backed by a sekkei node'}">▶ ${ran?.stage === 'implement' ? 'build again' : 'build it'}</button>
         ` : ''}
         ${state.cardState === 'reviewing' ? `
           <button class="btn btn-sm board-btn-pass" data-action="review-pass" data-id="${esc(id)}" title="Review passed — the card is done">✓</button>

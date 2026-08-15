@@ -889,50 +889,6 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     this.render()
   }
 
-  /** Voice input — record, transcribe, drop the text into the composer. */
-  async toggleMic() {
-    if (this.isRecording) {
-      this._recorder?.stop()
-      return
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus' : 'audio/webm'
-      this._recorder = new MediaRecorder(stream, { mimeType })
-      this._chunks = []
-      this._recorder.ondataavailable = (e) => { if (e.data.size > 0) this._chunks.push(e.data) }
-      this._recorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop())
-        this.isRecording = false
-        this.render()
-        try {
-          const blob = new Blob(this._chunks, { type: mimeType })
-          const buffer = await blob.arrayBuffer()
-          const result = await window.puffin.speech.transcribe(Array.from(new Uint8Array(buffer)))
-          const text = result?.text || result?.transcript
-          const input = this.container.querySelector('#specs-author-input')
-          if (text && input) {
-            input.value = input.value ? `${input.value} ${text}` : text
-            input.focus()
-          } else if (!text) {
-            this.authoring.error = result?.error || 'Transcription returned nothing (is the Speech API key set in Config?)'
-            this.render()
-          }
-        } catch (error) {
-          this.authoring.error = `Transcription failed: ${error.message}`
-          this.render()
-        }
-      }
-      this._recorder.start()
-      this.isRecording = true
-      this.render()
-    } catch (error) {
-      this.authoring.error = `Microphone unavailable: ${error.message}`
-      this.render()
-    }
-  }
-
   /**
    * Re-render just the authoring pane so streaming never disturbs the tree.
    * Markdown is re-rendered per chunk: a half-arrived `**bold` would otherwise

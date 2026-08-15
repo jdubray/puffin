@@ -2039,18 +2039,6 @@ export class PromptEditorComponent {
     return `## GUI Designs\n\nThe following UI designs should guide your implementation:\n\n${descriptions.join('\n\n---\n\n')}`
   }
 
-  /**
-   * Escape HTML for safe rendering
-   */
-  escapeHtml(str) {
-    if (!str) return ''
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-  }
-
   // ── Voice Input (MediaRecorder + Whisper API) ───────────────────────
 
   /**

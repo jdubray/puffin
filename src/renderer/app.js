@@ -228,18 +228,6 @@ class PuffinApp {
   }
 
   /**
-   * Escape HTML to prevent XSS
-   * @param {string} str - String to escape
-   * @returns {string} Escaped string
-   */
-  escapeHtml(str) {
-    if (!str) return ''
-    const div = document.createElement('div')
-    div.textContent = str
-    return div.innerHTML
-  }
-
-  /**
    * Clean up any leftover overlay elements from previous sessions
    * This prevents stuck overlays from blocking the UI
    */

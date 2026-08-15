@@ -357,26 +357,6 @@ class PuffinState {
   }
 
   /**
-   * Get database status information
-   * @returns {Object} Database status
-   */
-  getDatabaseStatus() {
-    if (!this.useSqlite) {
-      return { enabled: false, reason: 'disabled' }
-    }
-
-    if (!this.database.isInitialized()) {
-      return { enabled: true, initialized: false }
-    }
-
-    return {
-      enabled: true,
-      initialized: true,
-      ...this.database.getStatus()
-    }
-  }
-
-  /**
    * Update configuration
    * @param {Object} updates - Partial config updates
    */

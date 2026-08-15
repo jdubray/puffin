@@ -9,6 +9,19 @@
  */
 
 import { renderMarkdown } from '../../lib/markdown.js'
+import { planGeneration } from '../../../shared/generation-plan.js'
+
+/**
+ * A card's instance id on the Workflow board: the glm id with everything
+ * polyrun will not take in an id replaced. One definition, because a second
+ * one that sanitised differently would make every queued card look unqueued.
+ *
+ * @param {string} glmId
+ * @returns {string}
+ */
+function cardIdFor(glmId) {
+  return String(glmId).replace(/[^a-zA-Z0-9._-]/g, '-')
+}
 
 /** Escape text for safe interpolation into HTML */
 function esc(text) {
@@ -419,6 +432,9 @@ export class SpecsViewComponent {
     // Changes since the last code generation → the workflow's inbox
     this.lastGenerationAt = null
     this.queueNote = null
+    this.plan = null        // derived by planGeneration - never hand-made
+    this.planScope = 'changed'
+    this.planning = false
     // Composer context sources + voice
     this.designDocs = []
     this.guiDesigns = []
@@ -505,7 +521,12 @@ export class SpecsViewComponent {
   async _loadBuildLane() {
     try {
       const lane = await window.puffin.project?.getBuildLane?.()
-      if (lane?.success) this.buildLane = lane
+      if (lane?.success) {
+        this.buildLane = lane
+        // The lane decides how a stateful component is proved, so a plan
+        // computed before it arrived named the wrong one.
+        if (this.plan) this.recomputePlan()
+      }
     } catch { /* the prompt simply omits the lane paragraph */ }
   }
 
@@ -586,6 +607,10 @@ export class SpecsViewComponent {
     // Follow the workspace with the live channel
     this.socketStatus = 'connecting'
     window.puffin.glm.subscribe({ workspaceId })
+    // The plan is cheap and derived, so it is computed on load rather than
+    // behind a button: an empty panel would just be a button that says
+    // "compute the thing you came here for".
+    this.recomputePlan()
   }
 
   async selectNode(glmId) {
@@ -788,26 +813,6 @@ export class SpecsViewComponent {
     this.render()
   }
 
-  /** Queue the selected spec onto the Workflow as a work item. */
-  async createWorkItem() {
-    if (!this.selectedGlmId) return
-    const instanceId = String(this.selectedGlmId).replace(/[^a-zA-Z0-9._-]/g, '-')
-    this.queueNote = { pending: true }
-    this.render()
-    const status = await window.puffin.board.getStatus()
-    if (!status.running) {
-      const started = await window.puffin.board.start()
-      if (!started.success) {
-        this.queueNote = { error: started.error }
-        this.render()
-        return
-      }
-    }
-    const result = await window.puffin.board.createCard({ instanceId })
-    this.queueNote = result.success ? { added: 1, skipped: 0 } : { error: result.error }
-    this.render()
-  }
-
   /** Voice input — record, transcribe, drop the text into the composer. */
   async toggleMic() {
     if (this.isRecording) {
@@ -865,7 +870,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
   /** Queue the selected spec onto the Workflow as a work item. */
   async createWorkItem() {
     if (!this.selectedGlmId) return
-    const instanceId = String(this.selectedGlmId).replace(/[^a-zA-Z0-9._-]/g, '-')
+    const instanceId = cardIdFor(this.selectedGlmId)
     this.queueNote = { pending: true }
     this.render()
     const status = await window.puffin.board.getStatus()
@@ -947,22 +952,48 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     this.render()
   }
 
-  // ===== Changes since the last generation =====
+  // ===== Generation planning =====
 
-  /** Nodes touched since the last code generation — the workflow's inbox. */
-  _changedNodes() {
-    if (!this.lastGenerationAt) return this.nodes.filter(n => n.stratum === 'component' || n.stratum === 'spec')
-    const since = new Date(this.lastGenerationAt).getTime()
-    return this.nodes.filter(n =>
-      (n.stratum === 'component' || n.stratum === 'spec') &&
-      new Date(n.updatedAt || n.authoredAt || 0).getTime() > since)
+  /**
+   * Derive the plan from the sekkei.
+   *
+   * Reads the board first so a component that already has a card is reported
+   * as queued rather than offered again — re-planning after a phase runs must
+   * not propose the phase that just ran.
+   */
+  async recomputePlan() {
+    this.planning = true
+    this.render()
+    let onBoard = []
+    try {
+      const cards = await window.puffin.board.listCards()
+      const byInstance = new Map(this.nodes.map(n => [cardIdFor(n.glmId), n.glmId]))
+      onBoard = (cards.instances || [])
+        .map(c => byInstance.get(c.instanceId || c.id))
+        .filter(Boolean)
+    } catch { /* board not running — every ready component is simply unqueued */ }
+
+    this.plan = planGeneration(this.nodes, {
+      buildLane: this.buildLane,
+      since: this.planScope === 'all' ? null : this.lastGenerationAt,
+      alreadyOnBoard: onBoard
+    })
+    this.planning = false
+    this.render()
   }
 
-  /** Queue the changed specs onto the workflow as cards — when the user says so. */
-  async queueChangesToWorkflow() {
-    const changed = this._changedNodes()
-    if (changed.length === 0) return
-    this.queueNote = { pending: true }
+  /**
+   * Put one phase on the Workflow board.
+   *
+   * One phase at a time, deliberately: the phases exist so that what comes
+   * back from the first one can change what you do about the second.
+   *
+   * @param {number} phaseNumber
+   */
+  async queuePhase(phaseNumber) {
+    const phase = this.plan?.phases.find(p => p.number === phaseNumber)
+    if (!phase) return
+    this.queueNote = { pending: phaseNumber }
     this.render()
 
     const status = await window.puffin.board.getStatus()
@@ -978,14 +1009,14 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       .map(c => c.instanceId || c.id))
 
     let added = 0
-    for (const node of changed) {
-      const instanceId = String(node.glmId).replace(/[^a-zA-Z0-9._-]/g, '-')
+    for (const component of phase.components) {
+      const instanceId = cardIdFor(component.glmId)
       if (existing.has(instanceId)) continue
       const result = await window.puffin.board.createCard({ instanceId })
       if (result.success) added++
     }
-    this.queueNote = { added, skipped: changed.length - added }
-    this.render()
+    this.queueNote = { added, skipped: phase.components.length - added }
+    await this.recomputePlan()
   }
 
   /** Mark this design as generated — resets the change window. */
@@ -1254,6 +1285,11 @@ coding agent would have to guess at. List findings worst-first with the glm id e
   }
 
   _onChange(e) {
+    if (e.target.id === 'specs-plan-scope') {
+      this.planScope = e.target.value
+      this.recomputePlan()
+      return
+    }
     if (e.target.id === 'specs-borrow-select') {
       const workspaceId = e.target.value
       if (workspaceId) this.borrowWorkspace(workspaceId)
@@ -1306,7 +1342,8 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       }
       else if (action === 'author') this.submitAuthoring()
       else if (action === 'cancel-author') this.cancelAuthoring()
-      else if (action === 'queue-changes') this.queueChangesToWorkflow()
+      else if (action === 'replan') this.recomputePlan()
+      else if (action === 'queue-phase') this.queuePhase(Number(target.dataset.phase))
       else if (action === 'mark-generated') this.markGenerated()
       else if (action === 'create-bind') this.createAndBind()
       else if (action === 'bind-existing') this.bindExisting()
@@ -1567,29 +1604,102 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     return clear + rows
   }
 
+  /**
+   * The generation plan: what gets built, in what order, how much at a time.
+   *
+   * Everything here is derived from the sekkei by `planGeneration` — the panel
+   * only renders it. Nothing on this screen asks the user to invent a batching,
+   * because a hand-made one cannot be re-derived when the next spec lands.
+   */
   _renderChanges() {
-    const changed = this._changedNodes()
     const note = this.queueNote
+    const plan = this.plan
+    const scope = this.planScope === 'all' ? 'all' : 'changed'
+
     return `<div class="specs-changes">
       <div class="specs-changes-line">
-        <b>${changed.length}</b> spec${changed.length === 1 ? '' : 's'} changed
-        ${this.lastGenerationAt
-          ? `since the last generation (${esc(String(this.lastGenerationAt).slice(0, 16).replace('T', ' '))})`
-          : '— nothing generated from this sekkei yet'}
+        <b>Plan a generation</b>
+        <select id="specs-plan-scope" class="form-control specs-ws-select"
+          title="Which part of the sekkei this generation covers">
+          <option value="changed" ${scope === 'changed' ? 'selected' : ''}>changed since the last generation</option>
+          <option value="all" ${scope === 'all' ? 'selected' : ''}>the whole sekkei</option>
+        </select>
         <span class="specs-changes-actions">
-          <button class="btn btn-primary btn-sm" data-action="queue-changes"
-            ${changed.length === 0 || note?.pending ? 'disabled' : ''}>
-            ${note?.pending ? 'Queueing…' : 'Queue to Workflow'}
-          </button>
+          <button class="btn btn-secondary btn-sm" data-action="replan"
+            ${this.planning ? 'disabled' : ''}>${this.planning ? 'Planning…' : 'Re-plan'}</button>
           <button class="btn btn-secondary btn-sm" data-action="mark-generated"
             title="Reset the change window — the current design is what the code reflects">Mark generated</button>
         </span>
       </div>
+      ${scope === 'changed' && this.lastGenerationAt
+        ? `<div class="specs-changes-note">since ${esc(String(this.lastGenerationAt).slice(0, 16).replace('T', ' '))}</div>`
+        : scope === 'changed'
+          ? '<div class="specs-changes-note">nothing generated from this sekkei yet — this covers everything</div>'
+          : ''}
+      ${plan ? this._renderPlan(plan) : '<div class="specs-changes-note">No plan computed yet.</div>'}
       ${note?.error ? `<div class="specs-editor-error">✗ ${esc(note.error)}</div>` : ''}
       ${note && note.added !== undefined ? `<div class="specs-changes-note">
         Queued ${note.added} card${note.added === 1 ? '' : 's'} onto the Workflow${note.skipped ? ` (${note.skipped} already there)` : ''} —
         open the Workflow tab to run them.
       </div>` : ''}
+    </div>`
+  }
+
+  /** @private */
+  _renderPlan(plan) {
+    const t = plan.totals
+    if (t.candidates === 0) {
+      return '<div class="specs-changes-note">Nothing to generate — no component has changed.</div>'
+    }
+
+    return `
+      <div class="specs-plan-totals">
+        <b>${t.candidates}</b> component${t.candidates === 1 ? '' : 's'} in scope ·
+        <b>${t.ready}</b> ready ·
+        <b>${t.notReady}</b> need authoring${t.queued ? ` · <b>${t.queued}</b> already queued` : ''}
+      </div>
+      ${plan.notReady.length > 0 ? `
+        <details class="specs-plan-phase specs-plan-zero">
+          <summary><b>Phase 0 — author these first</b> (${plan.notReady.length})
+            <span class="specs-plan-why">not a later phase: a generation has nothing to consume
+            and the card would have no gate to pass</span></summary>
+          ${plan.notReady.map(c => `
+            <div class="specs-plan-gap">
+              <a class="j-link" data-glm-id="${escAttr(c.glmId)}">${esc(c.title)}</a>
+              <span class="specs-plan-reasons">${esc(c.reasons.join(' · '))}</span>
+            </div>`).join('')}
+        </details>` : ''}
+      ${plan.phases.map(phase => this._renderPhase(phase)).join('')}
+      ${plan.cycle.length > 0 ? `
+        <div class="specs-plan-phase specs-plan-cycle">
+          <b>⚠ Dependency cycle</b> — ${plan.cycle.map(c => esc(c.title)).join(', ')}.
+          No order inside a cycle is correct; break it in the sekkei before generating.
+        </div>` : ''}
+      ${plan.phases.length === 0 && plan.notReady.length > 0
+        ? '<div class="specs-changes-note">No phase can run yet — everything in scope is in phase 0.</div>'
+        : ''}`
+  }
+
+  /** @private */
+  _renderPhase(phase) {
+    const busy = this.queueNote?.pending === phase.number
+    return `<div class="specs-plan-phase">
+      <div class="specs-plan-head">
+        <b>Phase ${phase.number}</b>
+        <span class="specs-plan-meta">layer ${phase.layer} · ${esc(phase.laneLabel)} ·
+          policy <code title="${phase.policy === 'hold'
+            ? 'Stops at the first escalation, so a defect in the prompt specs does not repeat across the batch'
+            : 'Carries on past an escalation and names it in the outcome'}">${esc(phase.policy)}</code></span>
+        <button class="btn btn-primary btn-sm" data-action="queue-phase"
+          data-phase="${phase.number}" ${busy ? 'disabled' : ''}>
+          ${busy ? 'Queueing…' : `Queue ${phase.components.length} card${phase.components.length === 1 ? '' : 's'}`}
+        </button>
+      </div>
+      <div class="specs-plan-components">
+        ${phase.components.map(c => `
+          <a class="j-link specs-plan-chip" data-glm-id="${escAttr(c.glmId)}"
+             title="${escAttr(c.glmId)}">${esc(c.title)}</a>`).join('')}
+      </div>
     </div>`
   }
 

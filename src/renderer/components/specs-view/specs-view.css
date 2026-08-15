@@ -735,6 +735,77 @@
   color: var(--success-color, #4cae6f);
 }
 
+/* Generation plan — phases, and the authoring work that is not a phase */
+
+.specs-plan-totals {
+  margin: 8px 0 6px;
+  color: var(--text-primary, #ddd);
+}
+
+.specs-plan-phase {
+  border-top: 1px solid var(--border-color, #3a3a3a);
+  padding: 8px 0;
+}
+
+.specs-plan-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.specs-plan-head .btn { margin-left: auto; }
+
+.specs-plan-meta {
+  font-size: 12.5px;
+  color: var(--text-secondary, #999);
+}
+
+.specs-plan-meta code {
+  background: var(--bg-tertiary, #2e2e2e);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.specs-plan-components {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.specs-plan-chip {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-tertiary, #2e2e2e);
+  cursor: pointer;
+}
+
+/* Phase zero reads as work to do, not as a failure */
+.specs-plan-zero summary {
+  cursor: pointer;
+  color: var(--warning-color, #d6a15a);
+}
+
+.specs-plan-why {
+  display: block;
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--text-secondary, #999);
+}
+
+.specs-plan-gap {
+  display: flex;
+  gap: 10px;
+  padding: 3px 0 3px 14px;
+  font-size: 12.5px;
+}
+
+.specs-plan-reasons { color: var(--text-secondary, #999); }
+
+.specs-plan-cycle { color: var(--error-color, #d16d6d); }
+
 /* Project ↔ sekkei binding */
 
 .specs-bound {

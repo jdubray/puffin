@@ -149,9 +149,16 @@ class GlmClient {
     return this._request('GET', `/workspaces/${workspaceId}/summary`)
   }
 
-  /** All nodes of a workspace (the sekkei DAG, flat). */
+  /**
+   * All nodes of a workspace (the sekkei DAG, flat).
+   *
+   * Relationships come along because generation planning needs the `depends-on`
+   * edges to layer components, and fetching them per node would be one round
+   * trip per node on a sekkei with dozens of them.
+   */
   async listNodes(workspaceId) {
-    const data = await this._request('GET', `/workspaces/${workspaceId}/nodes`)
+    const data = await this._request('GET',
+      `/workspaces/${workspaceId}/nodes?include=relationships`)
     return data.nodes || []
   }
 

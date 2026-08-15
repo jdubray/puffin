@@ -44,6 +44,34 @@ const COLUMNS = [
  * both are stages of the machine, so both are columns here rather than steps
  * someone remembers to take.
  */
+/**
+ * A cheap signature of everything the board draws from the runtime.
+ *
+ * Equal signatures mean a re-render would produce identical HTML, which is
+ * what lets the poll tick find nothing and cost nothing. Every field the board
+ * actually displays belongs here: one left out is a change that silently never
+ * repaints, which is a worse failure than the flicker this replaced.
+ *
+ * @param {Array<Object>} cards
+ * @param {Array<Object>} generations
+ * @returns {string}
+ */
+export function boardSignature(cards = [], generations = []) {
+  const cardPart = cards
+    .map(c => [
+      c.instanceId || c.id, c.seq, c.status,
+      c.state?.cardState, c.state?.reworkCount, c.state?.lastSignal
+    ].join(':'))
+    .join('|')
+  const batchPart = generations
+    .map(g => [
+      g.generationId, g.phase, g.policy, g.cards?.length,
+      g.state?.genState, g.state?.pending, g.state?.escalated
+    ].join(':'))
+    .join('|')
+  return `${cardPart}#${batchPart}`
+}
+
 const DRAG_ACTIONS = {
   'ready': 'MARK_READY',
   'planning': null, // START_WORK from ready, RESUME from needsHuman
@@ -96,13 +124,49 @@ export class BoardViewComponent {
 
   onShow() {
     if (!this.hasLoaded && !this.isBusy) this.refresh()
-    if (!this._pollTimer) {
-      this._pollTimer = setInterval(() => {
-        if (document.getElementById('board-view')?.classList.contains('active')) {
-          this._reloadCards()
-        }
-      }, 5000)
-    }
+    this._startPolling()
+  }
+
+  /**
+   * Watch for changes the board did not make itself.
+   *
+   * Cards move by dispatch from this view, so polling exists only for what
+   * happens elsewhere - another window, a resumed batch, a card driven from
+   * the CLI. It is therefore allowed to find nothing, and finding nothing must
+   * cost nothing: the tick re-renders only when the board actually differs.
+   *
+   * The first version re-rendered every five seconds unconditionally. That
+   * rebuilt the whole board - including a finished session's transcript -
+   * forever, throwing away scroll position and any text being selected, which
+   * is what made a finished session look like it was still working.
+   * @private
+   */
+  _startPolling() {
+    if (this._pollTimer) return
+    this._pollTimer = setInterval(async () => {
+      // No onHide in the component contract, so the timer retires itself and
+      // onShow starts a fresh one. A hidden view polling forever is how you
+      // end up with an app that is never idle.
+      if (!document.getElementById('board-view')?.classList.contains('active')) {
+        return this._stopPolling()
+      }
+      // A running session owns the screen: its transcript is streaming into a
+      // pane a full render would rebuild under the reader.
+      if (this.session?.running) return
+      await this._reloadCards()
+    }, 5000)
+  }
+
+  /** @private */
+  _stopPolling() {
+    if (!this._pollTimer) return
+    clearInterval(this._pollTimer)
+    this._pollTimer = null
+  }
+
+  /** @private */
+  _boardSignature() {
+    return boardSignature(this.cards, this.generations)
   }
 
   async refresh() {
@@ -154,7 +218,15 @@ export class BoardViewComponent {
     }
   }
 
-  async _reloadCards() {
+  /**
+   * Reload cards and batches, and render only if that changed anything.
+   *
+   * @param {{force?: boolean}} [options] - force renders regardless, for the
+   *   callers that changed something the signature does not cover (a rejection
+   *   message, a closed panel).
+   */
+  async _reloadCards({ force = false } = {}) {
+    const before = this._boardSignature()
     const res = await window.puffin.board.listCards()
     if (res.success) {
       this.cards = res.instances || res.list || []
@@ -165,7 +237,8 @@ export class BoardViewComponent {
       const batches = await window.puffin.board.listGenerations()
       this.generations = batches.success ? batches.generations : []
     } catch { this.generations = [] }
-    this.render()
+
+    if (force || this._boardSignature() !== before) this.render()
   }
 
   // ===== running a card's session =====
@@ -297,14 +370,14 @@ export class BoardViewComponent {
   async resumeGeneration(generationId) {
     const result = await window.puffin.board.resumeGeneration({ generationId })
     if (!result.success) this.rejection = { instanceId: generationId, reason: result.error }
-    await this._reloadCards()
+    await this._reloadCards({ force: true })
   }
 
   /** Stop a batch. The cards stay where they are; only the run ends. */
   async cancelGeneration(generationId) {
     const result = await window.puffin.board.cancelGeneration({ generationId })
     if (!result.success) this.rejection = { instanceId: generationId, reason: result.error }
-    await this._reloadCards()
+    await this._reloadCards({ force: true })
   }
 
   /**
@@ -331,7 +404,7 @@ export class BoardViewComponent {
     } else if (input) {
       input.value = ''
     }
-    await this._reloadCards()
+    await this._reloadCards({ force: true })
   }
 
   /**
@@ -347,7 +420,7 @@ export class BoardViewComponent {
       const reason = result.rejectReason || result.decision?.rejectReason || 'rejected'
       this.rejection = { instanceId, reason }
     }
-    await this._reloadCards()
+    await this._reloadCards({ force: true })
   }
 
   /**
@@ -579,7 +652,7 @@ export class BoardViewComponent {
     const instanceId = cardIdForNode(glmId)
     const result = await window.puffin.board.createCard({ instanceId })
     if (!result.success) this.rejection = { instanceId, reason: result.error }
-    await this._reloadCards()
+    await this._reloadCards({ force: true })
     if (this.picker) this.openPicker()
   }
 

@@ -86,6 +86,21 @@ describe('isDeclared', () => {
     assert.strictEqual(isDeclared('src/kernel.test.mjs', ['src/kernel.mjs']), false)
   })
 
+  it('lets a directory output declare what is inside it', () => {
+    // A component that is a folder: the spec says `src/probes/`, the session
+    // writes six modules in it, and string comparison called all six
+    // undeclared - a warning firing on the design working as written.
+    for (const f of ['src/probes/index.mjs', 'src/probes/library.mjs', 'src/probes/deep/x.mjs']) {
+      assert.strictEqual(isDeclared(f, ['polysim/src/probes/']), true, f)
+      assert.strictEqual(isDeclared(f, ['src/probes/']), true, f)
+    }
+  })
+
+  it('does not let a directory output declare its siblings', () => {
+    assert.strictEqual(isDeclared('src/probes.mjs', ['src/probes/']), false)
+    assert.strictEqual(isDeclared('src/other/x.mjs', ['src/probes/']), false)
+  })
+
   it('declares nothing when the spec named no outputs', () => {
     assert.strictEqual(isDeclared('src/kernel.mjs', []), false)
   })

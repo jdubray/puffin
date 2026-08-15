@@ -86,10 +86,26 @@ function changedPaths(before, after) {
  */
 function isDeclared(filePath, outputs) {
   const target = normalise(filePath)
-  return outputs.map(normalise).filter(Boolean).some(output =>
-    target === output ||
-    target.endsWith(`/${output}`) ||
-    output.endsWith(`/${target}`))
+  return outputs.map(normalise).filter(Boolean).some(output => {
+    // A directory output declares its contents. Real specs name a component
+    // that is a folder - `src/probes/` - and the session writes six modules
+    // inside it; comparing strings reported all six as undeclared, which is a
+    // warning firing on the design working exactly as written.
+    if (output.endsWith('/')) {
+      // Segment-wise, so the root tolerance above still applies: the spec's
+      // `polysim/src/probes/` and the session's `src/probes/deep/x.mjs` line up
+      // on the segments they share, and a sibling like `src/other/x.mjs` does not.
+      const dir = output.slice(0, -1).split('/').filter(Boolean)
+      const file = target.split('/').filter(Boolean)
+      for (let n = Math.min(dir.length, file.length); n >= 1; n--) {
+        if (dir.slice(-n).join('/') === file.slice(0, n).join('/')) return true
+      }
+      return false
+    }
+    return target === output ||
+      target.endsWith(`/${output}`) ||
+      output.endsWith(`/${target}`)
+  })
 }
 
 /**

@@ -9,6 +9,7 @@
  */
 
 import { validatePrompt } from '../../shared/validators.js'
+import { BUILT_IN_VIEWS } from '../../shared/constants.js'
 
 /**
  * Initial model state
@@ -1293,8 +1294,7 @@ export const resetStuckDetectionAcceptor = model => proposal => {
 export const switchViewAcceptor = model => proposal => {
   if (proposal?.type === 'SWITCH_VIEW') {
     // Core views plus plugin-contributed views (e.g., 'designer' from designer-plugin)
-    const validViews = ['config', 'prompt', 'specs', 'board', 'docs', 'user-stories', 'cli-output', 'polygraph', 'profile', 'git', 'debug', 'designer']
-    if (validViews.includes(proposal.payload.view)) {
+    if (BUILT_IN_VIEWS.includes(proposal.payload.view)) {
       model.currentView = proposal.payload.view
     }
   }

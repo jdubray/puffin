@@ -39,6 +39,7 @@ import { PolygraphWorkbenchComponent } from './components/polygraph-workbench/po
 import { SpecsViewComponent } from './components/specs-view/specs-view.js'
 import { DocsViewComponent } from './components/docs-view/docs-view.js'
 import { DoctorPanelComponent } from './components/doctor-panel/doctor-panel.js'
+import { BUILT_IN_VIEWS } from '../shared/constants.js'
 import { BoardViewComponent } from './components/board-view/board-view.js'
 
 // Plugin system
@@ -1822,7 +1823,7 @@ class PuffinApp {
    */
   updateViews(state) {
     // Core views - plugins may contribute additional views (e.g., designer-plugin)
-    const views = ['config', 'prompt', 'specs', 'board', 'user-stories', 'cli-output', 'polygraph', 'git', 'profile', 'debug']
+    const views = BUILT_IN_VIEWS
     const hasActivePluginView = this.sidebarViewManager.hasActivePluginView()
     const currentView = state.ui.currentView
 

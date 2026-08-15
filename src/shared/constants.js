@@ -130,3 +130,26 @@ export const DEFAULT_HISTORY = {
   activeBranch: 'main',
   activePromptId: null
 }
+
+/**
+ * Built-in views, in nav order.
+ *
+ * One list, because there used to be two: the SAM acceptor's whitelist decided
+ * whether a view could be switched to, and app.js's list decided which section
+ * got the `active` class. A view missing from either one fails silently — the
+ * tab highlights and nothing appears — which is exactly what happened twice.
+ */
+export const BUILT_IN_VIEWS = [
+  'config',
+  'prompt',
+  'specs',
+  'board',
+  'docs',
+  'user-stories',
+  'cli-output',
+  'polygraph',
+  'git',
+  'profile',
+  'debug',
+  'designer'
+]

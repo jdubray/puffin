@@ -1686,6 +1686,8 @@ coding agent would have to guess at. List findings worst-first with the glm id e
               <span class="specs-plan-reasons">${esc(c.reasons.join(' · '))}</span>
             </div>`).join('')}
         </details>` : ''}
+      ${(plan.advisories || []).map(a => `
+        <div class="specs-plan-advisory">◆ ${esc(a.text)}</div>`).join('')}
       ${plan.phases.map(phase => this._renderPhase(phase)).join('')}
       ${plan.cycle.length > 0 ? `
         <div class="specs-plan-phase specs-plan-cycle">

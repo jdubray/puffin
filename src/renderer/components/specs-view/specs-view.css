@@ -1035,3 +1035,14 @@
 @media (max-width: 900px) {
   .specs-body { grid-template-columns: 1fr; }
 }
+
+/* What the plan could not derive, said out loud rather than left to look
+   like an answer */
+.specs-plan-advisory {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--warning-color, #d6a15a);
+  background: var(--bg-tertiary, #2e2e2e);
+  font-size: 12.5px;
+  color: var(--text-secondary, #999);
+}

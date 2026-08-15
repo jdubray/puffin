@@ -12,10 +12,10 @@
 const { describe, it, before } = require('node:test')
 const assert = require('node:assert/strict')
 
-let planGeneration, laneFor, DEFAULT_PHASE_SIZE
+let planGeneration, laneFor, promptTemplate, DEFAULT_PHASE_SIZE
 
 before(async () => {
-  ;({ planGeneration, laneFor, DEFAULT_PHASE_SIZE } =
+  ;({ planGeneration, laneFor, promptTemplate, DEFAULT_PHASE_SIZE } =
     await import('../src/shared/generation-plan.js'))
 })
 
@@ -84,6 +84,28 @@ describe('readiness — the cut that decides phase zero', () => {
     const plan = planGeneration([
       component('acme:app.core'), promptSpec('acme:app.core'),
       acceptanceSpec('acme:app.core', { verifier: { command: 'pytest -q', expect: 'exit0' } })
+    ])
+    assert.strictEqual(plan.totals.ready, 1)
+  })
+
+  it('reads the template under every key a real sekkei has used', () => {
+    // The bug this exists to prevent: sekkeis are authored with `template`,
+    // GLM's generator reads `prompt_template`, and SpecBody calls it
+    // `content`. Knowing only one key reported eight finished components as
+    // unready and sent them all to phase zero.
+    for (const key of ['template', 'prompt_template', 'content']) {
+      assert.strictEqual(promptTemplate({ [key]: 'build it' }), 'build it', key)
+    }
+    assert.strictEqual(promptTemplate({ template: '  ' }), '')
+    assert.strictEqual(promptTemplate({}), '')
+    assert.strictEqual(promptTemplate(null), '')
+  })
+
+  it('plans a component whose prompt spec uses the authored `template` key', () => {
+    const plan = planGeneration([
+      component('acme:app.core'),
+      { ...promptSpec('acme:app.core'), body: { template: 'build it', outputs: ['src/x.js'] } },
+      acceptanceSpec('acme:app.core')
     ])
     assert.strictEqual(plan.totals.ready, 1)
   })
@@ -252,6 +274,39 @@ describe('size and policy', () => {
 })
 
 // --- scope ------------------------------------------------------------------
+
+describe('advisories — what the plan could not derive', () => {
+  it('says so when nothing declares a dependency, since the order means nothing', () => {
+    const plan = planGeneration([
+      ...readyComponent('acme:app.a'), ...readyComponent('acme:app.b')
+    ])
+    assert.ok(plan.advisories.some(a => a.kind === 'no-dependency-edges'))
+  })
+
+  it('stays quiet once the edges are there', () => {
+    const plan = planGeneration([
+      ...readyComponent('acme:app.a',
+        { relationships: [{ kind: 'depends-on', targetGlmId: 'acme:app.b' }] }),
+      ...readyComponent('acme:app.b')
+    ])
+    assert.ok(!plan.advisories.some(a => a.kind === 'no-dependency-edges'))
+  })
+
+  it('says so when no interaction declares an fsm contract', () => {
+    // Everything then plans as stateless: no model check, and no capture-ready
+    // instruction in the prompt spec. That is a real answer or a missing
+    // contract, and only the author knows which.
+    const plan = planGeneration(readyComponent('acme:app.a'))
+    assert.ok(plan.advisories.some(a => a.kind === 'nothing-declared-stateful'))
+  })
+
+  it('stays quiet once something is stateful', () => {
+    const plan = planGeneration([
+      ...readyComponent('acme:app.a'), fsmInteraction('acme:app.a')
+    ])
+    assert.ok(!plan.advisories.some(a => a.kind === 'nothing-declared-stateful'))
+  })
+})
 
 describe('scope', () => {
   it('plans only what changed when given a watermark', () => {

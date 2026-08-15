@@ -62,6 +62,27 @@ function verifierCommand(body) {
   return ''
 }
 
+/**
+ * The instruction text a prompt spec carries.
+ *
+ * Read under every key the sekkei has actually used. Real sekkeis are authored
+ * with `template`; GLM's own generator reads `prompt_template`; `content` is
+ * the generic SpecBody field. Recognising only one of them reported eight fully
+ * authored components as unready and sent them all to phase zero — a planner
+ * that is wrong about readiness is worse than no planner, because it sends you
+ * to rewrite specs that were already finished.
+ *
+ * @param {Object} body - Prompt spec body
+ * @returns {string} Empty when the spec is genuinely a stub
+ */
+export function promptTemplate(body) {
+  for (const key of ['template', 'prompt_template', 'content']) {
+    const value = body?.[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
 /** The glm id of the component a node hangs beneath, or the node itself. @private */
 function componentIdOf(glmId, componentIds) {
   if (componentIds.has(glmId)) return glmId
@@ -116,9 +137,8 @@ function readinessGaps(component, specsByKind, stateful) {
     gaps.push('no prompt spec — nothing tells the implementer what to build')
   } else {
     const body = prompt.body || {}
-    const template = typeof body.prompt_template === 'string' ? body.prompt_template.trim()
-      : typeof body.content === 'string' ? body.content.trim() : ''
-    if (!template) gaps.push('prompt spec has no prompt_template')
+    const template = promptTemplate(body)
+    if (!template) gaps.push('prompt spec carries no template')
     if (!Array.isArray(body.outputs) || body.outputs.length === 0) {
       gaps.push('prompt spec names no outputs — generation has nowhere to write')
     }
@@ -255,6 +275,27 @@ export function planGeneration(nodes = [], options = {}) {
 
   const { layers, cycle } = dependencyLayers(ready)
 
+  // What the plan could not derive, said out loud. A phase ordering with no
+  // edges behind it and a lane chosen by default both look like answers; the
+  // planner is the only thing in a position to know they were not.
+  const advisories = []
+  if (ready.length > 1 && ready.every(item => item.deps.size === 0)) {
+    advisories.push({
+      kind: 'no-dependency-edges',
+      text: 'No component in scope declares a depends-on edge, so every phase ' +
+        'is one layer and the split is by size alone. Add the edges in the ' +
+        'sekkei to get an ordering that means something.'
+    })
+  }
+  if (components.length > 0 && statefulIds.size === 0) {
+    advisories.push({
+      kind: 'nothing-declared-stateful',
+      text: 'No interaction declares an fsm contract, so every component is ' +
+        'planned as stateless and proved by its acceptance verifier alone — ' +
+        'no model check, and no capture-ready instruction in its prompt spec.'
+    })
+  }
+
   const phases = []
   layers.forEach((layer, layerIndex) => {
     // Lane before size: a phase must be judgeable as one kind of thing.
@@ -283,6 +324,7 @@ export function planGeneration(nodes = [], options = {}) {
 
   return {
     phases,
+    advisories,
     notReady: notReady.sort((a, b) => a.glmId.localeCompare(b.glmId)),
     cycle: cycle.map(stripDeps),
     queued: queued.sort((a, b) => a.glmId.localeCompare(b.glmId)),

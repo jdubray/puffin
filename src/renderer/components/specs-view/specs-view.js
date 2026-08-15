@@ -1356,7 +1356,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       else if (action === 'author') this.submitAuthoring()
       else if (action === 'cancel-author') this.cancelAuthoring()
       else if (action === 'replan') this.recomputePlan()
-      else if (action === 'queue-phase') this.queuePhase(Number(target.dataset.phase))
+      else if (action === 'queue-phase') this.queuePhase(Number(button.dataset.phase))
       else if (action === 'mark-generated') this.markGenerated()
       else if (action === 'create-bind') this.createAndBind()
       else if (action === 'bind-existing') this.bindExisting()

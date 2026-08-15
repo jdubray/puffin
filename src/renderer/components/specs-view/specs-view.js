@@ -135,6 +135,14 @@ Use the glm_* MCP tools for every change:
   glm_apply_patch — update an existing node's body (JSON-Patch)
   glm_verify — run the 7-gate verifier when the change is complete
 
+Where the design comes from:
+- The problem statement, the product rationale and the requirements live as
+  free-form documents under docs/ — that is the WHY, and it stays prose. Read
+  them before authoring, and cite them by filename in the nodes they justify.
+- The sekkei is the HOW: a bill of materials for the software. It is the source
+  the code is generated from, the way source files are the source a binary is
+  compiled from. Write it so a coding agent could build from it without asking.
+
 Sekkei authoring rules:
 - Strata nest: system → capability → component → interaction → spec. Put content at
   the altitude it belongs to; never inline a child's content into its parent.

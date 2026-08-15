@@ -21,6 +21,7 @@ const os = require('os')
 const path = require('path')
 const { readGlmConfig } = require('./glm-client')
 const { PluginCheckService } = require('./plugin-check-service')
+const { detectProjectLanguage } = require('./project-language')
 
 const PROBE_TIMEOUT_MS = 8000
 
@@ -441,6 +442,25 @@ class DoctorService {
       status: writable ? 'ok' : 'fail',
       detail: writable ? puffinDir : `cannot write to ${puffinDir}`,
       fix: writable ? undefined : 'Check the folder permissions — Puffin keeps project state there.'
+    })
+
+    // Which build lane this project is in. polygen emits JavaScript, so on a
+    // Python or Go project it is not broken — it is not applicable, and the
+    // acceptance-verifier lane carries the work instead.
+    const lang = detectProjectLanguage(this.projectPath)
+    checks.push({
+      id: 'project:language',
+      group: 'Project',
+      label: 'polygen applicable',
+      status: lang.polygenApplicable ? 'ok' : 'skip',
+      detail: lang.language
+        ? (lang.polygenApplicable
+            ? `${lang.language} (${lang.evidence}) — machines can be generated`
+            : `not applicable — this is a ${lang.language} project (${lang.evidence}) and polygen emits JavaScript; machines are authored by hand here, and the model checker still applies`)
+        : 'not applicable — no build file recognised, so polygen is not offered',
+      fix: lang.polygenApplicable
+        ? undefined
+        : 'Not a fault: implement through the acceptance-verifier lane, and hand-author any state machine.'
     })
 
     const docsDir = path.join(this.projectPath, 'docs')

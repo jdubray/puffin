@@ -413,14 +413,28 @@
     <div class="spine">
 
       <div class="station">
+        <div class="station-no">STATION 00</div>
+        <div class="station-name">State the problem</div>
+        <span class="station-where">Docs tab · docs/</span>
+        <p>
+          The problem, the rationale and the requirements stay <em>prose</em>,
+          as free-form documents under <code>docs/</code>. This is the why, and
+          it is a different conversation from the how — held once, then read by
+          every authoring session that follows.
+        </p>
+        <span class="gate">GATE · human judgement</span>
+      </div>
+
+      <div class="station">
         <div class="station-no">STATION 01</div>
         <div class="station-name">Author</div>
         <span class="station-where">Sekkei tab · GLM</span>
         <p>
-          A session edits the design through the <code>glm_*</code> tools —
-          creating, patching and wiring nodes across the strata
+          A session reads those documents and writes the design through the
+          <code>glm_*</code> tools, across the strata
           <em>system → capability → component → interaction → spec</em>.
-          It never touches source code.
+          The sekkei is the <em>bill of materials</em>: the source code is
+          generated from, as source files are what a binary is compiled from.
         </p>
         <span class="gate">GATE · none</span>
       </div>
@@ -443,11 +457,10 @@
         <span class="station-where">session · polygen · polynv</span>
         <p>
           The node's <em>prompt spec</em> is the brief: context bundle,
-          regeneration template, verifier command. State machines are authored
-          by polygen and arrive pre-verified; polynv then elicits invariants
-          against the real state graph.
+          regeneration template, verifier command. Which lane the component
+          takes depends on what it is — see below.
         </p>
-        <span class="gate is-open">GATE · model check</span>
+        <span class="gate is-open">GATE · lane-dependent</span>
       </div>
 
       <div class="station is-unwired">
@@ -475,6 +488,39 @@
       </div>
 
     </div>
+
+    <h3>Two lanes, chosen by the component</h3>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Component</th><th>Built by</th><th>Proved by</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Holds state, in JS/TS</td>
+            <td><b>polygen</b> — contract → module → invariants → corpus</td>
+            <td>Model check over every reachable state, then the acceptance verifier</td>
+          </tr>
+          <tr>
+            <td>Holds state, other language</td>
+            <td>Authored by the session — polygen emits JavaScript only</td>
+            <td>Model check still applies (it reads the machine's artifacts), then the acceptance verifier</td>
+          </tr>
+          <tr>
+            <td>Everything else</td>
+            <td>Authored by the session from the prompt spec</td>
+            <td>The acceptance spec's verifier command — deliverables and checkable criteria</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The difference is worth stating plainly: a model check is a proof over all
+      reachable states, an acceptance verifier is a set of examples. Tests
+      sample; the checker exhausts. So the stronger lane is used wherever it is
+      available — and where it isn't, the spec says so rather than implying the
+      weaker one is equivalent.
+    </p>
 
     <p class="bend">
       <b>One backward bend, and it carries evidence.</b>
@@ -544,12 +590,12 @@
           </tr>
           <tr>
             <td><span class="engine">polygen</span></td>
-            <td>Authoring new stateful code from a contract</td>
+            <td>Authoring new stateful code from a contract — JavaScript/TypeScript only</td>
             <td>SAM v2 module + invariants + trace corpus, self-repaired</td>
           </tr>
           <tr>
             <td><span class="engine">polygraph</span></td>
-            <td>Verification — replay and model check</td>
+            <td>Verification — replay and model check, whatever wrote the machine</td>
             <td>Counterexamples, reachable-state coverage</td>
           </tr>
           <tr>
@@ -601,6 +647,7 @@
           <tr><th>Capability</th><th>State</th><th>Note</th></tr>
         </thead>
         <tbody>
+          <tr><td>Problem docs in docs/</td><td><span class="mark mark-on">wired</span></td><td>Read and authored from the Docs tab</td></tr>
           <tr><td>Sekkei authoring</td><td><span class="mark mark-on">wired</span></td><td>Threaded, resumable, over MCP on HTTP</td></tr>
           <tr><td>DoRC gate</td><td><span class="mark mark-on">wired</span></td><td>backlog → ready asks the verifier</td></tr>
           <tr><td>Board dispatch</td><td><span class="mark mark-on">wired</span></td><td>Illegal drags bounce with the machine's reason</td></tr>
@@ -610,6 +657,8 @@
           <tr><td>Evolution gate</td><td><span class="mark mark-part">manual</span></td><td>polyvers runs from the workbench, not from a card</td></tr>
           <tr><td>Start implementation</td><td><span class="mark mark-off">open</span></td><td>The card advances; no session is spawned</td></tr>
           <tr><td>Acceptance validation</td><td><span class="mark mark-off">open</span></td><td>You press ✓ / ✗; the verifier should</td></tr>
+          <tr><td>Lane selection</td><td><span class="mark mark-part">reported</span></td><td>Doctor names the lane; the card does not yet route by it</td></tr>
+          <tr><td>Code review · PR</td><td><span class="mark mark-off">open</span></td><td>A card reaches done with no review gate and no git step</td></tr>
         </tbody>
       </table>
     </div>
@@ -636,9 +685,11 @@
         <p class="phase-name">One component at a time</p>
         <p>
           DoRC gate decides <code>ready</code>. The prompt spec briefs the
-          session; wherever the component is a state machine, polygen authors it
-          and it is verified before it is read. Elicit invariants, link them to
-          the spec, then let the acceptance verifier decide <code>done</code>.
+          session. A state machine in JS/TS goes to polygen and arrives
+          verified; one in another language is authored and then model-checked
+          all the same; everything else is proved by its acceptance verifier.
+          Elicit invariants where there is a machine, link them to the spec,
+          then let the verifier decide <code>done</code>.
         </p>
       </li>
       <li class="phase">

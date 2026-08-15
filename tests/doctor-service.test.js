@@ -47,8 +47,12 @@ describe('DoctorService', () => {
 
     assert.strictEqual(find(checks, 'polygraph:service').status, 'skip')
     assert.strictEqual(find(checks, 'board:runtime').status, 'skip')
+    // A skip must name itself a non-verdict — either "we could not test this"
+    // or "this does not apply here". Silence would read as approval.
     for (const check of checks) {
-      if (check.status === 'skip') assert.match(check.detail, /skipped/)
+      if (check.status === 'skip') {
+        assert.match(check.detail, /skipped|not applicable/, check.id)
+      }
     }
   })
 

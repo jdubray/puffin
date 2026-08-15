@@ -25,6 +25,7 @@ const { GlmClient } = require('./glm-client')
 const { setupGlmSessionIntegration } = require('./glm-integration')
 const { BoardRuntime } = require('./board-runtime')
 const { GenerationCoordinator } = require('./generation-coordinator')
+const { buildComponentPrompt } = require('./component-prompt')
 
 // Polygraph workbench — engine access for any project built with Polygraph
 const polygraphService = new PolygraphService()
@@ -579,6 +580,30 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('board:cancelGeneration', async (event, { generationId } = {}) => {
     if (!generationId) return { success: false, error: 'generationId is required' }
     return generationCoordinator.cancel(generationId)
+  })
+
+  /**
+   * The prompt a card runs, resolved from the sekkei.
+   *
+   * Built here rather than in the renderer because it needs the whole node set
+   * to resolve the context bundle, and because a session should never be handed
+   * a list of ids to go fetch for itself.
+   */
+  ipcMain.handle('board:componentPrompt', async (event, { workspaceId, glmId, stage } = {}) => {
+    try {
+      if (!workspaceId || !glmId) {
+        return { success: false, error: 'workspaceId and glmId are required' }
+      }
+      const nodes = await glmClient.listNodes(workspaceId)
+      const language = detectProjectLanguage(projectPath)
+      const lane = {
+        language,
+        stateful: validationLaneFor({ isStateMachine: true, language: language.language })
+      }
+      return buildComponentPrompt({ nodes, glmId, stage, lane })
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
   })
 
   ipcMain.handle('board:getCard', async (event, { instanceId } = {}) => {

@@ -60,6 +60,7 @@ export class BoardViewComponent {
     this.status = null
     this.cards = []
     this.generations = []
+    this.session = null   // the one running card session, if any
     this.rejection = null // { instanceId, reason }
     this.journalFor = null // { instanceId, entries }
     this.binding = null // this project's bound sekkei (the gate's source)
@@ -160,6 +161,118 @@ export class BoardViewComponent {
       this.generations = batches.success ? batches.generations : []
     } catch { this.generations = [] }
     this.render()
+  }
+
+  // ===== running a card's session =====
+
+  /**
+   * Start work on a card: dispatch START_WORK, then run its PLANNING session.
+   *
+   * The dispatch goes first on purpose. It can be rejected - by the card (work
+   * starts from ready) or by a held batch - and a session launched before the
+   * machine agreed would be work the board never asked for.
+   *
+   * @param {string} instanceId
+   */
+  async startWork(instanceId) {
+    await this.dispatch(instanceId, 'START_WORK')
+    const card = this.cards.find(c => (c.instanceId || c.id) === instanceId)
+    if (card?.state?.cardState !== 'planning') return // rejected; the reason is on screen
+    return this._runSession(instanceId, 'plan')
+  }
+
+  /**
+   * Run the IMPLEMENTATION session for a card already in implementing.
+   *
+   * Separate from planning because the machine separates them: planning names
+   * what the spec left open, and a person decides the plan is ready. Handing
+   * both to one session would collapse that decision into a turn boundary.
+   *
+   * @param {string} instanceId
+   */
+  async runImplementation(instanceId) {
+    return this._runSession(instanceId, 'implement')
+  }
+
+  /**
+   * @private
+   * Build the prompt from the sekkei and run it, streaming into the panel.
+   */
+  async _runSession(instanceId, stage) {
+    const node = this._nodeForCard(instanceId)
+    if (!node) {
+      this.rejection = { instanceId, reason: 'no sekkei node behind this card - nothing to build from' }
+      return this.render()
+    }
+    if (this.session?.running) {
+      this.rejection = { instanceId, reason: 'a session is already running - one at a time' }
+      return this.render()
+    }
+
+    this.session = {
+      instanceId, stage, title: node.title || node.glmId,
+      text: '', running: true, error: null
+    }
+    this.render()
+
+    const built = await window.puffin.board.componentPrompt({
+      workspaceId: this.glmWorkspaceId, glmId: node.glmId, stage
+    })
+    if (!built.success) {
+      this.session = { ...this.session, running: false, error: built.error }
+      return this.render()
+    }
+
+    this._subscribeSession()
+    window.puffin.claude.submit({ prompt: built.prompt, sessionId: null })
+  }
+
+  /**
+   * @private
+   * Subscribe once. The response channel is global, so the guard is the
+   * session's own running flag rather than a per-card listener.
+   */
+  _subscribeSession() {
+    if (this._sessionSubscribed) return
+    this._sessionSubscribed = true
+    window.puffin.claude.onResponse((chunk) => {
+      if (!this.session?.running) return
+      this.session.text += typeof chunk === 'string' ? chunk : (chunk?.content || '')
+      this._renderSessionOnly()
+    })
+    window.puffin.claude.onComplete(() => {
+      if (!this.session?.running) return
+      this.session.running = false
+      // The card does NOT advance here. A finished turn is not a passed gate:
+      // planning ends when a person says the plan is ready, and implementing
+      // ends at the model check - both are decisions the machine owns.
+      this.render()
+    })
+    window.puffin.claude.onError((error) => {
+      if (!this.session?.running) return
+      this.session.running = false
+      this.session.error = typeof error === 'string' ? error : (error?.message || 'failed')
+      this.render()
+    })
+  }
+
+  /** Stop the running session. The card stays where it is. */
+  async cancelSession() {
+    try { await window.puffin.claude.cancel() } catch { /* already gone */ }
+    if (this.session) this.session.running = false
+    this.render()
+  }
+
+  /**
+   * @private
+   * Repaint only the session body, so a streaming reply does not rebuild the
+   * board underneath the user's cursor.
+   */
+  _renderSessionOnly() {
+    const body = this.container?.querySelector('#board-session-body')
+    if (!body) return this.render()
+    body.textContent = this.session.text
+    body.scrollTop = body.scrollHeight
   }
 
   /**
@@ -490,6 +603,10 @@ export class BoardViewComponent {
     else if (action === 'review-fail' && id) this.dispatch(id, 'REVIEW_FAILED', { finding: reason || 'defect' })
     else if (action === 'resume' && id) this.dispatch(id, 'RESUME')
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')
+    else if (action === 'start-work' && id) this.startWork(id)
+    else if (action === 'implement' && id) this.runImplementation(id)
+    else if (action === 'close-session') { this.session = null; this.render() }
+    else if (action === 'cancel-session') this.cancelSession()
     else if (action === 'resume-generation' && id) this.resumeGeneration(id)
     else if (action === 'cancel-generation' && id) this.cancelGeneration(id)
   }
@@ -569,10 +686,43 @@ export class BoardViewComponent {
         ${this.rejection.pending ? '⏳' : '⤺'} <code>${esc(this.rejection.instanceId)}</code> — ${esc(this.rejection.reason)}
       </div>` : ''}
       ${this._renderGenerations()}
+      ${this._renderSession()}
       ${this.picker ? this._renderPicker() : ''}
       ${this._renderBody()}
       ${this.journalFor ? this._renderJournal() : ''}
     `
+  }
+
+  /**
+   * The running session, if any.
+   *
+   * Shown on the board rather than sent to the Prompt tab because the session
+   * belongs to a card: its subject is that card's spec, and reading it here is
+   * how you decide whether the plan is ready.
+   * @private
+   */
+  _renderSession() {
+    const session = this.session
+    if (!session) return ''
+    const label = session.stage === 'plan' ? 'planning' : 'implementing'
+    return `<div class="board-session">
+      <div class="board-session-head">
+        <b>${session.running ? '&#9203;' : '&#9679;'} ${esc(session.title)}</b>
+        <span class="board-session-meta">${esc(label)} session${session.running ? ' &mdash; running' : ' &mdash; finished'}</span>
+        <span class="board-session-actions">
+          ${session.running
+            ? '<button class="btn btn-secondary btn-sm" data-action="cancel-session">Stop</button>'
+            : '<button class="btn btn-secondary btn-sm" data-action="close-session">Close</button>'}
+        </span>
+      </div>
+      ${session.error ? `<div class="board-rejection">&#10007; ${esc(session.error)}</div>` : ''}
+      <pre class="board-session-body" id="board-session-body">${esc(session.text)}</pre>
+      ${!session.running && !session.error ? `<div class="board-session-note">
+        The turn is over; the card has not moved. ${session.stage === 'plan'
+          ? 'Read the plan, then use <b>plan ready</b> when it is.'
+          : 'Move the card to validating when the code is in &mdash; the model check answers there.'}
+      </div>` : ''}
+    </div>`
   }
 
   /**
@@ -699,8 +849,22 @@ export class BoardViewComponent {
           <button class="btn btn-sm board-btn-pass" data-action="validation-pass" data-id="${esc(id)}" title="Validation passed — hands the card to review">✓</button>
           <button class="btn btn-sm board-btn-fail" data-action="validation-fail" data-id="${esc(id)}" data-reason="verifier-failed" title="Validation failed (verifier-failed)">✗</button>
         ` : ''}
+        ${state.cardState === 'ready' ? `
+          <button class="btn btn-sm board-btn-pass" data-action="start-work" data-id="${esc(id)}"
+            ${node && !this.session?.running ? '' : 'disabled'}
+            title="${node
+              ? 'Start work: run a planning session from this component&apos;s prompt spec'
+              : 'This card is not backed by a sekkei node'}">▶ plan it</button>
+        ` : ''}
         ${state.cardState === 'planning' ? `
           <button class="btn btn-sm board-btn-pass" data-action="plan-ready" data-id="${esc(id)}" title="The plan is written — start implementing">plan ready</button>
+        ` : ''}
+        ${state.cardState === 'implementing' ? `
+          <button class="btn btn-sm board-btn-pass" data-action="implement" data-id="${esc(id)}"
+            ${node && !this.session?.running ? '' : 'disabled'}
+            title="${node
+              ? 'Run the implementation session: write the files the spec names, against its verifier'
+              : 'This card is not backed by a sekkei node'}">▶ build it</button>
         ` : ''}
         ${state.cardState === 'reviewing' ? `
           <button class="btn btn-sm board-btn-pass" data-action="review-pass" data-id="${esc(id)}" title="Review passed — the card is done">✓</button>

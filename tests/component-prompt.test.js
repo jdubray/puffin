@@ -1,0 +1,154 @@
+/**
+ * The prompt a card runs.
+ *
+ * These assert what must be IN the prompt, because everything missing from it
+ * is something the session will either guess at or spend turns retrieving.
+ * The two stages differ in exactly one way that matters — planning writes no
+ * files — and that difference is load-bearing, so it is tested directly.
+ */
+
+'use strict'
+
+const { describe, it } = require('node:test')
+const assert = require('node:assert/strict')
+
+const { buildComponentPrompt } = require('../src/main/component-prompt.js')
+
+const ID = 'cogfab:sim.kernel.core'
+
+const nodes = () => [
+  {
+    glmId: ID, stratum: 'component', title: 'kernel.mjs', description: 'the clock',
+    body: { boundary: 'owns the dispatch loop', runtime: 'node' }
+  },
+  {
+    glmId: `${ID}.spec.prompt`, stratum: 'spec', specKind: 'prompt',
+    body: {
+      template: 'Implement the virtual clock and dispatch loop.',
+      outputs: ['src/kernel.mjs'],
+      context_bundle: ['cogfab:sim.kernel.streams']
+    }
+  },
+  {
+    glmId: `${ID}.spec.acceptance`, stratum: 'spec', specKind: 'acceptance',
+    body: { verifier: { command: 'bun test src/kernel.test.mjs' },
+      acceptance_criteria: ['events fire in timestamp order'] }
+  },
+  {
+    glmId: `${ID}.dispatch_cycle`, stratum: 'interaction', title: 'dispatch cycle',
+    body: { contract: 'fsm', states: ['idle', 'running'], transitions: ['idle->running'] }
+  },
+  {
+    glmId: 'cogfab:sim.kernel.streams', stratum: 'component', title: 'streams',
+    description: 'named RNG streams', body: { boundary: 'owns randomness' }
+  }
+]
+
+const build = (overrides = {}) =>
+  buildComponentPrompt({ nodes: nodes(), glmId: ID, ...overrides })
+
+describe('what the prompt carries', () => {
+  it('carries the spec template, outputs and verifier', () => {
+    const result = build()
+    assert.strictEqual(result.success, true)
+    assert.match(result.prompt, /virtual clock and dispatch loop/)
+    assert.match(result.prompt, /src\/kernel\.mjs/)
+    assert.match(result.prompt, /bun test src\/kernel\.test\.mjs/)
+    assert.deepStrictEqual(result.outputs, ['src/kernel.mjs'])
+  })
+
+  it('resolves the context bundle instead of handing over ids to go fetch', () => {
+    // A session that has to retrieve its own context spends turns on it and can
+    // silently skip what it cannot find.
+    const result = build()
+    assert.match(result.prompt, /named RNG streams/)
+    assert.match(result.prompt, /owns randomness/)
+  })
+
+  it('reports a dangling reference rather than resolving it to nothing', () => {
+    const withGhost = nodes()
+    withGhost[1].body.context_bundle = ['cogfab:sim.kernel.streams', 'cogfab:sim.ghost']
+    const result = buildComponentPrompt({ nodes: withGhost, glmId: ID })
+    assert.deepStrictEqual(result.missingContext, ['cogfab:sim.ghost'])
+    assert.match(result.prompt, /UNRESOLVED REFERENCES/)
+    assert.match(result.prompt, /defect\s+in the spec/)
+  })
+
+  it('includes the acceptance criteria the card will be judged on', () => {
+    assert.match(build().prompt, /events fire in timestamp order/)
+  })
+
+  it('includes the interaction contract, which is the state vocabulary', () => {
+    assert.match(build().prompt, /dispatch_cycle/)
+    assert.match(build().prompt, /idle->running/)
+  })
+
+  it('says plainly when the acceptance spec names no verifier', () => {
+    const noGate = nodes().filter(n => !n.glmId.endsWith('.spec.acceptance'))
+    const result = buildComponentPrompt({ nodes: noGate, glmId: ID })
+    assert.strictEqual(result.success, true)
+    assert.match(result.prompt, /cannot pass its gate/)
+  })
+
+  it('refuses to build a prompt from a spec with no template', () => {
+    // The planner should have caught this; refusing here means a card can never
+    // start work on a spec that says nothing.
+    const stub = nodes()
+    stub[1].body.template = ''
+    const result = buildComponentPrompt({ nodes: stub, glmId: ID })
+    assert.strictEqual(result.success, false)
+    assert.match(result.error, /no prompt spec template/)
+  })
+
+  it('refuses an unknown component', () => {
+    const result = buildComponentPrompt({ nodes: nodes(), glmId: 'cogfab:sim.nope' })
+    assert.strictEqual(result.success, false)
+  })
+})
+
+describe('the two stages', () => {
+  it('forbids writing during planning', () => {
+    const result = build({ stage: 'plan' })
+    assert.match(result.prompt, /Do NOT write or edit any file/)
+    assert.doesNotMatch(result.prompt, /Write the files listed under OUTPUTS/)
+  })
+
+  it('asks planning to name what the spec does not settle', () => {
+    assert.match(build({ stage: 'plan' }).prompt, /Name anything the spec does not settle/)
+  })
+
+  it('asks implementation to run the verifier itself', () => {
+    const result = build({ stage: 'implement' })
+    assert.match(result.prompt, /Run it yourself before you finish/)
+    assert.doesNotMatch(result.prompt, /Do NOT write or edit any file/)
+  })
+
+  it('tells implementation to escalate rather than guess', () => {
+    // An escalated card is a normal outcome; a wrong guess found at review is not.
+    assert.match(build({ stage: 'implement' }).prompt, /stop and say so/)
+  })
+})
+
+describe('the proof lane', () => {
+  it('names capture-ready where polygen cannot emit', () => {
+    const result = build({
+      stage: 'implement',
+      lane: { language: { language: 'python' }, stateful: { lane: 'captured' } }
+    })
+    assert.match(result.prompt, /CAPTURE-READY/)
+    assert.match(result.prompt, /step-listener seam/)
+    assert.match(result.prompt, /python/)
+  })
+
+  it('names the model check where polygen does emit', () => {
+    const result = build({
+      lane: { language: { language: 'javascript' }, stateful: { lane: 'generated' } }
+    })
+    assert.match(result.prompt, /model-check/)
+    assert.doesNotMatch(result.prompt, /CAPTURE-READY/)
+  })
+
+  it('omits the lane paragraph entirely when the lane is unknown', () => {
+    assert.doesNotMatch(build().prompt, /HOW THIS IS PROVED/)
+  })
+})

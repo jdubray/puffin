@@ -789,6 +789,7 @@ contextBridge.exposeInMainWorld('puffin', {
     start: () => ipcRenderer.invoke('board:start'),
     createCard: (args) => ipcRenderer.invoke('board:createCard', args),
     listCards: () => ipcRenderer.invoke('board:listCards'),
+    componentPrompt: (args) => ipcRenderer.invoke('board:componentPrompt', args),
     createGeneration: (args) => ipcRenderer.invoke('board:createGeneration', args),
     listGenerations: () => ipcRenderer.invoke('board:listGenerations'),
     resumeGeneration: (args) => ipcRenderer.invoke('board:resumeGeneration', args),

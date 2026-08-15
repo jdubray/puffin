@@ -46,7 +46,7 @@ describe('task-card machine', () => {
     assert.strictEqual(r.post.cardState, 'planning', 'START_WORK enters the plan, not the work')
 
     // No shortcut: implementation is reachable only through PLAN_READY
-    r = step('SUBMIT_FOR_VALIDATION')
+    r = step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
     assert.strictEqual(r.changed, false, 'a card cannot skip from planning to validating')
 
     r = step('PLAN_READY')
@@ -58,7 +58,7 @@ describe('task-card machine', () => {
     step('MARK_READY', { gate: 'pass' })
     step('START_WORK')
     step('PLAN_READY')
-    step('SUBMIT_FOR_VALIDATION')
+    step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
 
     // A correction returns to implementing, never to planning
     const r = step('VALIDATION_FAILED', { reason: 'verifier-failed' })
@@ -73,7 +73,7 @@ describe('task-card machine', () => {
     step('MARK_READY', { gate: 'pass' })
     step('START_WORK')
     step('PLAN_READY')
-    step('SUBMIT_FOR_VALIDATION')
+    step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
 
     let r = step('VALIDATION_PASSED')
     assert.strictEqual(r.post.cardState, 'reviewing', 'passing validation does not finish a card')
@@ -89,11 +89,11 @@ describe('task-card machine', () => {
     step('PLAN_READY')
 
     // One validation failure, then one review finding: two corrections total
-    step('SUBMIT_FOR_VALIDATION')
+    step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
     let r = step('VALIDATION_FAILED', { reason: 'missing-deliverable' })
     assert.strictEqual(r.post.reworkCount, 1)
 
-    step('SUBMIT_FOR_VALIDATION')
+    step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
     step('VALIDATION_PASSED')
     r = step('REVIEW_FAILED', { finding: 'spec-mismatch' })
     assert.strictEqual(r.post.cardState, 'implementing')
@@ -101,7 +101,7 @@ describe('task-card machine', () => {
     assert.strictEqual(r.post.reworkCount, 2, 'validation and review share one budget')
 
     // The third correction, from either source, escalates
-    step('SUBMIT_FOR_VALIDATION')
+    step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
     step('VALIDATION_PASSED')
     r = step('REVIEW_FAILED', { finding: 'defect' })
     assert.strictEqual(r.post.cardState, 'needsHuman')
@@ -114,14 +114,14 @@ describe('task-card machine', () => {
     step('START_WORK')
     step('PLAN_READY')
     for (let lap = 1; lap <= 2; lap++) {
-      step('SUBMIT_FOR_VALIDATION')
+      step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
       const r = step('VALIDATION_FAILED', { reason: 'verifier-failed' })
       assert.strictEqual(r.post.cardState, 'implementing')
       assert.strictEqual(r.post.reworkCount, lap)
       assert.strictEqual(r.post.lastSignal, 'verifier-failed')
     }
     // Third failure does not get another lap — the human gets the card
-    step('SUBMIT_FOR_VALIDATION')
+    step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
     const r = step('VALIDATION_FAILED', { reason: 'missing-deliverable' })
     assert.strictEqual(r.post.cardState, 'needsHuman')
     assert.strictEqual(r.post.lastSignal, 'budget-exhausted')
@@ -149,7 +149,7 @@ describe('task-card machine', () => {
     step('MARK_READY', { gate: 'pass' })
     step('START_WORK')
     step('PLAN_READY')
-    step('SUBMIT_FOR_VALIDATION')
+    step('SUBMIT_FOR_VALIDATION', { check: 'pass' })
     step('VALIDATION_PASSED')
     let r = step('REVIEW_PASSED')
     assert.strictEqual(r.post.cardState, 'done')
@@ -170,6 +170,36 @@ describe('task-card machine', () => {
     const report = machine.instance({}).validate()
     assert.strictEqual(report.errors?.length ?? 0, 0,
       `validate() errors: ${JSON.stringify(report.errors)}`)
+  })
+
+  it('the model check decides validation — a failing machine cannot pass', () => {
+    const step = fresh()
+    step('MARK_READY', { gate: 'pass' })
+    step('START_WORK')
+    step('PLAN_READY')
+
+    // Polygraph found a reachable violation: the card stays where it is.
+    let r = step('SUBMIT_FOR_VALIDATION', { check: 'fail' })
+    assert.strictEqual(r.changed, false, 'a failing check is an observable rejection')
+    assert.strictEqual(r.post.cardState, 'implementing')
+
+    // A component with no state graph answers honestly and moves on — the
+    // acceptance verifier is still ahead of it.
+    r = step('SUBMIT_FOR_VALIDATION', { check: 'not-applicable' })
+    assert.strictEqual(r.post.cardState, 'validating')
+  })
+
+  it('refuses a submission with no verdict at all', () => {
+    const step = fresh()
+    step('MARK_READY', { gate: 'pass' })
+    step('START_WORK')
+    step('PLAN_READY')
+
+    // Omitting the checker's answer is not a domain rejection but a caller
+    // error, and the strict profile stops it at the boundary: there is no way
+    // to reach validating without saying what the check said.
+    assert.throws(() => step('SUBMIT_FOR_VALIDATION'), /missing required field 'check'/)
+    assert.strictEqual(machine.getState().cardState, 'implementing', 'and nothing moved')
   })
 
   describe('model check (Polygraph gate)', () => {

@@ -46,7 +46,7 @@ const DRAG_ACTIONS = {
   'ready': 'MARK_READY',
   'planning': null, // START_WORK from ready, RESUME from needsHuman
   'implementing': 'PLAN_READY', // the only forward door into work
-  'validating': 'SUBMIT_FOR_VALIDATION',
+  'validating': null, // the Polygraph model check answers, not the drag
   'reviewing': 'VALIDATION_PASSED',
   'done': 'REVIEW_PASSED',
   'needsHuman': 'ESCALATE',
@@ -184,6 +184,46 @@ export class BoardViewComponent {
       this.rejection = { instanceId, reason }
     }
     await this._reloadCards()
+  }
+
+  /**
+   * implementing→validating goes through the Polygraph model check.
+   *
+   * The same shape as the DoRC gate at ready: the engine answers, the dispatch
+   * carries its verdict, and a failing check leaves the card where it is. A
+   * card with no machine behind it reports 'not-applicable' — an honest
+   * declared value, not a way around the gate, and the acceptance verifier is
+   * still ahead of it either way.
+   */
+  async checkAndSubmit(instanceId) {
+    const card = this.cards.find(c => (c.instanceId || c.id) === instanceId)
+    const machine = this._machineFor(card)
+
+    if (!machine) {
+      return this.dispatch(instanceId, 'SUBMIT_FOR_VALIDATION', { check: 'not-applicable' })
+    }
+
+    this.rejection = { instanceId, reason: `model-checking ${machine.name}…`, pending: true }
+    this.render()
+    try {
+      const result = await window.puffin.polygraph.check({ machineDir: machine.dir })
+      const passed = result.success && !(result.violations?.length > 0)
+      await this.dispatch(instanceId, 'SUBMIT_FOR_VALIDATION', {
+        check: passed ? 'pass' : 'fail'
+      })
+      if (!passed && !this.rejection) {
+        // The counterexample is the point: name what the checker found.
+        this.rejection = {
+          instanceId,
+          reason: `model check failed — ${result.violations?.[0]?.name ||
+            result.error || 'an invariant is reachable'}`
+        }
+        this.render()
+      }
+    } catch (error) {
+      this.rejection = { instanceId, reason: `model check could not run: ${error.message}` }
+      this.render()
+    }
   }
 
   /** backlog→ready goes through the DoRC gate when a GLM workspace is wired */
@@ -400,6 +440,7 @@ export class BoardViewComponent {
 
     if (target === from) return
     if (target === 'ready') return this.gateAndMarkReady(instanceId)
+    if (target === 'validating') return this.checkAndSubmit(instanceId)
     if (target === 'planning') {
       // Two legal ways in: starting work, or a human resuming an escalated
       // card — which returns to planning because whatever exhausted the budget

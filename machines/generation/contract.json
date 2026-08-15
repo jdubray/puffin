@@ -1,0 +1,110 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "genState",
+      "type": "enum: 'drafting' | 'running' | 'held' | 'done' | 'doneWithEscalations' | 'halted'"
+    },
+    {
+      "name": "policy",
+      "type": "enum: '' | 'hold' | 'continue' — what an escalated card does to the batch. Chosen once at START and immutable after: a run cannot change the rules it is being judged by halfway through."
+    },
+    {
+      "name": "pending",
+      "type": "integer 0..3 — cards selected for this generation that have not yet settled"
+    },
+    {
+      "name": "escalated",
+      "type": "integer 0..2 — cards that reached needsHuman during this generation"
+    }
+  ],
+  "initState": {
+    "genState": "drafting",
+    "policy": "",
+    "pending": 0,
+    "escalated": 0
+  },
+  "actions": {
+    "SELECT": {
+      "dataFields": {
+        "count": "integer - how many specs this generation covers; chosen from the sekkei's new and changed nodes"
+      }
+    },
+    "START": {
+      "dataFields": {
+        "policy": "string - 'hold' (an escalation stops the batch) or 'continue' (the batch runs on and reports what escalated). The user's call, recorded in the run."
+      }
+    },
+    "CARD_DONE": { "dataFields": {} },
+    "CARD_ESCALATED": { "dataFields": {} },
+    "RESUME_GENERATION": { "dataFields": {} },
+    "CANCEL": { "dataFields": {} }
+  },
+  "dataDomain": {
+    "SELECT": { "count": [1, 2, 3] },
+    "START": { "policy": ["hold", "continue"] },
+    "CARD_DONE": {},
+    "CARD_ESCALATED": {},
+    "RESUME_GENERATION": {},
+    "CANCEL": {}
+  },
+  "terminalKey": "genState",
+  "terminalStates": ["done", "doneWithEscalations", "halted"],
+  "specialRules": [
+    {
+      "name": "select-only-while-drafting",
+      "note": "The set of specs is chosen before the generation starts and never after: a batch whose membership can change mid-run has no meaningful 'finished'.",
+      "whenState": "genState != 'drafting'",
+      "whenAction": "SELECT"
+    },
+    {
+      "name": "start-needs-a-selection",
+      "note": "START applies only in drafting, and only with at least one spec selected.",
+      "whenState": "genState != 'drafting' || pending == 0",
+      "whenAction": "START"
+    },
+    {
+      "name": "policy-is-chosen-once",
+      "note": "The escalation policy is recorded at START and never changes. Both values are legal — which one is right is the user's call, and the checker proves the machine behaves correctly under either.",
+      "whenState": "genState != 'drafting'",
+      "whenAction": "START"
+    },
+    {
+      "name": "card-outcomes-only-while-running",
+      "note": "A card outcome arriving outside running — late, duplicated, or after the batch settled — is absorbed as an observable no-op.",
+      "whenState": "genState != 'running'",
+      "whenAction": "CARD_DONE or CARD_ESCALATED"
+    },
+    {
+      "name": "hold-stops-the-batch",
+      "note": "Under policy 'hold', a card reaching needsHuman moves the generation to held: no further card is started until a person resumes. Under 'continue' the batch runs on and the escalation is carried into the terminal state instead. This is the one behavioural difference between the two policies.",
+      "whenState": "genState == 'running' && policy == 'hold'",
+      "whenAction": "CARD_ESCALATED"
+    },
+    {
+      "name": "resume-only-from-held",
+      "note": "RESUME_GENERATION is the human's decision to carry on after a hold. It exists nowhere else, and it never clears the escalation count — the batch remembers what it stepped over.",
+      "whenState": "genState != 'held'",
+      "whenAction": "RESUME_GENERATION"
+    },
+    {
+      "name": "settled-generations-name-their-outcome",
+      "note": "A generation finishes as 'done' only when nothing escalated. If any card reached needsHuman, it finishes as 'doneWithEscalations' — so 'finished' never quietly means 'finished, with three cards abandoned'.",
+      "whenState": "genState == 'running' && pending == 1",
+      "whenAction": "CARD_DONE or CARD_ESCALATED"
+    },
+    {
+      "name": "cancel-only-while-active",
+      "note": "CANCEL (a human stops the batch) applies while drafting, running or held.",
+      "whenState": "genState in ('done','doneWithEscalations','halted')",
+      "whenAction": "CANCEL"
+    },
+    {
+      "name": "terminals-are-frozen",
+      "note": "done, doneWithEscalations and halted are frozen: re-running is a new generation with its own selection, policy and journal, not a mutation of a settled one.",
+      "whenState": "genState in ('done','doneWithEscalations','halted')",
+      "whenAction": "any"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre, never a throw and never a silent return."
+}

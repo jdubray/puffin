@@ -37,6 +37,8 @@ const modelShape = {
 const ACTIVE = new Set(['ready', 'planning', 'implementing', 'validating', 'reviewing']);
 const FAILURE_REASONS = new Set(['missing-deliverable', 'verifier-failed']);
 const REVIEW_FINDINGS = new Set(['defect', 'spec-mismatch']);
+/** Polygraph verdicts that let work leave implementing. */
+const CHECK_VERDICTS = new Set(['pass', 'not-applicable']);
 
 const componentActions = {
   MARK_READY: {
@@ -46,7 +48,11 @@ const componentActions = {
   },
   START_WORK: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
   PLAN_READY: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
-  SUBMIT_FOR_VALIDATION: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
+  SUBMIT_FOR_VALIDATION: {
+    action: (data = {}) => ({ ...data }),
+    schema: { check: { type: 'string', required: true } },
+    domain: [{ check: 'pass' }, { check: 'fail' }, { check: 'not-applicable' }],
+  },
   VALIDATION_PASSED: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
   REVIEW_PASSED: { action: (data = {}) => ({ ...data }), schema: {}, domain: [{}] },
   REVIEW_FAILED: {
@@ -92,9 +98,14 @@ const acceptors = {
     unchanged('reworkCount', 'lastSignal');
   },
 
+  // Work leaves implementing only past the Polygraph model check. A failing
+  // check is a rejection, not a warning: a machine that violates its own
+  // invariants cannot reach review, let alone done.
   SUBMIT_FOR_VALIDATION: (model) => (proposal, { reject, next, unchanged }) => {
+    const data = proposal || {};
     if (model.cardState === 'done') return reject('done-is-terminal');
     if (model.cardState !== 'implementing') return reject('validate-only-from-implementing');
+    if (!CHECK_VERDICTS.has(data.check)) return reject('model-check-precedes-validation');
     next.cardState = 'validating';
     unchanged('reworkCount', 'lastSignal');
   },

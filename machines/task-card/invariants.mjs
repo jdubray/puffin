@@ -141,6 +141,16 @@ export const transitionInvariants = [
         post.lastSignal === pre.lastSignal),
   },
   {
+    name: 'model-check-decides-validation',
+    // Polygraph is embedded, not adjacent: nothing reaches validating without
+    // the checker's verdict, and 'fail' never does.
+    pred: (pre, action, data, post) => {
+      if (post.cardState !== 'validating' || pre.cardState === 'validating') return true
+      return action === 'SUBMIT_FOR_VALIDATION' && !!data &&
+        (data.check === 'pass' || data.check === 'not-applicable')
+    },
+  },
+  {
     name: 'gate-verdict-decides-ready',
     // A card reaches ready only on a passing DoRC verdict — no human override.
     pred: (pre, action, data, post) => {

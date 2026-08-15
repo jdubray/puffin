@@ -32,7 +32,9 @@
       "dataFields": {}
     },
     "SUBMIT_FOR_VALIDATION": {
-      "dataFields": {}
+      "dataFields": {
+        "check": "string - the Polygraph model-check verdict for this card's machine: 'pass' | 'fail' | 'not-applicable' (the component holds no state, so there is no state graph to explore). The checker's answer, never a human opinion."
+      }
     },
     "VALIDATION_PASSED": {
       "dataFields": {}
@@ -66,7 +68,13 @@
     },
     "START_WORK": {},
     "PLAN_READY": {},
-    "SUBMIT_FOR_VALIDATION": {},
+    "SUBMIT_FOR_VALIDATION": {
+      "check": [
+        "pass",
+        "fail",
+        "not-applicable"
+      ]
+    },
     "VALIDATION_PASSED": {},
     "VALIDATION_FAILED": {
       "reason": [
@@ -117,6 +125,12 @@
       "name": "validate-only-from-implementing",
       "note": "SUBMIT_FOR_VALIDATION applies only while implementing.",
       "whenState": "cardState != 'implementing'",
+      "whenAction": "SUBMIT_FOR_VALIDATION"
+    },
+    {
+      "name": "model-check-precedes-validation",
+      "note": "Work leaves implementing only once Polygraph has explored the machine's reachable states and found no invariant violation. A failing check is an observable rejection — the card stays in implementing — so a machine that does not satisfy its own invariants can never reach review, let alone done. 'not-applicable' is the honest answer for a component that holds no state; it is a declared value, not a way around the gate.",
+      "whenState": "cardState == 'implementing' && data.check == 'fail'",
       "whenAction": "SUBMIT_FOR_VALIDATION"
     },
     {

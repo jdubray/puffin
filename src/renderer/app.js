@@ -691,6 +691,7 @@ class PuffinApp {
       if (result.success) {
         console.log('State loaded from .puffin/', result.state)
         this.intents.loadState(result.state)
+        this.checkRequiredPlugins(result.state)
       } else {
         console.error('Failed to load state:', result.error)
         this.showToast('Failed to load project state: ' + result.error, 'error')
@@ -698,6 +699,33 @@ class PuffinApp {
     } catch (error) {
       console.error('Error loading state:', error)
       this.showToast('Error loading project state', 'error')
+    }
+  }
+
+/**
+   * Prompt once when the workflow's Claude Code plugins are missing.
+   *
+   * The failure this prevents is a silent one: without the Polygraph plugin a
+   * session has no polygen/polynv/polyvers to call and reports nothing useful.
+   * Better to say so at startup than to let it surface as a puzzling session.
+   *
+   * Declining is remembered in the project config — a prompt that returns every
+   * launch is one people learn to dismiss unread.
+   *
+   * @param {Object} state - The freshly loaded project state
+   */
+  async checkRequiredPlugins(state) {
+    if (state?.config?.pluginPromptDismissed) return
+    try {
+      const status = await window.puffin.doctor.checkPlugins()
+      if (!status?.success || status.satisfied) return
+      this.intents.showModal('missing-plugins', {
+        plugins: status.plugins,
+        missingRequired: status.missingRequired
+      })
+    } catch (error) {
+      // A check that cannot run is not worth interrupting anyone over
+      console.warn('[PuffinApp] Plugin check skipped:', error.message)
     }
   }
 

@@ -798,7 +798,10 @@ contextBridge.exposeInMainWorld('puffin', {
   // GLM — spec-oriented development (sekkei, SCRs, verifier)
   // Doctor — a single health report across CLI, GLM, Polygraph, board, project
   doctor: {
-    run: () => ipcRenderer.invoke('doctor:run')
+    run: () => ipcRenderer.invoke('doctor:run'),
+    // Claude Code plugins are user-scoped: one answer for the whole machine
+    checkPlugins: () => ipcRenderer.invoke('plugins:checkRequired'),
+    installPlugins: () => ipcRenderer.invoke('plugins:installRequired')
   },
 
   glm: {

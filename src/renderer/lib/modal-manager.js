@@ -95,6 +95,9 @@ export class ModalManager {
       case 'next-action':
         this.renderNextAction(modalTitle, modalContent, modalActions, modal.data, state)
         break
+      case 'missing-plugins':
+        this.renderMissingPlugins(modalTitle, modalContent, modalActions, modal.data)
+        break
       default:
         console.warn('Unknown modal type:', modal.type)
         // Provide a way to close unknown modals
@@ -107,6 +110,84 @@ export class ModalManager {
     }
   }
 
+
+/**
+   * The workflow's plugins are missing.
+   *
+   * Shown once at startup rather than at the moment of failure, because the
+   * failure is silent: without the plugin a session simply has no
+   * `polygraph:polygen` to call. Declining is remembered — a prompt that
+   * returns every launch trains people to dismiss it unread.
+   */
+  renderMissingPlugins(title, content, actions, data) {
+    const { plugins = [], missingRequired = [] } = data || {}
+    title.textContent = 'Polygraph plugin not installed'
+
+    content.innerHTML = `
+      <p>
+        Puffin's workflow uses the Polygraph plugin to author and verify state
+        machines. Without it, a session has no <code>polygen</code>,
+        <code>polynv</code> or <code>polyvers</code> to call — and says nothing
+        about why.
+      </p>
+      <ul class="plugin-modal-list">
+        ${plugins.map(p => `
+          <li class="${p.installed && p.enabled ? 'is-ok' : 'is-missing'}">
+            <b>${p.name}</b>${p.required ? '' : ' <span class="plugin-optional">(optional)</span>'}
+            — ${p.purpose}
+            <span class="plugin-state">${
+              p.installed ? (p.enabled ? 'enabled' : 'installed, disabled') : 'not installed'
+            }</span>
+          </li>`).join('')}
+      </ul>
+      <p class="plugin-modal-note">
+        Plugins install for your user, not per project — installing once covers
+        every project you open. Puffin installs from your local Polygraph
+        checkout when it finds one.
+      </p>
+      <div id="plugin-install-output" class="plugin-install-output hidden"></div>
+    `
+
+    actions.innerHTML = `
+      <button class="btn secondary" id="plugin-decline-btn">Not now</button>
+      <button class="btn primary" id="plugin-install-btn">Install</button>
+    `
+
+    const output = document.getElementById('plugin-install-output')
+    const installBtn = document.getElementById('plugin-install-btn')
+
+    document.getElementById('plugin-decline-btn')?.addEventListener('click', async () => {
+      // Remembered, so the prompt does not return every launch
+      try { await window.puffin.state.updateConfig({ pluginPromptDismissed: true }) } catch { /* best effort */ }
+      this.intents.hideModal()
+    })
+
+    installBtn?.addEventListener('click', async () => {
+      installBtn.disabled = true
+      installBtn.textContent = 'Installing…'
+      output.classList.remove('hidden')
+      output.textContent = 'Adding the marketplace and installing…'
+      try {
+        const result = await window.puffin.doctor.installPlugins()
+        if (result?.success) {
+          output.textContent = 'Installed. Sessions started from now on will see the plugin.'
+          installBtn.textContent = 'Done'
+          setTimeout(() => this.intents.hideModal(), 1600)
+        } else {
+          // Show what the CLI actually said — "install failed" alone leaves
+          // nowhere to go.
+          const steps = (result?.steps || []).map(s => `$ ${s.cmd}\n${s.output}`).join('\n\n')
+          output.textContent = `${result?.error || 'install failed'}\n\n${steps}`.trim()
+          installBtn.disabled = false
+          installBtn.textContent = 'Try again'
+        }
+      } catch (error) {
+        output.textContent = error.message
+        installBtn.disabled = false
+        installBtn.textContent = 'Try again'
+      }
+    })
+  }
 
   /**
    * Render profile view modal

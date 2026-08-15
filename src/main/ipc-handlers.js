@@ -19,6 +19,7 @@ const { scaffoldCommands } = require('./command-scaffolder')
 const documentEditService = require('./document-edit-service')
 const { PolygraphService } = require('./polygraph-service')
 const { DoctorService } = require('./doctor-service')
+const { PluginCheckService } = require('./plugin-check-service')
 const { GlmClient } = require('./glm-client')
 const { setupGlmSessionIntegration } = require('./glm-integration')
 const { BoardRuntime } = require('./board-runtime')
@@ -36,8 +37,11 @@ let glmSubscription = null
 const boardRuntime = new BoardRuntime({
   polygraphDirResolver: () => polygraphService.resolvePolygraphDir()
 })
+// Claude Code plugins install at user level, so this answers for the machine
+const pluginCheckService = new PluginCheckService()
+
 // One health report across every integration Puffin wires
-const doctorService = new DoctorService({ polygraphService, boardRuntime })
+const doctorService = new DoctorService({ polygraphService, boardRuntime, pluginCheckService })
 
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
@@ -385,6 +389,27 @@ function setupStateHandlers(ipcMain) {
       return await polygraphService.getElicitationReport(machineDir)
     } catch (error) {
       return { success: false, error: error.message }
+    }
+  })
+
+  // Are the workflow's plugins present? Plugins are user-scoped, so this is a
+  // machine-wide answer, not a per-project one.
+  ipcMain.handle('plugins:checkRequired', async () => {
+    try {
+      return { success: true, ...pluginCheckService.getStatus() }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Install them, preferring the local Polygraph checkout as the marketplace.
+  ipcMain.handle('plugins:installRequired', async () => {
+    try {
+      return await pluginCheckService.install({
+        polygraphDir: polygraphService.resolvePolygraphDir()
+      })
+    } catch (error) {
+      return { success: false, error: error.message, steps: [] }
     }
   })
 

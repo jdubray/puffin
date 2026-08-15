@@ -20,6 +20,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { readGlmConfig } = require('./glm-client')
+const { PluginCheckService } = require('./plugin-check-service')
 
 const PROBE_TIMEOUT_MS = 8000
 
@@ -89,7 +90,7 @@ class DoctorService {
    */
   constructor({
     projectPath = null, polygraphService = null, boardRuntime = null,
-    runCommand = run, probeUrl = probe
+    runCommand = run, probeUrl = probe, pluginCheckService = null
   } = {}) {
     this.projectPath = projectPath
     this.polygraphService = polygraphService
@@ -98,6 +99,7 @@ class DoctorService {
     // CLI or reach the network — the report's shape is what they check.
     this._run = runCommand
     this._probe = probeUrl
+    this.pluginCheckService = pluginCheckService || new PluginCheckService()
   }
 
   setProjectPath(projectPath) {
@@ -115,6 +117,7 @@ class DoctorService {
       this._safe('Claude CLI', () => this.checkClaude()),
       this._safe('GLM', () => this.checkGlm()),
       this._safe('Polygraph', () => this.checkPolygraph()),
+      this._safe('Plugins', () => this.checkPlugins()),
       this._safe('Workflow', () => this.checkBoard()),
       this._safe('Project', () => this.checkProject())
     ])
@@ -332,6 +335,38 @@ class DoctorService {
     }
 
     return checks
+  }
+
+  /**
+   * The Claude Code plugins the workflow depends on.
+   *
+   * Installed and enabled are reported apart: a disabled plugin is on disk and
+   * contributes nothing, which from a session's point of view is identical to
+   * missing — but enabling it is a one-liner and installing is a download.
+   */
+  async checkPlugins() {
+    const status = this.pluginCheckService.getStatus()
+    return status.plugins.map(plugin => {
+      const state = plugin.installed
+        ? (plugin.enabled ? 'ok' : 'warn')
+        : (plugin.required ? 'fail' : 'warn')
+      return {
+        id: `plugin:${plugin.name}`,
+        group: 'Plugins',
+        label: `${plugin.name} plugin`,
+        status: state,
+        detail: plugin.installed
+          ? (plugin.enabled
+              ? `enabled${plugin.marketplace ? ` (${plugin.marketplace})` : ''} — ${plugin.purpose}`
+              : 'installed but disabled — sessions cannot see it')
+          : `not installed — ${plugin.purpose}`,
+        fix: state === 'ok'
+          ? undefined
+          : (plugin.installed
+              ? `Run: claude plugin enable ${plugin.name}`
+              : `Use the install prompt in Config, or run: claude plugin install ${plugin.name}`)
+      }
+    })
   }
 
   /** polyrun and the runtime the board depends on. */

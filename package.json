@@ -10,8 +10,7 @@
     "lint": "eslint .",
     "verify:machines": "node scripts/verify-machines.mjs",
     "build:excalidraw": "esbuild plugins/excalidraw-plugin/renderer/excalidraw-bundle-entry.js --bundle --outfile=plugins/excalidraw-plugin/renderer/excalidraw-bundle.js --format=iife --platform=browser --target=chrome120 --loader:.js=jsx --define:process.env.NODE_ENV=\\\"production\\\" --define:process.env.IS_PREACT=\\\"false\\\"",
-    "package": "electron-builder",
-    "postinstall": "electron-rebuild"
+    "package": "electron-builder"
   },
   "keywords": [
     "claude",
@@ -27,18 +26,17 @@
     "@excalidraw/excalidraw": "^0.17.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "better-sqlite3": "^11.6.0",
+    "better-sqlite3": "^13.0.3",
     "marked": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "uuid": "^10.0.0",
+    "uuid": "^14.0.1",
     "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.6.0",
-    "electron": "^33.0.0",
-    "electron-builder": "^25.0.0",
-    "esbuild": "^0.27.3",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "eslint": "^10.8.1"
   },
   "build": {
@@ -49,11 +47,11 @@
     },
     "files": [
       "src/**/*",
-      "shared/**/*",
+      "machines/**/*",
       "package.json"
     ],
     "asarUnpack": [
-      "shared/**/*"
+      "machines/**/*"
     ],
     "extraResources": [
       {
@@ -92,6 +90,7 @@
     "linux": {
       "target": "AppImage",
       "icon": "build/icon.png"
-    }
+    },
+    "npmRebuild": false
   }
 }

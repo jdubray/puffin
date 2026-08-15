@@ -1,4 +1,28 @@
-/* Docs view — the project's docs/ tree, read in place */
+/* Docs view — the project's docs/ tree, read in place.
+
+   The view owns the window height and hands it down: index and reader take
+   what is left after the toolbar and composer, and scroll INSIDE themselves.
+   Nothing here uses calc(100vh - guess) — a fixed height computed from a
+   guessed chrome height is what pushed the composer below the fold, so the
+   only way to reach it was to scroll the whole page. */
+
+.view-content.docs-fill {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.view-content.docs-fill > #docs-view-root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The section itself must not scroll — the panes inside it do. */
+#docs-view.view { overflow: hidden; }
 
 .docs-toolbar {
   display: flex;
@@ -25,6 +49,7 @@
 }
 
 .docs-body {
+  flex: 1;
   display: grid;
   grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
   gap: 14px;
@@ -56,8 +81,8 @@
 
 .docs-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  max-height: calc(100vh - 260px);
   padding: 6px;
   background: var(--bg-secondary, #252525);
   border: 1px solid var(--border-color, #3a3a3a);
@@ -154,15 +179,15 @@
 .docs-frame {
   flex: 1;
   width: 100%;
-  min-height: calc(100vh - 260px);
+  min-height: 0;
   border: none;
   background: #ffffff;
 }
 
 .docs-markdown {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  max-height: calc(100vh - 300px);
   padding: 16px 20px;
   font-size: 13.5px;
   line-height: 1.65;
@@ -222,13 +247,14 @@
 }
 
 @media (max-width: 900px) {
-  .docs-body { grid-template-columns: 1fr; }
-  .docs-list { max-height: 200px; }
+  .docs-body { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 30%) 1fr; }
 }
 
 /* ── Composer — a prompt window whose deliverable is a file ───────── */
 
+/* Pinned: the composer is always reachable without scrolling the view. */
 .docs-composer {
+  flex: none;
   margin-top: 12px;
   padding: 10px 12px;
   background: var(--bg-secondary, #252525);
@@ -251,7 +277,7 @@
 }
 
 .docs-reply-body {
-  max-height: 220px;
+  max-height: min(220px, 22vh);
   padding: 0;
   overflow-y: auto;
 }

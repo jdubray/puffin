@@ -116,7 +116,7 @@ function renderJsonString(text, knownIds, indent) {
  * but the artifact is the DESIGN, not the code: the session edits sekkei
  * nodes through the glm_* MCP tools Puffin wires into every session.
  */
-function buildAuthoringPrompt(instruction, { workspaceSlug, workspaceId, selectedGlmId, nodeCount }) {
+function buildAuthoringPrompt(instruction, { workspaceSlug, workspaceId, selectedGlmId, nodeCount, lane }) {
   return `You are authoring a sekkei (設計) — the design of record for this project.
 You edit SPECIFICATIONS, never source code.
 
@@ -153,6 +153,7 @@ Sekkei authoring rules:
 - Specs are the machine-runnable leaves: acceptance specs carry deliverables and a
   verifier command; prompt specs carry the context bundle and template that let a
   coding agent regenerate the component with no human input.
+${lane ? buildLaneBrief(lane) : ''}
 - Acceptance criteria must be mechanically checkable. Business rules must be
   unambiguous declarative statements.
 - Do NOT create, modify, or delete source files. Implementation happens later, in a
@@ -281,6 +282,48 @@ export function buildTree(nodes = []) {
   return level('')
 }
 
+/**
+ * The paragraph every prompt spec needs about HOW its component gets built and
+ * proved, given this project's language.
+ *
+ * It exists because the instruction is easy to lose exactly where it matters
+ * most. polygen enforces the capture shape structurally, so a JS component gets
+ * it for free; a Python or Go component gets it only if someone wrote it down.
+ * Without the shape there is no step listener, without a listener there is no
+ * corpus, and without a corpus the card cannot pass its gate — the failure
+ * surfaces at validation, long after the code was written, as a retrofit.
+ *
+ * @param {{language: string|null, stateful: Object}} lane - From project:buildLane
+ * @returns {string}
+ */
+function buildLaneBrief(lane) {
+  const language = lane.language?.language
+  const stateful = lane.stateful || {}
+  const polygen = stateful.lane === 'generated'
+
+  return `
+How components in this project get built and proved (${language || 'language not detected'}):
+${polygen
+    ? `- Stateful components: authored with the polygen agent (/polygraph:polygen) from a
+  contract, and model-checked over every reachable state before review. The
+  prompt spec should say so, and name the contract it is generated from.`
+    : `- Stateful components: polygen emits JavaScript, so it does NOT apply here. The
+  prompt spec MUST instruct the implementer to write the module CAPTURE-READY
+  (the /polygraph:capture-ready skill): one named step boundary, a declared
+  state projection, observable rejections, and a step-listener seam present
+  from the first commit. That listener emits one NDJSON line per step —
+  {pre, action, data, post} — and that corpus is the only evidence that crosses
+  out of ${language || 'this language'}: the model checker cannot execute the
+  module, so replay over the corpus is what proves the component. A module
+  written without the seam cannot be captured without a retrofit, and a
+  component with no corpus does not pass its gate.
+- The prompt spec must also name where the corpus lands (a traces/ directory
+  beside the component's contract) and which exported scenarios produce it.`}
+- Stateless components: no state graph, so the acceptance spec's verifier
+  command is the proof. Say what it runs and what it asserts.
+`
+}
+
 /** Legal SCR events per status (mirror of GLM's domain/scr.ts FSM) */
 const SCR_EVENTS = {
   'Draft': ['submit'],
@@ -385,6 +428,7 @@ export class SpecsViewComponent {
     this.quickMode = false
     this.models = []
     this.defaultModel = ''
+    this.buildLane = null // { language, stateful, stateless } — see project:buildLane
     this.isRecording = false
     this._recorder = null
     this._chunks = []
@@ -447,6 +491,22 @@ export class SpecsViewComponent {
     if (!this.hasLoaded && !this.isBusy) {
       this.refresh()
     }
+    if (!this.buildLane) this._loadBuildLane()
+  }
+
+  /**
+   * Which lane this project builds in — polygen or capture-ready.
+   *
+   * Loaded here so the authoring prompt can tell the session what its prompt
+   * specs must instruct, rather than every spec being written as though
+   * polygen were always available.
+   * @private
+   */
+  async _loadBuildLane() {
+    try {
+      const lane = await window.puffin.project?.getBuildLane?.()
+      if (lane?.success) this.buildLane = lane
+    } catch { /* the prompt simply omits the lane paragraph */ }
   }
 
   async refresh() {
@@ -636,7 +696,8 @@ export class SpecsViewComponent {
         workspaceSlug: this.binding?.slug || '',
         workspaceId: this.workspaceId,
         selectedGlmId: this.selectedGlmId,
-        nodeCount: this.nodes.length
+        nodeCount: this.nodes.length,
+        lane: this.buildLane
       }),
       model,
       effort: effort || undefined,

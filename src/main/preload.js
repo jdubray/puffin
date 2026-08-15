@@ -796,6 +796,11 @@ contextBridge.exposeInMainWorld('puffin', {
   },
 
   // GLM — spec-oriented development (sekkei, SCRs, verifier)
+  // Which build lane this project is in (polygen vs capture-ready)
+  project: {
+    getBuildLane: () => ipcRenderer.invoke('project:buildLane')
+  },
+
   // Doctor — a single health report across CLI, GLM, Polygraph, board, project
   doctor: {
     run: () => ipcRenderer.invoke('doctor:run'),

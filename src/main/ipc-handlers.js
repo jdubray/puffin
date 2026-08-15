@@ -20,6 +20,7 @@ const documentEditService = require('./document-edit-service')
 const { PolygraphService } = require('./polygraph-service')
 const { DoctorService } = require('./doctor-service')
 const { PluginCheckService } = require('./plugin-check-service')
+const { detectProjectLanguage, validationLaneFor } = require('./project-language')
 const { GlmClient } = require('./glm-client')
 const { setupGlmSessionIntegration } = require('./glm-integration')
 const { BoardRuntime } = require('./board-runtime')
@@ -387,6 +388,22 @@ function setupStateHandlers(ipcMain) {
     try {
       if (!machineDir) return { success: false, error: 'machineDir is required' }
       return await polygraphService.getElicitationReport(machineDir)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Which build lane this project is in — polygen emits JavaScript, so a
+  // non-JS project authors its machines capture-ready instead.
+  ipcMain.handle('project:buildLane', async () => {
+    try {
+      const language = detectProjectLanguage(projectPath)
+      return {
+        success: true,
+        language,
+        stateful: validationLaneFor({ isStateMachine: true, language: language.language }),
+        stateless: validationLaneFor({ isStateMachine: false, language: language.language })
+      }
     } catch (error) {
       return { success: false, error: error.message }
     }

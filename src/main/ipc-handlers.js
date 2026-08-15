@@ -27,6 +27,7 @@ const { BoardRuntime } = require('./board-runtime')
 const { GenerationCoordinator } = require('./generation-coordinator')
 const { buildComponentPrompt } = require('./component-prompt')
 const { compareScope, gateAffecting } = require('./session-scope')
+const { PolycheckService } = require('./polycheck-service')
 
 // Polygraph workbench — engine access for any project built with Polygraph
 const polygraphService = new PolygraphService()
@@ -46,6 +47,7 @@ const pluginCheckService = new PluginCheckService()
 
 // One health report across every integration Puffin wires
 const generationCoordinator = new GenerationCoordinator({ board: boardRuntime })
+const polycheckService = new PolycheckService({})
 const doctorService = new DoctorService({ polygraphService, boardRuntime, pluginCheckService })
 
 const { getTempImageService } = require('./services')
@@ -196,6 +198,7 @@ function setIpcProjectPath(newProjectPath) {
   if (gitService) gitService.setProjectPath(newProjectPath)
   if (boardRuntime) boardRuntime.setProjectPath(newProjectPath)
   if (generationCoordinator) generationCoordinator.setProjectPath(newProjectPath)
+  if (polycheckService) polycheckService.setProjectPath(newProjectPath)
   if (polygraphService) {
     polygraphService.setProjectPath(newProjectPath)
     // Config is not loaded yet at project-switch time; state:init applies
@@ -666,6 +669,29 @@ function setupStateHandlers(ipcMain) {
       fs.mkdirSync(path.dirname(file), { recursive: true })
       fs.writeFileSync(file, JSON.stringify(log || {}, null, 2))
       return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  /**
+   * What this project's agent policy permits, per card.
+   *
+   * Run before a session, not after: if the policy lets a session write the
+   * check that decides its own gate, that session's green result is not
+   * evidence and the turn is not worth spending.
+   */
+  ipcMain.handle('policy:check', async (event, { cards } = {}) => {
+    try {
+      return await polycheckService.check({ cards })
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('policy:status', async () => {
+    try {
+      return { success: true, ...polycheckService.getStatus() }
     } catch (error) {
       return { success: false, error: error.message }
     }

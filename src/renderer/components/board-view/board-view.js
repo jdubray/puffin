@@ -9,6 +9,7 @@
  */
 
 import { readVerifierRun, describeVerdict } from '../../../shared/verifier-verdict.js'
+import { nextStep, pickNext, STEP } from '../../../shared/card-policy.js'
 
 /** Escape for an HTML attribute value — esc() leaves quotes alone. */
 function escAttr(text) {
@@ -99,6 +100,8 @@ export class BoardViewComponent {
     // instanceId -> {stage, at, ok}: which sessions have run, so a card can
     // show it and a button can say 'again' instead of implying nothing happened.
     this.sessionLog = {}
+    this.runner = null    // the phase runner, when it is working
+    this.policy = null    // polycheck's verdict per card, when it is installed
     // Off by default: skipping permission prompts is the user's call to make,
     // once, in the open - not a default they discover after the fact.
     this.unattended = false   // the one running card session, if any
@@ -257,6 +260,193 @@ export class BoardViewComponent {
     if (force || this._boardSignature() !== before) this.render()
   }
 
+  // ===== the runner: the board driving itself =====
+
+  /**
+   * Work the phase without a human at each step.
+   *
+   * Running it by hand teaches you the workflow; it does not scale to a sekkei
+   * with dozens of components. What makes automation acceptable here is that
+   * the decisions are not the runner's: card-policy.js decides, purely, from
+   * the card's state and the evidence gathered about it, and every rule there
+   * is written so that absence of evidence stops rather than advances.
+   *
+   * So this loop is deliberately dumb. It gathers evidence, asks, and does what
+   * it is told - including stopping.
+   */
+  async runPhase() {
+    if (this.runner?.running) return this.stopRunner()
+
+    this.runner = { running: true, log: [], stoppedBy: null }
+    this.render()
+
+    // The policy pre-check, once for the whole phase: it is a property of the
+    // repo's settings, not of any one card, and running it per card would ask
+    // the same question six times.
+    await this._checkPolicy()
+
+    try {
+      while (this.runner?.running) {
+        await this._reloadCards({ force: true })
+        const card = pickNext(this.cards)
+        if (!card) {
+          this._runnerNote('nothing left that the runner can act on')
+          break
+        }
+        const done = await this._runOneStep(card)
+        if (done) break
+      }
+    } finally {
+      if (this.runner) this.runner.running = false
+      this.render()
+    }
+  }
+
+  /** Stop after the step in flight. The card and the batch are left as they are. */
+  stopRunner() {
+    if (!this.runner) return
+    this.runner.running = false
+    this.runner.stoppedBy = 'you'
+    this._runnerNote('stopped')
+    this.render()
+  }
+
+  /**
+   * @private
+   * One decision, executed. Returns true when the loop should end.
+   */
+  async _runOneStep(card) {
+    const instanceId = card.instanceId || card.id
+    const node = this._nodeForCard(instanceId)
+    const batch = this._activeGenerations().find(g => g.cards.includes(instanceId))
+    const decision = nextStep({
+      cardState: card.state?.cardState,
+      session: this.sessionLog[instanceId] || null,
+      batchHeld: batch?.state?.genState === 'held',
+      evidence: {
+        mandate: node ? this.policy?.mandate?.[node.glmId] : null,
+        hasVerifier: this.sessionLog[instanceId]?.hasVerifier,
+        check: this.sessionLog[instanceId]?.check,
+        checkReason: this.sessionLog[instanceId]?.checkReason,
+        findings: this._findingsFor(instanceId)
+      }
+    })
+
+    this._runnerNote(`${node?.title || instanceId}: ${decision.step} — ${decision.reason}`)
+
+    switch (decision.step) {
+      case STEP.GATE:
+        await this.gateAndMarkReady(instanceId)
+        break
+      case STEP.PLAN:
+        await this.startWork(instanceId)
+        break
+      case STEP.PLAN_READY:
+        await this.dispatch(instanceId, 'PLAN_READY')
+        break
+      case STEP.BUILD:
+        await this.runImplementation(instanceId)
+        break
+      case STEP.VALIDATE:
+        await this.checkAndSubmit(instanceId)
+        break
+      case STEP.VALIDATION_VERDICT:
+        await this.dispatch(instanceId,
+          decision.data.passed ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED',
+          decision.data.passed ? {} : { reason: decision.data.reason })
+        break
+      case STEP.REVIEW:
+        await this.dispatch(instanceId,
+          decision.data.passed ? 'REVIEW_PASSED' : 'REVIEW_FAILED',
+          decision.data.passed ? {} : { finding: decision.data.finding })
+        break
+      case STEP.ESCALATE:
+        // The card carries the reason, so the person who picks it up is not
+        // left reading a transcript to find out why it stopped.
+        await this.dispatch(instanceId, 'ESCALATE')
+        this.sessionLog[instanceId] = {
+          ...(this.sessionLog[instanceId] || {}),
+          escalatedBecause: decision.reason
+        }
+        this._persistSessionLog()
+        break
+      case STEP.WAIT:
+      case STEP.DONE:
+        // Nothing here can change without a person, so looping would spin.
+        this.runner.stoppedBy = decision.reason
+        return true
+      default:
+        return true
+    }
+
+    // A card that escalated stops the run: under 'hold' the batch is frozen
+    // anyway, and under 'continue' the next pass picks up the remaining cards
+    // deliberately rather than rolling straight past a problem.
+    if (decision.step === STEP.ESCALATE) {
+      this.runner.stoppedBy = decision.reason
+      return true
+    }
+    return false
+  }
+
+  /** @private Findings that should fail review rather than pass it. */
+  _findingsFor(instanceId) {
+    const log = this.sessionLog[instanceId] || {}
+    const findings = []
+    if (log.gateAffecting?.length > 0) {
+      findings.push({
+        kind: 'spec-mismatch',
+        summary: `a test or fixture was changed outside the card's outputs: ${log.gateAffecting.join(', ')}`
+      })
+    }
+    return findings
+  }
+
+  /** @private */
+  _runnerNote(text) {
+    if (!this.runner) return
+    this.runner.log.push(text)
+    if (this.runner.log.length > 200) this.runner.log.shift()
+    this.render()
+  }
+
+  /**
+   * Ask polycheck what this project's policy permits, per card.
+   *
+   * @private
+   */
+  async _checkPolicy() {
+    const cards = this.cards.map(c => {
+      const node = this._nodeForCard(c.instanceId || c.id)
+      return node ? { id: node.glmId, gloss: node.title || node.glmId, outputs: [] } : null
+    }).filter(Boolean)
+
+    // Outputs come from the same place the session's prompt does, so the
+    // declaration polycheck checks is the one the card is actually held to.
+    for (const card of cards) {
+      try {
+        const built = await window.puffin.board.componentPrompt({
+          workspaceId: this.glmWorkspaceId, glmId: card.id, stage: 'implement'
+        })
+        if (built.success) card.outputs = built.outputs || []
+      } catch { /* a card with no outputs simply cannot be confined */ }
+    }
+
+    try {
+      const result = await window.puffin.board.policyCheck({ cards })
+      this.policy = result.success ? result : null
+      if (result.success) {
+        const surplus = Object.entries(result.mandate || {}).filter(([, v]) => v.oracle)
+        this._runnerNote(surplus.length === 0
+          ? 'policy: every card is confined to what it declared'
+          : `policy: ${surplus.length} card(s) could write the check that decides their own gate`)
+      } else if (result.available === false) {
+        this._runnerNote('policy: polycheck not installed — running without the pre-check')
+      }
+    } catch { /* the runner proceeds; the post-hoc scope check still applies */ }
+    this.render()
+  }
+
   // ===== running a card's session =====
 
   /**
@@ -322,11 +512,20 @@ export class BoardViewComponent {
     })
     if (!built.success) {
       this.session = { ...this.session, running: false, error: built.error }
-      return this.render()
+      this.sessionLog[instanceId] = {
+        stage, at: new Date().toISOString(), ok: false, error: built.error
+      }
+      this._persistSessionLog()
+      this.render()
+      return
     }
     this.session.outputs = built.outputs || []
 
     this._subscribeSession()
+    // The runner needs to know when the turn is over. Without this it would
+    // ask for the next step while the session was still writing files, and
+    // decide on evidence that had not been gathered yet.
+    const settled = new Promise(resolve => { this._sessionSettled = resolve })
     window.puffin.claude.submit({
       prompt: built.prompt,
       sessionId: null,
@@ -340,6 +539,7 @@ export class BoardViewComponent {
       additionalDirs: built.scratchDir ? [{ path: built.scratchDir }] : [],
       unattended: this.unattended === true
     })
+    return settled
   }
 
   /**
@@ -367,7 +567,7 @@ export class BoardViewComponent {
         ok: true
       }
       this._persistSessionLog()
-      this._checkSessionScope()
+      this._checkSessionScope().finally(() => this._settleSession())
       // The card does NOT advance here. A finished turn is not a passed gate:
       // planning ends when a person says the plan is ready, and implementing
       // ends at the model check - both are decisions the machine owns.
@@ -382,6 +582,8 @@ export class BoardViewComponent {
         at: new Date().toISOString(),
         ok: false
       }
+      this._persistSessionLog()
+      this._settleSession()
       this.render()
     })
   }
@@ -406,6 +608,12 @@ export class BoardViewComponent {
         entry.changed = scope.changed
         entry.outOfScope = scope.outOfScope
         entry.gateAffecting = scope.gateAffecting
+        // Declared but never written. A build that produced none of its outputs
+        // has not built anything, however confidently the turn ended.
+        if (this.session?.stage === 'implement') {
+          entry.missingOutputs = (this.session.outputs || []).filter(out =>
+            !scope.declared.some(c => c.endsWith(out) || out.endsWith(c)))
+        }
       }
       if (this.session?.instanceId === instanceId) this.session.scope = scope
       this._persistSessionLog()
@@ -418,10 +626,18 @@ export class BoardViewComponent {
     try { window.puffin.board.writeSessionLog({ log: this.sessionLog }) } catch { /* ignore */ }
   }
 
+  /** @private Release whatever is awaiting this turn, exactly once. */
+  _settleSession() {
+    const resolve = this._sessionSettled
+    this._sessionSettled = null
+    if (resolve) resolve()
+  }
+
   /** Stop the running session. The card stays where it is. */
   async cancelSession() {
     try { await window.puffin.claude.cancel() } catch { /* already gone */ }
     if (this.session) this.session.running = false
+    this._settleSession()
     this.render()
   }
 
@@ -513,6 +729,10 @@ export class BoardViewComponent {
     const machine = this._machineFor(card)
 
     if (!machine) {
+      this.sessionLog[instanceId] = {
+        ...(this.sessionLog[instanceId] || {}), check: 'not-applicable', checkReason: null
+      }
+      this._persistSessionLog()
       return this.dispatch(instanceId, 'SUBMIT_FOR_VALIDATION', { check: 'not-applicable' })
     }
 
@@ -527,6 +747,14 @@ export class BoardViewComponent {
         ? await this._replayCorpus(machine)
         : await this._modelCheck(machine)
 
+      // Kept on the card: the runner decides the validation verdict from the
+      // gate that actually ran, never from the fact that a step completed.
+      this.sessionLog[instanceId] = {
+        ...(this.sessionLog[instanceId] || {}),
+        check: verdict.passed ? 'pass' : 'fail',
+        checkReason: verdict.passed ? null : verdict.reason
+      }
+      this._persistSessionLog()
       await this.dispatch(instanceId, 'SUBMIT_FOR_VALIDATION', {
         check: verdict.passed ? 'pass' : 'fail'
       })
@@ -775,10 +1003,12 @@ export class BoardViewComponent {
     else if (action === 'review-fail' && id) this.dispatch(id, 'REVIEW_FAILED', { finding: reason || 'defect' })
     else if (action === 'resume' && id) this.dispatch(id, 'RESUME')
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')
+    else if (action === 'run-phase') this.runPhase()
     else if (action === 'start-work' && id) this.startWork(id)
     else if (action === 'validate' && id) this.checkAndSubmit(id)
     else if (action === 'implement' && id) this.runImplementation(id)
     else if (action === 'close-session') { this.session = null; this.render() }
+    else if (action === 'close-runner') { this.runner = null; this.render() }
     else if (action === 'cancel-session') this.cancelSession()
     else if (action === 'resume-generation' && id) this.resumeGeneration(id)
     else if (action === 'cancel-generation' && id) this.cancelGeneration(id)
@@ -858,6 +1088,11 @@ export class BoardViewComponent {
           </button>
           <input type="text" id="board-new-card" class="board-input" placeholder="ad-hoc card…">
           <button class="btn btn-secondary btn-sm" data-action="create-card" ${!this.status?.running ? 'disabled' : ''}>Add</button>
+          <button class="btn btn-primary btn-sm" data-action="run-phase"
+            ${!this.status?.running ? 'disabled' : ''}
+            title="Work the phase without stopping at each step. The runner advances a card only on positive evidence and escalates otherwise.">
+            ${this.runner?.running ? '⏹ Stop' : '▶ Run phase'}
+          </button>
           <label class="board-unattended" title="Card sessions have no approve button, so a command that is not pre-approved hangs the turn. Unattended runs them without asking — the same trust you give a terminal you have already opened.">
             <input type="checkbox" id="board-unattended" ${this.unattended ? 'checked' : ''}> unattended
           </label>
@@ -868,11 +1103,39 @@ export class BoardViewComponent {
         ${this.rejection.pending ? '⏳' : '⤺'} <code>${esc(this.rejection.instanceId)}</code> — ${esc(this.rejection.reason)}
       </div>` : ''}
       ${this._renderGenerations()}
+      ${this._renderRunner()}
       ${this._renderSession()}
       ${this.picker ? this._renderPicker() : ''}
       ${this._renderBody()}
       ${this.journalFor ? this._renderJournal() : ''}
     `
+  }
+
+  /**
+   * The runner's own account of itself.
+   *
+   * Every decision it made, in the words of the rule that made it, so an
+   * unattended run is readable afterwards rather than being a board that
+   * changed while nobody was looking.
+   * @private
+   */
+  _renderRunner() {
+    const runner = this.runner
+    if (!runner) return ''
+    return `<div class="board-runner ${runner.running ? 'board-runner-live' : ''}">
+      <div class="board-runner-head">
+        <b>${runner.running ? '▶ running the phase' : '■ runner stopped'}</b>
+        ${runner.stoppedBy ? `<span class="board-runner-why">${esc(runner.stoppedBy)}</span>` : ''}
+        <span class="board-runner-actions">
+          ${runner.running
+            ? '<button class="btn btn-secondary btn-sm" data-action="run-phase">Stop</button>'
+            : '<button class="btn btn-secondary btn-sm" data-action="close-runner">Close</button>'}
+        </span>
+      </div>
+      <ol class="board-runner-log">
+        ${runner.log.slice(-12).map(line => `<li>${esc(line)}</li>`).join('')}
+      </ol>
+    </div>`
   }
 
   /**

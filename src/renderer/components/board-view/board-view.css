@@ -492,3 +492,40 @@
   margin-top: 6px;
   color: var(--text-secondary, #999);
 }
+
+/* The runner — an unattended run has to be readable afterwards */
+
+.board-runner {
+  margin-bottom: 10px;
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-left: 3px solid var(--text-secondary, #777);
+  border-radius: 4px;
+  background: var(--bg-secondary, #252525);
+}
+
+.board-runner-live { border-left-color: var(--success-color, #4cae6f); }
+
+.board-runner-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.board-runner-why { color: var(--text-secondary, #999); }
+.board-runner-actions { margin-left: auto; }
+
+.board-runner-log {
+  margin: 0;
+  padding: 8px 12px 8px 30px;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary, #aaa);
+}
+
+.board-runner-log li { padding: 1px 0; }

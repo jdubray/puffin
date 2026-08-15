@@ -59,6 +59,7 @@ export class BoardViewComponent {
     this.container = null
     this.status = null
     this.cards = []
+    this.generations = []
     this.rejection = null // { instanceId, reason }
     this.journalFor = null // { instanceId, entries }
     this.binding = null // this project's bound sekkei (the gate's source)
@@ -151,8 +152,45 @@ export class BoardViewComponent {
     const res = await window.puffin.board.listCards()
     if (res.success) {
       this.cards = res.instances || res.list || []
-      this.render()
     }
+    // Batches are reloaded with the cards, because a card movement is exactly
+    // what changes them - a hold appears the moment a card escalates.
+    try {
+      const batches = await window.puffin.board.listGenerations()
+      this.generations = batches.success ? batches.generations : []
+    } catch { this.generations = [] }
+    this.render()
+  }
+
+  /**
+   * Carry on after a hold. A person's decision, never automatic: the batch
+   * held because something needed a human, and resuming says one has looked.
+   *
+   * @param {string} generationId
+   */
+  async resumeGeneration(generationId) {
+    const result = await window.puffin.board.resumeGeneration({ generationId })
+    if (!result.success) this.rejection = { instanceId: generationId, reason: result.error }
+    await this._reloadCards()
+  }
+
+  /** Stop a batch. The cards stay where they are; only the run ends. */
+  async cancelGeneration(generationId) {
+    const result = await window.puffin.board.cancelGeneration({ generationId })
+    if (!result.success) this.rejection = { instanceId: generationId, reason: result.error }
+    await this._reloadCards()
+  }
+
+  /**
+   * The batches worth showing: the ones still running or held.
+   *
+   * A settled generation is history - it belongs in a journal, not across the
+   * top of a board someone is working on.
+   * @private
+   */
+  _activeGenerations() {
+    return (this.generations || [])
+      .filter(g => ['drafting', 'running', 'held'].includes(g.state?.genState))
   }
 
   async createCard() {
@@ -452,6 +490,8 @@ export class BoardViewComponent {
     else if (action === 'review-fail' && id) this.dispatch(id, 'REVIEW_FAILED', { finding: reason || 'defect' })
     else if (action === 'resume' && id) this.dispatch(id, 'RESUME')
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')
+    else if (action === 'resume-generation' && id) this.resumeGeneration(id)
+    else if (action === 'cancel-generation' && id) this.cancelGeneration(id)
   }
 
   _onDragStart(e) {
@@ -528,10 +568,46 @@ export class BoardViewComponent {
       ${this.rejection ? `<div class="board-rejection ${this.rejection.pending ? 'board-rejection-pending' : ''}">
         ${this.rejection.pending ? '⏳' : '⤺'} <code>${esc(this.rejection.instanceId)}</code> — ${esc(this.rejection.reason)}
       </div>` : ''}
+      ${this._renderGenerations()}
       ${this.picker ? this._renderPicker() : ''}
       ${this._renderBody()}
       ${this.journalFor ? this._renderJournal() : ''}
     `
+  }
+
+  /**
+   * The batch strip: one line per active generation.
+   *
+   * A held batch is the loudest thing on the board on purpose - while it is
+   * held, its cards refuse to move, and a user who cannot see why would read
+   * that as the board being broken.
+   * @private
+   */
+  _renderGenerations() {
+    const active = this._activeGenerations()
+    if (active.length === 0) return ''
+    return `<div class="board-generations">
+      ${active.map(g => {
+        const state = g.state || {}
+        const held = state.genState === 'held'
+        return `<div class="board-generation ${held ? 'board-generation-held' : ''}">
+          <span class="board-generation-name">${held ? '⏸' : '▶'} Phase ${esc(String(g.phase))}</span>
+          <span class="board-generation-meta">
+            ${esc(String(state.pending ?? 0))} of ${esc(String(g.cards.length))} outstanding ·
+            policy <code>${esc(state.policy || g.policy)}</code>${
+              state.escalated > 0 ? ` · <b>${esc(String(state.escalated))}</b> escalated` : ''}
+          </span>
+          ${held ? `<span class="board-generation-why">A card escalated and this phase runs on
+            <b>hold</b> — its other cards will refuse to move until you resume it.</span>` : ''}
+          <span class="board-generation-actions">
+            ${held ? `<button class="btn btn-primary btn-sm" data-action="resume-generation"
+              data-id="${esc(g.generationId)}">Resume phase</button>` : ''}
+            <button class="btn btn-secondary btn-sm" data-action="cancel-generation"
+              data-id="${esc(g.generationId)}" title="End the run; the cards stay on the board">End</button>
+          </span>
+        </div>`
+      }).join('')}
+    </div>`
   }
 
   _renderPicker() {

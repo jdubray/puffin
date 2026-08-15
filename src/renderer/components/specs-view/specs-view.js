@@ -1009,13 +1009,26 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       .map(c => c.instanceId || c.id))
 
     let added = 0
+    const cards = []
     for (const component of phase.components) {
       const instanceId = cardIdFor(component.glmId)
+      cards.push(instanceId)
       if (existing.has(instanceId)) continue
       const result = await window.puffin.board.createCard({ instanceId })
       if (result.success) added++
     }
-    this.queueNote = { added, skipped: phase.components.length - added }
+
+    // The batch, not just the cards. Without it the phase's policy would be a
+    // word on a heading: nothing would count the cards still outstanding, and
+    // nothing would stop the rest of the phase after one of them escalated.
+    const generationId = `gen-${this.binding?.slug || 'sekkei'}-p${phase.number}-${Date.now()}`
+    const generation = await window.puffin.board.createGeneration({
+      generationId, phase: phase.number, policy: phase.policy, cards
+    })
+
+    this.queueNote = generation.success
+      ? { added, skipped: phase.components.length - added, policy: phase.policy }
+      : { error: `Cards queued, but the batch did not start: ${generation.error}` }
     await this.recomputePlan()
   }
 
@@ -1639,8 +1652,12 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       ${plan ? this._renderPlan(plan) : '<div class="specs-changes-note">No plan computed yet.</div>'}
       ${note?.error ? `<div class="specs-editor-error">✗ ${esc(note.error)}</div>` : ''}
       ${note && note.added !== undefined ? `<div class="specs-changes-note">
-        Queued ${note.added} card${note.added === 1 ? '' : 's'} onto the Workflow${note.skipped ? ` (${note.skipped} already there)` : ''} —
-        open the Workflow tab to run them.
+        Queued ${note.added} card${note.added === 1 ? '' : 's'} onto the Workflow${note.skipped ? ` (${note.skipped} already there)` : ''}${
+          note.policy === 'hold'
+            ? ' — the batch runs on <b>hold</b>: if a card escalates, the rest of the phase stops until you resume it.'
+            : note.policy === 'continue'
+              ? ' — the batch runs on <b>continue</b>: escalations are carried into the outcome instead of stopping it.'
+              : ' — open the Workflow tab to run them.'}
       </div>` : ''}
     </div>`
   }

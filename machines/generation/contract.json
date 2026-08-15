@@ -11,11 +11,11 @@
     },
     {
       "name": "pending",
-      "type": "integer 0..3 — cards selected for this generation that have not yet settled"
+      "type": "integer >= 0 — cards selected for this generation that have not yet settled. The 1..3 selection domain below is the checker's finite window, not a runtime cap."
     },
     {
       "name": "escalated",
-      "type": "integer 0..2 — cards that reached needsHuman during this generation"
+      "type": "integer >= 0 — cards that reached needsHuman during this generation"
     }
   ],
   "initState": {

@@ -61,6 +61,53 @@
   background: var(--bg-tertiary, #2e2e2e);
 }
 
+/* The batch strip — one line per running or held generation */
+
+.board-generations {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.board-generation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #3a3a3a);
+}
+
+.board-generation-name { font-weight: 600; }
+
+.board-generation-meta { color: var(--text-secondary, #999); }
+
+.board-generation-meta code {
+  background: var(--bg-tertiary, #2e2e2e);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.board-generation-actions { margin-left: auto; display: flex; gap: 6px; }
+
+/* A held batch is the loudest thing on the board: while it holds, its cards
+   refuse to move, and that must never read as the board being broken. */
+.board-generation-held {
+  border-color: var(--warning-color, #d6a15a);
+  background: rgba(214, 161, 90, 0.1);
+}
+
+.board-generation-why {
+  flex-basis: 100%;
+  order: 3;
+  color: var(--text-secondary, #999);
+  font-size: 12.5px;
+}
+
 .board-empty {
   padding: 40px;
   text-align: center;

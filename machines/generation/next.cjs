@@ -28,9 +28,20 @@ const INITIAL_STATE = {
   escalated: 0,
 };
 
-/** Bounds keep the state space finite; the real batch size is the card count. */
-const MAX_SELECTION = 3;
-const MAX_ESCALATIONS = 2;
+/**
+ * The checker's window, NOT a runtime cap.
+ *
+ * Exploring every reachable state needs a finite selection domain, so the
+ * contract enumerates batches of 1..3 and every proof below is established
+ * over those. A real phase carries more, and the acceptors deliberately do not
+ * enforce this number: a bound that lived in the guard would reject a genuine
+ * six-card batch at runtime, which is a proof about a machine nobody runs.
+ * What the proofs actually rest on is the shape - pending only ever decrements
+ * toward zero - and that holds at any size.
+ *
+ * The number itself lives in contract.json's dataDomain, which is the only
+ * place that needs it.
+ */
 
 const modelShape = {
   genState: { type: 'string' },
@@ -70,7 +81,7 @@ const acceptors = {
     const data = proposal || {};
     if (TERMINAL.has(model.genState)) return reject('terminals-are-frozen');
     if (model.genState !== 'drafting') return reject('select-only-while-drafting');
-    if (!Number.isInteger(data.count) || data.count < 1 || data.count > MAX_SELECTION) {
+    if (!Number.isInteger(data.count) || data.count < 1) {
       return reject('select-only-while-drafting');
     }
     next.pending = data.count;
@@ -106,7 +117,9 @@ const acceptors = {
     if (model.genState !== 'running') return reject('card-outcomes-only-while-running');
 
     const pending = model.pending - 1;
-    const escalated = Math.min(model.escalated + 1, MAX_ESCALATIONS);
+    // Not clamped: a count that stops rising would under-report what the batch
+    // stepped over, which is the one thing the terminal exists to say.
+    const escalated = model.escalated + 1;
     next.pending = pending;
     next.escalated = escalated;
     next.genState = pending === 0

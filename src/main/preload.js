@@ -789,6 +789,10 @@ contextBridge.exposeInMainWorld('puffin', {
     start: () => ipcRenderer.invoke('board:start'),
     createCard: (args) => ipcRenderer.invoke('board:createCard', args),
     listCards: () => ipcRenderer.invoke('board:listCards'),
+    createGeneration: (args) => ipcRenderer.invoke('board:createGeneration', args),
+    listGenerations: () => ipcRenderer.invoke('board:listGenerations'),
+    resumeGeneration: (args) => ipcRenderer.invoke('board:resumeGeneration', args),
+    cancelGeneration: (args) => ipcRenderer.invoke('board:cancelGeneration', args),
     // dispatch({ instanceId, action, data?, actionId? }) → { success, decision }
     dispatch: (args) => ipcRenderer.invoke('board:dispatch', args),
     getCard: (args) => ipcRenderer.invoke('board:getCard', args),

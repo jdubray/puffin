@@ -22,10 +22,13 @@ export const stateInvariants = [
     pred: (s) => POLICIES.has(s.policy),
   },
   {
-    name: 'counts-are-bounded',
+    name: 'counts-are-whole-and-non-negative',
+    // No ceiling here on purpose. The checker's finite window comes from the
+    // SELECT domain (1..3 in the contract); writing that number into an
+    // invariant would make a real six-card batch violate its own machine.
     pred: (s) =>
-      Number.isInteger(s.pending) && s.pending >= 0 && s.pending <= 3 &&
-      Number.isInteger(s.escalated) && s.escalated >= 0 && s.escalated <= 2,
+      Number.isInteger(s.pending) && s.pending >= 0 &&
+      Number.isInteger(s.escalated) && s.escalated >= 0,
   },
   {
     name: 'a-running-batch-has-a-policy',

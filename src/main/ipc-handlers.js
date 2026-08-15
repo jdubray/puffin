@@ -24,6 +24,7 @@ const { detectProjectLanguage, validationLaneFor } = require('./project-language
 const { GlmClient } = require('./glm-client')
 const { setupGlmSessionIntegration } = require('./glm-integration')
 const { BoardRuntime } = require('./board-runtime')
+const { GenerationCoordinator } = require('./generation-coordinator')
 
 // Polygraph workbench — engine access for any project built with Polygraph
 const polygraphService = new PolygraphService()
@@ -42,6 +43,7 @@ const boardRuntime = new BoardRuntime({
 const pluginCheckService = new PluginCheckService()
 
 // One health report across every integration Puffin wires
+const generationCoordinator = new GenerationCoordinator({ board: boardRuntime })
 const doctorService = new DoctorService({ polygraphService, boardRuntime, pluginCheckService })
 
 const { getTempImageService } = require('./services')
@@ -191,6 +193,7 @@ function setIpcProjectPath(newProjectPath) {
   if (claudeService) claudeService.setProjectPath(newProjectPath)
   if (gitService) gitService.setProjectPath(newProjectPath)
   if (boardRuntime) boardRuntime.setProjectPath(newProjectPath)
+  if (generationCoordinator) generationCoordinator.setProjectPath(newProjectPath)
   if (polygraphService) {
     polygraphService.setProjectPath(newProjectPath)
     // Config is not loaded yet at project-switch time; state:init applies
@@ -544,11 +547,38 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('board:dispatch', async (event, { instanceId, action, data, actionId } = {}) => {
     try {
       if (!instanceId || !action) return { success: false, error: 'instanceId and action are required' }
-      const result = await boardRuntime.dispatch(instanceId, action, data, actionId)
+      const result = await generationCoordinator.dispatchCard(instanceId, action, data, actionId)
+      if (result?.held) return result
       return { success: true, ...result }
     } catch (error) {
       return { success: false, error: error.message, status: error.status }
     }
+  })
+
+  ipcMain.handle('board:createGeneration', async (event, params = {}) => {
+    try {
+      return await generationCoordinator.createGeneration(params)
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('board:listGenerations', async () => {
+    try {
+      return await generationCoordinator.listGenerations()
+    } catch (error) {
+      return { success: false, error: error.message, generations: [] }
+    }
+  })
+
+  ipcMain.handle('board:resumeGeneration', async (event, { generationId } = {}) => {
+    if (!generationId) return { success: false, error: 'generationId is required' }
+    return generationCoordinator.resume(generationId)
+  })
+
+  ipcMain.handle('board:cancelGeneration', async (event, { generationId } = {}) => {
+    if (!generationId) return { success: false, error: 'generationId is required' }
+    return generationCoordinator.cancel(generationId)
   })
 
   ipcMain.handle('board:getCard', async (event, { instanceId } = {}) => {

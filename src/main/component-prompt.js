@@ -163,8 +163,16 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
     return { success: false, error: `${glmId} has no prompt spec template — author it before starting work` }
   }
 
-  const outputs = (prompt?.body?.outputs || []).map(o => (typeof o === 'string' ? o : o?.path))
-    .filter(Boolean)
+  // The prompt spec's outputs AND the acceptance spec's deliverables. They
+  // disagree in practice - a spec names streams.mjs under outputs while its
+  // acceptance node lists streams.mjs and streams.test.mjs, and the verifier
+  // runs the test file - so a session that writes only the outputs cannot pass
+  // its own gate. Taking both means the card declares everything it is judged
+  // on, and the out-of-scope check stops flagging a file the design asked for.
+  const outputs = [...new Set([
+    ...(prompt?.body?.outputs || []),
+    ...(acceptance?.body?.deliverables || [])
+  ].map(o => (typeof o === 'string' ? o : o?.path)).filter(Boolean))]
   const verifier = verifierCommand(acceptance?.body)
   const bundle = resolveBundle(prompt?.body?.context_bundle || [], byId)
   const allowed = allowedToolsFor(verifier)

@@ -32,6 +32,7 @@ const nodes = () => [
   {
     glmId: `${ID}.spec.acceptance`, stratum: 'spec', specKind: 'acceptance',
     body: { verifier: { command: 'bun test src/kernel.test.mjs' },
+      deliverables: ['src/kernel.mjs', 'src/kernel.test.mjs'],
       acceptance_criteria: ['events fire in timestamp order'] }
   },
   {
@@ -54,7 +55,10 @@ describe('what the prompt carries', () => {
     assert.match(result.prompt, /virtual clock and dispatch loop/)
     assert.match(result.prompt, /src\/kernel\.mjs/)
     assert.match(result.prompt, /bun test src\/kernel\.test\.mjs/)
-    assert.deepStrictEqual(result.outputs, ['src/kernel.mjs'])
+    // Both the prompt spec's outputs and the acceptance spec's deliverables:
+    // the verifier runs the test file, so a card that did not declare it could
+    // not pass its own gate without writing something "out of scope".
+    assert.deepStrictEqual(result.outputs, ['src/kernel.mjs', 'src/kernel.test.mjs'])
   })
 
   it('resolves the context bundle instead of handing over ids to go fetch', () => {

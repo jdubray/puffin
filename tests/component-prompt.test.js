@@ -12,7 +12,7 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { buildComponentPrompt } = require('../src/main/component-prompt.js')
+const { buildComponentPrompt, allowedToolsFor } = require('../src/main/component-prompt.js')
 
 const ID = 'cogfab:sim.kernel.core'
 
@@ -126,6 +126,44 @@ describe('the two stages', () => {
   it('tells implementation to escalate rather than guess', () => {
     // An escalated card is a normal outcome; a wrong guess found at review is not.
     assert.match(build({ stage: 'implement' }).prompt, /stop and say so/)
+  })
+})
+
+describe('what the session may run', () => {
+  it("grants the verifier's binary, since that is the gate it must run", () => {
+    // acceptEdits covers file edits only. Without this the session can write
+    // the code and not test it, and the turn burns down on "This command
+    // requires approval" in a panel with no approve button.
+    assert.deepStrictEqual(allowedToolsFor('bun test src/kernel.test.mjs'), ['Bash(bun:*)'])
+    assert.deepStrictEqual(allowedToolsFor('npm test -- kernel'), ['Bash(npm:*)'])
+  })
+
+  it('grants the binary rather than the exact command', () => {
+    // The session legitimately varies it - one file, a filter, 2>&1 - and an
+    // allowlist of one exact string refuses every variant.
+    assert.strictEqual(allowedToolsFor('bun test x')[0], 'Bash(bun:*)')
+  })
+
+  it('grants nothing when the verifier is not a plain executable', () => {
+    // A path, a pipe or a shell operator is the spec asking for something an
+    // allowlist should not quietly hand over.
+    for (const odd of ['cd foo && bun test', './scripts/verify.sh', 'a|b', '', '   ', null]) {
+      assert.deepStrictEqual(allowedToolsFor(odd), [], String(odd))
+    }
+  })
+
+  it('tells the session where the boundary is', () => {
+    const result = build({ stage: 'implement' })
+    assert.deepStrictEqual(result.allowedTools, ['Bash(bun:*)'])
+    assert.match(result.prompt, /you may run `bun` commands without asking/)
+    assert.match(result.prompt, /stop and say which one/)
+  })
+
+  it('says so plainly when nothing is pre-approved', () => {
+    const noGate = nodes().filter(n => !n.glmId.endsWith('.spec.acceptance'))
+    const result = buildComponentPrompt({ nodes: noGate, glmId: ID, stage: 'implement' })
+    assert.deepStrictEqual(result.allowedTools, [])
+    assert.match(result.prompt, /no command is pre-approved/)
   })
 })
 

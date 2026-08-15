@@ -51,6 +51,38 @@ const PLAN_RULES = `For this planning turn:
   it is cheaper to answer now than to discover it half-implemented.`
 
 /**
+ * The tools a card's session may use without asking.
+ *
+ * A card session has no one to answer a permission prompt: the board shows the
+ * reply but has no approve button, so an unapproved Bash call stalls the turn
+ * and the transcript fills with "This command requires approval" until the
+ * turn budget runs out. That is what makes this list load-bearing rather than
+ * a convenience.
+ *
+ * It is derived from the verifier rather than fixed, and it grants the verifier's
+ * BINARY (`Bash(bun:*)`), not the exact string: the session legitimately runs
+ * the suite in variants - one file, a filter, with 2>&1 - and an allowlist of
+ * one exact command refuses all of them. Nothing else is granted; a session
+ * that needs more says so and the card escalates, which is the honest outcome.
+ *
+ * @param {string} verifier - The acceptance spec's verifier command
+ * @returns {string[]} --allowedTools entries
+ */
+function allowedToolsFor(verifier) {
+  const command = String(verifier || '').trim()
+  // A compound command grants nothing. Its first word is not the verifier -
+  // `cd build && ctest` would hand over `cd` and still leave ctest blocked,
+  // which is the worst of both: a grant that buys nothing and hides the fact
+  // that the real command was never approved.
+  if (/[&|;<>`$(){}\n]/.test(command)) return []
+  const binary = command.split(/\s+/)[0]
+  // A bare executable name only. A path here is the spec pointing at a script
+  // whose contents an allowlist cannot vouch for.
+  if (!/^[a-zA-Z0-9_.-]+$/.test(binary)) return []
+  return [`Bash(${binary}:*)`]
+}
+
+/**
  * The verifier command an acceptance spec carries, in either shape GLM writes.
  *
  * @param {Object} body
@@ -135,6 +167,7 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
     .filter(Boolean)
   const verifier = verifierCommand(acceptance?.body)
   const bundle = resolveBundle(prompt?.body?.context_bundle || [], byId)
+  const allowed = allowedToolsFor(verifier)
 
   // Everything hanging beneath the component: its interactions and its other
   // spec leaves. A session that reads only the prompt spec misses the
@@ -168,7 +201,16 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
         `in the spec, not as context you should invent.`
       : '',
     lane ? laneBrief(lane, stage) : '',
-    stage === 'implement' ? IMPLEMENT_RULES : PLAN_RULES
+    stage === 'implement' ? IMPLEMENT_RULES : PLAN_RULES,
+    // Say what the session may run. Without this it discovers the boundary by
+    // hitting it, and a refused command reads to the model as a transient
+    // failure worth retrying rather than a rule.
+    allowed.length > 0
+      ? `SHELL: you may run \`${allowed[0].slice(5, -1).replace(':*', '')}\` commands without asking. ` +
+        `Anything else needs an approval nobody is watching for, so it will hang: ` +
+        `if you need another command, stop and say which one and why.`
+      : `SHELL: no command is pre-approved for this card, and nobody is watching ` +
+        `for an approval prompt. Do not start one - say what you would have run.`
   ]
 
   return {
@@ -176,6 +218,7 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
     prompt: sections.filter(Boolean).join('\n\n'),
     outputs,
     verifier,
+    allowedTools: allowed,
     title: component.title || glmId,
     missingContext: bundle.missing
   }
@@ -209,4 +252,4 @@ function laneBrief(lane, stage) {
     `${language} — a module written without it cannot be captured without a rewrite.`
 }
 
-module.exports = { buildComponentPrompt, promptTemplate, verifierCommand }
+module.exports = { buildComponentPrompt, promptTemplate, verifierCommand, allowedToolsFor }

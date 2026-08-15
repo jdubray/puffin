@@ -776,9 +776,13 @@ class ClaudeService {
     // Limit turns to prevent runaway processes
     args.push('--max-turns', String(data.maxTurns || '100'))
 
-    // Permission mode: bypass all prompts when puppeteer loop is active (user opted in),
-    // otherwise only auto-accept file edits.
-    const permissionMode = data.mcpConfigPath ? 'bypassPermissions' : 'acceptEdits'
+    // Permission mode. `acceptEdits` covers file edits ONLY - every Bash call
+    // still asks, and a surface with no approve button (the board's card
+    // sessions, the puppeteer loop) stalls on the prompt until the turn budget
+    // runs out. Those callers say so explicitly rather than inheriting a
+    // default that cannot work for them.
+    const unattended = data.unattended === true || !!data.mcpConfigPath
+    const permissionMode = unattended ? 'bypassPermissions' : 'acceptEdits'
     args.push('--permission-mode', permissionMode)
 
     // Add model if specified

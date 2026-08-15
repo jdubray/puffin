@@ -62,7 +62,10 @@ export class BoardViewComponent {
     this.status = null
     this.cards = []
     this.generations = []
-    this.session = null   // the one running card session, if any
+    this.session = null
+    // Off by default: skipping permission prompts is the user's call to make,
+    // once, in the open - not a default they discover after the fact.
+    this.unattended = false   // the one running card session, if any
     this.rejection = null // { instanceId, reason }
     this.journalFor = null // { instanceId, entries }
     this.binding = null // this project's bound sekkei (the gate's source)
@@ -226,7 +229,15 @@ export class BoardViewComponent {
     }
 
     this._subscribeSession()
-    window.puffin.claude.submit({ prompt: built.prompt, sessionId: null })
+    window.puffin.claude.submit({
+      prompt: built.prompt,
+      sessionId: null,
+      // The verifier's binary, so the session can run its own gate. Without it
+      // acceptEdits lets the session write files but not test them, and the
+      // turn burns down asking for an approval this panel cannot give.
+      allowedTools: built.allowedTools || [],
+      unattended: this.unattended === true
+    })
   }
 
   /**
@@ -589,7 +600,11 @@ export class BoardViewComponent {
 
   // ===== events =====
 
-  _onChange() { /* no board-level selectors — the gate follows the binding */ }
+  _onChange(e) {
+    if (e.target.id === 'board-unattended') {
+      this.unattended = e.target.checked
+    }
+  }
 
   _onClick(e) {
     const button = e.target.closest('button[data-action]')
@@ -687,6 +702,9 @@ export class BoardViewComponent {
           </button>
           <input type="text" id="board-new-card" class="board-input" placeholder="ad-hoc card…">
           <button class="btn btn-secondary btn-sm" data-action="create-card" ${!this.status?.running ? 'disabled' : ''}>Add</button>
+          <label class="board-unattended" title="Card sessions have no approve button, so a command that is not pre-approved hangs the turn. Unattended runs them without asking — the same trust you give a terminal you have already opened.">
+            <input type="checkbox" id="board-unattended" ${this.unattended ? 'checked' : ''}> unattended
+          </label>
           <button class="btn btn-secondary btn-sm" data-action="refresh" ${this.isBusy ? 'disabled' : ''}>${this.isBusy ? 'Loading…' : 'Refresh'}</button>
         </div>
       </div>

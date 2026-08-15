@@ -604,8 +604,80 @@
   border-radius: 4px;
 }
 
+/* The composer sits in the narrow left column, so the inherited prompt-view
+   layout has to be re-fitted rather than inherited wholesale.
+
+   Selects on one line: the three are a single decision ("which model, how hard
+   to think"), and letting them wrap put Effort on a line of its own — reading
+   as a separate section it isn't. They share the row and shrink together.
+
+   Actions on two rows of wide, short buttons: with six actions in this width,
+   one row squeezed each into a two- or three-line column of text. Wrapping is
+   the same total height with none of the squeeze. */
+
+.specs-composer .prompt-options {
+  flex-wrap: nowrap;
+  column-gap: 10px;
+  align-items: center;
+}
+
+.specs-composer .prompt-option-group {
+  min-width: 0;
+  flex: 1 1 0;
+  gap: 5px;
+}
+
+.specs-composer .prompt-select-label {
+  flex: none;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.specs-composer .prompt-model-select {
+  min-width: 0;
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
 .specs-composer-actions {
-  justify-content: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 6px;
+}
+
+/* Wide and short: each button takes a share of the row, and its label stays on
+   one line rather than stacking into a column. */
+.specs-composer-actions > .btn,
+.specs-composer-actions > .dropdown > .btn {
+  flex: 1 1 auto;
+  min-width: 116px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.specs-composer-actions > .dropdown { flex: 1 1 auto; min-width: 116px; }
+.specs-composer-actions > .dropdown > .btn { width: 100%; }
+
+/* The mic is an icon, not a labelled action — it should not claim a share. */
+.specs-composer-actions > .mic-btn {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 34px;
+  padding: 6px 0;
+}
+
+/* Author is the one primary action: give it the end of the row to itself. */
+.specs-composer-actions > .btn.primary {
+  flex: 0 0 auto;
+  min-width: 92px;
+  margin-left: auto;
 }
 
 /* The composer inherits the prompt view's option/action styling; only the

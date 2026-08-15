@@ -1374,7 +1374,9 @@ coding agent would have to guess at. List findings worst-first with the glm id e
             title="Review this sekkei for gaps, ambiguity and altitude errors">🔍 Review specs</button>
           <button class="btn outline" data-action="new-work-item"
             ${!this.selectedGlmId ? 'disabled' : ''}
-            title="${this.selectedGlmId ? 'Queue the selected spec onto the Workflow' : 'Select a node first'}">+ Work item</button>
+            title="${this.selectedGlmId
+              ? `Put ${this.selectedGlmId} on the Workflow board as a card to implement`
+              : 'Select a spec in the tree first'}">→ Send to Workflow</button>
 
           <div class="dropdown ${this.openMenu === 'docs' ? 'open' : ''}" id="sekkei-docs-dropdown">
             <button class="btn secondary" data-action="menu-docs" title="Include design documents as reference">

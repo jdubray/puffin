@@ -10,6 +10,11 @@
 
 import { readVerifierRun, describeVerdict } from '../../../shared/verifier-verdict.js'
 
+/** Escape for an HTML attribute value — esc() leaves quotes alone. */
+function escAttr(text) {
+  return esc(text).replace(/"/g, '&quot;')
+}
+
 /** Escape text for safe interpolation into HTML */
 function esc(text) {
   const div = document.createElement('div')
@@ -290,9 +295,17 @@ export class BoardViewComponent {
       return this.render()
     }
 
+    // The working tree as it stands BEFORE the turn. Without this there is no
+    // way to tell what the session changed from what was already dirty.
+    let before = ''
+    try {
+      const snap = await window.puffin.board.workspaceSnapshot()
+      if (snap.success) before = snap.snapshot
+    } catch { /* not a git repo: the scope check simply reports nothing */ }
+
     this.session = {
       instanceId, stage, title: node.title || node.glmId,
-      text: '', running: true, error: null
+      text: '', running: true, error: null, before, outputs: []
     }
     this.render()
 
@@ -303,6 +316,7 @@ export class BoardViewComponent {
       this.session = { ...this.session, running: false, error: built.error }
       return this.render()
     }
+    this.session.outputs = built.outputs || []
 
     this._subscribeSession()
     window.puffin.claude.submit({
@@ -340,6 +354,7 @@ export class BoardViewComponent {
         at: new Date().toISOString(),
         ok: true
       }
+      this._checkSessionScope()
       // The card does NOT advance here. A finished turn is not a passed gate:
       // planning ends when a person says the plan is ready, and implementing
       // ends at the model check - both are decisions the machine owns.
@@ -356,6 +371,32 @@ export class BoardViewComponent {
       }
       this.render()
     })
+  }
+
+  /**
+   * @private
+   * What did the turn actually touch?
+   *
+   * Asked of git, not of the session. A session that edits a test to turn a
+   * red gate green reports it honestly - the one we saw did - and the notice
+   * still goes unread, because prose in the middle of a transcript is not a
+   * signal. This puts the answer on the card, where the review gate is.
+   */
+  async _checkSessionScope() {
+    const { instanceId, before, outputs } = this.session || {}
+    if (!instanceId) return
+    try {
+      const scope = await window.puffin.board.sessionScope({ before, outputs })
+      if (!scope.success) return
+      const entry = this.sessionLog[instanceId]
+      if (entry) {
+        entry.changed = scope.changed
+        entry.outOfScope = scope.outOfScope
+        entry.gateAffecting = scope.gateAffecting
+      }
+      if (this.session?.instanceId === instanceId) this.session.scope = scope
+      this.render()
+    } catch { /* the turn still happened; the scope check is best-effort */ }
   }
 
   /** Stop the running session. The card stays where it is. */
@@ -839,6 +880,7 @@ export class BoardViewComponent {
       </div>
       ${session.error ? `<div class="board-rejection">&#10007; ${esc(session.error)}</div>` : ''}
       <pre class="board-session-body" id="board-session-body">${esc(session.text)}</pre>
+      ${this._renderScopeFinding(session.scope)}
       ${!session.running && !session.error ? `<div class="board-session-note">
         <b>The turn is over and the card has not moved.</b> ${session.stage === 'plan'
           ? 'A finished turn is not a plan you have agreed to, so read it first.'
@@ -851,6 +893,34 @@ export class BoardViewComponent {
             : `<button class="btn btn-primary btn-sm" data-action="validate"
                  data-id="${esc(session.instanceId)}">Run the model check &rarr; validating</button>`}
         </span>
+      </div>` : ''}
+    </div>`
+  }
+
+  /**
+   * Files the turn changed that the card never declared.
+   *
+   * Loud, and loudest for a test file: that is the shape where a failing gate
+   * becomes a passing one without the code changing. Puffin cannot tell a good
+   * reason from a bad one and does not try - it makes sure the question gets
+   * asked before review, instead of leaving it in a transcript.
+   * @private
+   */
+  _renderScopeFinding(scope) {
+    if (!scope || scope.outOfScope.length === 0) return ''
+    const gate = scope.gateAffecting || []
+    return `<div class="board-scope ${gate.length > 0 ? 'board-scope-gate' : ''}">
+      <div class="board-scope-head">
+        ${gate.length > 0 ? '&#9888; ' : ''}This turn changed ${scope.outOfScope.length}
+        file${scope.outOfScope.length === 1 ? '' : 's'} the card did not declare
+      </div>
+      <div class="board-scope-list">
+        ${scope.outOfScope.map(f => `<code class="${gate.includes(f) ? 'board-scope-gatefile' : ''}">${esc(f)}</code>`).join(' ')}
+      </div>
+      ${gate.length > 0 ? `<div class="board-scope-why">
+        ${gate.length === 1 ? 'That is a test or fixture' : 'Those are tests or fixtures'} —
+        the one change that can turn a failing gate green without the code
+        changing. Read the diff before this card passes review.
       </div>` : ''}
     </div>`
   }
@@ -975,6 +1045,10 @@ export class BoardViewComponent {
         ${ran ? `<span class="board-badge ${ran.ok ? 'board-badge-ran' : 'board-badge-warn'}"
           title="${esc(ran.stage === 'plan' ? 'A planning session finished' : 'An implementation session finished')} at ${esc(String(ran.at).slice(11, 16))} — the card does not move on its own"
         >${ran.stage === 'plan' ? 'planned' : 'built'}${ran.ok ? '' : ' ✗'}</span>` : ''}
+        ${ran?.outOfScope?.length > 0 ? `<span class="board-badge board-badge-scope"
+          title="Changed outside this card's declared outputs: ${escAttr(ran.outOfScope.join(', '))}${
+            ran.gateAffecting?.length > 0 ? ' — includes a test or fixture, which can turn a failing gate green without the code changing' : ''}"
+        >${ran.gateAffecting?.length > 0 ? '⚠ ' : ''}off-spec ${ran.outOfScope.length}</span>` : ''}
         ${state.reworkCount > 0 ? `<span class="board-badge board-badge-warn">rework ${state.reworkCount}/2</span>` : ''}
         ${state.lastSignal ? `<span class="board-badge">${esc(state.lastSignal)}</span>` : ''}
       </div>

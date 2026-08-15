@@ -26,6 +26,7 @@ const { setupGlmSessionIntegration } = require('./glm-integration')
 const { BoardRuntime } = require('./board-runtime')
 const { GenerationCoordinator } = require('./generation-coordinator')
 const { buildComponentPrompt } = require('./component-prompt')
+const { compareScope, gateAffecting } = require('./session-scope')
 
 // Polygraph workbench — engine access for any project built with Polygraph
 const polygraphService = new PolygraphService()
@@ -601,6 +602,35 @@ function setupStateHandlers(ipcMain) {
         stateful: validationLaneFor({ isStateMachine: true, language: language.language })
       }
       return buildComponentPrompt({ nodes, glmId, stage, lane })
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  /**
+   * The working tree as git sees it — the before/after of a card's turn.
+   *
+   * git rather than the session's own account of what it wrote: the point is
+   * to have a record that does not depend on the session describing itself
+   * accurately.
+   */
+  ipcMain.handle('board:workspaceSnapshot', async () => {
+    try {
+      const result = await gitService.execGit(['status', '--porcelain', '-uall'])
+      if (result.code !== 0) return { success: false, error: result.stderr || 'git status failed' }
+      return { success: true, snapshot: result.stdout }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  /** What the turn changed, against what the card was allowed to change. */
+  ipcMain.handle('board:sessionScope', async (event, { before, outputs } = {}) => {
+    try {
+      const result = await gitService.execGit(['status', '--porcelain', '-uall'])
+      if (result.code !== 0) return { success: false, error: result.stderr || 'git status failed' }
+      const scope = compareScope({ before: before || '', after: result.stdout, outputs: outputs || [] })
+      return { success: true, ...scope, gateAffecting: gateAffecting(scope.outOfScope) }
     } catch (error) {
       return { success: false, error: error.message }
     }

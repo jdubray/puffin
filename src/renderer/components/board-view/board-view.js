@@ -8,6 +8,8 @@
  * and dispatches MARK_READY with the gate's answer — not the human's.
  */
 
+import { readVerifierRun, describeVerdict } from '../../../shared/verifier-verdict.js'
+
 /** Escape text for safe interpolation into HTML */
 function esc(text) {
   const div = document.createElement('div')
@@ -436,12 +438,18 @@ export class BoardViewComponent {
     this.render()
     try {
       const verdict = await window.puffin.glm.verify({ workspaceId: this.glmWorkspaceId })
-      const gates = verdict.result?.gates || verdict.result?.results || []
-      const passed = verdict.success && (verdict.result?.ok ?? verdict.result?.passed ??
-        (Array.isArray(gates) && gates.length > 0 && gates.every(g => g.ok ?? g.passed)))
+      // One reader for this payload — see shared/verifier-verdict.js. Reading
+      // it by hand here is what made the gate unpassable: the gates live under
+      // run.gateResults, so the old lookup found an empty list every time.
+      const gateVerdict = readVerifierRun(verdict.result)
+      const passed = verdict.success && gateVerdict.passed
       await this.dispatch(instanceId, 'MARK_READY', { gate: passed ? 'pass' : 'fail' })
-      if (!passed && !this.rejection) {
-        this.rejection = { instanceId, reason: 'DoRC gate failed — the verifier said no' }
+      if (!passed) {
+        // Overwrite, do not defer to the machine's reason. The card's own
+        // 'ready-requires-gate-pass' is true but useless on its own: it says a
+        // gate refused without saying which, and the DoRC gates fail for
+        // reasons a person has to go and fix.
+        this.rejection = { instanceId, reason: describeVerdict(gateVerdict) }
         this.render()
       }
     } catch (error) {

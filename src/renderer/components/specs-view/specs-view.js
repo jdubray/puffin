@@ -9,6 +9,7 @@
  */
 
 import { renderMarkdown } from '../../lib/markdown.js'
+import { readVerifierRun, describeVerdict } from '../../../shared/verifier-verdict.js'
 import { planGeneration } from '../../../shared/generation-plan.js'
 
 /**
@@ -1765,15 +1766,18 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     if (!v) return ''
     if (v.pending) return '<div class="specs-verify specs-verify-pending">Verifier running…</div>'
     if (v.error) return `<div class="specs-verify specs-verify-fail">✗ ${esc(v.error)}</div>`
-    const gates = v.gates || v.results || []
-    const passed = v.ok ?? v.passed ?? (Array.isArray(gates) && gates.every(g => g.ok ?? g.passed))
-    return `<div class="specs-verify ${passed ? 'specs-verify-ok' : 'specs-verify-fail'}">
-      ${passed ? '✓ all verifier gates green (Definition of Ready to Code)' : '✗ verifier gates failing'}
-      ${Array.isArray(gates) && gates.length ? `<div class="specs-gates">${gates.map(g =>
-        `<span class="specs-badge ${g.ok ?? g.passed ? '' : 'specs-badge-warn'}">${esc(g.name || g.gate || '?')}</span>`
+    // The gates live under run.gateResults; reading v.gates found an empty
+    // array, and [].every() is true — so this panel reported every gate green
+    // while showing none of them. One reader now, and empty is never a pass.
+    const verdict = readVerifierRun(v)
+    return `<div class="specs-verify ${verdict.passed ? 'specs-verify-ok' : 'specs-verify-fail'}">
+      ${verdict.passed
+        ? `✓ all ${verdict.total} verifier gates green (Definition of Ready to Code)`
+        : `✗ ${verdict.failed.length} of ${verdict.total} verifier gates failing`}
+      ${verdict.total > 0 ? `<div class="specs-gates">${verdict.gates.map(g =>
+        `<span class="specs-badge ${(g.passed ?? g.ok) ? '' : 'specs-badge-warn'}">${esc(g.name || g.gate || '?')}</span>`
       ).join('')}</div>` : ''}
-      ${!passed && v.problems?.length ? `<pre class="specs-output">${esc(v.problems.slice(0, 20).map(p =>
-        typeof p === 'string' ? p : JSON.stringify(p)).join('\n'))}</pre>` : ''}
+      ${!verdict.passed ? `<pre class="specs-output">${esc(describeVerdict(verdict))}</pre>` : ''}
     </div>`
   }
 

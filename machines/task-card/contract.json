@@ -3,15 +3,15 @@
   "stateKeys": [
     {
       "name": "cardState",
-      "type": "enum: 'backlog' | 'ready' | 'implementing' | 'validating' | 'done' | 'needsHuman'"
+      "type": "enum: 'backlog' | 'ready' | 'planning' | 'implementing' | 'validating' | 'reviewing' | 'done' | 'needsHuman'"
     },
     {
       "name": "reworkCount",
-      "type": "integer 0..2 — validation-failure bends taken since the last fresh start (RESUME resets)"
+      "type": "integer 0..2 — correction bends taken since the last fresh start (validation OR review failures share one budget; RESUME resets)"
     },
     {
       "name": "lastSignal",
-      "type": "string, the concrete signal that caused the current position: '' | 'missing-deliverable' | 'verifier-failed' | 'budget-exhausted' | 'escalated'"
+      "type": "string, the concrete signal that caused the current position: '' | 'missing-deliverable' | 'verifier-failed' | 'defect' | 'spec-mismatch' | 'budget-exhausted' | 'escalated'"
     }
   ],
   "initState": {
@@ -25,28 +25,69 @@
         "gate": "string - the DoRC gate verdict ('pass' | 'fail'); the GLM verifier's answer, never a human opinion"
       }
     },
-    "START_IMPLEMENTATION": { "dataFields": {} },
-    "SUBMIT_FOR_VALIDATION": { "dataFields": {} },
-    "VALIDATION_PASSED": { "dataFields": {} },
+    "START_WORK": {
+      "dataFields": {}
+    },
+    "PLAN_READY": {
+      "dataFields": {}
+    },
+    "SUBMIT_FOR_VALIDATION": {
+      "dataFields": {}
+    },
+    "VALIDATION_PASSED": {
+      "dataFields": {}
+    },
     "VALIDATION_FAILED": {
       "dataFields": {
         "reason": "string - the concrete failure ('missing-deliverable' | 'verifier-failed'); handed to the rework as-is — 'fix this specific thing', never 'redo the job'"
       }
     },
-    "ESCALATE": { "dataFields": {} },
-    "RESUME": { "dataFields": {} }
+    "REVIEW_PASSED": {
+      "dataFields": {}
+    },
+    "REVIEW_FAILED": {
+      "dataFields": {
+        "finding": "string - what the review found ('defect' | 'spec-mismatch'); named so the correction targets one thing, never 'redo the job'"
+      }
+    },
+    "ESCALATE": {
+      "dataFields": {}
+    },
+    "RESUME": {
+      "dataFields": {}
+    }
   },
   "dataDomain": {
-    "MARK_READY": { "gate": ["pass", "fail"] },
-    "START_IMPLEMENTATION": {},
+    "MARK_READY": {
+      "gate": [
+        "pass",
+        "fail"
+      ]
+    },
+    "START_WORK": {},
+    "PLAN_READY": {},
     "SUBMIT_FOR_VALIDATION": {},
     "VALIDATION_PASSED": {},
-    "VALIDATION_FAILED": { "reason": ["missing-deliverable", "verifier-failed"] },
+    "VALIDATION_FAILED": {
+      "reason": [
+        "missing-deliverable",
+        "verifier-failed"
+      ]
+    },
+    "REVIEW_PASSED": {},
+    "REVIEW_FAILED": {
+      "finding": [
+        "defect",
+        "spec-mismatch"
+      ]
+    },
     "ESCALATE": {},
     "RESUME": {}
   },
   "terminalKey": "cardState",
-  "terminalStates": ["done"],
+  "terminalStates": [
+    "done"
+  ],
   "specialRules": [
     {
       "name": "ready-requires-gate-pass",
@@ -61,10 +102,16 @@
       "whenAction": "MARK_READY"
     },
     {
-      "name": "implement-only-from-ready",
-      "note": "Work starts only on a card that passed the gate.",
+      "name": "work-starts-with-a-plan",
+      "note": "START_WORK applies only in ready, and it enters PLANNING, not implementing. The plan is the front-loaded context for the work: what gets built and how it will be proved. Implementation begins only when PLAN_READY says the plan exists.",
       "whenState": "cardState != 'ready'",
-      "whenAction": "START_IMPLEMENTATION"
+      "whenAction": "START_WORK"
+    },
+    {
+      "name": "plan-ready-only-while-planning",
+      "note": "PLAN_READY applies only in planning; it is the single door from plan to work.",
+      "whenState": "cardState != 'planning'",
+      "whenAction": "PLAN_READY"
     },
     {
       "name": "validate-only-from-implementing",
@@ -80,19 +127,25 @@
     },
     {
       "name": "bounded-rework-escalates",
-      "note": "The ONLY backward edge in the normal flow is validating -> implementing, taken ONLY by VALIDATION_FAILED carrying its concrete reason, at most 2 times. The third failure does not get another lap: the card moves to needsHuman with lastSignal 'budget-exhausted'. No timer, no 'just in case' retry exists.",
+      "note": "The only backward edges are validating -> implementing (VALIDATION_FAILED) and reviewing -> implementing (REVIEW_FAILED), each carrying its concrete signal and sharing ONE budget of 2. The third correction does not get another lap: the card moves to needsHuman with 'budget-exhausted'. No timer, no 'just in case' retry.",
       "whenState": "cardState == 'validating' && reworkCount >= 2",
-      "whenAction": "VALIDATION_FAILED"
+      "whenAction": "VALIDATION_FAILED or REVIEW_FAILED"
+    },
+    {
+      "name": "review-verdict-only-while-reviewing",
+      "note": "A review verdict outside reviewing — a late or duplicate reviewer event — is absorbed as an observable no-op.",
+      "whenState": "cardState != 'reviewing'",
+      "whenAction": "REVIEW_PASSED or REVIEW_FAILED"
     },
     {
       "name": "escalate-only-while-active",
-      "note": "ESCALATE (a human pulls the cord) applies in ready, implementing, or validating.",
+      "note": "ESCALATE (a human pulls the cord) applies in ready, planning, implementing, validating or reviewing.",
       "whenState": "cardState in ('backlog','done','needsHuman')",
       "whenAction": "ESCALATE"
     },
     {
       "name": "resume-only-from-needs-human",
-      "note": "RESUME is the human's decision to send the card back to work: needsHuman -> implementing with a fresh rework budget. It exists nowhere else.",
+      "note": "RESUME is the human's decision to send the card back to work: needsHuman -> PLANNING with a fresh budget. Re-planning is never automatic — the machine offers no path back to planning except this one, which a person takes deliberately.",
       "whenState": "cardState != 'needsHuman'",
       "whenAction": "RESUME"
     },

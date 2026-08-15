@@ -523,14 +523,16 @@
     </p>
 
     <p class="bend">
-      <b>One backward bend, and it carries evidence.</b>
-      A failed validation returns the card to <code>implement</code> with the
-      concrete signal that caused it — <code>missing-deliverable</code> or
-      <code>verifier-failed</code> — never a bare “try again”. The budget is
-      <b>two</b> bends; the third failure sends the card to
-      <code>needsHuman</code> with <code>budget-exhausted</code>.
-      <code>RESUME</code> grants a fresh budget deliberately. There is no
-      re-plan action, and no loop.
+      <b>Two backward bends, one budget, and every bend carries evidence.</b>
+      A failed validation or a review finding returns the card to
+      <code>implement</code> with the concrete signal that caused it —
+      <code>missing-deliverable</code>, <code>verifier-failed</code>,
+      <code>defect</code>, <code>spec-mismatch</code> — never a bare “try
+      again”. They share <b>one</b> budget of two; the third correction, from
+      either source, sends the card to <code>needsHuman</code> with
+      <code>budget-exhausted</code>. <b>There is no re-plan action.</b> Planning
+      is entered once per attempt, and the only road back to it is a human
+      taking <code>RESUME</code> — deliberately, with a fresh budget.
     </p>
   </section>
 
@@ -539,14 +541,17 @@
     <p class="sec-note">
       The board's columns are not labels — they are the states of a verified
       machine, and a drag is a dispatch the machine may reject with its reason.
-      Six states, seven actions, model-checked before it shipped.
+      Eight states, ten actions, model-checked before it shipped — 31 reachable
+      states explored, no invariant violation among them.
     </p>
 
     <div class="states">
       <span class="state">backlog</span>
       <span class="state">ready</span>
+      <span class="state">planning</span>
       <span class="state">implementing</span>
       <span class="state">validating</span>
+      <span class="state">reviewing</span>
       <span class="state is-human">needsHuman</span>
       <span class="state is-terminal">done · frozen</span>
     </div>
@@ -558,12 +563,15 @@
         </thead>
         <tbody>
           <tr><td><code>MARK_READY</code></td><td>backlog → ready</td><td>DoRC gate verdict</td></tr>
-          <tr><td><code>START_IMPLEMENTATION</code></td><td>ready → implementing</td><td>you, once the spec is ready</td></tr>
+          <tr><td><code>START_WORK</code></td><td>ready → planning</td><td>you, once the spec is ready</td></tr>
+          <tr><td><code>PLAN_READY</code></td><td>planning → implementing</td><td>the plan exists — the only forward door into work</td></tr>
           <tr><td><code>SUBMIT_FOR_VALIDATION</code></td><td>implementing → validating</td><td>deliverables exist</td></tr>
-          <tr><td><code>VALIDATION_PASSED</code></td><td>validating → done</td><td>acceptance verifier</td></tr>
+          <tr><td><code>VALIDATION_PASSED</code></td><td>validating → reviewing</td><td>acceptance verifier</td></tr>
           <tr><td><code>VALIDATION_FAILED</code></td><td>validating → implementing</td><td>verifier, with a named signal</td></tr>
-          <tr><td><code>ESCALATE</code></td><td>any → needsHuman</td><td>you</td></tr>
-          <tr><td><code>RESUME</code></td><td>needsHuman → implementing</td><td>you — grants a fresh budget</td></tr>
+          <tr><td><code>REVIEW_PASSED</code></td><td>reviewing → done</td><td>the reviewer</td></tr>
+          <tr><td><code>REVIEW_FAILED</code></td><td>reviewing → implementing</td><td>the reviewer, naming <code>defect</code> or <code>spec-mismatch</code></td></tr>
+          <tr><td><code>ESCALATE</code></td><td>any active → needsHuman</td><td>you</td></tr>
+          <tr><td><code>RESUME</code></td><td>needsHuman → planning</td><td>you — fresh budget, fresh plan</td></tr>
         </tbody>
       </table>
     </div>
@@ -658,7 +666,8 @@
           <tr><td>Start implementation</td><td><span class="mark mark-off">open</span></td><td>The card advances; no session is spawned</td></tr>
           <tr><td>Acceptance validation</td><td><span class="mark mark-off">open</span></td><td>You press ✓ / ✗; the verifier should</td></tr>
           <tr><td>Lane selection</td><td><span class="mark mark-part">reported</span></td><td>Doctor names the lane; the card does not yet route by it</td></tr>
-          <tr><td>Code review · PR</td><td><span class="mark mark-off">open</span></td><td>A card reaches done with no review gate and no git step</td></tr>
+          <tr><td>Review as a stage</td><td><span class="mark mark-part">machine</span></td><td>The state exists and gates <code>done</code>; the reviewer is still a human pressing ✓</td></tr>
+          <tr><td>PR · git integration</td><td><span class="mark mark-off">open</span></td><td>No branch, commit or PR step in the card lifecycle</td></tr>
         </tbody>
       </table>
     </div>

@@ -27,18 +27,28 @@ function cardIdForNode(glmId) {
 const COLUMNS = [
   { state: 'backlog', label: 'Backlog' },
   { state: 'ready', label: 'Ready' },
+  { state: 'planning', label: 'Planning' },
   { state: 'implementing', label: 'Implementing' },
   { state: 'validating', label: 'Validating' },
+  { state: 'reviewing', label: 'Reviewing' },
   { state: 'needsHuman', label: 'Needs Human' },
   { state: 'done', label: 'Done' }
 ]
 
-/** Drag target column → the action that attempts the move */
+/**
+ * Drag target column → the action that attempts the move.
+ *
+ * Work is planned before it is implemented, and reviewed before it is done —
+ * both are stages of the machine, so both are columns here rather than steps
+ * someone remembers to take.
+ */
 const DRAG_ACTIONS = {
   'ready': 'MARK_READY',
-  'implementing': null, // resolved per source: START_IMPLEMENTATION or RESUME
+  'planning': null, // START_WORK from ready, RESUME from needsHuman
+  'implementing': 'PLAN_READY', // the only forward door into work
   'validating': 'SUBMIT_FOR_VALIDATION',
-  'done': 'VALIDATION_PASSED',
+  'reviewing': 'VALIDATION_PASSED',
+  'done': 'REVIEW_PASSED',
   'needsHuman': 'ESCALATE',
   'backlog': null // no action leads back to backlog — the machine will say so
 }
@@ -349,6 +359,9 @@ export class BoardViewComponent {
     else if (action === 'close-journal') { this.journalFor = null; this.render() }
     else if (action === 'validation-pass' && id) this.dispatch(id, 'VALIDATION_PASSED')
     else if (action === 'validation-fail' && id) this.dispatch(id, 'VALIDATION_FAILED', { reason: reason || 'verifier-failed' })
+    else if (action === 'plan-ready' && id) this.dispatch(id, 'PLAN_READY')
+    else if (action === 'review-pass' && id) this.dispatch(id, 'REVIEW_PASSED')
+    else if (action === 'review-fail' && id) this.dispatch(id, 'REVIEW_FAILED', { finding: reason || 'defect' })
     else if (action === 'resume' && id) this.dispatch(id, 'RESUME')
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')
   }
@@ -387,11 +400,11 @@ export class BoardViewComponent {
 
     if (target === from) return
     if (target === 'ready') return this.gateAndMarkReady(instanceId)
-    if (target === 'implementing') {
-      // Two legal ways in: from ready (start) or from needsHuman (resume).
-      // Anything else: dispatch the start — the machine names the refusal.
-      return this.dispatch(instanceId,
-        from === 'needsHuman' ? 'RESUME' : 'START_IMPLEMENTATION')
+    if (target === 'planning') {
+      // Two legal ways in: starting work, or a human resuming an escalated
+      // card — which returns to planning because whatever exhausted the budget
+      // invalidated the plan.
+      return this.dispatch(instanceId, from === 'needsHuman' ? 'RESUME' : 'START_WORK')
     }
     const action = DRAG_ACTIONS[target]
     if (action) return this.dispatch(instanceId, action)
@@ -514,8 +527,16 @@ export class BoardViewComponent {
       </div>
       <div class="board-card-actions">
         ${state.cardState === 'validating' ? `
-          <button class="btn btn-sm board-btn-pass" data-action="validation-pass" data-id="${esc(id)}" title="Validation passed">✓</button>
+          <button class="btn btn-sm board-btn-pass" data-action="validation-pass" data-id="${esc(id)}" title="Validation passed — hands the card to review">✓</button>
           <button class="btn btn-sm board-btn-fail" data-action="validation-fail" data-id="${esc(id)}" data-reason="verifier-failed" title="Validation failed (verifier-failed)">✗</button>
+        ` : ''}
+        ${state.cardState === 'planning' ? `
+          <button class="btn btn-sm board-btn-pass" data-action="plan-ready" data-id="${esc(id)}" title="The plan is written — start implementing">plan ready</button>
+        ` : ''}
+        ${state.cardState === 'reviewing' ? `
+          <button class="btn btn-sm board-btn-pass" data-action="review-pass" data-id="${esc(id)}" title="Review passed — the card is done">✓</button>
+          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="defect" title="Review found a defect — back to implementing">✗ defect</button>
+          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="spec-mismatch" title="Review found the code does not match the spec">✗ spec</button>
         ` : ''}
         ${state.cardState === 'needsHuman' ? `
           <button class="btn btn-sm" data-action="resume" data-id="${esc(id)}" title="Resume with a fresh budget">resume</button>

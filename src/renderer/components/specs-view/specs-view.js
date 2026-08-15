@@ -24,6 +24,18 @@ function escAttr(text) {
 
 const STRATUM_ORDER = ['system', 'capability', 'component', 'interaction', 'spec']
 
+/**
+ * Badge codes. Two letters, because 'capability' and 'component' share their
+ * first — a lone C left the two altitudes indistinguishable in the tree.
+ */
+const STRATUM_CODE = {
+  system: 'SY',
+  capability: 'CA',
+  component: 'CO',
+  interaction: 'IN',
+  spec: 'SP'
+}
+
 /** English plurals for the summary tiles — 'capabilitys' is not a word. */
 const STRATUM_PLURAL = {
   system: 'systems',
@@ -203,6 +215,62 @@ function extractFollowUps(text) {
     .filter(t => t.length >= 12 && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
     .slice(0, 8)
     .map((t, i) => ({ id: `fu-${i}`, text: t }))
+}
+
+/** The glm id's path segments, org prefix dropped: `org:a.b.c` → [a, b, c]. */
+function idSegments(glmId) {
+  if (!glmId) return []
+  const withoutOrg = glmId.includes(':') ? glmId.split(':')[1] : glmId
+  return withoutOrg.split('.')
+}
+
+/**
+ * Nest the flat node list into the tree the sekkei describes.
+ *
+ * Parentage comes from the glm id, but not from the immediate parent path: a
+ * spec is `<component>.spec.<kind>`, so the path one segment up (`….spec`)
+ * names no node. Each node therefore attaches to its NEAREST EXISTING
+ * ancestor. Matching the immediate parent alone made every spec a root of its
+ * own — which is how specs ended up above the system node with no path down to
+ * components and interactions.
+ *
+ * Siblings are ordered by stratum, so an interaction always precedes the specs
+ * beneath the same component.
+ *
+ * @param {Array<{glmId: string, stratum: string, title?: string}>} nodes
+ * @returns {Array<{node: Object, path: string, children: Array}>}
+ */
+export function buildTree(nodes = []) {
+  const byPath = new Map()
+  for (const node of nodes) byPath.set(idSegments(node.glmId).join('.'), node)
+
+  const nearestAncestor = (glmId) => {
+    const segments = idSegments(glmId)
+    for (let i = segments.length - 1; i > 0; i--) {
+      const candidate = segments.slice(0, i).join('.')
+      if (byPath.has(candidate)) return candidate
+    }
+    return ''
+  }
+
+  const childrenOf = new Map()
+  for (const node of nodes) {
+    const parent = nearestAncestor(node.glmId)
+    if (!childrenOf.has(parent)) childrenOf.set(parent, [])
+    childrenOf.get(parent).push(node)
+  }
+  for (const children of childrenOf.values()) {
+    children.sort((a, b) =>
+      STRATUM_ORDER.indexOf(a.stratum) - STRATUM_ORDER.indexOf(b.stratum) ||
+      (a.title || '').localeCompare(b.title || ''))
+  }
+
+  const level = (parentPath) => (childrenOf.get(parentPath) || []).map(node => {
+    const path = idSegments(node.glmId).join('.')
+    return { node, path, children: level(path) }
+  })
+
+  return level('')
 }
 
 /** Legal SCR events per status (mirror of GLM's domain/scr.ts FSM) */
@@ -440,10 +508,12 @@ export class SpecsViewComponent {
       this.selectedNode = null
       this.verifyResult = null
     }
-    // Expand the first two levels by default
+    // Open the system and its capabilities by default, so components are
+    // visible without hunting. `expanded` holds a node's OWN path — it used to
+    // hold the parent's, which expanded nothing that had children.
     for (const node of this.nodes) {
       const segments = this._segments(node.glmId)
-      if (segments.length <= 2) this.expanded.add(this._parentPath(node.glmId))
+      if (segments.length <= 2) this.expanded.add(segments.join('.'))
     }
     // Follow the workspace with the live channel
     this.socketStatus = 'connecting'
@@ -1137,7 +1207,10 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       if (action === 'refresh') this.refresh()
       else if (action === 'verify') this.runVerifier()
       else if (action === 'toggle' && nodeRow) {
-        const key = nodeRow.dataset.glmId
+        // Expansion is keyed on the segments path, not the glm id. This read
+        // dataset.glmId, so every twisty click stored a key the tree never
+        // checked — clicking a capability did nothing at all.
+        const key = nodeRow.dataset.path
         if (this.expanded.has(key)) this.expanded.delete(key)
         else this.expanded.add(key)
         this.render()
@@ -1614,50 +1687,29 @@ coding agent would have to guess at. List findings worst-first with the glm id e
         ? 'No nodes in this workspace yet.'
         : 'Select a GLM workspace.'}</div>`
     }
-    // Build a path tree from glm id segments
-    const byPath = new Map()
-    for (const node of this.nodes) {
-      byPath.set(this._segments(node.glmId).join('.'), node)
-    }
-    const childrenOf = new Map()
-    for (const node of this.nodes) {
-      const segments = this._segments(node.glmId)
-      const parent = segments.slice(0, -1).join('.')
-      if (!childrenOf.has(parent)) childrenOf.set(parent, [])
-      childrenOf.get(parent).push(node)
-    }
-    for (const children of childrenOf.values()) {
-      children.sort((a, b) =>
-        STRATUM_ORDER.indexOf(a.stratum) - STRATUM_ORDER.indexOf(b.stratum) ||
-        (a.title || '').localeCompare(b.title || ''))
-    }
 
-    const renderLevel = (parentPath, depth) => {
-      const children = childrenOf.get(parentPath) || []
-      return children.map(node => {
-        const nodePath = this._segments(node.glmId).join('.')
-        const hasChildren = (childrenOf.get(nodePath) || []).length > 0
-        const isExpanded = this.expanded.has(nodePath)
-        const isSelected = node.glmId === this.selectedGlmId
-        return `
-          <div class="specs-node ${isSelected ? 'selected' : ''}" data-glm-id="${esc(node.glmId)}"
-            style="padding-left: ${10 + depth * 16}px">
-            ${hasChildren
-              ? `<button class="specs-twisty" data-action="toggle">${isExpanded ? '▾' : '▸'}</button>`
-              : '<span class="specs-twisty-spacer"></span>'}
-            <span class="specs-stratum specs-stratum-${esc(node.stratum)}">${esc((node.stratum || '?')[0].toUpperCase())}</span>
-            <span class="specs-node-title">${esc(node.title || node.glmId)}</span>
-            <span class="specs-node-rev">${esc(node.revisionMajor || '')}${node.revisionIteration != null ? `.${node.revisionIteration}` : ''}</span>
-          </div>
-          ${hasChildren && isExpanded ? renderLevel(nodePath, depth + 1) : ''}
-        `
-      }).join('')
-    }
+    const renderLevel = (entries, depth) => entries.map(({ node, path, children }) => {
+      const hasChildren = children.length > 0
+      const isExpanded = this.expanded.has(path)
+      const isSelected = node.glmId === this.selectedGlmId
+      return `
+        <div class="specs-node ${isSelected ? 'selected' : ''}" data-glm-id="${esc(node.glmId)}"
+          data-path="${esc(path)}" style="padding-left: ${10 + depth * 16}px">
+          ${hasChildren
+            ? `<button class="specs-twisty" data-action="toggle">${isExpanded ? '▾' : '▸'}</button>`
+            : '<span class="specs-twisty-spacer"></span>'}
+          <span class="specs-stratum specs-stratum-${esc(node.stratum)}"
+            title="${esc(node.stratum || 'unknown stratum')}">${esc(STRATUM_CODE[node.stratum] || '??')}</span>
+          <span class="specs-node-title">${esc(node.title || node.glmId)}</span>
+          ${node.revisionMajor ? `<span class="specs-node-rev"
+            title="revision ${esc(node.revisionMajor)}.${node.revisionIteration ?? 0}${node.revisionStatus ? ` · ${esc(node.revisionStatus)}` : ''}"
+          >r${esc(node.revisionMajor)}.${node.revisionIteration ?? 0}</span>` : ''}
+        </div>
+        ${hasChildren && isExpanded ? renderLevel(children, depth + 1) : ''}
+      `
+    }).join('')
 
-    // Roots: nodes whose parent path has no node
-    const roots = this.nodes.filter(n => !byPath.has(this._parentPath(n.glmId)))
-    const rootPaths = new Set(roots.map(n => this._parentPath(n.glmId)))
-    return [...rootPaths].map(p => renderLevel(p, 0)).join('')
+    return renderLevel(buildTree(this.nodes), 0)
   }
 
   _renderDetail() {

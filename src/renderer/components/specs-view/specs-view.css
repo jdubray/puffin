@@ -164,8 +164,9 @@
 
 .specs-stratum {
   flex: none;
-  width: 18px;
+  width: 22px;
   height: 18px;
+  letter-spacing: 0.02em;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 700;

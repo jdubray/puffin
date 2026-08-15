@@ -210,6 +210,14 @@ export class BoardViewComponent {
         }
       } catch { this.binding = null; this.glmWorkspaceId = '' }
 
+      // What previous sessions did to these cards. Loaded before anything is
+      // drawn, so an off-spec finding is on screen from the first render
+      // rather than only for whoever was watching when it happened.
+      try {
+        const saved = await window.puffin.board.readSessionLog()
+        if (saved.success) this.sessionLog = saved.log || {}
+      } catch { /* an empty log is a fine starting point */ }
+
       // Machines discovered in this project, so a card can reach the
       // elicitation for the machine implementing it.
       try {
@@ -358,6 +366,7 @@ export class BoardViewComponent {
         at: new Date().toISOString(),
         ok: true
       }
+      this._persistSessionLog()
       this._checkSessionScope()
       // The card does NOT advance here. A finished turn is not a passed gate:
       // planning ends when a person says the plan is ready, and implementing
@@ -399,8 +408,14 @@ export class BoardViewComponent {
         entry.gateAffecting = scope.gateAffecting
       }
       if (this.session?.instanceId === instanceId) this.session.scope = scope
+      this._persistSessionLog()
       this.render()
     } catch { /* the turn still happened; the scope check is best-effort */ }
+  }
+
+  /** @private Best-effort: a lost log costs a badge, never the work. */
+  _persistSessionLog() {
+    try { window.puffin.board.writeSessionLog({ log: this.sessionLog }) } catch { /* ignore */ }
   }
 
   /** Stop the running session. The card stays where it is. */

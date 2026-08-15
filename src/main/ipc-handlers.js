@@ -642,6 +642,35 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  /**
+   * What each card's sessions did — read and written by the board.
+   *
+   * On disk because it is the durable half of a finding: an out-of-scope edit
+   * that vanishes when the app restarts is a warning the user is guaranteed to
+   * miss exactly once, which is the failure this whole signal exists to fix.
+   */
+  ipcMain.handle('board:readSessionLog', async () => {
+    try {
+      const file = path.join(projectPath || '', '.puffin', 'card-sessions.json')
+      if (!projectPath || !fs.existsSync(file)) return { success: true, log: {} }
+      return { success: true, log: JSON.parse(fs.readFileSync(file, 'utf-8')) }
+    } catch {
+      return { success: true, log: {} }
+    }
+  })
+
+  ipcMain.handle('board:writeSessionLog', async (event, { log } = {}) => {
+    try {
+      if (!projectPath) return { success: false, error: 'No project open' }
+      const file = path.join(projectPath, '.puffin', 'card-sessions.json')
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, JSON.stringify(log || {}, null, 2))
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('board:getCard', async (event, { instanceId } = {}) => {
     try {
       if (!instanceId) return { success: false, error: 'instanceId is required' }

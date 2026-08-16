@@ -114,21 +114,57 @@
   color: var(--text-secondary, #999);
 }
 
+/* A horizontal accordion: the cards get the room, and an empty stage keeps a
+   spine so the shape of the workflow stays on screen. Eight equal columns for
+   the two that have cards is how a board with 43 components becomes
+   unreadable. */
 .board-columns {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  display: flex;
   gap: 10px;
+  align-items: stretch;
   overflow-x: auto;
 }
 
 .board-column {
-  background: var(--bg-secondary, #252525);
-  border: 1px solid var(--border-color, #3a3a3a);
-  border-radius: 6px;
+  flex: 1 1 0;
+  min-width: 150px;
   min-height: 300px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 6px;
+  transition: flex-basis 140ms ease, min-width 140ms ease;
 }
+
+.board-column-collapsed {
+  flex: 0 0 34px;
+  min-width: 34px;
+}
+
+.board-column-collapsed .board-column-cards { display: none; }
+
+.board-column-collapsed .board-column-header {
+  writing-mode: vertical-rl;
+  height: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px 6px;
+  border-bottom: none;
+  cursor: pointer;
+}
+
+.board-column-collapsed .board-count {
+  writing-mode: horizontal-tb;
+  opacity: 0.5;
+}
+
+.board-column-collapsed:hover {
+  background: var(--bg-tertiary, #2e2e2e);
+}
+
+.board-column-header { cursor: pointer; }
 
 .board-column.board-drop-target {
   border-color: var(--accent-color, #5f97d6);

@@ -104,7 +104,8 @@ export class BoardViewComponent {
     // show it and a button can say 'again' instead of implying nothing happened.
     this.sessionLog = {}
     this.runner = null
-    this.confirm = null   // a session the user has been asked to confirm    // the phase runner, when it is working
+    this.confirm = null
+    this.expandedColumn = null  // a collapsed column opened by hand or by a drag   // a session the user has been asked to confirm    // the phase runner, when it is working
     this.policy = null    // polycheck's verdict per card, when it is installed
     // Off by default: skipping permission prompts is the user's call to make,
     // once, in the open - not a default they discover after the fact.
@@ -1161,6 +1162,16 @@ export class BoardViewComponent {
   }
 
   _onClick(e) {
+    // The column header is a heading, not a button, but it toggles a collapsed
+    // column open — so it gets its own lookup rather than being made a button
+    // for the sake of one handler.
+    const header = e.target.closest('.board-column-header[data-action]')
+    if (header) {
+      const state = header.dataset.id
+      this.expandedColumn = this.expandedColumn === state ? null : state
+      return this.render()
+    }
+
     const button = e.target.closest('button[data-action]')
     if (!button) return
     const { action, id, reason } = button.dataset
@@ -1204,9 +1215,16 @@ export class BoardViewComponent {
 
   _onDragOver(e) {
     const column = e.target.closest('[data-column]')
-    if (column) {
-      e.preventDefault()
-      column.classList.add('board-drop-target')
+    if (!column) return
+    e.preventDefault()
+    column.classList.add('board-drop-target')
+    // Open a collapsed column under the cursor. A 40px drop target is a
+    // dexterity test, and the stage you most often drop into is exactly the
+    // one that is empty and therefore collapsed.
+    if (column.classList.contains('board-column-collapsed') &&
+        this.expandedColumn !== column.dataset.column) {
+      this.expandedColumn = column.dataset.column
+      this.render()
     }
   }
 
@@ -1220,6 +1238,7 @@ export class BoardViewComponent {
     if (!column) return
     e.preventDefault()
     column.classList.remove('board-drop-target')
+    this.expandedColumn = null
     const instanceId = e.dataTransfer.getData('text/plain')
     if (!instanceId) return
     const target = column.dataset.column
@@ -1584,18 +1603,27 @@ export class BoardViewComponent {
       const state = card.state?.cardState || 'backlog'
       ;(byState[state] || byState.backlog).push(card)
     }
+    // An empty column earns a spine, not a share of the width. Eight equal
+    // columns for two that have cards is how a board with 43 components becomes
+    // unreadable — the cards get the room and the empty stages stay visible as
+    // labels, so the shape of the workflow is still on screen.
     return `<div class="board-columns">
-      ${COLUMNS.map(column => `
-        <div class="board-column" data-column="${column.state}">
-          <div class="board-column-header">
-            ${esc(column.label)}
-            <span class="board-count">${byState[column.state].length}</span>
+      ${COLUMNS.map(column => {
+        const cards = byState[column.state]
+        const collapsed = cards.length === 0 && this.expandedColumn !== column.state
+        return `
+        <div class="board-column ${collapsed ? 'board-column-collapsed' : ''}"
+             data-column="${column.state}"
+             title="${collapsed ? `${esc(column.label)} — empty` : ''}">
+          <div class="board-column-header" data-action="toggle-column" data-id="${column.state}">
+            <span class="board-column-label">${esc(column.label)}</span>
+            <span class="board-count">${cards.length}</span>
           </div>
           <div class="board-column-cards">
-            ${byState[column.state].map(card => this._renderCard(card)).join('')}
+            ${cards.map(card => this._renderCard(card)).join('')}
           </div>
-        </div>
-      `).join('')}
+        </div>`
+      }).join('')}
     </div>`
   }
 

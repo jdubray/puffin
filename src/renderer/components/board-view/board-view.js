@@ -896,11 +896,13 @@ export class BoardViewComponent {
 
     const result = await window.puffin.glm.createScr({
       workspaceId: this.glmWorkspaceId,
-      title: `Unsettled by planning: ${node.title || node.glmId}`,
+      title: `Decisions owed: ${node.title || node.glmId}`,
       // The planning turn's own words. Summarising them here would lose what
       // makes them useful - each question already carries the file and line
       // that raised it.
-      problem: `Raised from the planning turn for ${node.glmId}.\n\n${session.text}`,
+      problem: `Raised from the ${session.stage === 'implement' ? 'implementation'
+        : session.stage === 'review' ? 'review' : 'planning'} turn for ${node.glmId}.` +
+        `\n\n${session.text}`,
       scrClass: 'II',
       targetNodes: [node.glmId]
     })
@@ -1488,14 +1490,7 @@ export class BoardViewComponent {
         <span class="board-session-next">
           ${session.stage === 'plan'
             ? `<button class="btn btn-primary btn-sm" data-action="plan-ready"
-                 data-id="${esc(session.instanceId)}">The plan is ready &rarr; implementing</button>
-               <button class="btn btn-secondary btn-sm" data-action="raise-scr"
-                 data-id="${esc(session.instanceId)}"
-                 title="Put what the spec does not settle into a Sekkei Change Request, so the answer lands in the design instead of in one session">Raise an SCR from this</button>
-               ${this.scrNote?.instanceId === session.instanceId ? `<span class="board-scr-note">${
-                 this.scrNote.pending ? 'raising…'
-                   : this.scrNote.ok ? 'SCR raised — answer it in the Sekkei tab'
-                     : `could not raise it: ${esc(this.scrNote.error || '')}`}</span>` : ''}`
+                 data-id="${esc(session.instanceId)}">The plan is ready &rarr; implementing</button>`
             : session.stage === 'review'
               ? `<button class="btn btn-primary btn-sm" data-action="review-pass"
                    data-id="${esc(session.instanceId)}">Nothing outstanding &rarr; done</button>
@@ -1504,6 +1499,15 @@ export class BoardViewComponent {
               : `<button class="btn btn-primary btn-sm" data-action="validate"
                    data-id="${esc(session.instanceId)}">Run the model check &rarr; validating</button>`}
         </span>
+        ${session.stage === 'verify' ? '' : `<span class="board-session-next">
+          <button class="btn btn-secondary btn-sm" data-action="raise-scr"
+            data-id="${esc(session.instanceId)}"
+            title="Put what this turn had to decide into a Sekkei Change Request, so the answer lands in the design rather than in one session">Raise an SCR from this</button>
+          ${this.scrNote?.instanceId === session.instanceId ? `<span class="board-scr-note">${
+            this.scrNote.pending ? 'raising…'
+              : this.scrNote.ok ? 'SCR raised — answer it in the Sekkei tab'
+                : `could not raise it: ${esc(this.scrNote.error || '')}`}</span>` : ''}
+        </span>`}
       </div>` : ''}
     </div>`
   }

@@ -53,7 +53,9 @@ const BLOCKING = {
   missingOutputs: 'the session finished without writing files the card declared',
   sessionFailed: 'the session did not finish',
   noVerifier: 'the acceptance spec names no verifier, so nothing can decide this card',
-  checkUnavailable: 'the validation gate could not run, and an unrun gate is not a passed gate'
+  checkUnavailable: 'the validation gate could not run, and an unrun gate is not a passed gate',
+  checkFailed: 'the state check did not pass, and the card machine will not enter ' +
+    'validation on a failing check — the module has to change, not the gate'
 }
 
 /**
@@ -147,6 +149,16 @@ export function nextStep({ cardState, evidence = {}, session = null, batchHeld =
         return {
           step: STEP.ESCALATE,
           reason: `${BLOCKING.missingOutputs}: ${session.missingOutputs.join(', ')}`
+        }
+      }
+      // A failing state check is not a step backwards to retry: the card
+      // machine refuses SUBMIT_FOR_VALIDATION unless the check passed or does
+      // not apply, so asking again produces the same rejection forever. What
+      // has to change is the module.
+      if (evidence.check === 'fail') {
+        return {
+          step: STEP.ESCALATE,
+          reason: `${BLOCKING.checkFailed}${evidence.checkReason ? `: ${evidence.checkReason}` : ''}`
         }
       }
       return { step: STEP.VALIDATE, reason: 'the code is in — run the validation gate' }

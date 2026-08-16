@@ -88,6 +88,20 @@ describe('stopping', () => {
     assert.strictEqual(step.step, STEP.VALIDATE)
   })
 
+  it('escalates a failing state check instead of submitting again', () => {
+    // The card machine refuses SUBMIT_FOR_VALIDATION unless the check passed
+    // or does not apply, so a runner that retried it produced the same
+    // rejection forever - a live loop that also tried to start a session on
+    // every turn of it. What has to change is the module, not the gate.
+    const step = at('implementing', {
+      session: { stage: 'implement', ok: true },
+      evidence: { check: 'fail', checkReason: 'the module falls back to its own createInstance' }
+    })
+    assert.strictEqual(step.step, STEP.ESCALATE)
+    assert.match(step.reason, /will not enter validation on a failing check/)
+    assert.match(step.reason, /createInstance/)
+  })
+
   it('waits rather than building a card whose dependencies are unfinished', () => {
     // Three times now a component was built before what it calls existed. The
     // session does the honest thing - inject a seam, refuse by name - and the

@@ -285,7 +285,10 @@ export class BoardViewComponent {
   async runPhase() {
     if (this.runner?.running) return this.stopRunner()
 
-    this.runner = { running: true, log: [], stoppedBy: null }
+    // attempts: `${instanceId}:${step}` -> count. A legitimate flow never needs
+    // the same step twice running on the same card; a second attempt means the
+    // step did not take, and repeating it is a loop rather than progress.
+    this.runner = { running: true, log: [], stoppedBy: null, attempts: new Map() }
     this.render()
 
     // The policy pre-check, once for the whole phase: it is a property of the
@@ -309,7 +312,17 @@ export class BoardViewComponent {
             : 'every card is finished')
           break
         }
+        const before = card.state?.cardState
         const outcome = await this._runOneStep(card)
+        await this._reloadCards({ force: true })
+        const after = this.cards.find(c => (c.instanceId || c.id) === (card.instanceId || card.id))
+        if (after?.state?.cardState !== before) {
+          // Real movement: forget what this card had already tried, so a
+          // legitimate second pass through a stage is not mistaken for a loop.
+          for (const key of [...this.runner.attempts.keys()]) {
+            if (key.startsWith(`${card.instanceId || card.id}:`)) this.runner.attempts.delete(key)
+          }
+        }
         if (outcome === 'park') parked.add(card.instanceId || card.id)
         else if (outcome === 'stop') break
       }
@@ -351,6 +364,29 @@ export class BoardViewComponent {
         findings: this._findingsFor(instanceId)
       }
     })
+
+    // A dispatch the board refuses leaves the card exactly where it was, and
+    // the same decision comes back next pass. That is how a held batch turned
+    // "run the validation gate" into an infinite loop that also tried to start
+    // a session on every turn of it.
+    const key = `${instanceId}:${decision.step}`
+    const attempts = (this.runner.attempts.get(key) || 0) + 1
+    this.runner.attempts.set(key, attempts)
+    if (attempts > 1) {
+      this._runnerNote(
+        `${node?.title || instanceId}: ${decision.step} did not take effect — ` +
+        `${this.rejection?.reason || 'the board refused it'}. Parking this card.`)
+      return 'park'
+    }
+
+    // One session at a time is a hard limit of the CLI, not a preference: a
+    // second submit fails with "a Claude CLI process is already running", and
+    // a runner that keeps trying turns one stuck card into a stream of errors.
+    if (this.session?.running &&
+        [STEP.PLAN, STEP.BUILD, STEP.RUN_REVIEW, STEP.VALIDATE_ACCEPTANCE].includes(decision.step)) {
+      this._runnerNote(`${node?.title || instanceId}: a session is still running — parking this card`)
+      return 'park'
+    }
 
     this._runnerNote(`${node?.title || instanceId}: ${decision.step} — ${decision.reason}`)
 

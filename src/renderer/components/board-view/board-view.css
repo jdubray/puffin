@@ -138,27 +138,28 @@
   transition: flex-basis 140ms ease, min-width 140ms ease;
 }
 
+/* Wide enough to read the label straight. A vertical label saves 70px and
+   costs a head-tilt on every glance, which is the wrong trade on a control
+   surface you scan constantly - and it makes the drop target a slot. */
 .board-column-collapsed {
-  flex: 0 0 34px;
-  min-width: 34px;
+  flex: 0 0 116px;
+  min-width: 116px;
 }
 
 .board-column-collapsed .board-column-cards { display: none; }
 
 .board-column-collapsed .board-column-header {
-  writing-mode: vertical-rl;
-  height: 100%;
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 10px 6px;
   border-bottom: none;
   cursor: pointer;
 }
 
-.board-column-collapsed .board-count {
-  writing-mode: horizontal-tb;
-  opacity: 0.5;
+.board-column-collapsed .board-column-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.board-column-collapsed .board-count { opacity: 0.5; }
 
 .board-column-collapsed:hover {
   background: var(--bg-tertiary, #2e2e2e);

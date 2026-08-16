@@ -149,6 +149,16 @@ Use the glm_* MCP tools for every change:
   glm_apply_patch — update an existing node's body (JSON-Patch)
   glm_verify — run the 7-gate verifier when the change is complete
 
+There is NO tool here for filing a Sekkei Change Request. The MCP surface can
+read and amend nodes; it cannot open an SCR, and there is no way for you to
+create one. So when a decision is owed — a question the design does not settle,
+a rule that has to be chosen before code can be written — amend the design of
+record AND list the decisions plainly at the end of your reply, one line each,
+naming the glm id you changed. The user files them; Puffin has a control for
+it. Do not describe an SCR as filed, and do not treat the amendment as a
+substitute for the record that a decision was made: the specs then say WHAT was
+decided with nothing saying it was ever in question.
+
 Where the design comes from:
 - The problem statement, the product rationale and the requirements live as
   free-form documents under docs/ — that is the WHY, and it stays prose. Read

@@ -1326,14 +1326,10 @@ export class BoardViewComponent {
     if (!column) return
     e.preventDefault()
     column.classList.add('board-drop-target')
-    // Open a collapsed column under the cursor. A 40px drop target is a
-    // dexterity test, and the stage you most often drop into is exactly the
-    // one that is empty and therefore collapsed.
-    if (column.classList.contains('board-column-collapsed') &&
-        this.expandedColumn !== column.dataset.column) {
-      this.expandedColumn = column.dataset.column
-      this.render()
-    }
+    // Deliberately no expand-on-hover. A collapsed lane is now wide enough to
+    // drop into as it stands, and widening one mid-drag shifts every column to
+    // its right — moving the target out from under the cursor at the moment
+    // the user is aiming at it.
   }
 
   _onDragLeave(e) {

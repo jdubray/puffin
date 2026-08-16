@@ -1646,7 +1646,21 @@ export class BoardViewComponent {
         ? this._renderVerifierOutput(session)
         : `<div class="board-session-body md-body" id="board-session-body">${renderMarkdown(session.text)}</div>`}
       ${this._renderScopeFinding(session.scope)}
-      ${!session.running && !session.error ? `<div class="board-session-note">
+      ${!session.running && !session.error && session.stage === 'verify' ? `<div class="board-session-note">
+        <b>${session.verdict === 'passed'
+          ? 'The verifier passed and the card has moved to reviewing.'
+          : 'The verifier failed and the card went back to implementing.'}</b>
+        ${session.verdict === 'passed'
+          ? 'The gates have said what they can. What is left is a reading of the code against its spec.'
+          : 'The gates decided this; nothing here needs your verdict.'}
+        ${session.verdict === 'passed' ? `<span class="board-session-next">
+          <button class="btn btn-primary btn-sm" data-action="run-review"
+            data-id="${esc(session.instanceId)}">Review it against the spec</button>
+          <button class="btn btn-secondary btn-sm" data-action="review-pass"
+            data-id="${esc(session.instanceId)}">Accept without reading &rarr; done</button>
+        </span>` : ''}
+      </div>` : ''}
+      ${!session.running && !session.error && session.stage !== 'verify' ? `<div class="board-session-note">
         <b>The turn is over and the card has not moved.</b> ${session.stage === 'plan'
           ? 'A finished turn is not a plan you have agreed to, so read it first.'
           : session.stage === 'review'

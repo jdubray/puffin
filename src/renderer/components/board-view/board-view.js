@@ -644,11 +644,13 @@ export class BoardViewComponent {
     // for a reason that belongs to another card.
     const blocked = confirmed ? [] : this._unbuiltDependencies(instanceId)
     if (blocked.length > 0) {
+      const first = this._buildFirst(instanceId)
       this.confirm = {
         instanceId,
         stage: 'implement',
         title: this._nodeForCard(instanceId)?.title || instanceId,
-        blockedBy: blocked
+        blockedBy: blocked,
+        buildFirst: first ? (first.title || first.glmId) : null
       }
       return this.render()
     }
@@ -673,13 +675,61 @@ export class BoardViewComponent {
 
     return [...deps]
       .map(glmId => {
-        const card = this.cards.find(c => (c.instanceId || c.id) === cardIdForNode(glmId))
+        const card = this.cards.find(c => baseCardId(c.instanceId || c.id) === cardIdForNode(glmId))
         const state = card?.state?.cardState
-        return state === 'done'
+        return this._codeExistsFor(glmId, card)
           ? null
-          : { glmId, title: components.find(n => n.glmId === glmId)?.title || glmId, state: state || 'not on the board' }
+          : {
+              glmId,
+              title: components.find(n => n.glmId === glmId)?.title || glmId,
+              state: state || 'not on the board'
+            }
       })
       .filter(Boolean)
+  }
+
+  /**
+   * @private
+   * Does this component's code exist yet?
+   *
+   * The question a dependency check is actually asking. It is NOT "has the card
+   * been accepted": a component sitting in validating or reviewing has been
+   * written and has cleared its gates, and waiting for the ceremony of review
+   * before anything may build against it deadlocks a chain of four - which is
+   * exactly what it did.
+   *
+   * An implementation session that finished is the other way to know, for a
+   * card still in implementing whose code is on disk.
+   */
+  _codeExistsFor(glmId, card) {
+    const state = card?.state?.cardState
+    if (['validating', 'reviewing', 'done'].includes(state)) return true
+    const log = this.sessionLog[card?.instanceId || cardIdForNode(glmId)] || {}
+    return log.stage === 'implement' && log.ok === true
+  }
+
+  /**
+   * @private
+   * The one to build first: a blocked dependency that is not itself blocked.
+   *
+   * A list of blockers tells you that you are stuck; the head of the chain
+   * tells you what to do about it.
+   */
+  _buildFirst(instanceId) {
+    const seen = new Set()
+    const walk = (id) => {
+      if (seen.has(id)) return null
+      seen.add(id)
+      const blockers = this._unbuiltDependencies(id)
+      if (blockers.length === 0) return id
+      for (const blocker of blockers) {
+        const next = walk(cardIdForNode(blocker.glmId))
+        if (next) return next
+      }
+      return null
+    }
+    const head = walk(instanceId)
+    return head && head !== instanceId ? this._nodeForCard(head) : null
   }
 
   /** @private Has a session of this stage already finished on this card? */
@@ -1592,6 +1642,10 @@ export class BoardViewComponent {
           <div>Building now means writing against something that does not exist yet.
           The session will do the honest thing — inject a seam and refuse by name —
           but its verifier will fail for a reason belonging to another card.</div>
+          ${ask.buildFirst
+            ? `<div class="board-confirm-first">Build <b>${esc(ask.buildFirst)}</b> first —
+               it is the end of this chain and nothing is blocking it.</div>`
+            : ''}
         </div>
         <div class="board-confirm-actions">
           <button class="btn btn-secondary btn-sm" data-action="cancel-confirm">Cancel</button>

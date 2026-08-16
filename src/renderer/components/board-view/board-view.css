@@ -684,3 +684,9 @@
   background: var(--bg-primary, #1f1f1f);
   color: var(--text-secondary, #999);
 }
+
+/* The head of a blocked chain — what to do, not only what is wrong */
+.board-confirm-first {
+  margin-top: 6px;
+  color: var(--text-primary, #ddd);
+}

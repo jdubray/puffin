@@ -152,6 +152,10 @@ describe('the hold gate', () => {
     assert.strictEqual(result.held, true)
     assert.strictEqual(result.success, false)
     assert.match(result.error, /held/)
+    // Names the control. Telling someone who has just resumed the escalated
+    // card to "resolve the escalation" sends them hunting for what else the
+    // board wants.
+    assert.match(result.error, /Resume phase/)
     // Not merely reported: the dispatch never reached the board.
     assert.strictEqual(board.calls.length, before)
     assert.strictEqual(board.instances.get('card-b').cardState, 'backlog')

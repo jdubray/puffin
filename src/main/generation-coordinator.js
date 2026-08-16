@@ -162,13 +162,17 @@ class GenerationCoordinator {
     if (generation && !ALLOWED_WHILE_HELD.has(action)) {
       const batch = await this._genState(generation.generationId)
       if (batch?.genState === 'held') {
+        // Name the control, not the principle. A user who has just resumed the
+        // escalated card is told to "resolve the escalation" they already
+        // resolved, and left hunting for what else the board wants.
         return {
           success: false,
           held: true,
           generationId: generation.generationId,
-          error: `Phase ${generation.phase} is held: a card escalated and this ` +
-            `generation runs on policy 'hold'. Resolve the escalation and resume ` +
-            `the phase before moving other cards.`
+          error: `Phase ${generation.phase} is held — a card escalated and this ` +
+            `phase runs on policy 'hold', so none of its cards move until a ` +
+            `person says to carry on. Use "Resume phase" on the phase strip ` +
+            `above the board.`
         }
       }
     }

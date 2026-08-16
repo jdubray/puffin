@@ -1301,6 +1301,17 @@ export class BoardViewComponent {
     </div>`
   }
 
+  /** @private Cards of this batch still sitting in needsHuman. */
+  _escalatedIn(generation) {
+    return (generation.cards || []).filter(id =>
+      this.cards.find(c => (c.instanceId || c.id) === id)?.state?.cardState === 'needsHuman')
+  }
+
+  /** @private */
+  _cardTitle(instanceId) {
+    return this._nodeForCard(instanceId)?.title || instanceId
+  }
+
   /**
    * The batch strip: one line per active generation.
    *
@@ -1323,8 +1334,12 @@ export class BoardViewComponent {
             policy <code>${esc(state.policy || g.policy)}</code>${
               state.escalated > 0 ? ` · <b>${esc(String(state.escalated))}</b> escalated` : ''}
           </span>
-          ${held ? `<span class="board-generation-why">A card escalated and this phase runs on
-            <b>hold</b> — its other cards will refuse to move until you resume it.</span>` : ''}
+          ${held ? `<span class="board-generation-why">${this._escalatedIn(g).length > 0
+            ? `A card escalated and this phase runs on <b>hold</b> — every card in it
+               refuses to move until you resume the phase.
+               Still escalated: ${this._escalatedIn(g).map(c => esc(this._cardTitle(c))).join(', ')}.`
+            : `<b>Nothing is escalated any more</b> — the phase is still held because
+               carrying on is a person's call, not the board's. Resume it to continue.`}</span>` : ''}
           <span class="board-generation-actions">
             ${held ? `<button class="btn btn-primary btn-sm" data-action="resume-generation"
               data-id="${esc(g.generationId)}">Resume phase</button>` : ''}

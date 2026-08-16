@@ -345,6 +345,14 @@ function laneBrief(lane, stage, { wantsMachine = false, machineDir = 'machines/<
       `  ${machineDir}/next.cjs        createInstance({strict: true}), named\n` +
       '                                acceptors, reject(reason) never throw\n' +
       `  ${machineDir}/invariants.mjs  what must hold in every reachable state\n` +
+      'The module must export EXACTLY this surface, with nothing standing in ' +
+      'for it: module.exports = { instance, init, actions, getState, setState }. ' +
+      'The checker derives the transition relation from those five — it calls ' +
+      'init(), setState(snapshot), actions[name](data), getState() — so a module ' +
+      'exporting a richer or differently-named surface (step, next, project, a ' +
+      'local createInstance) explores zero states and reports nothing about your ' +
+      'machine. Adapters for other callers may sit alongside them; these five ' +
+      'must be there.\n' +
       'Those three paths are in your OUTPUTS above: they are deliverables of ' +
       'this card, not extras.\n' +
       "The module MUST use @cognitive-fab/sam-pattern's createInstance. Do not " +

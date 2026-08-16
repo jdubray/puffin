@@ -45,6 +45,31 @@ describe('renderMarkdown', () => {
     assert.ok(!html.includes('**'))
   })
 
+  it('puts one list around a run of items, not one per item', () => {
+    // Wrapping each item separately produced three <ul>s for a three-item
+    // list, which renders with a gap between every bullet.
+    const html = renderMarkdown(['- alpha', '- beta', '- gamma'].join('\n'))
+    assert.strictEqual((html.match(/<ul>/g) || []).length, 1)
+    assert.strictEqual((html.match(/<li>/g) || []).length, 3)
+  })
+
+  it('wraps a numbered list in <ol>', () => {
+    // These used to become <li> and never be wrapped at all.
+    const html = renderMarkdown(['1. first', '2. second'].join('\n'))
+    assert.match(html, /<ol><li>first<\/li><li>second<\/li><\/ol>/)
+  })
+
+  it('keeps two separate lists separate', () => {
+    const html = renderMarkdown(['- a', '', 'text', '', '- b'].join('\n'))
+    assert.strictEqual((html.match(/<ul>/g) || []).length, 2)
+  })
+
+  it('does not put bullets inside the numbered list', () => {
+    const html = renderMarkdown(['- bullet', '', '1. numbered'].join('\n'))
+    assert.match(html, /<ul><li>bullet<\/li><\/ul>/)
+    assert.match(html, /<ol><li>numbered<\/li><\/ol>/)
+  })
+
   it('renders headings, links and fenced code', () => {
     const html = renderMarkdown([
       '## Status',

@@ -126,13 +126,18 @@ export function simpleMarkdown(text) {
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
 
-  // Lists
+  // Lists. Items are wrapped as a RUN, not one at a time: wrapping each item
+  // separately turned a three-item list into three <ul>s, which renders with a
+  // gap between every bullet.
   html = html.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>')
-  html = html.replace(/(<li>.*<\/li>)\n(?=<li>)/g, '$1')
-  html = html.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
+  html = html.replace(/(?:<li>[\s\S]*?<\/li>\n?)+/g, run => `<ul>${run.replace(/\n/g, '')}</ul>`)
 
-  // Numbered lists
-  html = html.replace(/^\s*\d+\.\s+(.*)$/gm, '<li>$1</li>')
+  // Numbered lists, converted after the bullets are safely inside their <ul>
+  // so the run matcher above cannot claim them. They used to become <li> and
+  // were never wrapped at all — bare items with no list around them.
+  html = html.replace(/^\s*\d+\.\s+(.*)$/gm, '<oli>$1</oli>')
+  html = html.replace(/(?:<oli>[\s\S]*?<\/oli>\n?)+/g, run =>
+    `<ol>${run.replace(/\n/g, '').replace(/<oli>/g, '<li>').replace(/<\/oli>/g, '</li>')}</ol>`)
 
   // Links — only schemes on the allowlist become clickable. A refused target
   // still shows its URL as text, so nothing is silently swallowed.
@@ -151,8 +156,8 @@ export function simpleMarkdown(text) {
   html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1')
   html = html.replace(/<p>(<pre>)/g, '$1')
   html = html.replace(/(<\/pre>)<\/p>/g, '$1')
-  html = html.replace(/<p>(<ul>)/g, '$1')
-  html = html.replace(/(<\/ul>)<\/p>/g, '$1')
+  html = html.replace(/<p>(<[uo]l>)/g, '$1')
+  html = html.replace(/(<\/[uo]l>)<\/p>/g, '$1')
   html = html.replace(/<p>(<div class="table-wrapper">)/g, '$1')
   html = html.replace(/(<\/table><\/div>)<\/p>/g, '$1')
 

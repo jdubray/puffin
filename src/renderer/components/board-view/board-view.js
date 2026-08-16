@@ -10,6 +10,7 @@
 
 import { readVerifierRun, describeVerdict } from '../../../shared/verifier-verdict.js'
 import { nextStep, pickNext, STEP } from '../../../shared/card-policy.js'
+import { renderMarkdown } from '../../lib/markdown.js'
 
 /** Escape for an HTML attribute value — esc() leaves quotes alone. */
 function escAttr(text) {
@@ -649,8 +650,12 @@ export class BoardViewComponent {
   _renderSessionOnly() {
     const body = this.container?.querySelector('#board-session-body')
     if (!body) return this.render()
-    body.textContent = this.session.text
-    body.scrollTop = body.scrollHeight
+    // Follow the tail only if the reader is already at it. Scrolling back to
+    // re-read something while a session streams should not keep yanking the
+    // view down, which is what an unconditional scrollTop does.
+    const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40
+    body.innerHTML = renderMarkdown(this.session.text)
+    if (atBottom) body.scrollTop = body.scrollHeight
   }
 
   /**
@@ -1161,7 +1166,7 @@ export class BoardViewComponent {
         </span>
       </div>
       ${session.error ? `<div class="board-rejection">&#10007; ${esc(session.error)}</div>` : ''}
-      <pre class="board-session-body" id="board-session-body">${esc(session.text)}</pre>
+      <div class="board-session-body md-body" id="board-session-body">${renderMarkdown(session.text)}</div>
       ${this._renderScopeFinding(session.scope)}
       ${!session.running && !session.error ? `<div class="board-session-note">
         <b>The turn is over and the card has not moved.</b> ${session.stage === 'plan'

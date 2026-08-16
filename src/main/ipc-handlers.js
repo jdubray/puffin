@@ -29,6 +29,7 @@ const { GenerationCoordinator } = require('./generation-coordinator')
 const { buildComponentPrompt } = require('./component-prompt')
 const { compareScope, gateAffecting } = require('./session-scope')
 const { PolycheckService } = require('./polycheck-service')
+const { inspectVerifier } = require('./verifier-command')
 
 // Polygraph workbench — engine access for any project built with Polygraph
 const polygraphService = new PolygraphService()
@@ -708,6 +709,14 @@ function setupStateHandlers(ipcMain) {
   ipcMain.handle('board:runVerifier', async (event, { command } = {}) => {
     if (!command) return { success: false, error: 'no verifier command' }
     if (!projectPath) return { success: false, error: 'No project open' }
+
+    // A gate that cannot run is not a gate that refused. Spawning it anyway
+    // returns a non-zero exit indistinguishable from a real failure, and the
+    // card gets sent back to implementing for a defect it does not have.
+    const inspection = inspectVerifier(command, projectPath)
+    if (!inspection.runnable) {
+      return { success: true, ran: false, passed: false, reason: inspection.reason, missing: inspection.missing }
+    }
     return new Promise((resolve) => {
       // shell:true because a verifier is a command line as the spec wrote it
       // ('bun test src/x.test.mjs'), not an argv the design ever decomposed.
@@ -720,13 +729,13 @@ function setupStateHandlers(ipcMain) {
       child.stderr.on('data', cap)
       const timer = setTimeout(() => {
         child.kill()
-        resolve({ success: true, passed: false, timedOut: true, code: null, output: out })
+        resolve({ success: true, ran: true, passed: false, timedOut: true, code: null, output: out })
       }, 10 * 60 * 1000)
       child.on('error', (error) =>
         resolve({ success: false, error: error.message, output: out }))
       child.on('close', (code) => {
         clearTimeout(timer)
-        resolve({ success: true, passed: code === 0, code, output: out })
+        resolve({ success: true, ran: true, passed: code === 0, code, output: out })
       })
     })
   })

@@ -434,6 +434,18 @@ export class BoardViewComponent {
     this.render()
 
     const result = await window.puffin.board.runVerifier({ command })
+
+    // Could not run: not a pass, not a fail, and above all not a reason to
+    // send the card back to implementing. The card stays put and the reason
+    // goes on screen, because what is broken is the spec, not the code.
+    if (result.success && result.ran === false) {
+      this.session = {
+        ...this.session, running: false, text: `$ ${command}`, error: result.reason
+      }
+      this.rejection = { instanceId, reason: result.reason }
+      return this.render()
+    }
+
     const passed = result.success && result.passed
     this.session = {
       ...this.session,

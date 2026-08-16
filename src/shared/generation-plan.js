@@ -212,8 +212,8 @@ function dependencyLayers(items) {
  * @param {Object} [options]
  * @param {Object} [options.buildLane] - From project:buildLane
  * @param {number} [options.phaseSize=DEFAULT_PHASE_SIZE]
- * @param {string|null} [options.since] - ISO time; only components touched
- *   after it are candidates. Null plans the whole sekkei.
+ * @param {Object} [options.buildState] - glmId → {state: 'new'|'stale'|'built'};
+ *   when given, only components that are not already built are candidates.
  * @param {Set<string>|Array<string>} [options.alreadyOnBoard] - Component glm
  *   ids that already have a card, so a re-plan does not re-queue them.
  * @returns {{phases: Array<Object>, notReady: Array<Object>, cycle: Array<Object>,
@@ -223,14 +223,19 @@ export function planGeneration(nodes = [], options = {}) {
   const {
     buildLane = null,
     phaseSize = DEFAULT_PHASE_SIZE,
-    since = null,
+    buildState = null,
     alreadyOnBoard = []
   } = options
 
   const onBoard = alreadyOnBoard instanceof Set ? alreadyOnBoard : new Set(alreadyOnBoard)
   const components = nodes.filter(n => n.stratum === 'component')
   const componentIds = new Set(components.map(n => n.glmId))
-  const sinceMs = since ? new Date(since).getTime() : null
+  // Scope by what each component IS, not by one timestamp for the sekkei. A
+  // global watermark answers "has anything been generated since I last said
+  // so", which nobody maintains and which reads as "nothing has been built"
+  // on a project with three finished components. Per-component build state
+  // answers the question actually being asked: what has no code, and what has
+  // code the design has since outrun.
 
   /** Descendants grouped under their component, so one pass over nodes serves all. */
   const specsFor = new Map()
@@ -266,7 +271,7 @@ export function planGeneration(nodes = [], options = {}) {
   const ready = []
 
   for (const component of components) {
-    if (sinceMs !== null && (touchedAt.get(component.glmId) || 0) <= sinceMs) continue
+    if (buildState && buildState[component.glmId]?.state === 'built') continue
 
     const stateful = statefulIds.has(component.glmId)
     const specs = specsFor.get(component.glmId) || new Map()

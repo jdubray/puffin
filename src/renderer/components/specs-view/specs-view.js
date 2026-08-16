@@ -487,7 +487,6 @@ export class SpecsViewComponent {
     this.selectedFollowUps = []
     this.followUpNote = ''
     // Changes since the last code generation → the workflow's inbox
-    this.lastGenerationAt = null
     this.queueNote = null
     this.plan = null        // derived by planGeneration - never hand-made
     this.planScope = 'changed'
@@ -612,7 +611,6 @@ export class SpecsViewComponent {
         const state = await window.puffin.state.get()
         const resolved = state?.state || state || {}
         this.projectName = resolved.projectName || ''
-        this.lastGenerationAt = resolved.config?.glmLastGenerationAt || null
       } catch { /* project name is cosmetic */ }
       // Context sources for the composer (both optional)
       try {
@@ -1000,7 +998,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
 
     this.plan = planGeneration(this.nodes, {
       buildLane: this.buildLane,
-      since: this.planScope === 'all' ? null : this.lastGenerationAt,
+      buildState: this.planScope === 'all' ? null : this.buildState,
       alreadyOnBoard: onBoard
     })
     this.planning = false
@@ -1060,13 +1058,6 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     await this.recomputePlan()
   }
 
-  /** Mark this design as generated — resets the change window. */
-  async markGenerated() {
-    this.lastGenerationAt = new Date().toISOString()
-    await window.puffin.state.updateConfig({ glmLastGenerationAt: this.lastGenerationAt })
-    this.queueNote = null
-    this.render()
-  }
 
   // ===== Binding (one project, one sekkei) =====
 
@@ -1385,7 +1376,6 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       else if (action === 'cancel-author') this.cancelAuthoring()
       else if (action === 'replan') this.recomputePlan()
       else if (action === 'queue-phase') this.queuePhase(Number(button.dataset.phase))
-      else if (action === 'mark-generated') this.markGenerated()
       else if (action === 'create-bind') this.createAndBind()
       else if (action === 'bind-existing') this.bindExisting()
       else if (action === 'stop-borrowing') this.stopBorrowing()
@@ -1661,22 +1651,17 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       <div class="specs-changes-line">
         <b>Plan a generation</b>
         <select id="specs-plan-scope" class="form-control specs-ws-select"
-          title="Which part of the sekkei this generation covers">
-          <option value="changed" ${scope === 'changed' ? 'selected' : ''}>changed since the last generation</option>
+          title="Which components this generation covers">
+          <option value="changed" ${scope === 'changed' ? 'selected' : ''}>what needs building</option>
           <option value="all" ${scope === 'all' ? 'selected' : ''}>the whole sekkei</option>
         </select>
         <span class="specs-changes-actions">
           <button class="btn btn-secondary btn-sm" data-action="replan"
             ${this.planning ? 'disabled' : ''}>${this.planning ? 'Planning…' : 'Re-plan'}</button>
-          <button class="btn btn-secondary btn-sm" data-action="mark-generated"
-            title="Reset the change window — the current design is what the code reflects">Mark generated</button>
+
         </span>
       </div>
-      ${scope === 'changed' && this.lastGenerationAt
-        ? `<div class="specs-changes-note">since ${esc(String(this.lastGenerationAt).slice(0, 16).replace('T', ' '))}</div>`
-        : scope === 'changed'
-          ? '<div class="specs-changes-note">nothing generated from this sekkei yet — this covers everything</div>'
-          : ''}
+      ${scope === 'changed' ? `<div class="specs-changes-note">${this._scopeSummary()}</div>` : ''}
       ${plan ? this._renderPlan(plan) : '<div class="specs-changes-note">No plan computed yet.</div>'}
       ${note?.error ? `<div class="specs-editor-error">✗ ${esc(note.error)}</div>` : ''}
       ${note && note.added !== undefined ? `<div class="specs-changes-note">
@@ -1688,6 +1673,30 @@ coding agent would have to guess at. List findings worst-first with the glm id e
               : ' — open the Workflow tab to run them.'}
       </div>` : ''}
     </div>`
+  }
+
+  /**
+   * What "what needs building" currently means, in counts.
+   *
+   * The line it replaced read "nothing generated from this sekkei yet" from a
+   * watermark nobody maintains, on a board with three finished components — so
+   * a plan that had just worked looked like one that had not run.
+   * @private
+   */
+  _scopeSummary() {
+    const states = Object.values(this.buildState || {})
+    const fresh = states.filter(s => s.state === 'new').length
+    const stale = states.filter(s => s.state === 'stale').length
+    const built = states.filter(s => s.state === 'built').length
+    if (fresh + stale === 0) {
+      return built > 0
+        ? `every component is built and none has changed since — nothing to generate`
+        : 'no components in this sekkei yet'
+    }
+    const parts = []
+    if (fresh) parts.push(`${fresh} never built`)
+    if (stale) parts.push(`${stale} whose design moved after the build`)
+    return `${parts.join(', ')}${built ? ` · ${built} up to date` : ''}`
   }
 
   /** @private */

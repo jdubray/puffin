@@ -323,27 +323,28 @@ describe('advisories — what the plan could not derive', () => {
 })
 
 describe('scope', () => {
-  it('plans only what changed when given a watermark', () => {
+  it('plans what has no code and what the design has outrun', () => {
+    // Scope is per component, not one timestamp for the sekkei. A watermark
+    // answers "has anything been generated since I last said so", which nobody
+    // maintains and which reads as "nothing has been built" on a project with
+    // three finished components.
     const plan = planGeneration([
-      ...readyComponent('acme:app.old'),
-      ...readyComponent('acme:app.new', { updatedAt: '2026-08-10T00:00:00Z' })
-    ], { since: '2026-08-05T00:00:00Z' })
-    assert.deepStrictEqual(plan.phases[0].components.map(c => c.glmId), ['acme:app.new'])
+      ...readyComponent('acme:app.done'),
+      ...readyComponent('acme:app.moved'),
+      ...readyComponent('acme:app.fresh')
+    ], {
+      buildState: {
+        'acme:app.done': { state: 'built' },
+        'acme:app.moved': { state: 'stale' },
+        'acme:app.fresh': { state: 'new' }
+      }
+    })
+    assert.deepStrictEqual(
+      plan.phases[0].components.map(c => c.glmId).sort(),
+      ['acme:app.fresh', 'acme:app.moved'])
   })
 
-  it('counts a component as changed when only its spec moved', () => {
-    // The spec is the source; a component whose prompt spec was rewritten
-    // needs regenerating even though the component node never moved.
-    const nodes = [
-      component('acme:app.core'),
-      promptSpec('acme:app.core'),
-      { ...acceptanceSpec('acme:app.core'), updatedAt: '2026-08-10T00:00:00Z' }
-    ]
-    const plan = planGeneration(nodes, { since: '2026-08-05T00:00:00Z' })
-    assert.strictEqual(plan.totals.ready, 1)
-  })
-
-  it('plans the whole sekkei with no watermark', () => {
+  it('plans everything when no build state is given', () => {
     const plan = planGeneration([
       ...readyComponent('acme:app.a'), ...readyComponent('acme:app.b')
     ])

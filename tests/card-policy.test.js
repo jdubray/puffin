@@ -164,6 +164,25 @@ describe('stopping', () => {
     assert.match(step.reason, /declared/)
   })
 
+  it('says when a failure reads as the service rather than the work', () => {
+    // 503 from the API and "the module will not load" both arrive as "the
+    // session did not finish". One is fixed by resuming, the other by reading.
+    const step = at('implementing', {
+      session: { stage: 'implement', ok: false, error: 'fetchCcrV2Session: 503' }
+    })
+    assert.strictEqual(step.step, STEP.ESCALATE)
+    assert.match(step.reason, /service rather than the work/)
+    assert.match(step.reason, /503/)
+  })
+
+  it('does not call a real failure transient', () => {
+    const step = at('implementing', {
+      session: { stage: 'implement', ok: false, error: 'spec must export the v2 SAM surface' }
+    })
+    assert.doesNotMatch(step.reason, /service rather than the work/)
+    assert.match(step.reason, /v2 SAM surface/)
+  })
+
   it('escalates a session that failed', () => {
     assert.strictEqual(
       at('implementing', { session: { stage: 'implement', ok: false } }).step, STEP.ESCALATE)

@@ -22,6 +22,35 @@
  * @module shared/card-policy
  */
 
+/**
+ * Failures that are the service having a bad minute, not the work being wrong.
+ *
+ * A card that escalated because the API returned 503 needs a retry, and a card
+ * that escalated because its module will not load needs a person. Both arrive
+ * as "the session did not finish", and telling them apart is the difference
+ * between resuming and reading.
+ *
+ * Recognised, not retried: a runner that silently re-ran on any 5xx would hide
+ * a service that is down from the person watching it. What this buys is a
+ * sentence saying which kind of failure it was.
+ */
+const TRANSIENT = new RegExp([
+  String.raw`\b(429|500|502|503|504)\b`,
+  'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN',
+  'socket hang up', 'fetch failed', 'Something went wrong',
+  'overloaded', 'rate limit'
+].join('|'), 'i')
+
+/**
+ * Does this failure look like the service rather than the work?
+ *
+ * @param {string} [error]
+ * @returns {boolean}
+ */
+export function looksTransient(error) {
+  return TRANSIENT.test(String(error || ''))
+}
+
 /** What the runner can ask the board to do. */
 export const STEP = {
   GATE: 'gate',                 // run the DoRC verifier, then MARK_READY
@@ -104,7 +133,9 @@ export function nextStep({ cardState, evidence = {}, session = null, batchHeld =
       if (!session || session.stage !== 'plan') {
         return { step: STEP.PLAN, reason: 'no plan has been produced for this card yet' }
       }
-      if (session.ok === false) return { step: STEP.ESCALATE, reason: BLOCKING.sessionFailed }
+      if (session.ok === false) {
+        return { step: STEP.ESCALATE, reason: sessionFailureReason(session) }
+      }
       return { step: STEP.PLAN_READY, reason: 'the plan is written' }
     }
 
@@ -124,10 +155,7 @@ export function nextStep({ cardState, evidence = {}, session = null, batchHeld =
         return { step: STEP.BUILD, reason: 'write the files the spec declares' }
       }
       if (session.ok === false) {
-        return {
-          step: STEP.ESCALATE,
-          reason: session.error ? `${BLOCKING.sessionFailed}: ${session.error}` : BLOCKING.sessionFailed
-        }
+        return { step: STEP.ESCALATE, reason: sessionFailureReason(session) }
       }
       // A build that touched a test it never declared is exactly the shape the
       // mandate exists for. Detected after the fact here, prevented before it
@@ -219,6 +247,18 @@ export function nextStep({ cardState, evidence = {}, session = null, batchHeld =
  * @param {Array<{instanceId: string, state: Object}>} cards
  * @returns {Object|null}
  */
+/**
+ * Why a session failed, in the terms that decide what to do about it.
+ * @private
+ */
+function sessionFailureReason(session) {
+  if (!session.error) return BLOCKING.sessionFailed
+  return looksTransient(session.error)
+    ? `${BLOCKING.sessionFailed}, and it reads as the service rather than the ` +
+      `work — resume the card and run the phase again: ${session.error}`
+    : `${BLOCKING.sessionFailed}: ${session.error}`
+}
+
 export function pickNext(cards = []) {
   const rank = {
     reviewing: 0, validating: 1, implementing: 2, planning: 3, ready: 4, backlog: 5

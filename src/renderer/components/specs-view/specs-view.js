@@ -10,19 +10,10 @@
 
 import { renderMarkdown } from '../../lib/markdown.js'
 import { readVerifierRun, describeVerdict } from '../../../shared/verifier-verdict.js'
+import { cardIdFor, baseCardId, nextCardId } from '../../../shared/card-id.js'
 import { planGeneration } from '../../../shared/generation-plan.js'
 
-/**
- * A card's instance id on the Workflow board: the glm id with everything
- * polyrun will not take in an id replaced. One definition, because a second
- * one that sanitised differently would make every queued card look unqueued.
- *
- * @param {string} glmId
- * @returns {string}
- */
-function cardIdFor(glmId) {
-  return String(glmId).replace(/[^a-zA-Z0-9._-]/g, '-')
-}
+
 
 /** Escape text for safe interpolation into HTML */
 function esc(text) {
@@ -997,8 +988,13 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     try {
       const cards = await window.puffin.board.listCards()
       const byInstance = new Map(this.nodes.map(n => [cardIdFor(n.glmId), n.glmId]))
-      onBoard = (cards.instances || [])
-        .map(c => byInstance.get(c.instanceId || c.id))
+      // A settled card is not a component still on the board: its run finished,
+      // and a spec that has moved since needs a new one. Counting it as queued
+      // is what made a rebuilt component unqueueable.
+      this.boardCards = cards.instances || []
+      onBoard = this.boardCards
+        .filter(c => c.state?.cardState !== 'done')
+        .map(c => byInstance.get(baseCardId(c.instanceId || c.id)))
         .filter(Boolean)
     } catch { /* board not running — every ready component is simply unqueued */ }
 
@@ -1037,10 +1033,13 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     const existing = new Set(((await window.puffin.board.listCards()).instances || [])
       .map(c => c.instanceId || c.id))
 
+    const board = (await window.puffin.board.listCards()).instances || []
     let added = 0
     const cards = []
     for (const component of phase.components) {
-      const instanceId = cardIdFor(component.glmId)
+      // Done is terminal, so a component built in an earlier generation gets a
+      // fresh card rather than a reopened one.
+      const { instanceId } = nextCardId(component.glmId, board)
       cards.push(instanceId)
       if (existing.has(instanceId)) continue
       const result = await window.puffin.board.createCard({ instanceId })

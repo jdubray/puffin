@@ -13,6 +13,7 @@ import { nextStep, pickNext, STEP } from '../../../shared/card-policy.js'
 import { dependenciesOf } from '../../../shared/generation-plan.js'
 import { renderMarkdown } from '../../lib/markdown.js'
 import { splitOutput } from '../../lib/verifier-output.js'
+import { cardIdFor as cardIdForNode, baseCardId, nextCardId, runOf } from '../../../shared/card-id.js'
 
 /** Escape for an HTML attribute value — esc() leaves quotes alone. */
 function escAttr(text) {
@@ -31,9 +32,7 @@ function esc(text) {
  * IS the spec. Lossy but deterministic, so the node is found by comparing
  * derived ids (no side table to drift).
  */
-function cardIdForNode(glmId) {
-  return String(glmId).replace(/[^a-zA-Z0-9._-]/g, '-')
-}
+
 
 const COLUMNS = [
   { state: 'backlog', label: 'Backlog' },
@@ -1237,16 +1236,22 @@ export class BoardViewComponent {
 
   /** Pull one spec onto the board — the card IS the work of implementing it. */
   async addFromSekkei(glmId) {
-    const instanceId = cardIdForNode(glmId)
+    // A settled card is a finished run, and done is terminal by design — so a
+    // component that has been built before starts a NEW card rather than
+    // reopening one the machine considers closed.
+    const { instanceId, isNewRun, run } = nextCardId(glmId, this.cards)
     const result = await window.puffin.board.createCard({ instanceId })
     if (!result.success) this.rejection = { instanceId, reason: result.error }
+    else if (isNewRun) this.rejection = { instanceId, reason: `run ${run} of this component` }
     await this._reloadCards({ force: true })
     if (this.picker) this.openPicker()
   }
 
   /** The sekkei node behind a card, when the card came from a spec. */
   _nodeForCard(instanceId) {
-    return this.sekkeiNodes.find(n => cardIdForNode(n.glmId) === instanceId) || null
+    // Any run of a component maps back to the same node.
+    const base = baseCardId(instanceId)
+    return this.sekkeiNodes.find(n => cardIdForNode(n.glmId) === base) || null
   }
 
   async showJournal(instanceId) {
@@ -1748,7 +1753,8 @@ export class BoardViewComponent {
     const note = this.linkNote?.instanceId === id ? this.linkNote : null
     const ran = this.sessionLog[id] || null
     return `<div class="board-card ${isDone ? 'board-card-done' : ''}" draggable="${!isDone}" data-card-id="${esc(id)}">
-      <div class="board-card-title">${esc(node?.title || id)}</div>
+      <div class="board-card-title">${esc(node?.title || id)}${
+        runOf(id) > 1 ? `<span class="board-card-run">run ${runOf(id)}</span>` : ''}</div>
       ${node ? `<div class="board-card-node"><span class="board-card-stratum">${esc(node.stratum)}</span> ${esc(node.glmId)}</div>` : ''}
       <div class="board-card-meta">
         ${machine ? `<span class="board-badge board-badge-machine"

@@ -525,3 +525,36 @@
 }
 
 .board-runner-log li { padding: 1px 0; }
+
+/* Asking before repeating work that is already done */
+
+.board-confirm {
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--warning-color, #d6a15a);
+  border-radius: 4px;
+  background: rgba(214, 161, 90, 0.1);
+  font-size: 13px;
+}
+
+.board-confirm-head { margin-bottom: 4px; }
+
+.board-confirm-body {
+  color: var(--text-secondary, #bbb);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.board-confirm-body code {
+  background: var(--bg-primary, #1a1a1a);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11.5px;
+}
+
+.board-confirm-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}

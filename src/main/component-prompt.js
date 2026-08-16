@@ -109,6 +109,33 @@ function promptTemplate(body) {
   return ''
 }
 
+/**
+ * Does this component declare a state contract of its own?
+ *
+ * The build lane is a property of the project — it says what polygen can emit
+ * here. Whether a machine is wanted for THIS component is a property of the
+ * component, and asking the second question of the first is how a prompt ends
+ * up hedging with "if this component is stateful" at a model that cannot check.
+ *
+ * @param {Array<Object>} descendants - nodes beneath the component
+ * @returns {boolean}
+ */
+function declaresStateContract(descendants) {
+  return descendants.some(node => {
+    if (node.stratum !== 'interaction') return false
+    const body = node.body || {}
+    const vocabulary = Array.isArray(body.states) && body.states.length > 0 &&
+      Array.isArray(body.transitions) && body.transitions.length > 0
+    return vocabulary || body.contract === 'fsm'
+  })
+}
+
+/** Where a component's machine lives, relative to the project. @private */
+function machineDirFor(glmId) {
+  const name = String(glmId).split('.').pop()
+  return `machines/${name}`
+}
+
 /** A node's body as readable text for the bundle. @private */
 function bodyText(node) {
   const body = node.body
@@ -184,6 +211,19 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
     n.glmId !== glmId && n.glmId.startsWith(`${glmId}.`) &&
     n.glmId !== `${glmId}.spec.prompt`)
 
+  // A machine is a deliverable of this card, not an aside. Saying "write only
+  // what OUTPUTS lists" and then asking for a machines/ directory is a
+  // contradiction, and a session that resolves it by obeying the stricter rule
+  // is behaving correctly — so the files go in OUTPUTS instead.
+  const wantsMachine = lane?.stateful?.lane === 'generated' && declaresStateContract(descendants)
+  const machineDir = machineDirFor(glmId)
+  if (wantsMachine) {
+    outputs.push(
+      `${machineDir}/contract.json`,
+      `${machineDir}/next.cjs`,
+      `${machineDir}/invariants.mjs`)
+  }
+
   const sections = [
     `You are implementing one component of a sekkei (設計) — the design of record.`,
     `COMPONENT: ${component.title || glmId}\nglm id: ${glmId}` +
@@ -208,7 +248,7 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
         `no such node exists: ${bundle.missing.join(', ')}. Treat that as a defect ` +
         `in the spec, not as context you should invent.`
       : '',
-    lane ? laneBrief(lane, stage) : '',
+    lane ? laneBrief(lane, stage, { wantsMachine, machineDir }) : '',
     stage === 'implement' ? IMPLEMENT_RULES : PLAN_RULES,
     // Scratch work needs somewhere to go, and it must not be the repo. A
     // session reaching for /tmp is blocked (only the project is writable), and
@@ -253,9 +293,18 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
  *
  * @private
  */
-function laneBrief(lane, stage) {
+function laneBrief(lane, stage, { wantsMachine = false, machineDir = 'machines/<component>' } = {}) {
   const language = lane.language?.language || 'this project'
   const kind = lane.stateful?.lane
+
+  if (kind === 'generated' && !wantsMachine) {
+    // Nothing here declares a state contract, so there is no machine to write
+    // and no model check to pass. Saying so beats a conditional the model has
+    // to adjudicate.
+    return 'HOW THIS IS PROVED: no interaction of this component declares a ' +
+      'state contract, so there is no state graph to check — the acceptance ' +
+      'verifier above is the proof.'
+  }
 
   if (kind === 'generated') {
     // The layout is not decoration: Polygraph discovers a machine by finding a
@@ -265,10 +314,12 @@ function laneBrief(lane, stage) {
     return 'HOW THIS IS PROVED: this component\'s interaction declares a state ' +
       'contract — the states and transitions listed above. Author the checkable ' +
       'part as a SAM v2 strict-profile module, and put it where Polygraph looks:\n' +
-      '  machines/<component>/contract.json   state keys, actions, finite data domains\n' +
-      '  machines/<component>/next.cjs        createInstance({strict: true}), named\n' +
-      '                                       acceptors, reject(reason) never throw\n' +
-      '  machines/<component>/invariants.mjs  what must hold in every reachable state\n' +
+      `  ${machineDir}/contract.json   state keys, actions, finite data domains\n` +
+      `  ${machineDir}/next.cjs        createInstance({strict: true}), named\n` +
+      '                                acceptors, reject(reason) never throw\n' +
+      `  ${machineDir}/invariants.mjs  what must hold in every reachable state\n` +
+      'Those three paths are in your OUTPUTS above: they are deliverables of ' +
+      'this card, not extras.\n' +
       'The checker explores a FINITE window, so bound the domains deliberately (a ' +
       'queue of 0..3, a cascade depth of 0..2) and say in the contract that the ' +
       'bound is the checker\'s window and not a runtime cap — the proof rests on ' +

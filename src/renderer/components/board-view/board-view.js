@@ -101,7 +101,8 @@ export class BoardViewComponent {
     // instanceId -> {stage, at, ok}: which sessions have run, so a card can
     // show it and a button can say 'again' instead of implying nothing happened.
     this.sessionLog = {}
-    this.runner = null    // the phase runner, when it is working
+    this.runner = null
+    this.confirm = null   // a session the user has been asked to confirm    // the phase runner, when it is working
     this.policy = null    // polycheck's verdict per card, when it is installed
     // Off by default: skipping permission prompts is the user's call to make,
     // once, in the open - not a default they discover after the fact.
@@ -544,7 +545,10 @@ export class BoardViewComponent {
    *
    * @param {string} instanceId
    */
-  async startWork(instanceId) {
+  async startWork(instanceId, { confirmed = false } = {}) {
+    if (!confirmed && this._alreadyRan(instanceId, 'plan')) {
+      return this._askAgain(instanceId, 'plan')
+    }
     await this.dispatch(instanceId, 'START_WORK')
     const card = this.cards.find(c => (c.instanceId || c.id) === instanceId)
     if (card?.state?.cardState !== 'planning') return // rejected; the reason is on screen
@@ -560,8 +564,47 @@ export class BoardViewComponent {
    *
    * @param {string} instanceId
    */
-  async runImplementation(instanceId) {
+  async runImplementation(instanceId, { confirmed = false } = {}) {
+    // A rebuild is not a free retry: it spends a turn, and it rewrites the
+    // files the card declared - including a module that is already finished and
+    // passing. Cheap to ask, expensive to undo.
+    if (!confirmed && this._alreadyRan(instanceId, 'implement')) {
+      return this._askAgain(instanceId, 'implement')
+    }
     return this._runSession(instanceId, 'implement')
+  }
+
+  /** @private Has a session of this stage already finished on this card? */
+  _alreadyRan(instanceId, stage) {
+    return this.sessionLog[instanceId]?.stage === stage
+  }
+
+  /**
+   * @private
+   * Put the question on screen with what it actually costs: when the last one
+   * ran, what it will overwrite, and where the card's gate currently stands.
+   */
+  _askAgain(instanceId, stage) {
+    const log = this.sessionLog[instanceId] || {}
+    const node = this._nodeForCard(instanceId)
+    this.confirm = {
+      instanceId,
+      stage,
+      title: node?.title || instanceId,
+      at: log.at || null,
+      verifier: log.verifier || null,
+      changed: log.changed || []
+    }
+    this.render()
+  }
+
+  /** Run the session the confirmation was about. */
+  async confirmSession() {
+    const ask = this.confirm
+    if (!ask) return
+    this.confirm = null
+    if (ask.stage === 'plan') return this.startWork(ask.instanceId, { confirmed: true })
+    return this.runImplementation(ask.instanceId, { confirmed: true })
   }
 
   /**
@@ -1100,6 +1143,8 @@ export class BoardViewComponent {
     else if (action === 'implement' && id) this.runImplementation(id)
     else if (action === 'close-session') { this.session = null; this.render() }
     else if (action === 'close-runner') { this.runner = null; this.render() }
+    else if (action === 'confirm-session') this.confirmSession()
+    else if (action === 'cancel-confirm') { this.confirm = null; this.render() }
     else if (action === 'cancel-session') this.cancelSession()
     else if (action === 'resume-generation' && id) this.resumeGeneration(id)
     else if (action === 'cancel-generation' && id) this.cancelGeneration(id)
@@ -1193,6 +1238,7 @@ export class BoardViewComponent {
       ${this.rejection ? `<div class="board-rejection ${this.rejection.pending ? 'board-rejection-pending' : ''}">
         ${this.rejection.pending ? '⏳' : '⤺'} <code>${esc(this.rejection.instanceId)}</code> — ${esc(this.rejection.reason)}
       </div>` : ''}
+      ${this._renderConfirm()}
       ${this._renderGenerations()}
       ${this._renderRunner()}
       ${this._renderSession()}
@@ -1298,6 +1344,39 @@ export class BoardViewComponent {
         the one change that can turn a failing gate green without the code
         changing. Read the diff before this card passes review.
       </div>` : ''}
+    </div>`
+  }
+
+  /**
+   * The "are you sure" for a session that has already run.
+   * @private
+   */
+  _renderConfirm() {
+    const ask = this.confirm
+    if (!ask) return ''
+    const verb = ask.stage === 'plan' ? 'planned' : 'built'
+    const when = ask.at ? String(ask.at).slice(11, 16) : 'earlier'
+    return `<div class="board-confirm">
+      <div class="board-confirm-head">
+        <b>${esc(ask.title)} was already ${verb} at ${esc(when)}.</b>
+      </div>
+      <div class="board-confirm-body">
+        Running it again spends another turn and rewrites the files this card
+        declared${ask.changed.length > 0
+          ? `, which last time were: ${ask.changed.slice(0, 6).map(f => `<code>${esc(f)}</code>`).join(' ')}`
+          : ''}.
+        ${ask.verifier === 'pass'
+          ? '<b>Its verifier currently passes</b> — a rebuild can only lose that.'
+          : ask.verifier === 'fail'
+            ? 'Its verifier currently fails, so a rebuild may well be what it needs.'
+            : ''}
+      </div>
+      <div class="board-confirm-actions">
+        <button class="btn btn-secondary btn-sm" data-action="cancel-confirm">Cancel</button>
+        <button class="btn btn-primary btn-sm" data-action="confirm-session">
+          ${ask.stage === 'plan' ? 'Plan again' : 'Build again'}
+        </button>
+      </div>
     </div>`
   }
 

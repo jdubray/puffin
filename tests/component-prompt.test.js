@@ -207,12 +207,47 @@ describe('the proof lane', () => {
     assert.doesNotMatch(result.prompt, /CAPTURE-READY/)
   })
 
+  it('puts the machine files in OUTPUTS, so the card does not contradict itself', () => {
+    // The rules say "write the files listed under OUTPUTS, do not invent
+    // others"; the lane brief asked for a machines/ directory that OUTPUTS
+    // never mentioned. A session that resolved that by obeying the stricter
+    // rule was behaving correctly and wrote no machine.
+    const withContract = nodes().concat([{
+      glmId: `${ID}.dispatch_cycle`, stratum: 'interaction',
+      body: { contract: 'fsm', states: ['a', 'b'], transitions: ['a->b'] }
+    }])
+    const result = buildComponentPrompt({
+      nodes: withContract, glmId: ID, stage: 'implement',
+      lane: { language: { language: 'javascript' }, stateful: { lane: 'generated' } }
+    })
+    assert.ok(result.outputs.includes('machines/core/contract.json'))
+    assert.ok(result.outputs.includes('machines/core/next.cjs'))
+    assert.ok(result.outputs.includes('machines/core/invariants.mjs'))
+    assert.match(result.prompt, /deliverables of this card, not extras/)
+  })
+
+  it('asks for no machine when the component declares no state contract', () => {
+    // The lane is a property of the project; whether a machine is wanted is a
+    // property of the component. Hedging with "if this component is stateful"
+    // asks the model to adjudicate something Puffin already knows.
+    const stateless = nodes().filter(n => !n.glmId.endsWith('.dispatch_cycle'))
+    const result = buildComponentPrompt({
+      nodes: stateless, glmId: ID, stage: 'implement',
+      lane: { language: { language: 'javascript' }, stateful: { lane: 'generated' } }
+    })
+    assert.ok(!result.outputs.some(o => o.startsWith('machines/')))
+    assert.match(result.prompt, /no state graph to check/)
+  })
+
   it('says where the machine has to live, or nothing can check it', () => {
     // Polygraph discovers a machine by finding a contract beside a module.
     // A perfect state machine in the wrong place is not checkable, and the
     // card's validation gate reports 'not-applicable' forever.
-    const result = build({ lane: { stateful: { lane: 'generated' } } })
-    assert.match(result.prompt, /machines\/<component>\/contract\.json/)
+    const result = buildComponentPrompt({
+      nodes: nodes(), glmId: ID, stage: 'implement',
+      lane: { stateful: { lane: 'generated' } }
+    })
+    assert.match(result.prompt, /machines\/core\/contract\.json/)
     assert.match(result.prompt, /next\.cjs/)
     assert.match(result.prompt, /invariants\.mjs/)
   })

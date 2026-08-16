@@ -59,6 +59,61 @@ const STRATUM_PLURAL = {
   spec: 'specs'
 }
 
+/**
+ * Which components have code, and whether the design has moved since.
+ *
+ * Three answers, and the middle one is the reason this exists: a component
+ * whose spec changed after it was built looks identical in a tree to one that
+ * was never touched, so the work of noticing it falls on someone remembering.
+ *
+ * Time is compared per component, not against one global watermark: a
+ * component is stale when ITS design moved after ITS build, and a sekkei where
+ * one edit marks forty components stale teaches you to ignore the marker.
+ *
+ * @param {Array<Object>} nodes - every sekkei node
+ * @param {Object} sessionLog - .puffin/card-sessions.json, keyed by card id
+ * @returns {Object<string, {state: 'new'|'stale'|'built', builtAt: string|null, changedAt: string|null}>}
+ */
+export function buildStateOf(nodes = [], sessionLog = {}) {
+  const components = nodes.filter(n => n.stratum === 'component')
+  const componentIds = new Set(components.map(n => n.glmId))
+  const ownerOf = (glmId) => {
+    if (componentIds.has(glmId)) return glmId
+    const parts = String(glmId).split('.')
+    for (let i = parts.length - 1; i > 0; i--) {
+      const candidate = parts.slice(0, i).join('.')
+      if (componentIds.has(candidate)) return candidate
+    }
+    return null
+  }
+
+  // The design's own clock: the latest edit to the component or anything
+  // beneath it, because a spec leaf changing is the component changing.
+  const changedAt = new Map()
+  for (const node of nodes) {
+    const owner = ownerOf(node.glmId)
+    if (!owner) continue
+    const at = node.updatedAt || node.authoredAt || null
+    if (at && (!changedAt.has(owner) || at > changedAt.get(owner))) changedAt.set(owner, at)
+  }
+
+  const state = {}
+  for (const component of components) {
+    const cardId = cardIdFor(component.glmId)
+    const entry = sessionLog[cardId] || {}
+    // Only an implementation turn counts as a build. A plan or a review read
+    // the design; they did not produce anything the design can outrun.
+    const builtAt = entry.stage === 'implement' && entry.ok ? entry.at || null : null
+    const moved = changedAt.get(component.glmId) || null
+    state[component.glmId] = {
+      state: !builtAt ? 'new' : (moved && moved > builtAt ? 'stale' : 'built'),
+      builtAt,
+      changedAt: moved
+    }
+  }
+  return state
+}
+
 /** A glm id: <org>:<project>[.<segment>…] — the dot is what makes it a path. */
 const GLM_ID_RE = /^[a-z][a-z0-9_-]*:[a-z0-9][a-z0-9._-]*$/i
 const URL_RE = /^https?:\/\/[^\s"]+$/i
@@ -455,7 +510,8 @@ export class SpecsViewComponent {
     this.quickMode = false
     this.models = []
     this.defaultModel = ''
-    this.buildLane = null // { language, stateful, stateless } — see project:buildLane
+    this.buildLane = null
+    this.buildState = {}    // glmId -> new | stale | built // { language, stateful, stateless } — see project:buildLane
     this.isRecording = false
     this._recorder = null
     this._chunks = []
@@ -618,6 +674,12 @@ export class SpecsViewComponent {
     // Follow the workspace with the live channel
     this.socketStatus = 'connecting'
     window.puffin.glm.subscribe({ workspaceId })
+    // What has been built, and what the design has outrun since.
+    try {
+      const saved = await window.puffin.board.readSessionLog()
+      this.buildState = buildStateOf(this.nodes, saved.success ? saved.log || {} : {})
+    } catch { this.buildState = {} }
+
     // The plan is cheap and derived, so it is computed on load rather than
     // behind a button: an empty panel would just be a button that says
     // "compute the thing you came here for".
@@ -1849,6 +1911,27 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     </div>`
   }
 
+  /**
+   * The build marker for a component row.
+   *
+   * Only components carry one: a spec leaf has no code of its own, and marking
+   * every node would bury the eight rows that can actually be acted on.
+   * @private
+   */
+  _buildMarker(node) {
+    if (node.stratum !== 'component') return ''
+    const info = this.buildState?.[node.glmId]
+    if (!info) return ''
+    if (info.state === 'new') {
+      return '<span class="specs-build specs-build-new" title="No implementation session has produced this yet">new</span>'
+    }
+    if (info.state === 'stale') {
+      return `<span class="specs-build specs-build-stale"
+        title="The design moved after this was built — built ${esc(String(info.builtAt).slice(0, 16).replace('T', ' '))}, spec changed ${esc(String(info.changedAt).slice(0, 16).replace('T', ' '))}">rebuild</span>`
+    }
+    return `<span class="specs-build specs-build-ok" title="Built ${esc(String(info.builtAt).slice(0, 16).replace('T', ' '))}, nothing changed since">built</span>`
+  }
+
   _renderTree() {
     if (this.nodes.length === 0) {
       return `<div class="specs-empty">${this.workspaceId
@@ -1868,6 +1951,7 @@ coding agent would have to guess at. List findings worst-first with the glm id e
             : '<span class="specs-twisty-spacer"></span>'}
           <span class="specs-stratum specs-stratum-${esc(node.stratum)}"
             title="${esc(node.stratum || 'unknown stratum')}">${esc(STRATUM_CODE[node.stratum] || '??')}</span>
+          ${this._buildMarker(node)}
           <span class="specs-node-title">${esc(node.title || node.glmId)}</span>
           ${node.revisionMajor ? `<span class="specs-node-rev"
             title="revision ${esc(node.revisionMajor)}.${node.revisionIteration ?? 0}${node.revisionStatus ? ` · ${esc(node.revisionStatus)}` : ''}"

@@ -1046,3 +1046,32 @@
   font-size: 12.5px;
   color: var(--text-secondary, #999);
 }
+
+/* Does this component have code, and has the design moved since? */
+
+.specs-build {
+  flex: none;
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.specs-build-new {
+  color: var(--accent-primary, #6aa9ff);
+  background: rgba(106, 169, 255, 0.14);
+}
+
+/* The one that earns its colour: identical to 'built' in a tree, and the whole
+   reason for the marker. */
+.specs-build-stale {
+  color: var(--warning-color, #e0a030);
+  background: rgba(224, 160, 48, 0.16);
+}
+
+.specs-build-ok {
+  color: var(--success-color, #4cae6f);
+  background: rgba(76, 174, 111, 0.12);
+}

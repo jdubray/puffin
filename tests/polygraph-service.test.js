@@ -120,7 +120,64 @@ describe('PolygraphService', () => {
     })
   })
 
-  describe('readDiagram', () => {
+  describe('a stand-in for the SAM library', () => {
+  const write = (body) => {
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'puffin-standin-'))
+    fs.writeFileSync(path.join(scratch, 'contract.json'), '{}')
+    fs.writeFileSync(path.join(scratch, 'next.cjs'), body)
+    return scratch
+  }
+
+  it('accepts a module that uses the library', () => {
+    const dir = write("const { createInstance } = require('@cognitive-fab/sam-pattern')")
+    try {
+      const svc = new PolygraphService({ projectPath: dir })
+      assert.strictEqual(svc._detectStandIn(path.join(dir, 'next.cjs')), null)
+    } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('refuses to check a module that falls back to its own factory', async () => {
+    // The case that came up: sam-pattern was not installed, so the module
+    // required it in a try and used a local factory "with the same strict
+    // profile surface" otherwise. The shape is the same; the behaviour the
+    // checker reads is not, so a green check would be green about the stand-in.
+    const dir = write([
+      'let createInstance',
+      "try { ({ createInstance } = require('@cognitive-fab/sam-pattern')) }",
+      'catch { createInstance = function () { return {} } }'
+    ].join(String.fromCharCode(10)))
+    try {
+      const svc = new PolygraphService({ projectPath: dir })
+      const result = await svc.checkMachine(dir)
+      assert.strictEqual(result.success, false)
+      assert.strictEqual(result.standIn, true)
+      assert.match(result.error, /verdict about the stand-in/)
+    } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('refuses a module that does not use the library at all', () => {
+    const dir = write('module.exports = { init() {}, actions: {} }')
+    try {
+      const svc = new PolygraphService({ projectPath: dir })
+      assert.match(svc._detectStandIn(path.join(dir, 'next.cjs')), /does not use/)
+    } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('says nothing about a module it cannot read', () => {
+    const svc = new PolygraphService({ projectPath: repoRoot })
+    assert.strictEqual(svc._detectStandIn(path.join(repoRoot, 'no-such-module.cjs')), null)
+  })
+
+  it('passes the machines this repo ships, which use the library', () => {
+    const svc = new PolygraphService({ projectPath: repoRoot })
+    for (const name of ['task-card', 'generation']) {
+      assert.strictEqual(
+        svc._detectStandIn(path.join(repoRoot, 'machines', name, 'next.cjs')), null, name)
+    }
+  })
+})
+
+describe('readDiagram', () => {
     it('rejects non-SVG paths', () => {
       const svc = new PolygraphService({ projectPath: repoRoot })
       const result = svc.readDiagram(path.join(repoRoot, 'package.json'))

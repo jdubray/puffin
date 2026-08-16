@@ -193,6 +193,47 @@ class PolygraphService {
    * @param {number} [options.maxStates] - State-space cap
    * @returns {Promise<Object>} Parsed check result
    */
+  /**
+   * Is this module a stand-in for the SAM library rather than a user of it?
+   *
+   * The checker does not merely call the module: it reads behaviour only the
+   * library has - lastStep().classification to detect a rejection,
+   * step.mutations to catch an acceptor that mutated and then rejected, a
+   * shallow-frozen pre-state, a merge-only setState, a getState that omits
+   * internal keys. A hand-rolled factory with the same SHAPE reproduces none of
+   * that, so a check against it explores the stand-in's semantics and returns a
+   * verdict about the stand-in.
+   *
+   * A red result there would be survivable. A green one is not: it is a proof
+   * of the wrong thing, wearing the right badge. So this refuses to run rather
+   * than reporting either.
+   *
+   * @param {string} modulePath
+   * @returns {string|null} the reason, or null when the module is genuine
+   * @private
+   */
+  _detectStandIn(modulePath) {
+    let source
+    try {
+      source = fs.readFileSync(modulePath, 'utf-8')
+    } catch {
+      return null // unreadable is the caller's problem, not this check's
+    }
+    if (/require\(\s*['"]@cognitive-fab\/sam-pattern['"]\s*\)/.test(source) &&
+        !/catch\s*(\([^)]*\))?\s*\{[^}]*createInstance/s.test(source)) {
+      return null
+    }
+    if (/createInstance/.test(source)) {
+      return 'this module defines or falls back to its own createInstance instead of ' +
+        'using @cognitive-fab/sam-pattern. The checker reads library-specific ' +
+        'behaviour (lastStep().classification, step.mutations, the frozen ' +
+        'pre-state), so a check here would be a verdict about the stand-in, not ' +
+        'about this machine. Install the package and remove the fallback.'
+    }
+    return 'this module does not use @cognitive-fab/sam-pattern, which the ' +
+      'checker needs in order to observe rejections and mutations at all.'
+  }
+
   async checkMachine(machineDir, options = {}) {
     const polygraphDir = this.resolvePolygraphDir()
     if (!polygraphDir) {
@@ -206,6 +247,9 @@ class PolygraphService {
     if (!moduleFile || !fs.existsSync(contract)) {
       return { success: false, error: `Not a machine artifact dir: ${machineDir}` }
     }
+
+    const standIn = this._detectStandIn(path.join(machineDir, moduleFile))
+    if (standIn) return { success: false, error: standIn, standIn: true }
 
     const args = [
       path.join(polygraphDir, 'scripts', 'check.mjs'),

@@ -341,6 +341,14 @@ function laneBrief(lane, stage, { wantsMachine = false, machineDir = 'machines/<
       `  ${machineDir}/invariants.mjs  what must hold in every reachable state\n` +
       'Those three paths are in your OUTPUTS above: they are deliverables of ' +
       'this card, not extras.\n' +
+      "The module MUST use @cognitive-fab/sam-pattern's createInstance. Do not " +
+      'shim it and do not fall back to a local factory with the same surface: ' +
+      'the checker reads library-specific behaviour — lastStep().classification, ' +
+      'step.mutations, the shallow-frozen pre-state, merge-only setState — so a ' +
+      'lookalike changes what is being proved rather than standing in for it, and ' +
+      'a green check would be a green check on the stand-in. If the package is ' +
+      'not installed, stop and say so: a missing dependency escalates a card, it ' +
+      'does not license a substitute.\n' +
       'The checker explores a FINITE window, so bound the domains deliberately (a ' +
       'queue of 0..3, a cascade depth of 0..2) and say in the contract that the ' +
       'bound is the checker\'s window and not a runtime cap — the proof rests on ' +

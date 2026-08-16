@@ -1192,8 +1192,13 @@ export class BoardViewComponent {
     return {
       passed,
       // The counterexample is the point: name what the checker found.
-      reason: `model check failed — ${result.violations?.[0]?.name ||
-        result.error || 'an invariant is reachable'}`
+      // Name what the checker said. "an invariant is reachable" is only true
+      // when one is: a spec that would not load explored zero states, and
+      // reporting a violation there sends the reader hunting for a
+      // counterexample that does not exist.
+      reason: result.violations?.[0]?.name
+        ? `model check failed — ${result.violations[0].name} is reachable`
+        : `model check failed — ${result.error || 'the checker gave no reason'}`
     }
   }
 

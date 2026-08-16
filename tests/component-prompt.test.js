@@ -252,6 +252,23 @@ describe('the proof lane', () => {
     assert.match(result.prompt, /invariants\.mjs/)
   })
 
+  it('names the exact export surface the checker derives from', () => {
+    // Two machines were authored with rich, sensibly-named exports (step, next,
+    // project, a local createInstance) and no getState/actions pair. The
+    // checker explored zero states on both and the board reported "an invariant
+    // is reachable" for a spec that never loaded.
+    const withContract = nodes().concat([{
+      glmId: `${ID}.dispatch_cycle`, stratum: 'interaction',
+      body: { contract: 'fsm', states: ['a', 'b'], transitions: ['a->b'] }
+    }])
+    const result = buildComponentPrompt({
+      nodes: withContract, glmId: ID, stage: 'implement',
+      lane: { stateful: { lane: 'generated' } }
+    })
+    assert.match(result.prompt, /instance, init, actions, getState, setState/)
+    assert.match(result.prompt, /explores zero states/)
+  })
+
   it('tells it to bound the domains, and why that is not a runtime cap', () => {
     const result = build({ lane: { stateful: { lane: 'generated' } } })
     assert.match(result.prompt, /FINITE window/)

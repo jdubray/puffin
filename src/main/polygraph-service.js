@@ -32,6 +32,12 @@ const SKIP_DIRS = new Set([
 /** Maximum directory depth for artifact discovery */
 const MAX_DEPTH = 6
 
+/** The last non-empty line of a run — what a tool says when it gives up. @private */
+function lastLine(text) {
+  const lines = String(text || '').split(String.fromCharCode(10)).filter(l => l.trim())
+  return lines.length > 0 ? lines[lines.length - 1] : undefined
+}
+
 class PolygraphService {
   /**
    * @param {Object} [options]
@@ -269,7 +275,10 @@ class PolygraphService {
 
     return {
       success: code === 0 && output.includes('no invariant violations reachable'),
-      exitCode: code,
+      // The checker's own words when it refused. Without this the caller has a
+      // failure with no reason, and reports the only failure it can name - "an
+      // invariant is reachable" - for a run that never explored a state.
+      error: code === 0 ? undefined : (output.match(/^ERROR: .*$/m)?.[0] || lastLine(output)),
       statesExplored: Number(output.match(/states explored: (\d+)/)?.[1] ?? 0),
       violations: this._countViolations(output),
       checkedInvariants: fs.existsSync(invariants),

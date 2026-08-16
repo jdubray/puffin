@@ -133,6 +133,33 @@ describe('the two stages', () => {
   })
 })
 
+describe('the rework loop', () => {
+  it('carries what review found into the next implementation turn', () => {
+    // Without this the loop is blind: the card returns to implementing and the
+    // session rebuilds from the spec alone, free to reproduce the exact
+    // defects that sent it back.
+    const result = buildComponentPrompt({
+      nodes: nodes(), glmId: ID, stage: 'implement',
+      priorFindings: 'defect - FR-6.3: finalize() is never called on the live path'
+    })
+    assert.match(result.prompt, /WHAT REVIEW FOUND LAST TIME/)
+    assert.match(result.prompt, /FR-6\.3/)
+    assert.match(result.prompt, /say for each one what you did or why it is not a defect/)
+  })
+
+  it('does not put findings in a planning turn', () => {
+    // Planning reads the design. Findings are about code that already exists.
+    const result = buildComponentPrompt({
+      nodes: nodes(), glmId: ID, stage: 'plan', priorFindings: 'defect - something'
+    })
+    assert.doesNotMatch(result.prompt, /WHAT REVIEW FOUND LAST TIME/)
+  })
+
+  it('says nothing when there are no prior findings', () => {
+    assert.doesNotMatch(build({ stage: 'implement' }).prompt, /WHAT REVIEW FOUND/)
+  })
+})
+
 describe('what the session may run', () => {
   it("grants the verifier's binary, since that is the gate it must run", () => {
     // acceptEdits covers file edits only. Without this the session can write

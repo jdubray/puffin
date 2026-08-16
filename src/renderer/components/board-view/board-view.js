@@ -448,7 +448,7 @@ export class BoardViewComponent {
         if (findings > 0) {
           await this.raiseScr(instanceId)
           this._runnerNote(`${node?.title || instanceId}: review found ${findings} — SCR raised, handed over`)
-          await this.dispatch(instanceId, 'REVIEW_FAILED', { finding: 'defect' })
+          await this.failReview(instanceId, 'defect')
           return 'park'
         }
         if (this.reviewBy !== 'agent') {
@@ -631,6 +631,30 @@ export class BoardViewComponent {
       })
     }
     return rows
+  }
+
+  /**
+   * Send a card back, keeping what the review said.
+   *
+   * Without this the rework loop is blind: the card returns to implementing and
+   * the next session rebuilds from the spec alone, knowing nothing about the
+   * defects that sent it here - so it is free to reproduce them exactly, and
+   * the same review finds them again.
+   *
+   * @param {string} instanceId
+   * @param {'defect'|'spec-mismatch'} finding
+   */
+  async failReview(instanceId, finding) {
+    if (this.session?.stage === 'review' && this.session.instanceId === instanceId &&
+        this.session.text) {
+      this.sessionLog[instanceId] = {
+        ...(this.sessionLog[instanceId] || {}),
+        reviewFindings: this.session.text,
+        reviewedAt: new Date().toISOString()
+      }
+      this._persistSessionLog()
+    }
+    await this.dispatch(instanceId, 'REVIEW_FAILED', { finding })
   }
 
   /** @private Findings that should fail review rather than pass it. */
@@ -892,7 +916,10 @@ export class BoardViewComponent {
     this.render()
 
     const built = await window.puffin.board.componentPrompt({
-      workspaceId: this.glmWorkspaceId, glmId: node.glmId, stage
+      workspaceId: this.glmWorkspaceId,
+      glmId: node.glmId,
+      stage,
+      priorFindings: stage === 'implement' ? (this.sessionLog[instanceId]?.reviewFindings || '') : ''
     })
     if (!built.success) {
       this.session = { ...this.session, running: false, error: built.error }
@@ -1460,7 +1487,7 @@ export class BoardViewComponent {
     else if (action === 'validation-fail' && id) this.dispatch(id, 'VALIDATION_FAILED', { reason: reason || 'verifier-failed' })
     else if (action === 'plan-ready' && id) this.dispatch(id, 'PLAN_READY')
     else if (action === 'review-pass' && id) this.dispatch(id, 'REVIEW_PASSED')
-    else if (action === 'review-fail' && id) this.dispatch(id, 'REVIEW_FAILED', { finding: reason || 'defect' })
+    else if (action === 'review-fail' && id) this.failReview(id, reason || 'defect')
     else if (action === 'resume' && id) this.dispatch(id, 'RESUME')
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')
     else if (action === 'run-phase') this.runPhase()

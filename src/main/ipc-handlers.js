@@ -595,7 +595,7 @@ function setupStateHandlers(ipcMain) {
    * to resolve the context bundle, and because a session should never be handed
    * a list of ids to go fetch for itself.
    */
-  ipcMain.handle('board:componentPrompt', async (event, { workspaceId, glmId, stage } = {}) => {
+  ipcMain.handle('board:componentPrompt', async (event, { workspaceId, glmId, stage, priorFindings } = {}) => {
     try {
       if (!workspaceId || !glmId) {
         return { success: false, error: 'workspaceId and glmId are required' }
@@ -611,7 +611,7 @@ function setupStateHandlers(ipcMain) {
       const scratchDir = path.join(
         os.tmpdir(), 'puffin-card-scratch', String(glmId).replace(/[^a-zA-Z0-9._-]/g, '-'))
       try { fs.mkdirSync(scratchDir, { recursive: true }) } catch { /* fall back to none */ }
-      const built = buildComponentPrompt({ nodes, glmId, stage, lane, scratchDir })
+      const built = buildComponentPrompt({ nodes, glmId, stage, lane, scratchDir, priorFindings })
       return built.success ? { ...built, scratchDir } : built
     } catch (error) {
       return { success: false, error: error.message }

@@ -200,7 +200,7 @@ function resolveBundle(ids, byId) {
  * @returns {{success: boolean, prompt?: string, error?: string, outputs?: string[],
  *            verifier?: string, title?: string, missingContext?: string[]}}
  */
-function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, sourceDir = '', scratchDir = '' }) {
+function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, sourceDir = '', scratchDir = '', priorFindings = '' }) {
   const byId = new Map(nodes.map(n => [n.glmId, n]))
   const component = byId.get(glmId)
   if (!component) return { success: false, error: `No node '${glmId}' in this sekkei` }
@@ -274,6 +274,18 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
         `in the spec, not as context you should invent.`
       : '',
     lane ? laneBrief(lane, stage, { wantsMachine, machineDir }) : '',
+    // What review found last time. Without this the rework loop is blind: the
+    // card comes back to implementing and the session rebuilds from the spec
+    // alone, knowing nothing about the defects that sent it here - so it is
+    // free to reproduce them exactly, and the same review finds them again.
+    priorFindings && stage === 'implement'
+      ? `WHAT REVIEW FOUND LAST TIME — this card was sent back for these. Fix ` +
+        `them, and say for each one what you did or why it is not a defect. A ` +
+        `finding you disagree with is a conversation, not something to ignore ` +
+        `quietly.
+
+${priorFindings}`
+      : '',
     stage === 'implement' ? IMPLEMENT_RULES
       : stage === 'review' ? REVIEW_RULES
         : PLAN_RULES,

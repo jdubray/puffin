@@ -105,7 +105,8 @@ export class BoardViewComponent {
     this.sessionLog = {}
     this.runner = null
     this.confirm = null
-    this.expandedColumn = null  // a collapsed column opened by hand or by a drag   // a session the user has been asked to confirm    // the phase runner, when it is working
+    this.expandedColumn = null
+    this.scrNote = null   // the result of raising an SCR from a planning turn  // a collapsed column opened by hand or by a drag   // a session the user has been asked to confirm    // the phase runner, when it is working
     this.policy = null    // polycheck's verdict per card, when it is installed
     // Off by default: skipping permission prompts is the user's call to make,
     // once, in the open - not a default they discover after the fact.
@@ -368,6 +369,9 @@ export class BoardViewComponent {
           decision.data.passed ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED',
           decision.data.passed ? {} : { reason: decision.data.reason })
         break
+      case STEP.RUN_REVIEW:
+        await this.runReview(instanceId)
+        break
       case STEP.REVIEW:
         await this.dispatch(instanceId,
           decision.data.passed ? 'REVIEW_PASSED' : 'REVIEW_FAILED',
@@ -478,6 +482,67 @@ export class BoardViewComponent {
       passed ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED',
       passed ? {} : { reason: 'verifier-failed' })
     this.render()
+  }
+
+  /**
+   * Review this card against its spec.
+   *
+   * The gates have already answered what they can. Review is for what a passing
+   * suite cannot see: behaviour the spec asks for that nothing exercises, a
+   * rule the code contradicts, a criterion met in letter and not in substance.
+   *
+   * It reports; it does not decide.
+   *
+   * @param {string} instanceId
+   */
+  async runReview(instanceId) {
+    return this._runSession(instanceId, 'review')
+  }
+
+  /**
+   * @private
+   * What review already knows before anyone reads anything.
+   *
+   * Assembled from the gates and the scope check rather than asked of the user:
+   * three buttons with nothing behind them are a judgement nobody is in a
+   * position to make.
+   */
+  _reviewEvidence(instanceId) {
+    const log = this.sessionLog[instanceId] || {}
+    const rows = []
+
+    rows.push(log.verifier === 'pass'
+      ? { ok: true, text: 'the acceptance verifier passed' }
+      : log.verifier === 'fail'
+        ? { ok: false, text: 'the acceptance verifier failed' }
+        : { ok: null, text: 'the acceptance verifier has not run here' })
+
+    rows.push(log.check === 'pass'
+      ? { ok: true, text: 'the state check passed' }
+      : log.check === 'not-applicable'
+        ? { ok: null, text: 'no state contract - nothing for the checker to explore' }
+        : log.check === 'fail'
+          ? { ok: false, text: 'the state check failed' }
+          : { ok: null, text: 'the state check has not run here' })
+
+    if (log.missingOutputs?.length > 0) {
+      rows.push({ ok: false, text: `declared but not written: ${log.missingOutputs.join(', ')}` })
+    } else if (log.changed?.length > 0) {
+      rows.push({
+        ok: true,
+        text: `wrote ${log.changed.length} file${log.changed.length === 1 ? '' : 's'}, all declared`
+      })
+    }
+    if (log.outOfScope?.length > 0) {
+      rows.push({ ok: false, text: `outside its declared outputs: ${log.outOfScope.join(', ')}` })
+    }
+    if (log.oracleEdits?.length > 0) {
+      rows.push({
+        ok: false,
+        text: `edited the check that decides its own gate: ${log.oracleEdits.join(', ')}`
+      })
+    }
+    return rows
   }
 
   /** @private Findings that should fail review rather than pass it. */
@@ -804,6 +869,47 @@ export class BoardViewComponent {
     const resolve = this._sessionSettled
     this._sessionSettled = null
     if (resolve) resolve()
+  }
+
+  /**
+   * Turn a planning turn's unsettled questions into a Sekkei Change Request.
+   *
+   * A plan's most valuable output is the list of what the spec does not settle,
+   * and that list had nowhere to go: it sat in a panel, got answered inside one
+   * session, and the next card asking the same cross-component question
+   * answered it differently. Several of them are not card-local at all - where
+   * machine artifacts live touches the world loader, the kernel and the twin
+   * engine at once.
+   *
+   * An SCR is the sekkei's own vehicle for "the design has to decide
+   * something", so the questions go there rather than into a commit message.
+   * Raised, not answered: what the answer IS stays a person's call.
+   *
+   * @param {string} instanceId
+   */
+  async raiseScr(instanceId) {
+    const node = this._nodeForCard(instanceId)
+    const session = this.session
+    if (!node || !session?.text || !this.glmWorkspaceId) return
+
+    this.scrNote = { instanceId, pending: true }
+    this.render()
+
+    const result = await window.puffin.glm.createScr({
+      workspaceId: this.glmWorkspaceId,
+      title: `Unsettled by planning: ${node.title || node.glmId}`,
+      // The planning turn's own words. Summarising them here would lose what
+      // makes them useful - each question already carries the file and line
+      // that raised it.
+      problem: `Raised from the planning turn for ${node.glmId}.\n\n${session.text}`,
+      scrClass: 'II',
+      targetNodes: [node.glmId]
+    })
+
+    this.scrNote = result.success
+      ? { instanceId, ok: true, id: result.scr?.id || result.id || '' }
+      : { instanceId, ok: false, error: result.error }
+    this.render()
   }
 
   /** Stop the running session. The card stays where it is. */
@@ -1193,6 +1299,8 @@ export class BoardViewComponent {
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')
     else if (action === 'run-phase') this.runPhase()
     else if (action === 'run-verifier' && id) this.runVerifier(id)
+    else if (action === 'run-review' && id) this.runReview(id)
+    else if (action === 'raise-scr' && id) this.raiseScr(id)
     else if (action === 'start-work' && id) this.startWork(id)
     else if (action === 'validate' && id) this.checkAndSubmit(id)
     else if (action === 'implement' && id) this.runImplementation(id)
@@ -1351,7 +1459,8 @@ export class BoardViewComponent {
     if (!session) return ''
     const label = session.stage === 'plan' ? 'planning'
       : session.stage === 'verify' ? 'acceptance verifier'
-        : 'implementing'
+        : session.stage === 'review' ? 'review'
+          : 'implementing'
     return `<div class="board-session">
       <div class="board-session-head">
         <b>${session.running ? '&#9203;' : '&#9679;'} ${esc(session.title)}</b>
@@ -1378,7 +1487,14 @@ export class BoardViewComponent {
         <span class="board-session-next">
           ${session.stage === 'plan'
             ? `<button class="btn btn-primary btn-sm" data-action="plan-ready"
-                 data-id="${esc(session.instanceId)}">The plan is ready &rarr; implementing</button>`
+                 data-id="${esc(session.instanceId)}">The plan is ready &rarr; implementing</button>
+               <button class="btn btn-secondary btn-sm" data-action="raise-scr"
+                 data-id="${esc(session.instanceId)}"
+                 title="Put what the spec does not settle into a Sekkei Change Request, so the answer lands in the design instead of in one session">Raise an SCR from this</button>
+               ${this.scrNote?.instanceId === session.instanceId ? `<span class="board-scr-note">${
+                 this.scrNote.pending ? 'raising…'
+                   : this.scrNote.ok ? 'SCR raised — answer it in the Sekkei tab'
+                     : `could not raise it: ${esc(this.scrNote.error || '')}`}</span>` : ''}`
             : session.stage === 'review'
               ? `<button class="btn btn-primary btn-sm" data-action="review-pass"
                    data-id="${esc(session.instanceId)}">Nothing outstanding &rarr; done</button>
@@ -1683,9 +1799,23 @@ export class BoardViewComponent {
               : 'This card is not backed by a sekkei node'}">▶ ${ran?.stage === 'implement' ? 'build again' : 'build it'}</button>
         ` : ''}
         ${state.cardState === 'reviewing' ? `
-          <button class="btn btn-sm board-btn-pass" data-action="review-pass" data-id="${esc(id)}" title="Review passed — the card is done">✓</button>
-          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="defect" title="Review found a defect — back to implementing">✗ defect</button>
-          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="spec-mismatch" title="Review found the code does not match the spec">✗ spec</button>
+          <button class="btn btn-sm board-btn-pass" data-action="run-review" data-id="${esc(id)}"
+            ${node && !this.session?.running ? '' : 'disabled'}
+            title="${node
+              ? 'Read this card against its spec and report findings — the gates have already run'
+              : 'This card is not backed by a sekkei node'}">▶ review</button>
+          <button class="btn btn-sm board-btn-pass" data-action="review-pass" data-id="${esc(id)}"
+            title="Accept: nothing outstanding that the gates or a reading found">✓ accept</button>
+          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="defect" title="A defect in the code — back to implementing">✗ defect</button>
+          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="spec-mismatch" title="The code is reasonable and the spec is what is wrong — back to implementing, and the spec needs an SCR">✗ spec</button>
+        ` : ''}
+        ${state.cardState === 'reviewing' ? `
+          <div class="board-review-evidence">
+            ${this._reviewEvidence(id).map(row => `
+              <div class="board-review-row ${row.ok === false ? 'bad' : row.ok === true ? 'good' : 'unknown'}">
+                ${row.ok === false ? '✗' : row.ok === true ? '✓' : '·'} ${esc(row.text)}
+              </div>`).join('')}
+          </div>
         ` : ''}
         ${state.cardState === 'needsHuman' ? `
           <button class="btn btn-sm" data-action="resume" data-id="${esc(id)}" title="Resume with a fresh budget">resume</button>

@@ -640,7 +640,16 @@ function setupStateHandlers(ipcMain) {
     try {
       const result = await gitService.execGit(['status', '--porcelain', '-uall'])
       if (result.code !== 0) return { success: false, error: result.stderr || 'git status failed' }
-      const scope = compareScope({ before: before || '', after: result.stdout, outputs: outputs || [] })
+      // Existence answers "was this produced"; the change set only answers
+      // "was this touched this turn", and the two are not the same question.
+      const exists = (out) => {
+        const rel = String(out).split('\\').join('/')
+        const candidates = [rel, rel.split('/').slice(1).join('/')].filter(Boolean)
+        return candidates.some(c => fs.existsSync(path.join(projectPath || '', c)))
+      }
+      const scope = compareScope({
+        before: before || '', after: result.stdout, outputs: outputs || [], exists
+      })
       return { success: true, ...scope, gateAffecting: gateAffecting(scope.outOfScope) }
     } catch (error) {
       return { success: false, error: error.message }

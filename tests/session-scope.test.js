@@ -134,6 +134,76 @@ describe('compareScope', () => {
   })
 })
 
+describe('missing outputs', () => {
+  it('asks whether the file is there, not whether this turn touched it', () => {
+    // The false escalation: a card whose module was already written and whose
+    // turn only edited its test was reported as having written neither, and
+    // escalated for work it had done. Existence is the question; the change
+    // set cannot answer it.
+    const result = compareScope({
+      before: ' M src/experiment.mjs\n?? src/experiment.test.mjs\n',
+      after: ' M src/experiment.mjs\n M src/experiment.test.mjs\n',
+      outputs: ['src/experiment.mjs', 'src/experiment.test.mjs'],
+      exists: () => true
+    })
+    assert.deepStrictEqual(result.missingOutputs, [])
+  })
+
+  it('reports an output that genuinely is not there', () => {
+    const result = compareScope({
+      before: '', after: '?? src/a.mjs\n',
+      outputs: ['src/a.mjs', 'src/b.mjs'],
+      exists: (out) => out === 'src/a.mjs'
+    })
+    assert.deepStrictEqual(result.missingOutputs, ['src/b.mjs'])
+  })
+
+  it('says nothing about a directory output, which existence cannot judge', () => {
+    const result = compareScope({
+      before: '', after: '', outputs: ['src/probes/'], exists: () => false
+    })
+    assert.deepStrictEqual(result.missingOutputs, [])
+  })
+
+  it('reports nothing when it has no way to look', () => {
+    const result = compareScope({ before: '', after: '', outputs: ['src/a.mjs'] })
+    assert.deepStrictEqual(result.missingOutputs, [])
+  })
+})
+
+describe('oracle edits', () => {
+  it('flags a test that already existed and was changed this turn', () => {
+    // The hazard a scope check cannot see: when the acceptance spec lists the
+    // test as a deliverable, editing it is perfectly in scope, so nothing is
+    // ever off-spec and the check that decides the gate can be rewritten by
+    // the turn that had to pass it.
+    const result = compareScope({
+      before: '?? src/x.test.mjs\n',
+      after: ' M src/x.test.mjs\n',
+      outputs: ['src/x.mjs', 'src/x.test.mjs']
+    })
+    assert.deepStrictEqual(result.oracleEdits, ['src/x.test.mjs'])
+    assert.deepStrictEqual(result.outOfScope, [], 'declared, so not off-spec')
+  })
+
+  it('does not flag a test the turn created', () => {
+    // A card whose deliverables include its test MUST write it. Flagging that
+    // would fire on every first build, which is how a warning becomes noise.
+    const result = compareScope({
+      before: '', after: '?? src/x.mjs\n?? src/x.test.mjs\n',
+      outputs: ['src/x.mjs', 'src/x.test.mjs']
+    })
+    assert.deepStrictEqual(result.oracleEdits, [])
+  })
+
+  it('says nothing about ordinary source', () => {
+    const result = compareScope({
+      before: '?? src/x.mjs\n', after: ' M src/x.mjs\n', outputs: ['src/x.mjs']
+    })
+    assert.deepStrictEqual(result.oracleEdits, [])
+  })
+})
+
 describe('gateAffecting', () => {
   it('picks out a test file, which is how a red gate turns green', () => {
     assert.deepStrictEqual(

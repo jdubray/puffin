@@ -117,14 +117,48 @@ function isDeclared(filePath, outputs) {
  * @param {string[]} [params.outputs] - the prompt spec's declared outputs
  * @returns {{changed: string[], declared: string[], outOfScope: string[]}}
  */
-function compareScope({ before, after, outputs = [] }) {
-  const changed = changedPaths(parsePorcelain(before), parsePorcelain(after))
+function compareScope({ before, after, outputs = [], exists = null }) {
+  const beforeEntries = parsePorcelain(before)
+  const changed = changedPaths(beforeEntries, parsePorcelain(after))
   const declared = []
   const outOfScope = []
   for (const filePath of changed) {
     (isDeclared(filePath, outputs) ? declared : outOfScope).push(filePath)
   }
-  return { changed, declared, outOfScope }
+
+  // A declared output is missing when it is NOT THERE — not when this turn
+  // happened to leave it alone. A card whose module was already written and
+  // whose turn only touched its test was reported as having written neither,
+  // and escalated for work it had done. Existence is the question; the change
+  // set cannot answer it.
+  const missingOutputs = typeof exists === 'function'
+    ? outputs.filter(out => !exists(out) && !isDirectoryOutput(out))
+    : []
+
+  // The session editing the check that decides its own gate. Not the same as
+  // writing it: a card whose deliverables include its test MUST create it, and
+  // flagging that would fire on every first build. What matters is a test that
+  // ALREADY EXISTED being changed during an implementation turn — the shape
+  // where a red gate turns green with the implementation untouched.
+  const oracleEdits = gateAffecting(changed).filter(p => beforeEntries.has(p) || !isNew(beforeEntries, p))
+
+  return { changed, declared, outOfScope, missingOutputs, oracleEdits }
+}
+
+/** A directory output is satisfied by its contents, which existence cannot see. @private */
+function isDirectoryOutput(output) {
+  return String(output || '').endsWith('/')
+}
+
+/**
+ * Was this path absent before the turn?
+ *
+ * Untracked-and-absent is the normal case for a first build; a file already in
+ * the tree, tracked or not, is one the turn changed rather than created.
+ * @private
+ */
+function isNew(beforeEntries, filePath) {
+  return !beforeEntries.has(filePath)
 }
 
 /**

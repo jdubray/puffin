@@ -48,6 +48,8 @@ const BLOCKING = {
     'a green gate here would not be evidence (polycheck: SURPLUS/oracle)',
   gateAffectingEdit: 'the session changed a test or fixture it never declared — ' +
     'that is how a failing gate turns green without the code changing',
+  oracleEdit: 'the session edited the check that decides its own gate — the gate ' +
+    'passing afterwards is not independent evidence that the code is right',
   missingOutputs: 'the session finished without writing files the card declared',
   sessionFailed: 'the session did not finish',
   noVerifier: 'the acceptance spec names no verifier, so nothing can decide this card',
@@ -117,6 +119,17 @@ export function nextStep({ cardState, evidence = {}, session = null, batchHeld =
         return {
           step: STEP.ESCALATE,
           reason: `${BLOCKING.gateAffectingEdit}: ${session.gateAffecting.join(', ')}`
+        }
+      }
+      // The same hazard from the other side, and the one a scope check alone
+      // cannot see: when the acceptance spec lists the test as a deliverable,
+      // editing it is perfectly in scope. Creating it is normal; changing one
+      // that already existed, during the turn that had to make it pass, is the
+      // case polycheck calls an oracle.
+      if (session.oracleEdits?.length > 0) {
+        return {
+          step: STEP.ESCALATE,
+          reason: `${BLOCKING.oracleEdit}: ${session.oracleEdits.join(', ')}`
         }
       }
       if (session.missingOutputs?.length > 0) {

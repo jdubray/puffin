@@ -116,6 +116,18 @@ describe('stopping', () => {
     assert.match(step.reason, /src\/x\.test\.mjs/)
   })
 
+  it('escalates a build that edited the check deciding its own gate', () => {
+    // The declared-deliverable blind spot: when the acceptance spec lists the
+    // test beside the module, editing it is in scope, so the scope check is
+    // silent - and the gate passing afterwards is not independent evidence.
+    const step = at('implementing', {
+      session: { stage: 'implement', ok: true, oracleEdits: ['src/x.test.mjs'] }
+    })
+    assert.strictEqual(step.step, STEP.ESCALATE)
+    assert.match(step.reason, /not independent evidence/)
+    assert.match(step.reason, /src\/x\.test\.mjs/)
+  })
+
   it('escalates a build that never wrote what it declared', () => {
     const step = at('implementing', {
       session: { stage: 'implement', ok: true, missingOutputs: ['src/x.mjs'] }

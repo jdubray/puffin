@@ -329,6 +329,7 @@ export class BoardViewComponent {
         hasVerifier: this.sessionLog[instanceId]?.hasVerifier,
         check: this.sessionLog[instanceId]?.check,
         verifier: this.sessionLog[instanceId]?.verifier,
+        oracleEdits: this.sessionLog[instanceId]?.oracleEdits,
         checkReason: this.sessionLog[instanceId]?.checkReason,
         findings: this._findingsFor(instanceId)
       }
@@ -693,11 +694,11 @@ export class BoardViewComponent {
         entry.changed = scope.changed
         entry.outOfScope = scope.outOfScope
         entry.gateAffecting = scope.gateAffecting
-        // Declared but never written. A build that produced none of its outputs
-        // has not built anything, however confidently the turn ended.
+        // Both answered in main, where the filesystem is: a declared output is
+        // missing when it is not there, not when this turn left it alone.
         if (this.session?.stage === 'implement') {
-          entry.missingOutputs = (this.session.outputs || []).filter(out =>
-            !scope.declared.some(c => c.endsWith(out) || out.endsWith(c)))
+          entry.missingOutputs = scope.missingOutputs || []
+          entry.oracleEdits = scope.oracleEdits || []
         }
       }
       if (this.session?.instanceId === instanceId) this.session.scope = scope

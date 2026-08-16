@@ -372,9 +372,15 @@ function timeOf(node) {
  * generation unit is the component. Self-edges are dropped — a component that
  * depends on its own spec depends on nothing.
  *
- * @private
+ * Exported because the board needs the same answer per card: a component built
+ * before what it calls exists produces code that cannot run and tests that fail
+ * for a reason belonging to another card.
+ *
+ * @param {Object} component - The component node, with relationships
+ * @param {Set<string>} componentIds - Every component in the sekkei
+ * @returns {Set<string>}
  */
-function dependenciesOf(component, componentIds) {
+export function dependenciesOf(component, componentIds) {
   const deps = new Set()
   for (const rel of component.relationships || []) {
     if (rel.kind !== 'depends-on') continue

@@ -108,6 +108,17 @@ export function nextStep({ cardState, evidence = {}, session = null, batchHeld =
 
     case 'implementing': {
       if (!session || session.stage !== 'implement') {
+        // Order first. A component built before what it calls exists writes a
+        // seam it cannot exercise, and its verifier then fails for a reason
+        // belonging to another card - which the runner would read as this
+        // card's defect and send it round again.
+        if (evidence.blockedBy?.length > 0) {
+          return {
+            step: STEP.WAIT,
+            reason: `waiting on ${evidence.blockedBy.join(', ')} — this card depends on ` +
+              'work that is not finished'
+          }
+        }
         return { step: STEP.BUILD, reason: 'write the files the spec declares' }
       }
       if (session.ok === false) return { step: STEP.ESCALATE, reason: BLOCKING.sessionFailed }

@@ -88,6 +88,20 @@ describe('stopping', () => {
     assert.strictEqual(step.step, STEP.VALIDATE)
   })
 
+  it('waits rather than building a card whose dependencies are unfinished', () => {
+    // Three times now a component was built before what it calls existed. The
+    // session does the honest thing - inject a seam, refuse by name - and the
+    // verifier then fails for a reason belonging to another card, which the
+    // runner would read as this card's defect and send it round again.
+    const step = at('implementing', { evidence: { blockedBy: ['world.mjs'] } })
+    assert.strictEqual(step.step, STEP.WAIT)
+    assert.match(step.reason, /world\.mjs/)
+  })
+
+  it('builds once its dependencies are done', () => {
+    assert.strictEqual(at('implementing', { evidence: { blockedBy: [] } }).step, STEP.BUILD)
+  })
+
   it('escalates a card whose spec names no verifier', () => {
     const step = at('ready', { evidence: { hasVerifier: false } })
     assert.strictEqual(step.step, STEP.ESCALATE)

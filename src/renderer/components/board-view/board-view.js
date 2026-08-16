@@ -10,6 +10,7 @@
 
 import { readVerifierRun, describeVerdict } from '../../../shared/verifier-verdict.js'
 import { nextStep, pickNext, STEP } from '../../../shared/card-policy.js'
+import { dependenciesOf } from '../../../shared/generation-plan.js'
 import { renderMarkdown } from '../../lib/markdown.js'
 import { splitOutput } from '../../lib/verifier-output.js'
 
@@ -331,6 +332,7 @@ export class BoardViewComponent {
         hasVerifier: this.sessionLog[instanceId]?.hasVerifier,
         check: this.sessionLog[instanceId]?.check,
         verifier: this.sessionLog[instanceId]?.verifier,
+        blockedBy: this._unbuiltDependencies(instanceId).map(d => d.title),
         oracleEdits: this.sessionLog[instanceId]?.oracleEdits,
         checkReason: this.sessionLog[instanceId]?.checkReason,
         findings: this._findingsFor(instanceId)
@@ -572,7 +574,47 @@ export class BoardViewComponent {
     if (!confirmed && this._alreadyRan(instanceId, 'implement')) {
       return this._askAgain(instanceId, 'implement')
     }
+    // Order is not a formality here: a component built before what it calls
+    // exists writes an injection seam it cannot exercise, and its suite fails
+    // for a reason that belongs to another card.
+    const blocked = confirmed ? [] : this._unbuiltDependencies(instanceId)
+    if (blocked.length > 0) {
+      this.confirm = {
+        instanceId,
+        stage: 'implement',
+        title: this._nodeForCard(instanceId)?.title || instanceId,
+        blockedBy: blocked
+      }
+      return this.render()
+    }
     return this._runSession(instanceId, 'implement')
+  }
+
+  /**
+   * Which of this card's dependencies are not finished yet.
+   *
+   * The sekkei says what each component depends on; the board knows which
+   * cards are done. Building ahead of that order produces code that cannot run
+   * and a suite that fails for a reason belonging to another card - three times
+   * now: experiment before kernel, experiment before world, twin before world.
+   * @private
+   */
+  _unbuiltDependencies(instanceId) {
+    const node = this._nodeForCard(instanceId)
+    if (!node) return []
+    const components = this.sekkeiNodes.filter(n => n.stratum === 'component')
+    const componentIds = new Set(components.map(n => n.glmId))
+    const deps = dependenciesOf(node, componentIds)
+
+    return [...deps]
+      .map(glmId => {
+        const card = this.cards.find(c => (c.instanceId || c.id) === cardIdForNode(glmId))
+        const state = card?.state?.cardState
+        return state === 'done'
+          ? null
+          : { glmId, title: components.find(n => n.glmId === glmId)?.title || glmId, state: state || 'not on the board' }
+      })
+      .filter(Boolean)
   }
 
   /** @private Has a session of this stage already finished on this card? */
@@ -1399,6 +1441,25 @@ export class BoardViewComponent {
     if (!ask) return ''
     const verb = ask.stage === 'plan' ? 'planned' : 'built'
     const when = ask.at ? String(ask.at).slice(11, 16) : 'earlier'
+
+    if (ask.blockedBy?.length > 0) {
+      return `<div class="board-confirm">
+        <div class="board-confirm-head">
+          <b>${esc(ask.title)} depends on ${ask.blockedBy.length === 1 ? 'a component' : 'components'} that ${ask.blockedBy.length === 1 ? 'is' : 'are'} not finished.</b>
+        </div>
+        <div class="board-confirm-body">
+          ${ask.blockedBy.map(d => `<code>${esc(d.title)}</code> <span class="board-confirm-state">(${esc(d.state)})</span>`).join(' · ')}
+          <div>Building now means writing against something that does not exist yet.
+          The session will do the honest thing — inject a seam and refuse by name —
+          but its verifier will fail for a reason belonging to another card.</div>
+        </div>
+        <div class="board-confirm-actions">
+          <button class="btn btn-secondary btn-sm" data-action="cancel-confirm">Cancel</button>
+          <button class="btn btn-primary btn-sm" data-action="confirm-session">Build anyway</button>
+        </div>
+      </div>`
+    }
+
     return `<div class="board-confirm">
       <div class="board-confirm-head">
         <b>${esc(ask.title)} was already ${verb} at ${esc(when)}.</b>

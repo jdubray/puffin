@@ -123,7 +123,12 @@ export function nextStep({ cardState, evidence = {}, session = null, batchHeld =
         }
         return { step: STEP.BUILD, reason: 'write the files the spec declares' }
       }
-      if (session.ok === false) return { step: STEP.ESCALATE, reason: BLOCKING.sessionFailed }
+      if (session.ok === false) {
+        return {
+          step: STEP.ESCALATE,
+          reason: session.error ? `${BLOCKING.sessionFailed}: ${session.error}` : BLOCKING.sessionFailed
+        }
+      }
       // A build that touched a test it never declared is exactly the shape the
       // mandate exists for. Detected after the fact here, prevented before it
       // by the policy check above; both matter, because a policy can be tight

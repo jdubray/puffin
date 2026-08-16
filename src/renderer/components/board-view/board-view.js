@@ -418,7 +418,12 @@ export class BoardViewComponent {
         await this.dispatch(instanceId, 'PLAN_READY')
         break
       case STEP.BUILD:
-        await this.runImplementation(instanceId)
+        // confirmed: the runner has already been told to work this phase, and
+        // a dialog waiting for a click is a dialog nobody is there to answer -
+        // it returned without running and the next pass read that as a session
+        // that did not finish. Dependency blocking is not skipped with it: the
+        // policy above decides that from evidence.blockedBy.
+        await this.runImplementation(instanceId, { confirmed: true })
         break
       case STEP.VALIDATE:
         await this.checkAndSubmit(instanceId)
@@ -464,7 +469,9 @@ export class BoardViewComponent {
         await this.dispatch(instanceId, 'ESCALATE')
         this.sessionLog[instanceId] = {
           ...(this.sessionLog[instanceId] || {}),
-          escalatedBecause: decision.reason
+          escalatedBecause: this.sessionLog[instanceId]?.error
+            ? `${decision.reason}: ${this.sessionLog[instanceId].error}`
+            : decision.reason
         }
         this._persistSessionLog()
         break
@@ -814,9 +821,17 @@ export class BoardViewComponent {
     return head && head !== instanceId ? this._nodeForCard(head) : null
   }
 
-  /** @private Has a session of this stage already finished on this card? */
+  /**
+   * @private
+   * Has a session of this stage already SUCCEEDED on this card?
+   *
+   * A failed turn is not work to protect: asking "this was already built,
+   * rebuild it?" about a session that never finished offers to preserve
+   * something that does not exist.
+   */
   _alreadyRan(instanceId, stage) {
-    return this.sessionLog[instanceId]?.stage === stage
+    const log = this.sessionLog[instanceId] || {}
+    return log.stage === stage && log.ok === true
   }
 
   /**
@@ -949,7 +964,11 @@ export class BoardViewComponent {
       this.sessionLog[this.session.instanceId] = {
         stage: this.session.stage,
         at: new Date().toISOString(),
-        ok: false
+        ok: false,
+        // What the CLI actually said. "the session did not finish" is true of
+        // a crash, a busy process and an untrusted workspace alike, and only
+        // one of those is fixed by trying again.
+        error: this.session.error
       }
       this._persistSessionLog()
       this._settleSession()

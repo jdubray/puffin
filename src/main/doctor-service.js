@@ -198,7 +198,62 @@ class DoctorService {
         : 'Run `/doctor` inside a Claude Code session — it can fix what it finds.'
     })
 
+    checks.push(this._checkWorkspaceTrust())
+
     return checks
+  }
+
+  /**
+   * Has this project been trusted by the Claude CLI?
+   *
+   * An untrusted workspace does not refuse politely: the CLI exits with a
+   * Windows crash code and a line about ignoring permission entries, which
+   * reaches the board as "the session did not finish" - the same message a
+   * busy process and a real crash produce, and the only one of the three that
+   * is fixed by a config line rather than by trying again.
+   *
+   * Read-only, and it reads the CLI's own config because that is where the
+   * answer is; Puffin cannot grant trust on the user's behalf and does not try.
+   * @private
+   */
+  _checkWorkspaceTrust() {
+    const base = {
+      id: 'claude:trust',
+      group: 'Claude CLI',
+      label: 'this project is trusted by the CLI'
+    }
+    if (!this.projectPath) {
+      return { ...base, status: 'skip', detail: 'skipped: no project open' }
+    }
+
+    const configPath = path.join(os.homedir(), '.claude.json')
+    let config
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    } catch {
+      // Absent or unreadable is not untrusted - a fresh install has no file
+      // yet - so this reports that it could not tell, which is what it means.
+      return {
+        ...base,
+        status: 'skip',
+        detail: `skipped: could not read ${configPath}`
+      }
+    }
+
+    const key = this.projectPath.split(path.sep).join('/')
+    const entry = config.projects?.[key] || config.projects?.[this.projectPath]
+    if (entry?.hasTrustDialogAccepted === true) {
+      return { ...base, status: 'ok', detail: 'trusted' }
+    }
+
+    return {
+      ...base,
+      status: 'fail',
+      detail: 'not trusted — sessions started here exit before doing anything, ' +
+        'reporting only that they did not finish',
+      fix: `Run \`claude\` once inside ${this.projectPath} and accept the trust ` +
+        `dialog, or set projects["${key}"].hasTrustDialogAccepted to true in ${configPath}.`
+    }
   }
 
   /** The GLM server, its MCP endpoint, and how sessions are wired to it. */

@@ -123,13 +123,27 @@ describe('readiness — the cut that decides phase zero', () => {
     assert.strictEqual(plan.notReady[0].reasons.length, 2)
   })
 
-  it('requires a contract from a stateful component', () => {
+  it('requires something to check against from a component that claims a state contract', () => {
+    // A contract with no vocabulary declares nothing: there is no trace shape
+    // for a checker or a replay to be judged against.
     const plan = planGeneration([
       ...readyComponent('acme:app.core'),
       fsmInteraction('acme:app.core', { states: [], transitions: [] })
     ])
     assert.strictEqual(plan.totals.ready, 0)
-    assert.match(plan.notReady[0].reasons.join(' '), /states\/transitions/)
+    assert.match(plan.notReady[0].reasons.join(' '), /no states or transitions/)
+  })
+
+  it('reads a declared state vocabulary as the contract, whatever it is labelled', () => {
+    // The label is GLM's discriminator; the substance is the state vocabulary
+    // a trace gets checked against. A future label that still declares states
+    // and transitions is still a contract.
+    const plan = planGeneration([
+      ...readyComponent('acme:app.core'),
+      fsmInteraction('acme:app.core', { contract: 'trace', states: ['a', 'b'], transitions: ['a->b'] })
+    ], { buildLane: GENERATED })
+    assert.strictEqual(plan.totals.ready, 1)
+    assert.strictEqual(plan.phases[0].lane, 'generated')
   })
 
   it('does not require a contract from a stateless component', () => {

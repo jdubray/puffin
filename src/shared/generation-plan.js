@@ -36,15 +36,28 @@ const PROMPT_SPEC = 'prompt'
 const ACCEPTANCE_SPEC = 'acceptance'
 
 /**
- * A component is stateful when an interaction beneath it declares an FSM
- * contract. That is what decides whether the proof is a state-space argument
- * or an acceptance run — see {@link laneFor}.
+ * Does this interaction declare a state contract?
+ *
+ * Read as substance, not label. GLM spells the discriminator 'fsm', but the
+ * thing being declared is not a finite state machine in Lamport's sense and
+ * SAM does not model one: what a contract actually pins down is the vocabulary
+ * a TRACE is checked against — the named positions the code passes through and
+ * the moves between them. A machine may be unbounded; the checker explores a
+ * finite window of it, which is a property of the check, not of the code.
+ *
+ * So the test is whether a state vocabulary is there to check against. An
+ * interaction labelled 'fsm' with no states declares nothing, and one that
+ * declares states under a future label still declares something.
  *
  * @param {Object} node - Any sekkei node
  * @returns {boolean}
  */
-function isFsmInteraction(node) {
-  return node.stratum === 'interaction' && node.body?.contract === 'fsm'
+function declaresStateContract(node) {
+  if (node.stratum !== 'interaction') return false
+  const body = node.body || {}
+  const hasVocabulary = Array.isArray(body.states) && body.states.length > 0 &&
+    Array.isArray(body.transitions) && body.transitions.length > 0
+  return hasVocabulary || body.contract === 'fsm'
 }
 
 /**
@@ -153,7 +166,7 @@ function readinessGaps(component, specsByKind, stateful) {
   // A stateful component with no contract cannot be model-checked OR replayed
   // against anything: the corpus would have no shape to be consistent with.
   if (stateful && !component._hasContract) {
-    gaps.push('stateful, but its interaction declares no states/transitions')
+    gaps.push('declares a state contract with no states or transitions to check against')
   }
 
   return gaps
@@ -237,7 +250,7 @@ export function planGeneration(nodes = [], options = {}) {
       const kind = node.specKind || node.body?.spec_kind || ''
       specsFor.get(owner).set(String(kind).toLowerCase(), node)
     }
-    if (isFsmInteraction(node)) {
+    if (declaresStateContract(node)) {
       statefulIds.add(owner)
       const states = node.body?.states
       const transitions = node.body?.transitions
@@ -290,9 +303,11 @@ export function planGeneration(nodes = [], options = {}) {
   if (components.length > 0 && statefulIds.size === 0) {
     advisories.push({
       kind: 'nothing-declared-stateful',
-      text: 'No interaction declares an fsm contract, so every component is ' +
+      text: 'No interaction declares a state contract, so every component is ' +
         'planned as stateless and proved by its acceptance verifier alone — ' +
-        'no model check, and no capture-ready instruction in its prompt spec.'
+        'no model check, and no capture-ready instruction in its prompt spec. ' +
+        'Plenty of stateful code needs nothing more than that; this is only ' +
+        'worth changing where the reachable states are the risk.'
     })
   }
 

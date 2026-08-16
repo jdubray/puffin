@@ -29,6 +29,7 @@ export const STEP = {
   PLAN_READY: 'planReady',      // planning → implementing
   BUILD: 'build',               // the implementation session
   VALIDATE: 'validate',         // the model check / corpus replay, then submit
+  VALIDATE_ACCEPTANCE: 'validateAcceptance', // run the card's own verifier
   VALIDATION_VERDICT: 'validationVerdict',
   REVIEW: 'review',             // pass or fail review from the findings
   ESCALATE: 'escalate',         // hand it to a person, with a reason
@@ -128,25 +129,26 @@ export function nextStep({ cardState, evidence = {}, session = null, batchHeld =
     }
 
     case 'validating': {
-      const check = evidence.check
-      // Three legal answers, and 'not-applicable' is one of them: a component
-      // with no state machine has nothing for the checker to explore, and
-      // saying so is honest. What is not legal is no answer at all.
-      if (check === 'pass' || check === 'not-applicable') {
+      // Two different gates, in order. Entering validating already cost the
+      // state-space argument (model check, or corpus replay, or an honest
+      // 'not-applicable'); leaving it costs the card's OWN acceptance verifier.
+      // Neither substitutes for the other, and neither is a person ticking a box.
+      const verifier = evidence.verifier
+      if (verifier === undefined || verifier === null) {
+        return { step: STEP.VALIDATE_ACCEPTANCE, reason: "run the card's acceptance verifier" }
+      }
+      if (verifier === 'pass') {
         return {
           step: STEP.VALIDATION_VERDICT,
           data: { passed: true },
-          reason: check === 'pass' ? 'the model check passed' : 'no state machine to check'
+          reason: 'the acceptance verifier passed'
         }
       }
-      if (check === 'fail') {
-        return {
-          step: STEP.VALIDATION_VERDICT,
-          data: { passed: false, reason: evidence.checkReason || 'verifier-failed' },
-          reason: 'the validation gate failed — back to implementing'
-        }
+      return {
+        step: STEP.VALIDATION_VERDICT,
+        data: { passed: false, reason: 'verifier-failed' },
+        reason: 'the acceptance verifier failed — back to implementing'
       }
-      return { step: STEP.ESCALATE, reason: BLOCKING.checkUnavailable }
     }
 
     case 'reviewing': {

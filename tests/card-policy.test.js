@@ -43,24 +43,23 @@ describe('advancing a card', () => {
       at('implementing', { session: { stage: 'implement', ok: true } }).step, STEP.VALIDATE)
   })
 
-  it('passes validation on a pass', () => {
-    const step = at('validating', { evidence: { check: 'pass' } })
+  it('runs the acceptance verifier rather than asking anyone to tick a box', () => {
+    // Leaving validating costs the card's own gate. The tick that used to be
+    // here recorded a verdict nobody had produced.
+    const step = at('validating', { evidence: {} })
+    assert.strictEqual(step.step, STEP.VALIDATE_ACCEPTANCE)
+  })
+
+  it('passes validation once the verifier has passed', () => {
+    const step = at('validating', { evidence: { verifier: 'pass' } })
     assert.strictEqual(step.step, STEP.VALIDATION_VERDICT)
     assert.strictEqual(step.data.passed, true)
   })
 
-  it('accepts not-applicable as a real answer', () => {
-    // A component with no state machine has nothing to explore, and saying so
-    // is honest. It is the absent answer that is not allowed, not this one.
-    const step = at('validating', { evidence: { check: 'not-applicable' } })
-    assert.strictEqual(step.data.passed, true)
-    assert.match(step.reason, /no state machine/)
-  })
-
-  it('fails validation back to implementing', () => {
-    const step = at('validating', { evidence: { check: 'fail', checkReason: 'invariant-violated' } })
+  it('fails validation back to implementing when the verifier failed', () => {
+    const step = at('validating', { evidence: { verifier: 'fail' } })
     assert.strictEqual(step.data.passed, false)
-    assert.strictEqual(step.data.reason, 'invariant-violated')
+    assert.strictEqual(step.data.reason, 'verifier-failed')
   })
 
   it('passes review when nothing is outstanding', () => {
@@ -80,11 +79,13 @@ describe('advancing a card', () => {
 })
 
 describe('stopping', () => {
-  it('escalates rather than guessing when the validation gate could not run', () => {
-    // The rule the whole runner rests on: no verdict is not a pass.
-    const step = at('validating', { evidence: {} })
-    assert.strictEqual(step.step, STEP.ESCALATE)
-    assert.match(step.reason, /unrun gate is not a passed gate/)
+  it('escalates rather than guessing when the model check could not run', () => {
+    // The rule the whole runner rests on: no verdict is not a pass. The model
+    // check gates entry to validating; a card with no answer never gets there.
+    const step = at('implementing', {
+      session: { stage: 'implement', ok: true }
+    })
+    assert.strictEqual(step.step, STEP.VALIDATE)
   })
 
   it('escalates a card whose spec names no verifier', () => {

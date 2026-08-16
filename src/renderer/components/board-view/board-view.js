@@ -328,6 +328,7 @@ export class BoardViewComponent {
         mandate: node ? this.policy?.mandate?.[node.glmId] : null,
         hasVerifier: this.sessionLog[instanceId]?.hasVerifier,
         check: this.sessionLog[instanceId]?.check,
+        verifier: this.sessionLog[instanceId]?.verifier,
         checkReason: this.sessionLog[instanceId]?.checkReason,
         findings: this._findingsFor(instanceId)
       }
@@ -350,6 +351,11 @@ export class BoardViewComponent {
         break
       case STEP.VALIDATE:
         await this.checkAndSubmit(instanceId)
+        break
+      case STEP.VALIDATE_ACCEPTANCE:
+        // Runs the gate and dispatches its verdict in one go, so the runner
+        // never has to invent one.
+        await this.runVerifier(instanceId)
         break
       case STEP.VALIDATION_VERDICT:
         await this.dispatch(instanceId,
@@ -388,6 +394,72 @@ export class BoardViewComponent {
       return true
     }
     return false
+  }
+
+  /**
+   * Run this card's acceptance verifier, and dispatch what it said.
+   *
+   * The validating column used to be a tick a person pressed. That is a gate
+   * with nothing behind it: the acceptance spec names the command, Puffin can
+   * run it, and a verdict nobody produced is not a verdict. Now the button
+   * runs the gate and the dispatch carries its exit code.
+   *
+   * @param {string} instanceId
+   */
+  async runVerifier(instanceId) {
+    const node = this._nodeForCard(instanceId)
+    if (!node) {
+      this.rejection = { instanceId, reason: 'no sekkei node behind this card' }
+      return this.render()
+    }
+
+    const built = await window.puffin.board.componentPrompt({
+      workspaceId: this.glmWorkspaceId, glmId: node.glmId, stage: 'implement'
+    })
+    const command = built.success ? built.verifier : ''
+    if (!command) {
+      // Not a pass and not a fail: the card cannot be decided this way at all,
+      // and saying so beats inviting someone to tick it.
+      this.rejection = {
+        instanceId,
+        reason: 'the acceptance spec names no verifier — nothing here can decide this card'
+      }
+      return this.render()
+    }
+
+    this.session = {
+      instanceId, stage: 'verify', title: node.title || node.glmId,
+      text: `$ ${command}\n`, running: true, error: null
+    }
+    this.render()
+
+    const result = await window.puffin.board.runVerifier({ command })
+    const passed = result.success && result.passed
+    this.session = {
+      ...this.session,
+      running: false,
+      text: `$ ${command}\n\n${result.output || result.error || ''}`.slice(-40000),
+      error: result.success ? null : result.error,
+      verdict: result.success
+        ? (passed ? 'passed' : `exited ${result.timedOut ? 'on a timeout' : result.code}`)
+        : null
+    }
+    this.sessionLog[instanceId] = {
+      ...(this.sessionLog[instanceId] || {}),
+      verifier: passed ? 'pass' : 'fail',
+      verifierAt: new Date().toISOString(),
+      verifierCode: result.code ?? null
+    }
+    this._persistSessionLog()
+
+    // A verifier that could not run is not a failing verifier. Failing the
+    // card would blame the code for the harness.
+    if (!result.success) return this.render()
+
+    await this.dispatch(instanceId,
+      passed ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED',
+      passed ? {} : { reason: 'verifier-failed' })
+    this.render()
   }
 
   /** @private Findings that should fail review rather than pass it. */
@@ -1009,6 +1081,7 @@ export class BoardViewComponent {
     else if (action === 'resume' && id) this.dispatch(id, 'RESUME')
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')
     else if (action === 'run-phase') this.runPhase()
+    else if (action === 'run-verifier' && id) this.runVerifier(id)
     else if (action === 'start-work' && id) this.startWork(id)
     else if (action === 'validate' && id) this.checkAndSubmit(id)
     else if (action === 'implement' && id) this.runImplementation(id)
@@ -1154,11 +1227,14 @@ export class BoardViewComponent {
   _renderSession() {
     const session = this.session
     if (!session) return ''
-    const label = session.stage === 'plan' ? 'planning' : 'implementing'
+    const label = session.stage === 'plan' ? 'planning'
+      : session.stage === 'verify' ? 'acceptance verifier'
+        : 'implementing'
     return `<div class="board-session">
       <div class="board-session-head">
         <b>${session.running ? '&#9203;' : '&#9679;'} ${esc(session.title)}</b>
-        <span class="board-session-meta">${esc(label)} session${session.running ? ' &mdash; running' : ' &mdash; finished'}</span>
+        <span class="board-session-meta">${esc(label)}${session.stage === 'verify' ? '' : ' session'}${
+          session.running ? ' &mdash; running' : session.verdict ? ` &mdash; ${esc(session.verdict)}` : ' &mdash; finished'}</span>
         <span class="board-session-actions">
           ${session.running
             ? '<button class="btn btn-secondary btn-sm" data-action="cancel-session">Stop</button>'
@@ -1341,8 +1417,14 @@ export class BoardViewComponent {
       </div>
       <div class="board-card-actions">
         ${state.cardState === 'validating' ? `
-          <button class="btn btn-sm board-btn-pass" data-action="validation-pass" data-id="${esc(id)}" title="Validation passed — hands the card to review">✓</button>
-          <button class="btn btn-sm board-btn-fail" data-action="validation-fail" data-id="${esc(id)}" data-reason="verifier-failed" title="Validation failed (verifier-failed)">✗</button>
+          <button class="btn btn-sm board-btn-pass" data-action="run-verifier" data-id="${esc(id)}"
+            ${node && !this.session?.running ? '' : 'disabled'}
+            title="${node
+              ? 'Run this card&apos;s acceptance verifier and record what it says'
+              : 'This card is not backed by a sekkei node'}">▶ verify</button>
+          <button class="btn btn-sm" data-action="validation-pass" data-id="${esc(id)}"
+            title="Record a pass yourself — for a card whose gate cannot run here. The verifier is the evidence; this is you standing in for it.">✓</button>
+          <button class="btn btn-sm board-btn-fail" data-action="validation-fail" data-id="${esc(id)}" data-reason="verifier-failed" title="Record a failure — back to implementing">✗</button>
         ` : ''}
         ${state.cardState === 'ready' ? `
           <button class="btn btn-sm board-btn-pass" data-action="start-work" data-id="${esc(id)}"

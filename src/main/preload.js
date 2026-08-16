@@ -793,6 +793,7 @@ contextBridge.exposeInMainWorld('puffin', {
     workspaceSnapshot: () => ipcRenderer.invoke('board:workspaceSnapshot'),
     sessionScope: (args) => ipcRenderer.invoke('board:sessionScope', args),
     readSessionLog: () => ipcRenderer.invoke('board:readSessionLog'),
+    runVerifier: (args) => ipcRenderer.invoke('board:runVerifier', args),
     policyCheck: (args) => ipcRenderer.invoke('policy:check', args),
     policyStatus: () => ipcRenderer.invoke('policy:status'),
     writeSessionLog: (args) => ipcRenderer.invoke('board:writeSessionLog', args),

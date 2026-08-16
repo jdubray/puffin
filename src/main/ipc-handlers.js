@@ -10,6 +10,7 @@ const { marked } = require('marked')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
+const { spawn } = require('child_process')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
 const VibeService = require('./vibe-service')
@@ -695,6 +696,39 @@ function setupStateHandlers(ipcMain) {
     } catch (error) {
       return { success: false, error: error.message }
     }
+  })
+
+  /**
+   * Run a card's acceptance verifier and report what it said.
+   *
+   * The card's own declared gate, run by Puffin rather than asserted by a
+   * human clicking a tick. A verdict nobody produced is not a verdict, and a
+   * button that records one anyway turns the gate into decoration.
+   */
+  ipcMain.handle('board:runVerifier', async (event, { command } = {}) => {
+    if (!command) return { success: false, error: 'no verifier command' }
+    if (!projectPath) return { success: false, error: 'No project open' }
+    return new Promise((resolve) => {
+      // shell:true because a verifier is a command line as the spec wrote it
+      // ('bun test src/x.test.mjs'), not an argv the design ever decomposed.
+      const child = spawn(command, {
+        cwd: projectPath, shell: true, windowsHide: true
+      })
+      let out = ''
+      const cap = (d) => { out += d; if (out.length > 40000) out = out.slice(-40000) }
+      child.stdout.on('data', cap)
+      child.stderr.on('data', cap)
+      const timer = setTimeout(() => {
+        child.kill()
+        resolve({ success: true, passed: false, timedOut: true, code: null, output: out })
+      }, 10 * 60 * 1000)
+      child.on('error', (error) =>
+        resolve({ success: false, error: error.message, output: out }))
+      child.on('close', (code) => {
+        clearTimeout(timer)
+        resolve({ success: true, passed: code === 0, code, output: out })
+      })
+    })
   })
 
   ipcMain.handle('board:getCard', async (event, { instanceId } = {}) => {

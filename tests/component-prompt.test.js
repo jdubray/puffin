@@ -203,8 +203,24 @@ describe('the proof lane', () => {
     const result = build({
       lane: { language: { language: 'javascript' }, stateful: { lane: 'generated' } }
     })
-    assert.match(result.prompt, /model-check/)
+    assert.match(result.prompt, /SAM v2 strict-profile/)
     assert.doesNotMatch(result.prompt, /CAPTURE-READY/)
+  })
+
+  it('says where the machine has to live, or nothing can check it', () => {
+    // Polygraph discovers a machine by finding a contract beside a module.
+    // A perfect state machine in the wrong place is not checkable, and the
+    // card's validation gate reports 'not-applicable' forever.
+    const result = build({ lane: { stateful: { lane: 'generated' } } })
+    assert.match(result.prompt, /machines\/<component>\/contract\.json/)
+    assert.match(result.prompt, /next\.cjs/)
+    assert.match(result.prompt, /invariants\.mjs/)
+  })
+
+  it('tells it to bound the domains, and why that is not a runtime cap', () => {
+    const result = build({ lane: { stateful: { lane: 'generated' } } })
+    assert.match(result.prompt, /FINITE window/)
+    assert.match(result.prompt, /not a runtime cap/)
   })
 
   it('omits the lane paragraph entirely when the lane is unknown', () => {

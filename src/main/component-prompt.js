@@ -258,9 +258,23 @@ function laneBrief(lane, stage) {
   const kind = lane.stateful?.lane
 
   if (kind === 'generated') {
-    return `HOW THIS IS PROVED: if this component is stateful, author it as a SAM v2\n` +
-      `strict-profile module so Polygraph can model-check it over every reachable\n` +
-      `state. Otherwise the acceptance verifier above is the proof.`
+    // The layout is not decoration: Polygraph discovers a machine by finding a
+    // contract beside a module. A component authored as a perfect state machine
+    // that lives nowhere it looks is not checkable, and its card's validation
+    // gate goes on reporting 'not-applicable' forever.
+    return 'HOW THIS IS PROVED: this component\'s interaction declares a state ' +
+      'contract — the states and transitions listed above. Author the checkable ' +
+      'part as a SAM v2 strict-profile module, and put it where Polygraph looks:\n' +
+      '  machines/<component>/contract.json   state keys, actions, finite data domains\n' +
+      '  machines/<component>/next.cjs        createInstance({strict: true}), named\n' +
+      '                                       acceptors, reject(reason) never throw\n' +
+      '  machines/<component>/invariants.mjs  what must hold in every reachable state\n' +
+      'The checker explores a FINITE window, so bound the domains deliberately (a ' +
+      'queue of 0..3, a cascade depth of 0..2) and say in the contract that the ' +
+      'bound is the checker\'s window and not a runtime cap — the proof rests on ' +
+      'the shape, which holds at any size. This module is the abstraction the ' +
+      'implementation is checked against; it does not replace the implementation, ' +
+      'and the acceptance verifier above still decides the code.'
   }
   return `HOW THIS IS PROVED: polygen emits JavaScript, so it does not apply to ` +
     `${language}. If this component is stateful, write it CAPTURE-READY (the ` +

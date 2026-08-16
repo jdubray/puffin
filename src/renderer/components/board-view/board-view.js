@@ -14,6 +14,7 @@ import { dependenciesOf } from '../../../shared/generation-plan.js'
 import { renderMarkdown } from '../../lib/markdown.js'
 import { splitOutput } from '../../lib/verifier-output.js'
 import { cardIdFor as cardIdForNode, baseCardId, nextCardId, runOf } from '../../../shared/card-id.js'
+import { unsettledCount, findingCount } from '../../../shared/turn-report.js'
 
 /** Escape for an HTML attribute value — esc() leaves quotes alone. */
 function escAttr(text) {
@@ -109,7 +110,9 @@ export class BoardViewComponent {
     this.policy = null    // polycheck's verdict per card, when it is installed
     // Off by default: skipping permission prompts is the user's call to make,
     // once, in the open - not a default they discover after the fact.
-    this.unattended = false   // the one running card session, if any
+    this.unattended = false
+    // Who accepts a clean review. The gates do not change; this is who signs.
+    this.reviewBy = 'human'   // the one running card session, if any
     this.rejection = null // { instanceId, reason }
     this.journalFor = null // { instanceId, entries }
     this.binding = null // this project's bound sekkei (the gate's source)
@@ -291,15 +294,24 @@ export class BoardViewComponent {
     await this._checkPolicy()
 
     try {
+      // A card the runner cannot act on is skipped, not a reason to stop: a
+      // board is a set of independent chains, and one card waiting on a person
+      // must not park the other seven. The pass ends when a full sweep moves
+      // nothing - the honest definition of "there is nothing left I can do".
+      const parked = new Set()
       while (this.runner?.running) {
         await this._reloadCards({ force: true })
-        const card = pickNext(this.cards)
+        const actionable = this.cards.filter(c => !parked.has(c.instanceId || c.id))
+        const card = pickNext(actionable)
         if (!card) {
-          this._runnerNote('nothing left that the runner can act on')
+          this._runnerNote(parked.size > 0
+            ? `nothing left the runner can move — ${parked.size} card(s) need a person`
+            : 'every card is finished')
           break
         }
-        const done = await this._runOneStep(card)
-        if (done) break
+        const outcome = await this._runOneStep(card)
+        if (outcome === 'park') parked.add(card.instanceId || card.id)
+        else if (outcome === 'stop') break
       }
     } finally {
       if (this.runner) this.runner.running = false
@@ -346,9 +358,26 @@ export class BoardViewComponent {
       case STEP.GATE:
         await this.gateAndMarkReady(instanceId)
         break
-      case STEP.PLAN:
-        await this.startWork(instanceId)
+      case STEP.PLAN: {
+        await this.startWork(instanceId, { confirmed: true })
+        // A plan whose questions the design does not answer is not a plan to
+        // implement from. The runner files the questions where the design keeps
+        // them and hands the card to a person, rather than letting the next
+        // turn decide them quietly in code.
+        const unsettled = unsettledCount(this.session?.text)
+        if (unsettled === null) {
+          this._runnerNote(`${node?.title || instanceId}: the plan did not say whether anything is unsettled — handing over`)
+          await this.dispatch(instanceId, 'ESCALATE')
+          return 'park'
+        }
+        if (unsettled > 0) {
+          await this.raiseScr(instanceId)
+          this._runnerNote(`${node?.title || instanceId}: ${unsettled} unsettled question(s) — SCR raised, handed over`)
+          await this.dispatch(instanceId, 'ESCALATE')
+          return 'park'
+        }
         break
+      }
       case STEP.PLAN_READY:
         await this.dispatch(instanceId, 'PLAN_READY')
         break
@@ -368,9 +397,26 @@ export class BoardViewComponent {
           decision.data.passed ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED',
           decision.data.passed ? {} : { reason: decision.data.reason })
         break
-      case STEP.RUN_REVIEW:
+      case STEP.RUN_REVIEW: {
         await this.runReview(instanceId)
+        const findings = findingCount(this.session?.text)
+        if (findings === null) {
+          this._runnerNote(`${node?.title || instanceId}: the review did not state a finding count — handing over`)
+          return 'park'
+        }
+        if (findings > 0) {
+          await this.raiseScr(instanceId)
+          this._runnerNote(`${node?.title || instanceId}: review found ${findings} — SCR raised, handed over`)
+          await this.dispatch(instanceId, 'REVIEW_FAILED', { finding: 'defect' })
+          return 'park'
+        }
+        if (this.reviewBy !== 'agent') {
+          // The default: a clean review is reported, and a person accepts it.
+          this._runnerNote(`${node?.title || instanceId}: review found nothing — waiting for you to accept`)
+          return 'park'
+        }
         break
+      }
       case STEP.REVIEW:
         await this.dispatch(instanceId,
           decision.data.passed ? 'REVIEW_PASSED' : 'REVIEW_FAILED',
@@ -388,21 +434,21 @@ export class BoardViewComponent {
         break
       case STEP.WAIT:
       case STEP.DONE:
-        // Nothing here can change without a person, so looping would spin.
-        this.runner.stoppedBy = decision.reason
-        return true
+        // This card cannot move; another one still might.
+        return 'park'
       default:
-        return true
+        return 'park'
     }
 
-    // A card that escalated stops the run: under 'hold' the batch is frozen
-    // anyway, and under 'continue' the next pass picks up the remaining cards
-    // deliberately rather than rolling straight past a problem.
+    // An escalated card is parked, not a stop. Under 'hold' the batch freezes
+    // by itself and the next card's dispatch is refused, which ends the sweep
+    // anyway; under 'continue' the remaining work is exactly what the policy
+    // said to carry on with.
     if (decision.step === STEP.ESCALATE) {
       this.runner.stoppedBy = decision.reason
-      return true
+      return 'park'
     }
-    return false
+    return 'continue'
   }
 
   /**
@@ -1322,6 +1368,9 @@ export class BoardViewComponent {
     if (e.target.id === 'board-unattended') {
       this.unattended = e.target.checked
     }
+    if (e.target.id === 'board-review-by') {
+      this.reviewBy = e.target.value
+    }
   }
 
   _onClick(e) {
@@ -1453,6 +1502,13 @@ export class BoardViewComponent {
             title="Work the phase without stopping at each step. The runner advances a card only on positive evidence and escalates otherwise.">
             ${this.runner?.running ? '⏹ Stop' : '▶ Run phase'}
           </button>
+          <label class="board-unattended" title="Who accepts a card once its review comes back clean. The gates are the same either way; this is about who signs.">
+            review
+            <select id="board-review-by" class="board-select">
+              <option value="human" ${this.reviewBy !== 'agent' ? 'selected' : ''}>by me</option>
+              <option value="agent" ${this.reviewBy === 'agent' ? 'selected' : ''}>by the runner</option>
+            </select>
+          </label>
           <label class="board-unattended" title="Card sessions have no approve button, so a command that is not pre-approved hangs the turn. Unattended runs them without asking — the same trust you give a terminal you have already opened.">
             <input type="checkbox" id="board-unattended" ${this.unattended ? 'checked' : ''}> unattended
           </label>

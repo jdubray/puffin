@@ -57,14 +57,20 @@ const REVIEW_RULES = `For this review turn:
   those go back to different places.
 - Finding nothing is a real answer. Say so plainly rather than manufacturing a
   concern to look thorough; a review that always finds something teaches the
-  reader to discount it.`
+  reader to discount it.
+- End your reply with one final line, exactly \`FINDINGS: none\` or
+  \`FINDINGS: <n>\` where n is how many findings you reported. A runner reads
+  that line, so it must be last and must be nothing else.`
 
 const PLAN_RULES = `For this planning turn:
 - Read the spec above and the code it will sit in. Do NOT write or edit any file.
 - Produce a short plan: the files you will create, the shape of the public
   surface, the collaborators you will touch, and the order you will build in.
 - Name anything the spec does not settle. That list is the point of this turn —
-  it is cheaper to answer now than to discover it half-implemented.`
+  it is cheaper to answer now than to discover it half-implemented.
+- End your reply with one final line, exactly \`UNSETTLED: none\` or
+  \`UNSETTLED: <n>\` where n is how many of those questions you listed. A runner
+  reads that line, so it must be last and must be nothing else.`
 
 /**
  * The tools a card's session may use without asking.

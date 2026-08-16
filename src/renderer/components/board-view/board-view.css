@@ -690,3 +690,12 @@
   margin-top: 6px;
   color: var(--text-primary, #ddd);
 }
+
+.board-select {
+  padding: 2px 6px;
+  font-size: 12px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--text-primary, #ddd);
+  border: 1px solid var(--border-color, #3a3a3a);
+  border-radius: 3px;
+}

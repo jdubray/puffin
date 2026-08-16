@@ -43,6 +43,22 @@ const IMPLEMENT_RULES = `Rules for this implementation:
   rather than picking one reading silently. An escalated card is a normal
   outcome; a wrong guess discovered at review is not.`
 
+const REVIEW_RULES = `For this review turn:
+- Read the spec above, then read the files this card produced. Do NOT edit
+  anything: a reviewer that fixes what it finds has reviewed nothing.
+- The gates have already run. The verifier passed and the state check gave its
+  answer, so do not re-litigate them — look for what a passing test suite does
+  not see: behaviour the spec asks for that no test exercises, a spec rule the
+  code contradicts, an acceptance criterion satisfied in letter and not in
+  substance, an error path that cannot be reached.
+- Report findings worst-first, each naming the spec clause and the file and
+  line. If a finding is a defect in the code, say 'defect'. If the code is
+  reasonable and the SPEC is what is wrong or unclear, say 'spec-mismatch' —
+  those go back to different places.
+- Finding nothing is a real answer. Say so plainly rather than manufacturing a
+  concern to look thorough; a review that always finds something teaches the
+  reader to discount it.`
+
 const PLAN_RULES = `For this planning turn:
 - Read the spec above and the code it will sit in. Do NOT write or edit any file.
 - Produce a short plan: the files you will create, the shape of the public
@@ -225,7 +241,10 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
   }
 
   const sections = [
-    `You are implementing one component of a sekkei (設計) — the design of record.`,
+    stage === 'review'
+      ? 'You are reviewing one component of a sekkei (設計) — the design of record — ' +
+        'against the spec it was built from.'
+      : 'You are implementing one component of a sekkei (設計) — the design of record.',
     `COMPONENT: ${component.title || glmId}\nglm id: ${glmId}` +
       (component.description ? `\n${component.description}` : '') +
       (component.body ? `\n${bodyText(component)}` : ''),
@@ -249,7 +268,9 @@ function buildComponentPrompt({ nodes = [], glmId, stage = 'plan', lane = null, 
         `in the spec, not as context you should invent.`
       : '',
     lane ? laneBrief(lane, stage, { wantsMachine, machineDir }) : '',
-    stage === 'implement' ? IMPLEMENT_RULES : PLAN_RULES,
+    stage === 'implement' ? IMPLEMENT_RULES
+      : stage === 'review' ? REVIEW_RULES
+        : PLAN_RULES,
     // Scratch work needs somewhere to go, and it must not be the repo. A
     // session reaching for /tmp is blocked (only the project is writable), and
     // a session dropping probe scripts next to the source dirties the working

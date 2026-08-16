@@ -11,6 +11,7 @@
 import { readVerifierRun, describeVerdict } from '../../../shared/verifier-verdict.js'
 import { nextStep, pickNext, STEP } from '../../../shared/card-policy.js'
 import { renderMarkdown } from '../../lib/markdown.js'
+import { splitOutput } from '../../lib/verifier-output.js'
 
 /** Escape for an HTML attribute value — esc() leaves quotes alone. */
 function escAttr(text) {
@@ -782,6 +783,7 @@ export class BoardViewComponent {
     // re-read something while a session streams should not keep yanking the
     // view down, which is what an unconditional scrollTop does.
     const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40
+    if (this.session.stage === 'verify') return this.render()
     body.innerHTML = renderMarkdown(this.session.text)
     if (atBottom) body.scrollTop = body.scrollHeight
   }
@@ -1301,21 +1303,62 @@ export class BoardViewComponent {
         </span>
       </div>
       ${session.error ? `<div class="board-rejection">&#10007; ${esc(session.error)}</div>` : ''}
-      <div class="board-session-body md-body" id="board-session-body">${renderMarkdown(session.text)}</div>
+      ${session.stage === 'verify'
+        ? this._renderVerifierOutput(session)
+        : `<div class="board-session-body md-body" id="board-session-body">${renderMarkdown(session.text)}</div>`}
       ${this._renderScopeFinding(session.scope)}
       ${!session.running && !session.error ? `<div class="board-session-note">
         <b>The turn is over and the card has not moved.</b> ${session.stage === 'plan'
           ? 'A finished turn is not a plan you have agreed to, so read it first.'
-          : 'A finished turn is not a passed gate: the session ran the acceptance verifier, ' +
-            'the model check has not run yet.'}
+          : session.stage === 'review'
+            ? 'A review reports; it does not decide. Accept it or send it back yourself.'
+            : 'A finished turn is not a passed gate: the session ran the acceptance verifier, ' +
+              'the model check has not run yet.'}
         <span class="board-session-next">
           ${session.stage === 'plan'
             ? `<button class="btn btn-primary btn-sm" data-action="plan-ready"
                  data-id="${esc(session.instanceId)}">The plan is ready &rarr; implementing</button>`
-            : `<button class="btn btn-primary btn-sm" data-action="validate"
-                 data-id="${esc(session.instanceId)}">Run the model check &rarr; validating</button>`}
+            : session.stage === 'review'
+              ? `<button class="btn btn-primary btn-sm" data-action="review-pass"
+                   data-id="${esc(session.instanceId)}">Nothing outstanding &rarr; done</button>
+                 <button class="btn btn-secondary btn-sm" data-action="review-fail"
+                   data-id="${esc(session.instanceId)}" data-reason="defect">Send it back</button>`
+              : `<button class="btn btn-primary btn-sm" data-action="validate"
+                   data-id="${esc(session.instanceId)}">Run the model check &rarr; validating</button>`}
         </span>
       </div>` : ''}
+    </div>`
+  }
+
+  /**
+   * A verifier run: the tally first, the failures next, the log last.
+   *
+   * Markdown was folding this into a paragraph - single newlines become spaces -
+   * so 46 result lines arrived as one block of prose. Test output is
+   * line-structured and the lines are the information.
+   * @private
+   */
+  _renderVerifierOutput(session) {
+    const { command, headline, failures, passes, rest } = splitOutput(session.text)
+    const tally = [
+      headline.pass !== null ? `<b class="v-pass">${headline.pass} pass</b>` : null,
+      headline.fail ? `<b class="v-fail">${headline.fail} fail</b>`
+        : headline.fail === 0 ? '<span class="v-pass">0 fail</span>' : null,
+      headline.skip ? `<span>${headline.skip} skipped</span>` : null
+    ].filter(Boolean).join(' · ')
+
+    return `<div class="board-verifier" id="board-session-body">
+      ${command ? `<div class="board-verifier-cmd">$ ${esc(command)}</div>` : ''}
+      ${tally ? `<div class="board-verifier-tally">${tally}</div>` : ''}
+      ${failures.length > 0 ? `<pre class="board-verifier-lines fail">${
+        failures.map(l => esc(l)).join('\n')}</pre>` : ''}
+      ${passes > 0 && failures.length === 0
+        ? `<div class="board-verifier-quiet">${passes} passing test${passes === 1 ? '' : 's'}, nothing to report</div>`
+        : passes > 0 ? `<div class="board-verifier-quiet">${passes} other test${passes === 1 ? '' : 's'} passed</div>` : ''}
+      ${rest.length > 0 ? `<details class="board-verifier-more">
+        <summary>full output (${rest.length} line${rest.length === 1 ? '' : 's'})</summary>
+        <pre class="board-verifier-lines">${rest.map(l => esc(l)).join('\n')}</pre>
+      </details>` : ''}
     </div>`
   }
 

@@ -348,3 +348,16 @@
   border: 1px solid var(--border-color, #3a3a3a);
   border-radius: 4px;
 }
+
+/* When the diagram set is short of the catalog, and why. One figure shown
+   without comment reads as "these are the diagrams". */
+.pgwb-diagram-note {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--warning-color, #d6a15a);
+  background: rgba(214, 161, 90, 0.1);
+  border-radius: 3px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary, #bbb);
+}

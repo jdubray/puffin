@@ -359,9 +359,26 @@ class PolygraphService {
       ? fs.readdirSync(outDir).filter(f => f.endsWith('.svg')).map(f => path.join(outDir, f))
       : []
 
+    // polyviz says how much of the graph it could reach, and a set with no
+    // state-machine figure is a set that could not read the machine. Throwing
+    // that away leaves one figure looking like the whole catalog - the same
+    // failure as a model check reporting success over one state.
+    const transitions = Number(`${stdout}${stderr}`.match(/abstract transitions=(\d+)/)?.[1] ?? -1)
+    const names = svgs.map(f => path.basename(f, '.svg'))
     return {
       success: code === 0 && svgs.length > 0,
       svgs,
+      diagrams: names,
+      transitions,
+      // The figure that needs the machine itself. Absent, the rest is drawn
+      // from the contract and the invariants alone.
+      hasStateMachine: names.includes('state-machine'),
+      why: names.includes('state-machine') || transitions !== 0
+        ? undefined
+        : "polyviz reached the machine but collapsed every transition to nothing, so it drew no " +
+          "state-machine figure. That happens when the contract declares no stateKeys: polyviz " +
+          "looks for a key named 'state' or one typed as an enum, and without it reads the state " +
+          'field as undefined on both sides of every edge.',
       outDir,
       output: `${stdout}${stderr}`.trim()
     }

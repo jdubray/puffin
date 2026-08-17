@@ -638,10 +638,14 @@ export class PolygraphWorkbenchComponent {
     if (diagram.error) {
       return `<div class="pgwb-result pgwb-result-fail">✗ ${esc(diagram.error)}</div>`
     }
+    // Say what the set is, and when it is short of the catalog. One figure
+    // shown without comment reads as "these are the diagrams", and the figure
+    // most likely to be missing is the one that needed the machine.
     if (!diagram.svgs || diagram.svgs.length === 0) {
       return '<div class="pgwb-result pgwb-result-fail">No diagrams produced</div>'
     }
     return `<div class="pgwb-diagrams">
+      ${diagram.why ? `<div class="pgwb-diagram-note">⚠ ${esc(diagram.why)}</div>` : ''}
       ${diagram.svgs.map(d => `
         <div class="pgwb-diagram">
           <div class="pgwb-diagram-title">${esc(d.name)}</div>

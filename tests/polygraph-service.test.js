@@ -120,7 +120,22 @@ describe('PolygraphService', () => {
     })
   })
 
-  describe('a stand-in for the SAM library', () => {
+  describe('a check that explored almost nothing', () => {
+  it('reports the skip count and flags the run as hollow',
+    { skip: !havePolygraph && 'polygraph checkout not found' }, async () => {
+      // A green result over one state is worse than a red one: it ends the
+      // conversation. twin_engine reported success with 1 state explored and
+      // 16 fields skipped for want of a declared domain.
+      const svc = new PolygraphService({ projectPath: repoRoot })
+      const result = await svc.checkMachine(path.join(repoRoot, 'machines', 'task-card'))
+      assert.strictEqual(result.success, true)
+      assert.strictEqual(result.hollow, false, 'a fully explored machine is not hollow')
+      assert.ok(result.statesExplored > 1)
+    })
+
+})
+
+describe('a stand-in for the SAM library', () => {
   const write = (body) => {
     const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'puffin-standin-'))
     fs.writeFileSync(path.join(scratch, 'contract.json'), '{}')

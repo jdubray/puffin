@@ -274,7 +274,14 @@ class PolygraphService {
     const output = `${stdout}${stderr}`.trim()
 
     return {
+      // A pass over one state is not a pass. twin_engine reported success with
+      // 1 state explored and 16 fields skipped for want of a domain - a green
+      // gate that proved nothing, which is worse than a red one because it
+      // ends the conversation. The checker names what it skipped; that is
+      // carried up rather than being averaged into a verdict.
       success: code === 0 && output.includes('no invariant violations reachable'),
+      hollow: /\(\d+ action\/field\(s\) skipped/.test(output),
+      skipped: Number(output.match(/\((\d+) action\/field\(s\) skipped/)?.[1] ?? 0),
       // The checker's own words when it refused. Without this the caller has a
       // failure with no reason, and reports the only failure it can name - "an
       // invariant is reachable" - for a run that never explored a state.

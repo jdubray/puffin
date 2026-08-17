@@ -1234,7 +1234,11 @@ export class BoardViewComponent {
   /** Exhaustive exploration — available when the module is JS. @private */
   async _modelCheck(machine) {
     const result = await window.puffin.polygraph.check({ machineDir: machine.dir })
-    const passed = result.success && !(result.violations?.length > 0)
+    // A check that explored almost nothing is not a proof, however green it
+    // reads. The checker says what it skipped and how far it got; a card should
+    // not pass its state gate on an exploration of one state.
+    const hollow = result.success && (result.hollow || (result.statesExplored ?? 0) <= 1)
+    const passed = result.success && !(result.violations?.length > 0) && !hollow
     return {
       passed,
       // The counterexample is the point: name what the checker found.
@@ -1242,9 +1246,15 @@ export class BoardViewComponent {
       // when one is: a spec that would not load explored zero states, and
       // reporting a violation there sends the reader hunting for a
       // counterexample that does not exist.
+      statesExplored: result.statesExplored,
       reason: result.violations?.[0]?.name
         ? `model check failed — ${result.violations[0].name} is reachable`
-        : `model check failed — ${result.error || 'the checker gave no reason'}`
+        : hollow
+          ? `the model check explored ${result.statesExplored ?? 0} state(s)` +
+            `${result.skipped ? ` and skipped ${result.skipped} action/field(s) for want of a declared domain` : ''} — ` +
+            'that is a green result over almost nothing, not a proof. Declare the ' +
+            "domains in the contract, and give each intent one data object so a domain entry is one payload."
+          : `model check failed — ${result.error || 'the checker gave no reason'}`
     }
   }
 

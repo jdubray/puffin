@@ -1287,6 +1287,16 @@ export class BoardViewComponent {
    * is surfaced with its named reason and the board re-renders from truth.
    */
   async dispatch(instanceId, action, data = {}) {
+    // Belt as well as braces: the buttons are disabled while a turn runs, and a
+    // render that has not caught up yet must not be able to advance the card
+    // underneath the session reporting on it.
+    if (this._isBusy(instanceId) && !['ESCALATE', 'RESUME'].includes(action)) {
+      this.rejection = {
+        instanceId,
+        reason: 'a session is working on this card — the turn has to finish before it can move'
+      }
+      return this.render()
+    }
     this.rejection = null
     const result = await window.puffin.board.dispatch({ instanceId, action, data })
     if (!result.success) {
@@ -2147,6 +2157,23 @@ export class BoardViewComponent {
     </div>`
   }
 
+  /**
+   * Is a session working on this card right now?
+   *
+   * Advancing a card mid-turn is the same defect the drag path had: pressing
+   * "plan ready" while the planning session is still writing moves the card
+   * past a plan that does not exist yet, and the turn then lands on a card that
+   * has left the state it was reporting about. Read-only controls - the journal,
+   * the invariant ledger - stay available; the ones that move the card do not.
+   *
+   * @param {string} instanceId
+   * @returns {boolean}
+   * @private
+   */
+  _isBusy(instanceId) {
+    return this.session?.running === true && this.session.instanceId === instanceId
+  }
+
   _renderCard(card) {
     const id = card.instanceId || card.id
     const state = card.state || {}
@@ -2155,6 +2182,10 @@ export class BoardViewComponent {
     const machine = this._machineFor(card)
     const note = this.linkNote?.instanceId === id ? this.linkNote : null
     const ran = this.sessionLog[id] || null
+    const busy = this._isBusy(id)
+    // The reason is on every guarded control, because a button that is disabled
+    // for no stated reason reads as broken.
+    const busyWhy = busy ? 'a session is working on this card — wait for the turn to finish' : ''
     return `<div class="board-card ${isDone ? 'board-card-done' : ''}" draggable="${!isDone}" data-card-id="${esc(id)}">
       <div class="board-card-title">${esc(node?.title || id)}${
         runOf(id) > 1 ? `<span class="board-card-run">run ${runOf(id)}</span>` : ''}</div>
@@ -2183,8 +2214,10 @@ export class BoardViewComponent {
               ? 'Run this card&apos;s acceptance verifier and record what it says'
               : 'This card is not backed by a sekkei node'}">▶ verify</button>
           <button class="btn btn-sm" data-action="validation-pass" data-id="${esc(id)}"
-            title="Record a pass yourself — for a card whose gate cannot run here. The verifier is the evidence; this is you standing in for it.">✓</button>
-          <button class="btn btn-sm board-btn-fail" data-action="validation-fail" data-id="${esc(id)}" data-reason="verifier-failed" title="Record a failure — back to implementing">✗</button>
+            ${busy ? 'disabled' : ''}
+            title="${busy ? busyWhy : 'Record a pass yourself — for a card whose gate cannot run here. The verifier is the evidence; this is you standing in for it.'}">✓</button>
+          <button class="btn btn-sm board-btn-fail" data-action="validation-fail" data-id="${esc(id)}" data-reason="verifier-failed"
+            ${busy ? 'disabled' : ''} title="${busy ? busyWhy : 'Record a failure — back to implementing'}">✗</button>
         ` : ''}
         ${state.cardState === 'ready' ? `
           <button class="btn btn-sm board-btn-pass" data-action="start-work" data-id="${esc(id)}"
@@ -2194,7 +2227,8 @@ export class BoardViewComponent {
               : 'This card is not backed by a sekkei node'}">▶ ${ran?.stage === 'plan' ? 'plan again' : 'plan it'}</button>
         ` : ''}
         ${state.cardState === 'planning' ? `
-          <button class="btn btn-sm board-btn-pass" data-action="plan-ready" data-id="${esc(id)}" title="The plan is written — start implementing">plan ready</button>
+          <button class="btn btn-sm board-btn-pass" data-action="plan-ready" data-id="${esc(id)}"
+            ${busy ? 'disabled' : ''} title="${busy ? busyWhy : 'The plan is written — start implementing'}">plan ready</button>
         ` : ''}
         ${state.cardState === 'implementing' ? `
           <button class="btn btn-sm board-btn-pass" data-action="implement" data-id="${esc(id)}"
@@ -2210,9 +2244,13 @@ export class BoardViewComponent {
               ? 'Read this card against its spec and report findings — the gates have already run'
               : 'This card is not backed by a sekkei node'}">▶ review</button>
           <button class="btn btn-sm board-btn-pass" data-action="review-pass" data-id="${esc(id)}"
-            title="Accept: nothing outstanding that the gates or a reading found">✓ accept</button>
-          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="defect" title="A defect in the code — back to implementing">✗ defect</button>
-          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="spec-mismatch" title="The code is reasonable and the spec is what is wrong — back to implementing, and the spec needs an SCR">✗ spec</button>
+            ${busy ? 'disabled' : ''}
+            title="${busy ? busyWhy : 'Accept: nothing outstanding that the gates or a reading found'}">✓ accept</button>
+          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="defect"
+            ${busy ? 'disabled' : ''} title="${busy ? busyWhy : 'A defect in the code — back to implementing'}">✗ defect</button>
+          <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="spec-mismatch"
+            ${busy ? 'disabled' : ''}
+            title="${busy ? busyWhy : 'The code is reasonable and the spec is what is wrong — back to implementing, and the spec needs an SCR'}">✗ spec</button>
         ` : ''}
         ${state.cardState === 'reviewing' ? `
           <div class="board-review-evidence">
@@ -2223,7 +2261,8 @@ export class BoardViewComponent {
           </div>
         ` : ''}
         ${state.cardState === 'needsHuman' ? `
-          <button class="btn btn-sm" data-action="resume" data-id="${esc(id)}" title="Resume with a fresh budget">resume</button>
+          <button class="btn btn-sm" data-action="resume" data-id="${esc(id)}"
+            ${busy ? 'disabled' : ''} title="${busy ? busyWhy : 'Resume with a fresh budget'}">resume</button>
         ` : ''}
         ${machine ? `
           <button class="btn btn-sm" data-action="invariants" data-id="${esc(id)}"

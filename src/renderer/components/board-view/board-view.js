@@ -489,13 +489,19 @@ export class BoardViewComponent {
         const unsettled = unsettledCount(this.session?.text)
         if (unsettled === null) {
           this._runnerNote(`${node?.title || instanceId}: the plan did not say whether anything is unsettled — handing over`)
-          await this.dispatch(instanceId, 'ESCALATE')
+          await this._handOver(instanceId,
+            'the plan did not state whether anything is unsettled, so there is no way to tell ' +
+            'a clean plan from one that forgot to say. Read it and decide.')
           return 'park'
         }
         if (unsettled > 0) {
           await this.raiseScr(instanceId)
+          const scrId = this.scrNote?.ok ? this.scrNote.id : null
           this._runnerNote(`${node?.title || instanceId}: ${unsettled} unsettled question(s) — SCR raised, handed over`)
-          await this.dispatch(instanceId, 'ESCALATE')
+          await this._handOver(instanceId,
+            `the plan found ${unsettled} question(s) the design does not answer. ` +
+            'Answer them in the sekkei, then resume this card.',
+            { scrId, questions: unsettled })
           return 'park'
         }
         break
@@ -529,6 +535,9 @@ export class BoardViewComponent {
         const findings = findingCount(this.session?.text)
         if (findings === null) {
           this._runnerNote(`${node?.title || instanceId}: the review did not state a finding count — handing over`)
+          await this._handOver(instanceId,
+            'the review did not state how many findings it had, so a clean read cannot be ' +
+            'told from an incomplete one. Read it and accept or send it back.')
           return 'park'
         }
         if (findings > 0) {
@@ -550,16 +559,9 @@ export class BoardViewComponent {
           decision.data.passed ? {} : { finding: decision.data.finding })
         break
       case STEP.ESCALATE:
-        // The card carries the reason, so the person who picks it up is not
-        // left reading a transcript to find out why it stopped.
-        await this.dispatch(instanceId, 'ESCALATE')
-        this.sessionLog[instanceId] = {
-          ...(this.sessionLog[instanceId] || {}),
-          escalatedBecause: this.sessionLog[instanceId]?.error
-            ? `${decision.reason}: ${this.sessionLog[instanceId].error}`
-            : decision.reason
-        }
-        this._persistSessionLog()
+        await this._handOver(instanceId, this.sessionLog[instanceId]?.error
+          ? `${decision.reason}: ${this.sessionLog[instanceId].error}`
+          : decision.reason)
         break
       case STEP.WAIT:
       case STEP.DONE:
@@ -775,6 +777,31 @@ export class BoardViewComponent {
       this._persistSessionLog()
     }
     await this.dispatch(instanceId, 'REVIEW_FAILED', { finding })
+  }
+
+  /**
+   * Hand a card to a person, with what they are being asked for.
+   *
+   * One place, because three paths escalate and two of them used to dispatch
+   * ESCALATE directly - so a card raised by the planning path arrived in Needs
+   * Human carrying no reason at all, and the lane said only that a human was
+   * needed. What FOR is the whole content of the message.
+   *
+   * @param {string} instanceId
+   * @param {string} reason
+   * @param {{scrId?: string, questions?: number}} [detail]
+   * @private
+   */
+  async _handOver(instanceId, reason, detail = {}) {
+    await this.dispatch(instanceId, 'ESCALATE')
+    this.sessionLog[instanceId] = {
+      ...(this.sessionLog[instanceId] || {}),
+      escalatedBecause: reason,
+      escalatedAt: new Date().toISOString(),
+      ...(detail.scrId ? { escalatedScr: detail.scrId } : {}),
+      ...(detail.questions ? { escalatedQuestions: detail.questions } : {})
+    }
+    this._persistSessionLog()
   }
 
   /** @private Findings that should fail review rather than pass it. */
@@ -1206,7 +1233,7 @@ export class BoardViewComponent {
     })
 
     this.scrNote = result.success
-      ? { instanceId, ok: true, id: result.scr?.id || result.id || '' }
+      ? { instanceId, ok: true, id: result.scr?.id || result.id || result.scrId || '' }
       : { instanceId, ok: false, error: result.error }
     this.render()
   }
@@ -2251,6 +2278,15 @@ export class BoardViewComponent {
           <button class="btn btn-sm board-btn-fail" data-action="review-fail" data-id="${esc(id)}" data-reason="spec-mismatch"
             ${busy ? 'disabled' : ''}
             title="${busy ? busyWhy : 'The code is reasonable and the spec is what is wrong — back to implementing, and the spec needs an SCR'}">✗ spec</button>
+        ` : ''}
+        ${state.cardState === 'needsHuman' && ran?.escalatedBecause ? `
+          <div class="board-needs">
+            <div class="board-needs-what">${esc(ran.escalatedBecause)}</div>
+            ${ran.escalatedScr ? `<div class="board-needs-where">
+              Raised as <code>${esc(ran.escalatedScr)}</code> — answer it in the Sekkei tab,
+              approve it, then <b>resume</b> this card.
+            </div>` : ''}
+          </div>
         ` : ''}
         ${state.cardState === 'reviewing' ? `
           <div class="board-review-evidence">

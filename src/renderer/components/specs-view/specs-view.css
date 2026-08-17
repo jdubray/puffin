@@ -1082,3 +1082,24 @@
   color: var(--text-secondary, #999);
   white-space: nowrap;
 }
+
+/* An SCR's content — the questions it is asking. A row that shows only a title
+   makes "answer it in the sekkei" advice nobody can act on. */
+
+.specs-scr-body {
+  padding: 8px 12px 10px 34px;
+  border-top: 1px solid var(--border-color, #333);
+  background: var(--bg-primary, #1c1c1c);
+}
+
+.specs-scr-targets {
+  font-size: 11.5px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-secondary, #999);
+  margin-bottom: 8px;
+}
+
+.specs-scr-problem {
+  max-height: min(420px, 44vh);
+  overflow: auto;
+}

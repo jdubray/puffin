@@ -466,7 +466,8 @@ export class SpecsViewComponent {
     this._heartbeatTimer = null
     // SCR panel state
     this.scrs = []
-    this.showScrs = null  // null = follow the content: open while an SCR awaits a decision
+    this.showScrs = null
+    this.openScr = null   // the SCR whose questions are being read  // null = follow the content: open while an SCR awaits a decision
     this.scrForm = null // { title, problem, scrClass, error, isSaving }
     this.scrError = null
     // One project, one sekkei
@@ -1370,6 +1371,12 @@ coding agent would have to guess at. List findings worst-first with the glm id e
         this.render()
       }
       else if (action === 'create-scr') this.createScr()
+      else if (action === 'toggle-scr') {
+        // The questions ARE the SCR's content. A row that shows only a title
+        // makes "answer it in the sekkei" advice nobody can act on.
+        this.openScr = this.openScr === button.dataset.scrId ? null : button.dataset.scrId
+        this.render()
+      }
       else if (action === 'scr-event') {
         this.driveScr(button.dataset.scrId, button.dataset.event)
       }
@@ -1909,6 +1916,9 @@ coding agent would have to guess at. List findings worst-first with the glm id e
     return `<div class="specs-scr-list">
       ${this.scrs.map(scr => `
         <div class="specs-scr-row">
+          <button class="specs-twisty" data-action="toggle-scr" data-scr-id="${escAttr(scr.id)}"
+            title="${this.openScr === scr.id ? 'Hide what this SCR asks' : 'Read what this SCR asks'}"
+          >${this.openScr === scr.id ? '▾' : '▸'}</button>
           <code class="specs-scr-id">${esc(scr.id)}</code>
           <span class="specs-badge">Class ${esc(scr.scrClass)}</span>
           <span class="specs-scr-title-text">${esc(scr.title)}</span>
@@ -1924,6 +1934,13 @@ coding agent would have to guess at. List findings worst-first with the glm id e
             ${scr.status === 'Approved' ? '<span class="specs-scr-hint">the runner will card this</span>' : ''}
           </span>
         </div>
+        ${this.openScr === scr.id ? `
+          <div class="specs-scr-body">
+            ${scr.targetNodes?.length ? `<div class="specs-scr-targets">
+              targets: ${scr.targetNodes.map(t => `<a class="j-link" data-glm-id="${escAttr(t)}">${esc(t)}</a>`).join(' · ')}
+            </div>` : '<div class="specs-scr-targets specs-warn">targets nothing — the runner cannot act on this</div>'}
+            <div class="specs-scr-problem md-body">${renderMarkdown(scr.problem || '(no detail recorded)')}</div>
+          </div>` : ''}
       `).join('')}
     </div>`
   }

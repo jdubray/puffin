@@ -1963,11 +1963,20 @@ export class BoardViewComponent {
     return `<div class="board-columns">
       ${COLUMNS.map(column => {
         const cards = byState[column.state]
-        const collapsed = cards.length === 0 && this.expandedColumn !== column.state
+        // Done collapses when it HAS cards, the inverse of every other lane.
+        // Finished work is reference, not working set: nine settled cards are
+        // the largest thing on a board whose subject is what is still moving.
+        // Click the spine to read them; nothing is hidden, only folded.
+        const settled = column.state === 'done' && cards.length > 0
+        const collapsed = (settled || cards.length === 0) && this.expandedColumn !== column.state
         return `
         <div class="board-column ${collapsed ? 'board-column-collapsed' : ''}"
              data-column="${column.state}"
-             title="${collapsed ? `${esc(column.label)} — empty` : ''}">
+             title="${collapsed
+               ? (settled
+                   ? `${esc(column.label)} — ${cards.length} finished, click to read`
+                   : `${esc(column.label)} — empty`)
+               : ''}">
           <div class="board-column-header" data-action="toggle-column" data-id="${column.state}">
             <span class="board-column-label">${esc(column.label)}</span>
             <span class="board-count">${cards.length}</span>

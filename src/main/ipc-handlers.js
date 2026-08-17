@@ -11,6 +11,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawn } = require('child_process')
+const crypto = require('crypto')
 const { PuffinState } = require('./puffin-state')
 const { ClaudeService } = require('./claude-service')
 const VibeService = require('./vibe-service')
@@ -747,6 +748,62 @@ function setupStateHandlers(ipcMain) {
         resolve({ success: true, ran: true, passed: code === 0, code, output: out })
       })
     })
+  })
+
+  /**
+   * Record what a finished card produced, so drift becomes measurable.
+   *
+   * Hashes are computed here, from the files on disk, rather than taken from
+   * the session's word for it: the whole point of a hash is that it does not
+   * depend on anyone's account of what they wrote.
+   */
+  ipcMain.handle('glm:recordGeneration', async (event, { workspaceId, glmId, outputs, verifierExitCode } = {}) => {
+    try {
+      if (!workspaceId || !glmId) return { success: false, error: 'workspaceId and glmId are required' }
+      if (!projectPath) return { success: false, error: 'No project open' }
+
+      const files = []
+      for (const out of outputs || []) {
+        const rel = String(out).split(path.sep).join('/')
+        // A spec rooted one level up names the same file; try both spellings
+        // rather than recording nothing for a path that plainly exists.
+        const candidates = [rel, rel.split('/').slice(1).join('/')].filter(Boolean)
+        for (const candidate of candidates) {
+          const abs = path.join(projectPath, candidate)
+          if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue
+          const content = fs.readFileSync(abs)
+          files.push({
+            path: candidate,
+            // GLM requires the algorithm prefix and rejects a bare digest.
+            sha256: `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`,
+            bytes: content.length
+          })
+          break
+        }
+      }
+      if (files.length === 0) {
+        return { success: false, error: 'none of the declared outputs exist on disk to hash' }
+      }
+
+      const result = await glmClient.recordGeneration(workspaceId, {
+        componentId: glmId,
+        files,
+        verifierExitCode: Number.isInteger(verifierExitCode) ? verifierExitCode : 0,
+        generatorIdentity: 'puffin/board'
+      })
+      return { success: true, files: files.length, result }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('glm:driftSweep', async (event, { workspaceId } = {}) => {
+    try {
+      if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+      return { success: true, result: await glmClient.driftSweep(workspaceId) }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
   })
 
   ipcMain.handle('board:getCard', async (event, { instanceId } = {}) => {

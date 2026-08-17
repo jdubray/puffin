@@ -634,6 +634,40 @@ export class BoardViewComponent {
   }
 
   /**
+   * Accept a card, and record what it produced.
+   *
+   * The recording is the point of the moment: GLM answers "is the sekkei in
+   * sync with the code" from per-file hashes, and until one is stored there is
+   * nothing to compare against - every drift bucket reads zero, which looks
+   * exactly like health. Acceptance is when the answer is true, so it is when
+   * the hash is taken.
+   *
+   * @param {string} instanceId
+   */
+  async acceptCard(instanceId) {
+    const node = this._nodeForCard(instanceId)
+    if (node && this.glmWorkspaceId) {
+      try {
+        const built = await window.puffin.board.componentPrompt({
+          workspaceId: this.glmWorkspaceId, glmId: node.glmId, stage: 'implement'
+        })
+        const result = await window.puffin.glm.recordGeneration({
+          workspaceId: this.glmWorkspaceId,
+          glmId: node.glmId,
+          outputs: built.success ? built.outputs : [],
+          verifierExitCode: this.sessionLog[instanceId]?.verifierCode ?? 0
+        })
+        // Worth saying out loud when it fails: a card accepted without a
+        // recorded generation is invisible to every later drift sweep.
+        if (!result.success) {
+          this.rejection = { instanceId, reason: `accepted, but the generation was not recorded: ${result.error}` }
+        }
+      } catch { /* the acceptance still stands; the sweep will simply not see it */ }
+    }
+    await this.dispatch(instanceId, 'REVIEW_PASSED')
+  }
+
+  /**
    * Send a card back, keeping what the review said.
    *
    * Without this the rework loop is blind: the card returns to implementing and
@@ -1505,7 +1539,7 @@ export class BoardViewComponent {
     else if (action === 'validation-pass' && id) this.dispatch(id, 'VALIDATION_PASSED')
     else if (action === 'validation-fail' && id) this.dispatch(id, 'VALIDATION_FAILED', { reason: reason || 'verifier-failed' })
     else if (action === 'plan-ready' && id) this.dispatch(id, 'PLAN_READY')
-    else if (action === 'review-pass' && id) this.dispatch(id, 'REVIEW_PASSED')
+    else if (action === 'review-pass' && id) this.acceptCard(id)
     else if (action === 'review-fail' && id) this.failReview(id, reason || 'defect')
     else if (action === 'resume' && id) this.dispatch(id, 'RESUME')
     else if (action === 'escalate' && id) this.dispatch(id, 'ESCALATE')

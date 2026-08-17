@@ -168,6 +168,28 @@ class GlmClient {
       `/workspaces/${workspaceId}/nodes/${encodeURIComponent(glmId)}`)
   }
 
+  /**
+   * Record what a component's generation actually produced.
+   *
+   * This is the input GLM's drift detection has never had: it stores the
+   * per-file sha256 of what was shipped, so a later sweep can say whether the
+   * sekkei has advanced past the code (hash drift) or the code has been edited
+   * outside the sekkei (live drift). Without it both questions are unanswerable
+   * and every drift bucket reads zero, which looks like health.
+   *
+   * @param {string} workspaceId
+   * @param {{componentId: string, files: Array<{path:string, sha256:string, bytes:number}>,
+   *          verifierExitCode: number, note?: string, generatorIdentity?: string}} body
+   */
+  async recordGeneration(workspaceId, body) {
+    return this._request('POST', `/workspaces/${workspaceId}/record-generation`, body)
+  }
+
+  /** Drift sweep: what the sekkei says versus what is on disk. */
+  async driftSweep(workspaceId) {
+    return this._request('POST', `/workspaces/${workspaceId}/drift/sweep`, {})
+  }
+
   /** SCRs (Sekkei Change Requests) of a workspace. */
   async listScrs(workspaceId) {
     const data = await this._request('GET', `/workspaces/${workspaceId}/scrs`)

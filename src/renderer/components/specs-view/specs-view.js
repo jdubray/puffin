@@ -466,7 +466,7 @@ export class SpecsViewComponent {
     this._heartbeatTimer = null
     // SCR panel state
     this.scrs = []
-    this.showScrs = false
+    this.showScrs = null  // null = follow the content: open while an SCR awaits a decision
     this.scrForm = null // { title, problem, scrClass, error, isSaving }
     this.scrError = null
     // One project, one sekkei
@@ -1357,7 +1357,8 @@ coding agent would have to guess at. List findings worst-first with the glm id e
       else if (action === 'cancel-edit') this.cancelEdit()
       else if (action === 'assist-node') this.assistEdit()
       else if (action === 'toggle-scrs') {
-        this.showScrs = !this.showScrs
+        const open = this.scrs.filter(x => !['Released', 'Rejected'].includes(x.status))
+        this.showScrs = !(this.showScrs === null ? open.length > 0 : this.showScrs)
         this.render()
       }
       else if (action === 'new-scr') {
@@ -1864,16 +1865,20 @@ coding agent would have to guess at. List findings worst-first with the glm id e
   _renderScrs() {
     if (!this.workspaceId) return ''
     const open = this.scrs.filter(s => !['Released', 'Rejected'].includes(s.status))
+    // Open by default while anything awaits a decision. A collapsed section
+    // above the words "2 open" reads as nothing to do, and an SCR waiting on a
+    // person is the most actionable thing on this screen.
+    const showing = this.showScrs === null ? open.length > 0 : this.showScrs
     return `<div class="specs-scrs">
       <div class="specs-scrs-header">
-        <button class="specs-twisty" data-action="toggle-scrs">${this.showScrs ? '▾' : '▸'}</button>
+        <button class="specs-twisty" data-action="toggle-scrs">${showing ? '▾' : '▸'}</button>
         <span class="specs-scrs-title">Changes (SCRs)</span>
         <span class="specs-badge">${open.length} open · ${this.scrs.length} total</span>
         <button class="btn btn-secondary btn-sm specs-scr-new" data-action="new-scr">New SCR</button>
       </div>
       ${this.scrError ? `<div class="specs-editor-error">✗ ${esc(this.scrError)}</div>` : ''}
       ${this.scrForm ? this._renderScrForm() : ''}
-      ${this.showScrs || this.scrForm ? this._renderScrList() : ''}
+      ${showing || this.scrForm ? this._renderScrList() : ''}
     </div>`
   }
 
@@ -1910,9 +1915,13 @@ coding agent would have to guess at. List findings worst-first with the glm id e
           <span class="specs-badge specs-scr-status-${esc(String(scr.status).replace(/\s/g, '-'))}">${esc(scr.status)}</span>
           <span class="specs-scr-actions">
             ${(SCR_EVENTS[scr.status] || []).map(ev => `
-              <button class="btn btn-secondary btn-sm" data-action="scr-event"
-                data-scr-id="${esc(scr.id)}" data-event="${esc(ev)}">${esc(ev)}</button>
+              <button class="btn ${ev === 'approve' ? 'btn-primary' : 'btn-secondary'} btn-sm" data-action="scr-event"
+                data-scr-id="${esc(scr.id)}" data-event="${esc(ev)}"
+                title="${ev === 'approve'
+                  ? 'Approve it — the Workflow runner cards the components this SCR targets and works them'
+                  : `Drive this SCR: ${esc(ev)}`}">${esc(ev)}</button>
             `).join('')}
+            ${scr.status === 'Approved' ? '<span class="specs-scr-hint">the runner will card this</span>' : ''}
           </span>
         </div>
       `).join('')}

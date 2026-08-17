@@ -1075,3 +1075,10 @@
   color: var(--success-color, #4cae6f);
   background: rgba(76, 174, 111, 0.12);
 }
+
+.specs-scr-hint {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-secondary, #999);
+  white-space: nowrap;
+}

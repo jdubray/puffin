@@ -699,3 +699,12 @@
   border: 1px solid var(--border-color, #3a3a3a);
   border-radius: 3px;
 }
+
+.board-picker-run {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--bg-primary, #1f1f1f);
+  color: var(--text-secondary, #999);
+  white-space: nowrap;
+}

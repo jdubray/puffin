@@ -1326,9 +1326,18 @@ export class BoardViewComponent {
 
   /** Open the picker of sekkei nodes that have no card yet. */
   openPicker() {
-    const existing = new Set(this.cards.map(c => c.instanceId || c.id))
+    // A settled card is a finished RUN, not a component that is spoken for.
+    // Excluding it hid every component that had ever been done - including one
+    // whose machine had never actually been checked, which is exactly the case
+    // that needs a second run.
+    const open = new Set(
+      this.cards
+        .filter(c => c.state?.cardState !== 'done')
+        .map(c => baseCardId(c.instanceId || c.id)))
     this.picker = {
-      candidates: this.sekkeiNodes.filter(n => !existing.has(cardIdForNode(n.glmId)))
+      candidates: this.sekkeiNodes
+        .filter(n => !open.has(cardIdForNode(n.glmId)))
+        .map(n => ({ ...n, nextRun: nextCardId(n.glmId, this.cards).run }))
     }
     this.render()
   }
@@ -1912,7 +1921,9 @@ export class BoardViewComponent {
               <span class="board-picker-stratum">${esc(node.stratum)}</span>
               <span class="board-picker-title">${esc(node.title || node.glmId)}</span>
               <code class="board-picker-id">${esc(node.glmId)}</code>
-              <button class="btn btn-sm" data-action="add-node" data-id="${esc(node.glmId)}">+ add</button>
+              ${node.nextRun > 1 ? `<span class="board-picker-run">run ${node.nextRun}</span>` : ''}
+              <button class="btn btn-sm" data-action="add-node" data-id="${esc(node.glmId)}">
+                ${node.nextRun > 1 ? '+ run again' : '+ add'}</button>
             </div>
           `).join('')}
         </div>

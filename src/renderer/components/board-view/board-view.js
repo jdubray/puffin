@@ -15,6 +15,7 @@ import { renderMarkdown } from '../../lib/markdown.js'
 import { splitOutput } from '../../lib/verifier-output.js'
 import { cardIdFor as cardIdForNode, baseCardId, nextCardId, runOf } from '../../../shared/card-id.js'
 import { unsettledCount, findingCount } from '../../../shared/turn-report.js'
+import { scrWorkPlan, scrWorkFinished, TRIGGER_STATUS } from '../../../shared/scr-plan.js'
 
 /** Escape for an HTML attribute value — esc() leaves quotes alone. */
 function escAttr(text) {
@@ -264,6 +265,13 @@ export class BoardViewComponent {
       const batches = await window.puffin.board.listGenerations()
       this.generations = batches.success ? batches.generations : []
     } catch { this.generations = [] }
+    // Approved change requests are work the board has been authorized to do.
+    if (this.glmWorkspaceId) {
+      try {
+        const res = await window.puffin.glm.listScrsFull({ workspaceId: this.glmWorkspaceId })
+        this.scrs = res.success ? (res.scrs || []) : []
+      } catch { this.scrs = [] }
+    }
 
     if (force || this._boardSignature() !== before) this.render()
   }
@@ -296,6 +304,12 @@ export class BoardViewComponent {
     // the same question six times.
     await this._checkPolicy()
 
+    // Approved change requests come first. An SCR is the sekkei's record that
+    // the design had to decide something; once a person approved it, the code
+    // for the nodes it touches is out of date by definition, and carding that
+    // work is derivable rather than assembled by hand.
+    await this._openScrWork()
+
     try {
       // A card the runner cannot act on is skipped, not a reason to stop: a
       // board is a set of independent chains, and one card waiting on a person
@@ -325,10 +339,82 @@ export class BoardViewComponent {
         }
         if (outcome === 'park') parked.add(card.instanceId || card.id)
         else if (outcome === 'stop') break
+        await this._closeFinishedScrs()
       }
     } finally {
       if (this.runner) this.runner.running = false
       this.render()
+    }
+  }
+
+  /**
+   * Card the work every approved SCR implies, and start a batch for it.
+   *
+   * @private
+   */
+  async _openScrWork() {
+    const plan = scrWorkPlan({
+      scrs: this.scrs || [],
+      nodes: this.sekkeiNodes,
+      cards: this.cards,
+      cardIdFor: cardIdForNode,
+      baseCardId
+    })
+    if (plan.length === 0) return
+
+    for (const entry of plan) {
+      if (entry.unresolved.length > 0) {
+        // Not actionable, and not silently skipped: an SCR aimed at a node that
+        // no longer exists needs a person, not a guess at what was meant.
+        this._runnerNote(`${entry.id}: targets ${entry.unresolved.join(', ')}, which resolve to no component — left for you`)
+      }
+      if (entry.waitingOn.length > 0) {
+        this._runnerNote(`${entry.id}: waiting on ${entry.waitingOn.length} card(s) already in flight`)
+      }
+      if (entry.needsCards.length === 0) continue
+
+      const created = []
+      for (const glmId of entry.needsCards) {
+        const { instanceId } = nextCardId(glmId, this.cards)
+        const result = await window.puffin.board.createCard({ instanceId })
+        if (result.success) created.push(instanceId)
+      }
+      if (created.length === 0) continue
+
+      // One batch per SCR, so the phase strip names the change request that
+      // asked for the work rather than an anonymous run.
+      const generationId = `scr-${entry.id}-${Date.now()}`
+      await window.puffin.board.createGeneration({
+        generationId, phase: entry.id, policy: 'hold', cards: created
+      })
+      this._scrBatches = { ...(this._scrBatches || {}), [entry.id]: entry.components }
+      this._runnerNote(`${entry.id}: carded ${created.length} component(s) — ${entry.components.map(c => c.split('.').pop()).join(', ')}`)
+      await this._reloadCards({ force: true })
+    }
+  }
+
+  /**
+   * Report an SCR whose work is finished by moving it to Implemented.
+   *
+   * The status is EARNED rather than remembered: a person approved the change,
+   * the board did the work, and the SCR says so without anyone having to go
+   * back and tick it. Released stays a human call — shipping is not the same
+   * fact as building.
+   *
+   * @private
+   */
+  async _closeFinishedScrs() {
+    for (const [scrId, components] of Object.entries(this._scrBatches || {})) {
+      if (!scrWorkFinished(components, this.cards, cardIdForNode, baseCardId)) continue
+      const result = await window.puffin.glm.scrStatus({
+        workspaceId: this.glmWorkspaceId, scrId, scrEvent: 'implement'
+      })
+      const rest = { ...this._scrBatches }
+      delete rest[scrId]
+      this._scrBatches = rest
+      this._runnerNote(result.success
+        ? `${scrId}: every component it targets is done — marked Implemented`
+        : `${scrId}: work finished, but the status could not be advanced: ${result.error}`)
     }
   }
 
@@ -1659,6 +1745,7 @@ export class BoardViewComponent {
         ${this.rejection.pending ? '⏳' : '⤺'} <code>${esc(this.rejection.instanceId)}</code> — ${esc(this.rejection.reason)}
       </div>` : ''}
       ${this._renderConfirm()}
+      ${this._renderScrQueue()}
       ${this._renderGenerations()}
       ${this._renderRunner()}
       ${this._renderSession()}
@@ -1897,6 +1984,43 @@ export class BoardViewComponent {
   /** @private */
   _cardTitle(instanceId) {
     return this._nodeForCard(instanceId)?.title || instanceId
+  }
+
+  /**
+   * Approved change requests, and what the board owes each of them.
+   *
+   * Only Approved appears. A Draft is a proposal and Under Review is a
+   * conversation; listing them here as pending work would invite someone to
+   * start building from a design nobody has agreed to.
+   * @private
+   */
+  _renderScrQueue() {
+    const plan = scrWorkPlan({
+      scrs: this.scrs || [],
+      nodes: this.sekkeiNodes,
+      cards: this.cards,
+      cardIdFor: cardIdForNode,
+      baseCardId
+    })
+    const drafts = (this.scrs || []).filter(s => !['Implemented', 'Released', 'Rejected', TRIGGER_STATUS].includes(s.status)).length
+    if (plan.length === 0 && drafts === 0) return ''
+
+    return `<div class="board-scrq">
+      ${plan.map(entry => `
+        <div class="board-scrq-row">
+          <span class="board-scrq-id">${esc(entry.id)}</span>
+          <span class="board-scrq-title">${esc(entry.title)}</span>
+          <span class="board-scrq-meta">${
+            entry.unresolved.length > 0
+              ? `⚠ ${entry.unresolved.length} target(s) resolve to no component`
+              : entry.needsCards.length > 0
+                ? `${entry.needsCards.length} component(s) to build`
+                : entry.waitingOn.length > 0
+                  ? `${entry.waitingOn.length} card(s) in flight`
+                  : 'work finished — awaiting its status'}</span>
+        </div>`).join('')}
+      ${drafts > 0 ? `<div class="board-scrq-note">${drafts} change request(s) not yet approved — the runner acts on <b>${esc(TRIGGER_STATUS)}</b> only.</div>` : ''}
+    </div>`
   }
 
   /**

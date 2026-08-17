@@ -797,6 +797,15 @@ function setupStateHandlers(ipcMain) {
     }
   })
 
+  ipcMain.handle('glm:listScrsFull', async (event, { workspaceId } = {}) => {
+    try {
+      if (!workspaceId) return { success: false, error: 'workspaceId is required' }
+      return { success: true, scrs: await glmClient.listScrs(workspaceId) }
+    } catch (error) {
+      return { success: false, error: error.message, scrs: [] }
+    }
+  })
+
   ipcMain.handle('glm:driftSweep', async (event, { workspaceId } = {}) => {
     try {
       if (!workspaceId) return { success: false, error: 'workspaceId is required' }

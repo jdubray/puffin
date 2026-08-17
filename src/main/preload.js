@@ -835,6 +835,7 @@ contextBridge.exposeInMainWorld('puffin', {
     createScr: (args) => ipcRenderer.invoke('glm:createScr', args),
     recordGeneration: (args) => ipcRenderer.invoke('glm:recordGeneration', args),
     driftSweep: (args) => ipcRenderer.invoke('glm:driftSweep', args),
+    listScrsFull: (args) => ipcRenderer.invoke('glm:listScrsFull', args),
     scrStatus: (args) => ipcRenderer.invoke('glm:scrStatus', args),
     verify: (args) => ipcRenderer.invoke('glm:verify', args),
     // Node editing (partial update; edit locks with 423 on contention)

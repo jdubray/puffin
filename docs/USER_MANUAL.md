@@ -1,5 +1,12 @@
 # Puffin User Manual
 
+> **Puffin 4.x note (2026-09).** Much of this manual describes Puffin 3.x. In 4.0 the code-generation
+> pipeline (CRE, sprints, implementation plans, RIS, inspection assertions, `CLAUDE.md` generation,
+> the Memory plugin) was removed; Puffin is now a **documentation manager** with Workspaces/Tasks, a
+> To Do / Doing / Done task board, the Docs and Editor tabs (document edits through a configurable
+> provider), and — since 4.1 — the [**Architecture tab**](#architecture-tab-v41). Sections about
+> removed features are kept for readers of older versions.
+
 ## Table of Contents
 1. [Overview](#overview)
 2. [What's New in v3.0](#whats-new-in-v30)

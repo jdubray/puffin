@@ -337,14 +337,43 @@ context.emit('dataUpdated', { items: newItems })
 const result = await context.callAction('other-plugin:processData', { input: data })
 ```
 
+#### Push Events to the Renderer
+
+`emit`/`subscribe` stay in the main process. To notify your renderer component
+(for example after a file watcher fires), use `sendToRenderer`; it delivers on
+the shared `plugin:event` channel and the renderer subscribes by plugin name:
+
+```javascript
+// main process
+context.sendToRenderer('changed', { kind: 'analysis' })   // returns false if no window
+
+// renderer component
+const off = window.puffin.plugins.onEvent('my-plugin', (event, data) => {
+  if (event === 'changed') this.reload()
+})
+// call off() in onDestroy()
+```
+
+#### Submit a Prompt Through the Prompt Tab
+
+A renderer component can hand a prompt to the Prompt tab so it goes through the
+normal path (recorded in history, session resumed, running-process guard):
+
+```javascript
+const ok = await window.puffinApp.components.promptEditor.submitExternal('/archlens how does X reach Y?')
+// false when the text is empty or a session is already running
+```
+
 ### Utility Methods
 
 ```javascript
 // Get plugin directory
 const dir = context.getPluginDirectory()
 
-// Get a shared service
-const gitService = context.getService('git')
+// Get a shared service: 'history', 'stories', 'claudeService', 'vibeService',
+// 'getMainWindow' (() => BrowserWindow), 'getConfig' (() => project config)
+const claude = context.getService('claudeService')
+const config = context.getService('getConfig')()
 
 // Get registration summary
 const summary = context.getRegistrationSummary()

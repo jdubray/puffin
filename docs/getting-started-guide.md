@@ -1,5 +1,12 @@
 # Getting Started with Puffin
 
+> **Puffin 4.x note (2026-09).** This walkthrough was written for Puffin 3.x. Since 4.0 Puffin is a
+> documentation manager: sprints, "Derive user stories", implementation plans and CRE no longer
+> exist, "branches/threads" are now **Workspaces/Tasks**, and the task board is a plain
+> To Do / Doing / Done backlog. Path A's sprint steps below therefore do not apply; the project
+> configuration, workspaces and Path B (direct prompting) still do. For the 4.1 **Architecture
+> tab** see the [User Manual](USER_MANUAL.md#architecture-tab-v41).
+
 This guide walks you through building a **Todo PWA** (Progressive Web App) — a single-page application that uses Local Storage for persistence, the SAM pattern (State-Action-Model) for state management, vanilla JavaScript (no frameworks), and a PWA architecture so it can be installed on your phone and work offline.
 
 There are two paths:

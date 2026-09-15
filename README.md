@@ -4,111 +4,63 @@
 
 # Puffin
 
-**Version 3.0 - Central Reasoning Engine Edition**
+**Version 4.1 — Documentation Manager with a living Architecture tab**
 
-A structured development environment for Claude Code that transforms AI coding from conversation into deterministic, traceable software engineering.
+A workbench for teams building with [Claude Code](https://docs.anthropic.com/en/docs/claude-code): keep the documentation, the architecture, and the task board of a project in one place, next to the conversations that produced them.
 
-> **🚀 New in v3.0:** Central Reasoning Engine (CRE), Excalidraw AI Diagrams, Memory Plugin, and automated sprint orchestration with Code Model tracking.
-
-
+> **🚀 New in v4.1:** the **Architecture tab**, built on [arch-lens](https://github.com/cognitive-fab/arch-lens) — question-driven architecture diagrams that stay in sync with the code, and an *Ask* box that answers architecture questions from the analysis first, then in prose, then with a new diagram.
 
 ## Why Puffin?
 
-Claude Code is extraordinary out of the box. It can take you to production for projects in the 10k-100k LoC range. But as projects grow, maintaining context, traceability, and structured collaboration becomes critical.
+Claude Code is extraordinary at writing code. What decays fastest around it is everything that explains the code: the documents, the architecture, the glossary, the list of what is being worked on. Puffin 4.x keeps that half of a project alive.
 
-**Puffin transforms AI coding from ad-hoc prompting into structured software engineering.**
+**Puffin 4.x is a documentation manager, not a code generator.** Claude Code stays in charge of building; Puffin wraps it with a conversation history, a task board, document tools, and a living architecture.
 
-### The Key Insight
+### What changed in 4.0
 
-Prompts alone create confusion. Claude responds much better to a **backlog-driven workflow with implementation plans**:
+Puffin 3.x tried to be a structured code generator (sprints, implementation plans, inspection assertions, generated `CLAUDE.md`). 4.0 removed all of it and kept the parts people actually used:
 
-1. **Prompts → User Stories** - Specifications become structured, reviewable stories
-2. **Stories → Sprint Planning** - CRE generates implementation plans with dependencies and sequencing
-3. **Plans → Ready-to-Implement Specs (RIS)** - Deterministic specifications that any AI could implement
-4. **RIS → Implementation** - Claude executes with full architectural context from the Code Model
-5. **Code Review → Verification** - Assertions validate correctness, findings tracked for bug fixes
-
-This structured approach, with **automated Code Model maintenance**, ensures traceability from requirements through implementation. You can charge ahead on complex projects without losing track of what was built, why, and how.
-
-### What Makes v3.0 Different
-
-| Traditional AI Coding | Puffin v3.0 |
-|----------------------|-------------|
-| Ad-hoc prompts | Structured user stories → Plans → RIS |
-| Context lost over time | Code Model tracks codebase structure |
-| Repeat architecture context | Memory Plugin auto-injects knowledge |
-| Manual story-by-story | Automated sprint orchestration |
-| Text-only planning | AI-generated diagrams from docs |
-| Hope code matches requirements | Inspection assertions verify correctness |
-| Implementation details in prompts | CRE generates deterministic RIS specs |
-
-**Key Benefits:**
-- **Deterministic Implementation** - Same RIS produces equivalent results across runs
-- **Traceability** - Track from requirements → plan → RIS → implementation → verification
-- **Knowledge Retention** - Architectural decisions preserved and auto-applied
-- **Sprint Automation** - Let Claude orchestrate entire implementation cycles
-- **Visual Documentation** - Generate diagrams directly from markdown docs
+| 3.x | 4.x |
+|-----|-----|
+| Sprints, plans, RIS, assertions, orchestration | A plain **To Do / Doing / Done** task board |
+| Puffin generates and swaps `CLAUDE.md` | Puffin never touches `CLAUDE.md` |
+| "Branches" and "threads" (confused with git) | **Workspaces** and **Tasks** |
+| Every prompt through the interactive CLI | Cost-controlled **document editing** through a configurable provider (Anthropic API or the CLI) |
+| — | **Architecture tab** (4.1): analysis-first diagrams, questions, drift detection |
 
 ## Overview
 
-Puffin is an Electron-based application that provides a visual interface for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Anthropic's official CLI for Claude. Rather than replacing the terminal, Puffin wraps it—giving you full agentic capabilities (file read/write, bash execution, tool use) with a structured workflow for managing cloding projects.
+Puffin is an Electron application that opens a project directory (like VS Code) and stores its state in a `.puffin/` folder. Prompts are sent to the Claude Code CLI as a subprocess with full agentic capabilities; responses stream back and are kept in a branched history organised by workspace.
 
-**Puffin's philosophy** is to provide a hierarchical view of the tasks being performed by Claude with traceability to architecture and user stories so that it becomes easier to work collaboratively with Claude and other cloders, rather than just being a passive tester.
-
-You can't "prompt along" a coding agent, just like you can't "prompt along" a developer—there are good reasons why we came up with processes and methodologies to build complex solutions. Processes and methodologies for cloding are yet to be built, but they are coming. Puffin serves as a foundation for structured collaboration between humans and AI coding agents.
-
+**Puffin's philosophy** is that you cannot "prompt along" a coding agent any more than you can "prompt along" a developer. The context a project needs — its documents, its architecture, its vocabulary, what is in flight — has to live somewhere structured, and it has to stay true as the code moves.
 
 ## ✨ Key Features
 
-### 🧠 Central Reasoning Engine (CRE)
-- **Implementation Plans** with dependency analysis and story sequencing
-- **Ready-to-Implement Specifications (RIS)** - deterministic, AI-executable specs
-- **Code Model (h-DSL)** tracking codebase structure with incremental updates
-- **Inspection Assertions** for automated verification of implementation correctness
-- **MCP Integration** for enhanced code exploration via Model Context Protocol
+### 🏛 Architecture Tab (new in 4.1)
+- **Analysis-first** — the artifact is an [arch-lens](https://github.com/cognitive-fab/arch-lens) `<name>.analysis.json` (components with responsibilities, relations with *what crosses*, boundaries with claims, facts, a glossary); every diagram and every paragraph is compiled from it, so they cannot disagree
+- **One diagram per question** — the tab is organised by the questions the architecture answers; each archify diagram is interactive, and its source links open the file in the Editor tab
+- **Reading pane** — answer, context, the long read, components involved, facts, what was deliberately left out, and the glossary terms the question uses
+- **Ask** — an instant slice of the analysis (no model call) with a coverage bar and the words the analysis never mentions; then an optional prose answer written only from that slice; then *Answer with a diagram*, which runs `/archlens` in Claude Code to extend the analysis
+- **Knows when it is stale** — `archlens check`/`enforce` on open: in sync, commits ahead, cited files changed, planned components now built, or citations gone; *Refresh analysis* and *Map this architecture* hand a fixed prompt to Claude Code
+- **Model browser and glossary** — components, relations, boundaries, facts and terms, each with back-references to the questions that use them
 
-### 📐 Excalidraw AI Diagrams
-- **Generate diagrams from docs** - Architecture, sequence, flowcharts, component diagrams
-- **Professional hand-drawn aesthetic** with 10+ element types
-- **Industry-standard format** - `.excalidraw` files compatible with Excalidraw web app
-- **Multi-format export** - PNG, SVG, and JSON
+### 📚 Documents
+- **Docs** tab — browse and preview the project's `docs/` tree
+- **Editor** tab — text editor with syntax highlighting, auto-save, file watching, and AI edits routed through the configured provider (Anthropic API with a cheap model, or the Claude CLI)
+- **Excalidraw** diagrams generated from markdown documents
+- **RLM** recursive document analysis (plugin)
 
-### 🧩 Memory & Context
-- **Branch Memory Plugin** auto-extracts domain knowledge from conversations
-- **Architectural Decisions** captured and injected into future sessions
-- **Branch-specific context** with facts, conventions, and bug patterns
-- **CLAUDE.md Generation** with Code Model snippets and memory context
-- **CLAUDE.md Rewrite** — one-click AI condensation (30–50% size reduction) to keep context lean
+### 🗂 Tasks and conversations
+- **Task board** — To Do / Doing / Done backlog with drag-and-drop, backed by SQLite
+- **Workspaces** — branched conversation history (Specifications, Architecture, UI, Backend, …) with per-workspace focus instructions
+- **Handoffs** between workspaces, `/btw` side questions, thinking budgets, image attachments
 
-### 💬 `/btw` Quick Questions
-- Type `/btw <question>` in the prompt editor for an ephemeral side-answer
-- Answered from existing session context — no tools, no file access
-- Never added to conversation history; answer shown inline and dismissed when done
-
-### 🔌 Pluggable Agent Backend
-- Set `PUFFIN_AGENT_CMD` to replace the Claude Code CLI with any compatible subprocess
-- Zero-config fallback to `claude` when the variable is not set
-- **Local LLM support** via [deepagents](https://github.com/your-org/local-llm) + Ollama
-- **Dynamic model discovery** — model dropdowns populate from Ollama `/api/tags` at startup
-
-### 🚀 Sprint Orchestration
-- **Automated Sprint Implementation** - Claude orchestrates entire sprints end-to-end
-- **Sequential Story Implementation** with clean sessions per story
-- **Automated Code Review** identifies issues, queues bug fixes
-- **Acceptance Criteria Validation** after each implementation
-- **Cost & Duration Tracking** with completion summaries
-
-### 📚 Document Processing
-- **RLM Plugin** for Recursive Language Model document analysis
-- **Document Editor** with syntax highlighting, inline prompt markers, auto-save
-- **Document Viewer** for markdown and images
-
-### 🔧 Developer Tools
-- **Branched Conversations** (Specifications, Architecture, UI, Backend, Deployment, Plugins)
-- **Git Integration** with branch management, staging, commits, and merge operations
-- **Real-time Activity Tracking** showing Claude's tool execution
-- **CLI Output View** with live streaming and raw JSON debugging
-- **SAM Debugger** for state management visualization
+### 🔧 Developer tools
+- **Git panel** — branch management, staging, commits, merges
+- **Code Review** plugin — findings tracked and turned into fix prompts
+- **CLI Output** view with live streaming and raw JSON
+- **Pluggable agent backend** — `PUFFIN_AGENT_CMD` swaps the Claude CLI for any compatible subprocess (local LLMs via deepagents + Ollama)
+- **Plugin system** — bundled and user plugins contribute tabs, IPC handlers, styles; see [docs/plugin-architecture](docs/plugin-architecture/PLUGIN_DEVELOPMENT_GUIDE.md)
 
 <p align="center">
   <br>
@@ -135,13 +87,18 @@ Puffin opens a project directory (like VS Code) and stores its state in a `.puff
 Your Project/
 ├── .puffin/
 │   ├── config.json      # Project configuration & Claude options
-│   ├── history.json     # Branched conversation history
-│   ├── puffin.db        # SQLite database (user stories, sprints, etc.)
-│   ├── architecture.md  # Architecture document
-│   └── plugins/         # Claude Code plugins/skills
+│   ├── history.json     # Branched conversation history (workspaces)
+│   └── puffin.db        # SQLite database (tasks)
+├── docs/
+│   └── architecture/    # arch-lens analysis + rendered diagrams (Architecture tab)
+│       ├── <name>.analysis.json
+│       ├── q_<id>.architecture.html
+│       └── README.md
 ├── src/
 └── ...your project files
 ```
+
+Puffin never writes `CLAUDE.md`; whatever you keep there is yours.
 
 ## Technology Stack
 
@@ -342,17 +299,14 @@ npm start /path/to/your/project
 
 ### Step 3: Configure Your Project
 
-1. **Project Setup** - Define description, assumptions, technical architecture
-2. **Coding Preferences** - Set style (OOP/FP), testing approach, documentation level
-3. **Branch Focus** - Configure focus areas for different branches (UI, Backend, etc.)
+1. **Project Setup** - Description, coding preferences, and the document-editing provider (Anthropic API key + model, or the Claude CLI)
+2. **Workspace Focus** - Focus instructions for each workspace (Specifications, UI, Backend, …)
 
-### Step 4: Start Your First Sprint
+### Step 4: Map the Architecture (optional, recommended)
 
-1. **Write Specifications** - Describe what you want to build in the Specifications branch
-2. **Derive User Stories** - Click "Derive User Stories" to extract structured stories
-3. **Create Sprint** - Select stories from backlog and create a sprint
-4. **Generate Plan** - CRE analyzes stories and produces an implementation plan
-5. **Approve & Implement** - Review the plan, approve, and choose automated or manual implementation
+1. Install arch-lens in Claude Code: `/plugin marketplace add cognitive-fab/arch-lens` then `/plugin install archlens@arch-lens`, and the renderer with `npx skills add tt-a1i/archify -g`
+2. Open the **Architecture** tab and click **Map this architecture** — Claude Code reads the project and writes `docs/architecture/<name>.analysis.json` plus one diagram per question
+3. Ask questions in the tab's header; save prose answers as notes, or turn them into diagrams
 
 > **📖 Need Help?** Read the [User Manual](docs/USER_MANUAL.md) for detailed workflows, plugin guides, and best practices.
 

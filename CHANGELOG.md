@@ -35,6 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lets a plugin submit a prompt through the normal history-recording path.
 - Spec: `docs/ARCHITECTURE_TAB_SPEC.md`.
 
+### Changed
+
+- Model catalog refreshed for the Claude 5 family: the model pickers now offer **Fable**
+  (most capable), Opus, Sonnet and Haiku as CLI aliases, so each resolves to the latest
+  model without a Puffin release (previously a pinned `claude-opus-4-7` id). The document
+  editor gains Fable; think-harder/superthink upgrade to Fable; the Anthropic API default is
+  `claude-haiku-4-5-20251001`.
+
 ### Notes
 
 - archlens 0.5+ is required for ask/check/enforce; older published builds are detected

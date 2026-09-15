@@ -1298,11 +1298,11 @@ export class PromptEditorComponent {
         finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
         console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
 
-        // Upgrade to opus for think-harder and superthink (Claude Code only — not applicable to local LLMs)
+        // Upgrade to fable (most capable) for think-harder and superthink (Claude Code only — not applicable to local LLMs)
         if ((thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') &&
             !selectedModel.startsWith('ollama:')) {
-          selectedModel = 'opus'
-          console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
+          selectedModel = 'fable'
+          console.log(`[PROMPT-EDITOR] Upgraded model to fable for ${thinkingBudget}`)
         }
       }
 
@@ -1488,10 +1488,10 @@ export class PromptEditorComponent {
         finalPrompt = this.wrapPromptWithThinkingBudget(finalPrompt, thinkingBudget)
         console.log(`[PROMPT-EDITOR] Applied thinking budget: ${thinkingBudget}`)
 
-        // Upgrade to opus for think-harder and superthink
+        // Upgrade to fable (most capable) for think-harder and superthink
         if (thinkingBudget === 'think-harder' || thinkingBudget === 'superthink') {
-          selectedModel = 'opus'
-          console.log(`[PROMPT-EDITOR] Upgraded model to opus for ${thinkingBudget}`)
+          selectedModel = 'fable'
+          console.log(`[PROMPT-EDITOR] Upgraded model to fable for ${thinkingBudget}`)
         }
       }
 

@@ -593,6 +593,7 @@ export class DocumentEditorView {
               <option value="haiku" ${this.state.selectedModel === 'haiku' ? 'selected' : ''}>Haiku (Fast)</option>
               <option value="sonnet" ${this.state.selectedModel === 'sonnet' ? 'selected' : ''}>Sonnet</option>
               <option value="opus" ${this.state.selectedModel === 'opus' ? 'selected' : ''}>Opus</option>
+              <option value="fable" ${this.state.selectedModel === 'fable' ? 'selected' : ''}>Fable (Most capable)</option>
             </select>
             <select class="document-editor-thinking-selector" ${!hasFile || this.state.isSubmitting ? 'disabled' : ''} title="Extended thinking budget">
               <option value="none" ${this.state.thinkingBudget === 'none' ? 'selected' : ''}>No Thinking</option>

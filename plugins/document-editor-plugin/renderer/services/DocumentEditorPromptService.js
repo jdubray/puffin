@@ -114,7 +114,8 @@ export class DocumentEditorPromptService {
       models: {
         haiku: { id: 'haiku', displayName: 'Haiku (Fast)' },
         sonnet: { id: 'sonnet', displayName: 'Sonnet' },
-        opus: { id: 'opus', displayName: 'Opus' }
+        opus: { id: 'opus', displayName: 'Opus' },
+        fable: { id: 'fable', displayName: 'Fable (Most capable)' }
       }
     }
   }
@@ -259,7 +260,7 @@ IMPORTANT: Your response MUST include either <<<CHANGE>>> blocks, an ## Updated 
    * @param {string} options.extension - File extension
    * @param {string} options.content - Current document content
    * @param {string} options.userPrompt - User's editing request
-   * @param {string} options.model - Model to use (haiku/sonnet/opus)
+   * @param {string} options.model - Model to use (haiku/sonnet/opus/fable)
    * @param {string} options.thinkingBudget - Thinking budget (none/think/think-hard)
    * @param {Array} options.contextFiles - Optional context files
    * @param {string} options.branchId - Branch ID for the request (unused - plugin has dedicated channel)

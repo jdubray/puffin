@@ -14,7 +14,7 @@
  * native rebuild is required. `fetchImpl` is injectable for testing.
  */
 
-const DEFAULT_MODEL = 'claude-haiku-4-5'
+const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 const DEFAULT_MAX_TOKENS = 4096
 const MAX_TOKENS_CEILING = 8192
 const API_URL = 'https://api.anthropic.com/v1/messages'

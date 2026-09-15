@@ -27,7 +27,7 @@ function okResponse(text, usage) {
     json: async () => ({
       content: [{ type: 'text', text }],
       usage: usage || { input_tokens: 10, output_tokens: 20 },
-      model: 'claude-haiku-4-5'
+      model: 'claude-haiku-4-5-20251001'
     })
   }
 }
@@ -66,7 +66,7 @@ describe('anthropic-api-client.sendMessage', () => {
   it('sends NO tools and defaults to the cheapest model', async () => {
     const cap = {}
     await apiClient.sendMessage({ prompt: 'edit this', apiKey: 'sk-test', fetchImpl: fakeFetch(okResponse('done'), cap) })
-    assert.strictEqual(cap.body.model, 'claude-haiku-4-5')
+    assert.strictEqual(cap.body.model, 'claude-haiku-4-5-20251001')
     assert.ok(!('tools' in cap.body), 'must not send tools')
     assert.ok(!('thinking' in cap.body), 'must not send thinking')
     assert.ok(!('effort' in cap.body), 'must not send effort (Haiku rejects it)')

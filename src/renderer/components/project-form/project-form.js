@@ -545,7 +545,7 @@ export class ProjectFormComponent {
     if (providerSelect) providerSelect.value = config.promptProvider || 'cli'
     const anthropic = config.anthropic || {}
     const modelInput = document.getElementById('anthropic-model-input')
-    if (modelInput) modelInput.value = anthropic.model || 'claude-haiku-4-5'
+    if (modelInput) modelInput.value = anthropic.model || 'claude-haiku-4-5-20251001'
     const maxTokensInput = document.getElementById('anthropic-max-tokens-input')
     if (maxTokensInput) maxTokensInput.value = anthropic.maxTokens || 4096
     const apiKeyInput = document.getElementById('anthropic-api-key-input')
@@ -669,7 +669,7 @@ export class ProjectFormComponent {
       debugMode: this.getCheckboxValue('debug-mode-checkbox'),
       promptProvider: this.getElementValue('prompt-provider-select', 'cli'),
       anthropic: {
-        model: this.getElementValue('anthropic-model-input', 'claude-haiku-4-5').trim() || 'claude-haiku-4-5',
+        model: this.getElementValue('anthropic-model-input', 'claude-haiku-4-5-20251001').trim() || 'claude-haiku-4-5-20251001',
         maxTokens: parseInt(this.getElementValue('anthropic-max-tokens-input', '4096'), 10) || 4096,
         apiKey: this.getElementValue('anthropic-api-key-input', '').trim()
       },

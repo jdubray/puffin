@@ -47,7 +47,7 @@
         },
         "documentEditor.defaultModel": {
           "type": "string",
-          "enum": ["haiku", "sonnet", "opus"],
+          "enum": ["haiku", "sonnet", "opus", "fable"],
           "default": "haiku",
           "description": "Default AI model for document editing"
         },

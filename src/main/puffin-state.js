@@ -2061,7 +2061,7 @@ ${content}`
         config.promptProvider = 'cli'
       }
       if (!config.anthropic) {
-        config.anthropic = { model: 'claude-haiku-4-5', maxTokens: 4096, apiKey: '' }
+        config.anthropic = { model: 'claude-haiku-4-5-20251001', maxTokens: 4096, apiKey: '' }
       }
       return config
     } catch {
@@ -2094,7 +2094,7 @@ ${content}`
         // 'api' (direct Anthropic Messages API, pay-per-token).
         promptProvider: 'cli',
         anthropic: {
-          model: 'claude-haiku-4-5',
+          model: 'claude-haiku-4-5-20251001',
           maxTokens: 4096,
           apiKey: ''
         },

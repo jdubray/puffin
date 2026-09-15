@@ -1277,11 +1277,14 @@ function setupClaudeHandlers(ipcMain) {
       }
     }
 
+    // Aliases, not pinned ids: the CLI resolves each to the latest model in the family
+    // (fable -> Fable 5.1, opus -> Opus 5, sonnet -> Sonnet 5, haiku -> Haiku 4.5 today).
     return {
       models: [
-        { id: 'claude-opus-4-7', name: 'Claude Opus', description: 'Most capable' },
-        { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced' },
-        { id: 'haiku', name: 'Claude Haiku', description: 'Fast' }
+        { id: 'fable', name: 'Claude Fable', description: 'Most capable (Fable 5.1)' },
+        { id: 'opus', name: 'Claude Opus', description: 'Deep reasoning (Opus 5)' },
+        { id: 'sonnet', name: 'Claude Sonnet', description: 'Balanced (Sonnet 5)' },
+        { id: 'haiku', name: 'Claude Haiku', description: 'Fast, cheapest (Haiku 4.5)' }
       ],
       default: 'sonnet'
     }

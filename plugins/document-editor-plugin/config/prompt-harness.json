@@ -186,7 +186,12 @@
     "opus": {
       "id": "opus",
       "displayName": "Opus",
-      "description": "Highest quality, best for complex edits"
+      "description": "Deep reasoning, best for complex edits"
+    },
+    "fable": {
+      "id": "fable",
+      "displayName": "Fable (Most capable)",
+      "description": "Most capable model; highest cost"
     }
   }
 }

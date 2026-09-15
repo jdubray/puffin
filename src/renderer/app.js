@@ -23,6 +23,9 @@ import { fetchWorkflowContext } from './lib/workflow-state-tracker.js'
 import { ActivityLog, ActivityEventType } from './lib/activity-log.js'
 import { computeActionCards, HOW_CONTENT } from './lib/action-card-engine.js'
 import { initTooltipEngine } from './lib/tooltip-engine.js'
+import { extractPlan, planFileFromActivity } from './lib/plan-extractor.js'
+import { revisePrompt, replanPrompt } from './lib/task-prompts.js'
+import { TaskRunner } from './lib/task-runner.js'
 
 // Components
 import { ProjectFormComponent } from './components/project-form/project-form.js'
@@ -556,7 +559,15 @@ class PuffinApp {
   initManagers() {
     this.modalManager = new ModalManager(
       this.intents,
-      this.showToast.bind(this)
+      this.showToast.bind(this),
+      {
+        planActions: {
+          approve: (payload, opts) => this.approvePlan(payload, opts),
+          revise: (feedback, data) => this.revisePlan(feedback, data),
+          importFile: (filePath) => this.importPlanFile(filePath),
+          openInEditor: (filePath) => this.openPathInEditor(filePath)
+        }
+      }
     )
     this.statePersistence = new StatePersistence(
       () => this.state,
@@ -564,6 +575,15 @@ class PuffinApp {
       this.showToast.bind(this)
     )
     this.activityTracker = new ActivityTracker(this.intents, () => this.state)
+    // The one implementation path for a task (Plan → Board → Implement)
+    this.taskRunner = new TaskRunner({
+      intents: this.intents,
+      getState: () => this.state,
+      getPromptEditor: () => this.components?.promptEditor,
+      showToast: this.showToast.bind(this),
+      planApi: window.puffin?.plan || null,
+      isSessionRunning: async () => { try { return !!(await window.puffin.claude.isRunning()) } catch { return false } }
+    })
     this.helpModeController = new HelpModeController()
     this.activityLog = new ActivityLog()
 
@@ -695,6 +715,8 @@ class PuffinApp {
       if (result.success) {
         console.log('State loaded from .puffin/', result.state)
         this.intents.loadState(result.state)
+        // Plans (docs/plans + plans table) and any run interrupted by a restart
+        this.loadPlansAtStartup().catch(err => console.warn('[PLAN] startup load failed:', err.message))
       } else {
         console.error('Failed to load state:', result.error)
         this.showToast('Failed to load project state: ' + result.error, 'error')
@@ -813,6 +835,7 @@ class PuffinApp {
       'selectBranch', 'createBranch', 'deleteBranch', 'reorderBranches', 'updateBranchSettings', 'selectPrompt', 'clearPromptSelection',
       'toggleThreadExpanded', 'expandThreadToEnd', 'updateThreadSearchQuery', 'markThreadComplete', 'unmarkThreadComplete',
       'addUserStory', 'updateUserStory', 'deleteUserStory', 'loadUserStories',
+      'loadPlans', 'requestTaskRun', 'clearTaskRunRequest', 'setTaskRun', 'clearTaskRun', 'setPlanRun',
       'switchView', 'toggleSidebar', 'showModal', 'hideModal',
       'toolStart', 'toolEnd', 'clearActivity',
       'loadDeveloperProfile', 'loadGithubRepositories', 'loadGithubActivity',
@@ -885,6 +908,14 @@ class PuffinApp {
           ['UPDATE_USER_STORY', actions.updateUserStory],
           ['DELETE_USER_STORY', actions.deleteUserStory],
           ['LOAD_USER_STORIES', actions.loadUserStories],
+
+          // Plans and task runs (Plan → Board → Implement)
+          ['LOAD_PLANS', actions.loadPlans],
+          ['REQUEST_TASK_RUN', actions.requestTaskRun],
+          ['CLEAR_TASK_RUN_REQUEST', actions.clearTaskRunRequest],
+          ['SET_TASK_RUN', actions.setTaskRun],
+          ['CLEAR_TASK_RUN', actions.clearTaskRun],
+          ['SET_PLAN_RUN', actions.setPlanRun],
 
           // UI Navigation actions
           ['SWITCH_VIEW', actions.switchView],
@@ -1556,10 +1587,20 @@ class PuffinApp {
       const filesModified = this.activityTracker.getFilesModified()
       console.log('[SAM-DEBUG] filesModified at completion:', filesModified.length, 'files')
 
+      // Remember which prompt this completion belongs to before the model clears it
+      const completedPromptId = this._findPendingPromptId()
+
       try {
         this.intents.completeResponse(response, filesModified)
       } catch (err) {
         console.error('[SAM-ERROR] completeResponse failed:', err)
+      }
+
+      // Plan mode: the session wrote its plan to ~/.claude/plans — open it for review
+      try {
+        await this._afterSessionComplete(completedPromptId, response, filesModified)
+      } catch (err) {
+        console.error('[PLAN] post-completion handling failed:', err)
       }
 
       // Refresh Website Edition URL panel after each response (new/modified files may have appeared)
@@ -1593,6 +1634,9 @@ class PuffinApp {
       this.components.cliOutput.setProcessing(false)
 
       const errorMessage = error?.message || String(error) || 'An unknown error occurred'
+      if (this.taskRunner?.isActive?.() && error?.code !== 'PROCESS_ALREADY_RUNNING') {
+        try { this.taskRunner.onSessionError(errorMessage) } catch (e) { console.error('[TASK-RUN] onSessionError failed:', e) }
+      }
 
       // Detect OAuth/authentication errors and offer a re-login flow
       const isAuthError = /authentication_error|OAuth token|oauth token|token.*expired|Failed to authenticate/i.test(errorMessage)
@@ -1737,6 +1781,17 @@ class PuffinApp {
           this._handlingRerunRequest = false
         })
     }
+
+    // A card asked to be implemented (Plan → Board → Implement)
+    if (state.taskRunRequest && !this._handlingTaskRunRequest) {
+      this._handlingTaskRunRequest = true
+      const { storyId, options } = state.taskRunRequest
+      this.intents.clearTaskRunRequest()
+      this.handleTaskRunRequest(storyId, options || {})
+        .catch(err => this.showToast({ type: 'error', title: 'Task', message: err.message }))
+        .finally(() => { this._handlingTaskRunRequest = false })
+    }
+    this._renderTaskChip(state)
 
     // Handle continue request - submit continuation prompt to Claude
     // Use guard to prevent re-entry since handler is async
@@ -3067,6 +3122,256 @@ Keep it concise but informative. Use markdown formatting.`
 
     // Record in state
     this.intents.recordIterationOutput(hash, summary)
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PLAN → BOARD
+  // ═══════════════════════════════════════════════════════════════
+
+  /** @returns {string|null} The prompt awaiting a response in the active workspace */
+  _findPendingPromptId() {
+    const raw = this.state?.history?.raw
+    const prompts = raw?.branches?.[raw?.activeBranch]?.prompts || []
+    const pending = [...prompts].reverse().find(p => !p.response)
+    return pending?.id || null
+  }
+
+  /** @returns {Object|null} A prompt record from raw history */
+  _findPrompt(promptId) {
+    const raw = this.state?.history?.raw
+    for (const branch of Object.values(raw?.branches || {})) {
+      const hit = (branch.prompts || []).find(p => p.id === promptId)
+      if (hit) return hit
+    }
+    return null
+  }
+
+  /**
+   * After a session completes: capture a plan-mode result, and let the task runner advance.
+   * @param {string|null} promptId
+   * @param {Object} response
+   * @param {Object[]} filesModified
+   */
+  async _afterSessionComplete(promptId, response, filesModified) {
+    if (this.taskRunner?.isActive?.()) {
+      await this.taskRunner.onSessionComplete(response, filesModified)
+      return
+    }
+    const prompt = promptId ? this._findPrompt(promptId) : null
+    if (prompt?.mode !== 'plan' || response?.cancelled) return
+    const planPath = planFileFromActivity(filesModified)
+    let content = ''
+    if (planPath) {
+      try {
+        content = (await window.puffin.plan.readFile(planPath)).content
+      } catch (err) {
+        console.warn('[PLAN] could not read plan file, using the reply:', err.message)
+      }
+    }
+    if (!content) content = response?.content || ''
+    if (!content.trim()) return
+    this.openPlanReview({
+      source: 'session',
+      promptId,
+      branchId: this.state?.history?.activeBranch || null,
+      path: planPath || null,
+      content
+    })
+  }
+
+  /**
+   * A card (or plan group) asked for an action; route it to the task runner.
+   * @param {string} storyId - Task id, or a plan id for plan-level actions
+   * @param {Object} options - `{ action: 'implement'|'retry'|'fix'|'done-anyway'|'reopen'|'run-plan'|'continue-plan'|'stop-plan'|'replan'|'open-thread' }`
+   */
+  async handleTaskRunRequest(storyId, options = {}) {
+    const action = options.action || 'implement'
+    const runner = this.taskRunner
+    switch (action) {
+      case 'implement': return runner.implement(storyId)
+      case 'retry': return runner.retry(storyId)
+      case 'fix': return runner.fix(storyId)
+      case 'done-anyway': return runner.markDoneAnyway(storyId)
+      case 'reopen': return runner.reopen(storyId)
+      case 'run-plan': return runner.runPlan(storyId)
+      case 'continue-plan': return runner.continuePlan(storyId)
+      case 'stop-plan': return runner.stopPlan()
+      case 'replan': return this.replanFromBoard(storyId)
+      case 'open-thread': {
+        const task = runner.task(storyId)
+        if (task?.threadId) {
+          if (task.branchId && this.state?.history?.activeBranch !== task.branchId) this.intents.selectBranch(task.branchId)
+          this.intents.selectPrompt(task.threadId)
+          this.intents.switchView('prompt')
+        }
+        return true
+      }
+      default:
+        console.warn('[TASK-RUN] unknown action', action)
+        return false
+    }
+  }
+
+  /** Prefill a Plan-mode prompt that revises an existing plan given the board state. */
+  async replanFromBoard(planId) {
+    const plan = (this.state?.plans || []).find(p => p.id === planId)
+    if (!plan) return false
+    const tasks = this.taskRunner.planTasks(planId)
+    const editor = this.components.promptEditor
+    if (!editor) return false
+    if (plan.branchId && this.state?.history?.activeBranch !== plan.branchId) this.intents.selectBranch(plan.branchId)
+    this.intents.switchView('prompt')
+    editor.setPromptMode('plan')
+    this._replanTarget = planId
+    if (editor.textarea) {
+      editor.textarea.value = replanPrompt({ planFile: plan.filePath, tasks })
+      editor.textarea.dispatchEvent(new Event('input'))
+      editor.textarea.focus()
+    }
+    this.showToast({ type: 'info', title: 'Re-plan', message: 'Review the prompt and press Plan. The approved plan replaces the open tasks of the old one.' })
+    return true
+  }
+
+  /** The task chip above the prompt editor: what the current session is doing for the board. */
+  _renderTaskChip(state) {
+    const chip = document.getElementById('task-chip')
+    if (!chip) return
+    const run = state?.taskRun
+    if (!run) {
+      if (!chip.classList.contains('hidden')) chip.classList.add('hidden')
+      return
+    }
+    const task = (state.userStories || []).find(s => s.id === run.storyId)
+    const label = chip.querySelector('.task-chip-label')
+    const verb = run.phase === 'review' ? 'Reviewing' : run.phase === 'fix' ? `Fixing (round ${run.fixRounds || 1})` : 'Implementing'
+    const pr = state.planRun
+    const progress = pr ? ` · plan ${pr.queue.filter(id => (state.userStories || []).find(s => s.id === id)?.status === 'completed').length}/${pr.queue.length}` : ''
+    if (label) label.textContent = `${verb}: ${task?.planStep ? `${task.planStep}. ` : ''}${task?.title || run.storyId}${progress}`
+    chip.querySelector('#task-chip-stop')?.classList.toggle('hidden', !pr || pr.stopped)
+    if (!chip.dataset.bound) {
+      chip.dataset.bound = '1'
+      chip.querySelector('#task-chip-open')?.addEventListener('click', () => this.intents.switchView('user-stories'))
+      chip.querySelector('#task-chip-stop')?.addEventListener('click', () => this.taskRunner.stopPlan())
+    }
+    chip.classList.remove('hidden')
+  }
+
+  /**
+   * Open the Plan Review panel.
+   * @param {Object} data - `{ source, promptId?, branchId?, path?, content, replacePlanId? }`
+   */
+  openPlanReview(data) {
+    const draft = extractPlan(data.content || '')
+    this.intents.showModal('plan-review', { ...data, draft })
+  }
+
+  /** Open the import chooser listing ~/.claude/plans and docs/plans. */
+  async openPlanImport() {
+    try {
+      const files = await window.puffin.plan.listFiles()
+      this.intents.showModal('plan-import', { files })
+    } catch (err) {
+      this.showToast({ type: 'error', title: 'Import failed', message: err.message })
+    }
+  }
+
+  /** Read a plan file and open it for review. */
+  async importPlanFile(filePath) {
+    try {
+      const file = await window.puffin.plan.readFile(filePath)
+      const isProject = /[\\/]docs[\\/]plans[\\/]/.test(filePath)
+      this.openPlanReview({
+        source: 'import',
+        path: filePath,
+        content: file.content,
+        branchId: file.frontMatter?.workspace || this.state?.history?.activeBranch || null,
+        replacePlanId: isProject && file.frontMatter?.puffin_plan_id ? file.frontMatter.puffin_plan_id : null
+      })
+    } catch (err) {
+      this.showToast({ type: 'error', title: 'Import failed', message: err.message })
+    }
+  }
+
+  /**
+   * Approve a plan: save it under docs/plans and (optionally) create its tasks.
+   * @param {Object} payload - plan:create args
+   * @param {{ createTasks: boolean }} opts
+   */
+  async approvePlan(payload, { createTasks } = {}) {
+    if (this._replanTarget && !payload.replacePlanId) payload = { ...payload, replacePlanId: this._replanTarget }
+    this._replanTarget = null
+    const result = await window.puffin.plan.create(payload)
+    this.intents.hideModal()
+    await this.refreshPlansAndTasks()
+    if (createTasks && result.stories?.length) {
+      this.showToast({ type: 'success', title: 'Plan added', message: `"${result.plan.title}": ${result.stories.length} task${result.stories.length === 1 ? '' : 's'} on the Backlog` })
+      this.intents.switchView('user-stories')
+    } else {
+      this.showToast({ type: 'success', title: 'Plan saved', message: result.plan.filePath })
+    }
+    this.components.promptEditor?.setPromptMode?.('build')
+    return result
+  }
+
+  /** Send feedback back into the planning thread (still in Plan mode). */
+  async revisePlan(feedback, data) {
+    const editor = this.components.promptEditor
+    if (!editor) return
+    if (data?.promptId) this.intents.selectPrompt(data.promptId)
+    this.intents.switchView('prompt')
+    const ok = await editor.submitExternal(revisePrompt(feedback), { mode: 'plan' })
+    if (!ok) this.showToast({ type: 'warning', title: 'Not sent', message: 'A session is already running.' })
+  }
+
+  /**
+   * Load plans, and mark any task left running by a previous Puffin session as failed.
+   */
+  async loadPlansAtStartup() {
+    if (!window.puffin?.plan?.list) return
+    const plans = await window.puffin.plan.list()
+    this.intents.loadPlans(plans)
+    const interrupted = (this.state?.userStories || []).filter(s => s.runState === 'running' || s.runState === 'reviewing' || s.runState === 'fixing')
+    for (const story of interrupted) {
+      this.intents.updateUserStory(story.id, {
+        runState: 'failed',
+        runMeta: { ...(story.runMeta || {}), lastError: 'Puffin closed while this task was running', finishedAt: new Date().toISOString() }
+      })
+    }
+  }
+
+  /** Reload tasks (and plans) from the database into the model. */
+  async refreshPlansAndTasks() {
+    try {
+      const result = await window.puffin.state.getUserStories()
+      const stories = Array.isArray(result) ? result : (result?.stories || [])
+      this.intents.loadUserStories(stories)
+    } catch (err) {
+      console.warn('[PLAN] could not reload tasks:', err.message)
+    }
+    try {
+      const plans = await window.puffin.plan.list()
+      this.intents.loadPlans(plans)
+    } catch (err) {
+      console.warn('[PLAN] could not reload plans:', err.message)
+    }
+  }
+
+  /** Open a project file in the Editor tab (document-editor plugin). */
+  async openPathInEditor(filePath) {
+    const viewId = 'document-editor-plugin:document-editor-view'
+    // Project-relative paths (e.g. docs/plans/x.md) are resolved against the open project
+    const isAbsolute = /^(?:[a-zA-Z]:[\\/]|[\\/])/.test(filePath)
+    if (!isAbsolute && this.projectPath) {
+      const sep = this.projectPath.includes('\\') ? '\\' : '/'
+      filePath = `${this.projectPath}${sep}${filePath.replace(/[\\/]/g, sep)}`
+    }
+    try {
+      await this.sidebarViewManager.activateView(viewId)
+      const editor = this.pluginViewContainer.getComponent?.(viewId) || this.pluginViewContainer.loadedComponents?.get(viewId)
+      if (editor?.openFileByPath) await editor.openFileByPath(filePath)
+    } catch (err) {
+      this.showToast({ type: 'warning', title: 'Editor', message: err.message })
+    }
   }
 
   /**

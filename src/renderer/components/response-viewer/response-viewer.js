@@ -318,6 +318,10 @@ export class ResponseViewerComponent {
             <span class="btn-icon">💾</span>
             <span class="btn-text">Save MD</span>
           </button>
+          <button class="response-action-btn" data-action="plan-from-reply" title="Treat this reply as a plan" data-help="Open this reply in the Plan Review panel and send its steps to the Backlog.">
+            <span class="btn-icon">📋</span>
+            <span class="btn-text">As plan</span>
+          </button>
         </div>
         ${filesModifiedHtml}
         <div class="response-meta">
@@ -328,6 +332,7 @@ export class ResponseViewerComponent {
 
     // Store the raw markdown content for later access
     this.currentMarkdown = prompt.response.content
+    this.currentPromptId = prompt.id
 
     // Attach event listeners to the action buttons
     this.attachActionListeners()
@@ -604,6 +609,14 @@ export class ResponseViewerComponent {
 
     if (continueBtn) {
       continueBtn.addEventListener('click', () => this.handleContinue())
+    }
+
+    const planBtn = this.container.querySelector('[data-action="plan-from-reply"]')
+    if (planBtn) {
+      planBtn.addEventListener('click', () => {
+        if (!this.currentMarkdown) return
+        window.puffinApp?.openPlanReview?.({ source: 'reply', promptId: this.currentPromptId || null, content: this.currentMarkdown })
+      })
     }
   }
 

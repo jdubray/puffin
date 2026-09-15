@@ -8,9 +8,12 @@
 
 const { BaseRepository } = require('./base-repository')
 const { UserStoryRepository, StoryStatus } = require('./user-story-repository')
+const { PlanRepository, PlanStatus } = require('./plan-repository')
 
 module.exports = {
   BaseRepository,
   UserStoryRepository,
-  StoryStatus
+  StoryStatus,
+  PlanRepository,
+  PlanStatus
 }

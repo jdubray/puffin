@@ -14713,3 +14713,293 @@ body.website-edition .plugin-nav-btn[data-plugin-name="rlm-document-plugin"] {
   color: var(--color-primary, #6c63ff);
 }
 
+
+/* ===== Plan → Board → Implement (4.2) ===== */
+
+/* Build | Plan mode switch in the prompt option bar */
+.prompt-mode-switch {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.prompt-mode-switch input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.prompt-mode-switch label {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  user-select: none;
+}
+
+.prompt-mode-switch input[type="radio"]:checked + label {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.prompt-mode-switch input[type="radio"]:focus-visible + label {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.prompt-inline-btn {
+  margin-left: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+/* Plan review panel (extends the legacy .plan-review-* rules above) */
+.modal:has(.plan-review-container) {
+  width: 78vw;
+  max-width: 1200px;
+}
+
+.plan-review-container {
+  max-height: 68vh;
+}
+
+.plan-review-path {
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.plan-review-markdown {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.plan-review-markdown code { font-size: 0.8em; }
+.plan-review-markdown pre { overflow-x: auto; font-size: 0.78rem; }
+
+.plan-review-warning {
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.6rem;
+  border-radius: var(--radius-sm);
+  background: rgba(236, 201, 75, 0.12);
+  color: var(--warning-color);
+  font-size: 0.8rem;
+}
+
+.plan-review-field {
+  display: block;
+  margin-bottom: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.plan-review-field .form-control { margin-top: 0.2rem; width: 100%; box-sizing: border-box; }
+
+.plan-review-steps-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.plan-review-summary { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-secondary); }
+
+.plan-review-steps { list-style: none; margin: 0; padding: 0; }
+
+.plan-step {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.4rem;
+  background: var(--bg-secondary);
+}
+
+.plan-step.excluded { opacity: 0.55; }
+
+.plan-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.plan-step-num {
+  min-width: 1.4rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.plan-step-title { flex: 1; min-width: 0; font-size: 0.85rem; }
+
+.plan-step-tools { display: flex; gap: 0.15rem; }
+
+.plan-step-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-xs);
+}
+
+.plan-step-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.plan-step-details {
+  padding: 0.3rem 0.6rem 0.6rem 2.4rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.plan-step-details.hidden { display: none; }
+.plan-step-details label { display: block; margin-top: 0.4rem; }
+.plan-step-details textarea, .plan-step-details select { width: 100%; box-sizing: border-box; margin-top: 0.15rem; font-size: 0.8rem; }
+.plan-step-skill { margin-top: 0.3rem; }
+.plan-step-files { margin-top: 0.4rem; font-size: 0.75rem; }
+.plan-step-files code { margin-right: 0.3rem; }
+
+.plan-review-revise { margin-top: 0.8rem; }
+.plan-review-revise.hidden { display: none; }
+.plan-review-revise textarea { width: 100%; box-sizing: border-box; }
+.plan-review-revise-actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.4rem; }
+
+/* Import chooser */
+.plan-import-group { margin-bottom: 0.9rem; }
+.plan-import-list { list-style: none; margin: 0; padding: 0; max-height: 40vh; overflow-y: auto; }
+
+.plan-import-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.plan-import-item:hover { border-color: var(--accent-primary); background: var(--bg-hover); }
+.plan-import-title { font-weight: 600; font-size: 0.85rem; }
+.plan-import-meta { font-size: 0.72rem; color: var(--text-muted); }
+.plan-import-empty { margin: 0.2rem 0; font-size: 0.8rem; color: var(--text-muted); }
+
+/* Task chip above the prompt editor */
+.task-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  font-size: 0.8rem;
+}
+
+.task-chip.hidden { display: none; }
+.task-chip-icon { color: var(--accent-primary); }
+.task-chip-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.task-chip-btn {
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-xs);
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.task-chip-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.task-chip-btn.hidden { display: none; }
+
+/* Plan groups on the board */
+.plan-group {
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.25rem 0.35rem 0.35rem;
+  background: rgba(108, 99, 255, 0.05);
+}
+
+.plan-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.2rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+  list-style: none;
+}
+
+.plan-group-header::-webkit-details-marker { display: none; }
+.plan-group-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.plan-group-progress { color: var(--text-muted); white-space: nowrap; }
+.plan-group-actions { display: flex; gap: 0.2rem; flex-shrink: 0; }
+
+.plan-group-btn {
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border-radius: var(--radius-xs);
+  padding: 0.1rem 0.4rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plan-group-btn:hover { color: var(--text-primary); border-color: var(--accent-primary); }
+.plan-group-note { margin: 0.1rem 0.2rem 0.4rem; font-size: 0.75rem; color: var(--warning-color); }
+
+/* Task badges and actions on cards */
+.task-badges { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.25rem 0 0.35rem; }
+
+.task-badge {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.task-badge-step { font-weight: 700; }
+.task-badge-dep.blocked { background: rgba(245, 101, 101, 0.18); color: var(--error-color); }
+.task-badge-skill { background: rgba(66, 153, 225, 0.18); color: var(--info-color); }
+.task-badge-run.run-running, .task-badge-run.run-reviewing, .task-badge-run.run-fixing { background: rgba(108, 99, 255, 0.2); color: var(--accent-primary); animation: task-pulse 1.4s ease-in-out infinite; }
+.task-badge-run.run-needs-fix, .task-badge-run.run-needs-human { background: rgba(236, 201, 75, 0.18); color: var(--warning-color); }
+.task-badge-run.run-failed, .task-badge-run.run-cancelled { background: rgba(245, 101, 101, 0.18); color: var(--error-color); }
+.task-badge-run.run-reviewed { background: rgba(72, 187, 120, 0.18); color: var(--success-color); }
+
+@keyframes task-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.task-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.2rem 0 0.4rem; }
+
+.task-action-btn {
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border-radius: var(--radius-xs);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.task-action-btn:hover:not(:disabled) { border-color: var(--accent-primary); background: var(--bg-hover); }
+.task-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.task-action-btn[data-task-action="implement"]:not(:disabled) { border-color: var(--accent-primary); color: var(--accent-primary); }

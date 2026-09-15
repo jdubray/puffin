@@ -57,6 +57,13 @@ class UserStoryRepository extends BaseRepository {
       status: row.status,
       implementedOn: this.parseJson(row.implemented_on, []),
       sourcePromptId: row.source_prompt_id,
+      planId: row.plan_id || null,
+      planStep: row.plan_step ?? null,
+      dependsOn: this.parseJson(row.depends_on, []),
+      skill: row.skill || null,
+      threadId: row.thread_id || null,
+      runState: row.run_state || 'idle',
+      runMeta: this.parseJson(row.run_meta, {}),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       archivedAt: row.archived_at
@@ -83,6 +90,13 @@ class UserStoryRepository extends BaseRepository {
       status: story.status || StoryStatus.PENDING,
       implemented_on: this.toJson(story.implementedOn || []),
       source_prompt_id: story.sourcePromptId || null,
+      plan_id: story.planId || null,
+      plan_step: Number.isInteger(story.planStep) ? story.planStep : null,
+      depends_on: this.toJson(story.dependsOn || []),
+      skill: story.skill || null,
+      thread_id: story.threadId || null,
+      run_state: story.runState || 'idle',
+      run_meta: this.toJson(story.runMeta || {}),
       created_at: story.createdAt || this.now(),
       updated_at: story.updatedAt || this.now(),
       archived_at: story.archivedAt || null
@@ -105,8 +119,9 @@ class UserStoryRepository extends BaseRepository {
       INSERT INTO user_stories (
         id, branch_id, title, description, acceptance_criteria,
         inspection_assertions, assertion_results, completion_summary,
-        status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        status, implemented_on, source_prompt_id, created_at, updated_at, archived_at,
+        plan_id, plan_step, depends_on, skill, thread_id, run_state, run_meta
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     const params = [
       row.id,
@@ -122,7 +137,14 @@ class UserStoryRepository extends BaseRepository {
       row.source_prompt_id,
       row.created_at,
       row.updated_at,
-      row.archived_at
+      row.archived_at,
+      row.plan_id,
+      row.plan_step,
+      row.depends_on,
+      row.skill,
+      row.thread_id,
+      row.run_state,
+      row.run_meta
     ]
 
     this.traceQuery('INSERT', sql, params, () => {
@@ -352,7 +374,14 @@ class UserStoryRepository extends BaseRepository {
         implemented_on = ?,
         source_prompt_id = ?,
         updated_at = ?,
-        archived_at = ?
+        archived_at = ?,
+        plan_id = ?,
+        plan_step = ?,
+        depends_on = ?,
+        skill = ?,
+        thread_id = ?,
+        run_state = ?,
+        run_meta = ?
       WHERE id = ?
     `
     const params = [
@@ -368,6 +397,13 @@ class UserStoryRepository extends BaseRepository {
       row.source_prompt_id,
       row.updated_at,
       row.archived_at,
+      row.plan_id,
+      row.plan_step,
+      row.depends_on,
+      row.skill,
+      row.thread_id,
+      row.run_state,
+      row.run_meta,
       id
     ]
 
@@ -475,8 +511,9 @@ class UserStoryRepository extends BaseRepository {
         INSERT OR REPLACE INTO archived_stories (
           id, branch_id, title, description, acceptance_criteria,
           inspection_assertions, assertion_results, completion_summary,
-          status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          status, implemented_on, source_prompt_id, created_at, updated_at, archived_at,
+          plan_id, plan_step, depends_on, skill, thread_id, run_state, run_meta
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
       const insertParams = [
         row.id,
@@ -492,7 +529,14 @@ class UserStoryRepository extends BaseRepository {
         row.source_prompt_id,
         row.created_at,
         row.updated_at,
-        row.archived_at
+        row.archived_at,
+        row.plan_id,
+        row.plan_step,
+        row.depends_on,
+        row.skill,
+        row.thread_id,
+        row.run_state,
+        row.run_meta
       ]
 
       this.traceQuery('INSERT_ARCHIVED', insertSql, insertParams, () => {
@@ -646,8 +690,9 @@ class UserStoryRepository extends BaseRepository {
         INSERT OR REPLACE INTO user_stories (
           id, branch_id, title, description, acceptance_criteria,
           inspection_assertions, assertion_results, completion_summary,
-          status, implemented_on, source_prompt_id, created_at, updated_at, archived_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          status, implemented_on, source_prompt_id, created_at, updated_at, archived_at,
+          plan_id, plan_step, depends_on, skill, thread_id, run_state, run_meta
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         row.id,
         row.branch_id,
@@ -662,7 +707,14 @@ class UserStoryRepository extends BaseRepository {
         row.source_prompt_id,
         row.created_at,
         row.updated_at,
-        null
+        null,
+        row.plan_id,
+        row.plan_step,
+        row.depends_on,
+        row.skill,
+        row.thread_id,
+        row.run_state,
+        row.run_meta
       )
 
       // Delete from archived_stories

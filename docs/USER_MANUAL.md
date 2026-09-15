@@ -4,7 +4,7 @@
 > pipeline (CRE, sprints, implementation plans, RIS, inspection assertions, `CLAUDE.md` generation,
 > the Memory plugin) was removed; Puffin is now a **documentation manager** with Workspaces/Tasks, a
 > To Do / Doing / Done task board, the Docs and Editor tabs (document edits through a configurable
-> provider), and — since 4.1 — the [**Architecture tab**](#architecture-tab-v41). Sections about
+> provider), the [**Architecture tab**](#architecture-tab-v41) (4.1), and [**Plan → Board → Implement**](#plan--board--implement-v42) (4.2). Sections about
 > removed features are kept for readers of older versions.
 
 ## Table of Contents
@@ -562,6 +562,46 @@ Cross-cutting technical facts about the project:
 
 Example:
 ```markdown
+## Plan → Board → Implement (v4.2)
+
+Claude Code's plan mode feeds the task board, and the board launches the implementation.
+
+**Plan.** In the Prompt window switch the mode from **Build** to **Plan** and describe what you
+want. The session runs read-only (Claude cannot change files); it explores the code and writes
+a plan. When the session ends the **Plan Review** panel opens: the plan as written on the left,
+and on the right what the board will get — the title, the target workspace, and one row per
+step with an include checkbox, editable *done when* criteria, dependencies and (when a step
+starts with `/skill …`) the skill it invokes. Reorder with the arrows, add steps the extractor
+missed. **Approve & send to board** saves the plan under `docs/plans/<date>-<slug>.md` and
+creates one *To Do* task per included step; **Approve only** saves the file without tasks;
+**Revise…** sends your feedback back into the same planning conversation and the panel reopens
+with the rewritten plan; **Discard** keeps nothing.
+
+Plans written in the terminal can be brought in with **Import plan…** (`~/.claude/plans` and
+`docs/plans`), and any reply can be opened as a plan with the **As plan** button under it.
+
+**Board.** Tasks from a plan appear in a collapsible **plan group** with their step number,
+*after N* dependency badge (red while the dependency is not done), a *skill* badge, and a run
+state (*running*, *reviewing*, *needs fix*, *failed*, *reviewed*). The group header shows
+progress and offers **Next** (implement the next unblocked task), **Run plan**, **Re-plan**
+and the plan file.
+
+**Implement.** **Implement** on a card starts a new conversation named after the task in the
+task's workspace, with the step, its *done when* criteria, the plan context and the rule
+"implement only this task". The card moves to *Doing* and a chip above the prompt editor shows
+what the session is doing. When the session ends Puffin runs a **review pass** against the
+criteria: `REVIEW: PASS` moves the card to *Done* (conversation, files touched and review
+excerpt attached); `REVIEW: ISSUES` shows **Fix** (the same conversation fixes what the
+review listed, then reviews again — after two rounds the card says *needs a human*) and
+**Done anyway**. A failed or cancelled session leaves **Retry**. **Run plan** implements the
+remaining tasks in order, one session at a time, and stops at the first task that does not
+reach Done; **Continue** resumes. If Puffin is closed during a run, the task is marked *failed:
+Puffin closed* with Retry on the next start.
+
+**Re-plan.** When the board has moved on, **Re-plan** on a plan group opens the Prompt window
+in Plan mode with the plan file and the done/open tasks prefilled; the approved plan replaces the
+open tasks of the old one and keeps the finished ones.
+
 ## Architecture Tab (v4.1)
 
 The **Architecture** tab shows a project's living architecture, compiled from an

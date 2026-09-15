@@ -225,6 +225,9 @@ export class UserStoriesComponent {
       const previousCount = this.stories?.length || 0
       this.stories = state.userStories || []
       this.branches = state.history?.raw?.branches || {}
+      this.plans = state.plans || []
+      this.taskRun = state.taskRun || null
+      this.planRun = state.planRun || null
 
       // Debug logging for story count changes
       if (this.stories.length !== previousCount) {
@@ -367,7 +370,7 @@ export class UserStoriesComponent {
           </div>
           <div class="kanban-swimlane-content">
             ${pendingStories.length > 0
-              ? pendingStories.map(story => this.renderStoryCard(story)).join('')
+              ? this.renderGroupedCards(pendingStories)
               : '<p class="placeholder">Nothing to do</p>'}
           </div>
         </div>
@@ -377,7 +380,7 @@ export class UserStoriesComponent {
           </div>
           <div class="kanban-swimlane-content">
             ${inProgressStories.length > 0
-              ? inProgressStories.map(story => this.renderStoryCard(story)).join('')
+              ? this.renderGroupedCards(inProgressStories)
               : '<p class="placeholder">Nothing in progress</p>'}
           </div>
         </div>
@@ -387,7 +390,7 @@ export class UserStoriesComponent {
           </div>
           <div class="kanban-swimlane-content">
             ${completedStories.length > 0
-              ? completedStories.map(story => this.renderStoryCard(story)).join('')
+              ? this.renderGroupedCards(completedStories)
               : '<p class="placeholder">Nothing done yet</p>'}
           </div>
         </div>
@@ -438,7 +441,7 @@ export class UserStoriesComponent {
 
     // Render active stories
     if (activeStories.length > 0) {
-      html += activeStories.map(story => this.renderStoryCard(story)).join('')
+      html += this.renderGroupedCards(activeStories)
     } else if (archivedStories.length > 0) {
       html += '<p class="placeholder">No active tasks. All tasks are archived.</p>'
     }
@@ -548,6 +551,122 @@ export class UserStoriesComponent {
   /**
    * Render a single story card
    */
+  /**
+   * Cards grouped by plan (plan groups first, in plan order; then ungrouped cards).
+   * @param {Object[]} stories - Stories of one column
+   * @returns {string}
+   */
+  renderGroupedCards(stories) {
+    const byPlan = new Map()
+    const loose = []
+    for (const story of stories) {
+      if (story.planId) {
+        if (!byPlan.has(story.planId)) byPlan.set(story.planId, [])
+        byPlan.get(story.planId).push(story)
+      } else {
+        loose.push(story)
+      }
+    }
+    const groups = [...byPlan.entries()].map(([planId, cards]) => {
+      const plan = (this.plans || []).find(p => p.id === planId)
+      cards.sort((a, b) => (a.planStep || 0) - (b.planStep || 0))
+      return this.renderPlanGroup(planId, plan, cards)
+    })
+    return groups.join('') + loose.map(story => this.renderStoryCard(story)).join('')
+  }
+
+  /**
+   * A collapsible plan group inside a column.
+   */
+  renderPlanGroup(planId, plan, cards) {
+    const title = plan?.title || 'Plan'
+    // Counts come from the live board, not the plan record (which is loaded once)
+    const all = (this.stories || []).filter(s => s.planId === planId)
+    const total = all.length || cards.length
+    const done = all.filter(s => s.status === 'completed').length
+    const isRunning = this.planRun && this.planRun.planId === planId && !this.planRun.stopped
+    const stoppedReason = this.planRun && this.planRun.planId === planId && this.planRun.stopped ? this.planRun.reason : null
+    const hasPending = (this.stories || []).some(s => s.planId === planId && s.status !== 'completed')
+    return `
+      <details class="plan-group" open data-plan-id="${this.escapeHtml(planId)}">
+        <summary class="plan-group-header">
+          <span class="plan-group-title" title="${this.escapeHtml(title)}">📋 ${this.escapeHtml(title)}</span>
+          <span class="plan-group-progress">${done}/${total} done</span>
+          <span class="plan-group-actions">
+            ${hasPending && !isRunning ? `<button class="plan-group-btn" data-plan-action="implement-next" title="Implement the next unblocked task" data-help="Implement the next task of this plan that is not blocked.">▶ Next</button>` : ''}
+            ${hasPending && !isRunning ? `<button class="plan-group-btn" data-plan-action="${stoppedReason ? 'continue-plan' : 'run-plan'}" title="Run every remaining task in order" data-help="Run every remaining task of this plan in order, one session at a time; stops at the first task that does not reach Done.">${stoppedReason ? '⏵ Continue' : '⏵⏵ Run plan'}</button>` : ''}
+            ${isRunning ? `<button class="plan-group-btn" data-plan-action="stop-plan" title="Stop after the current task" data-help="Let the current task finish, then stop the plan run.">■ Stop</button>` : ''}
+            <button class="plan-group-btn" data-plan-action="replan" title="Revise the plan with Claude" data-help="Open the Prompt tab in Plan mode with this plan and the board state prefilled; the approved plan replaces the open tasks.">↻ Re-plan</button>
+            ${plan?.filePath ? `<button class="plan-group-btn" data-plan-action="open-plan" title="Open the plan file" data-help="Open the plan markdown in the Editor tab.">📄</button>` : ''}
+          </span>
+        </summary>
+        ${stoppedReason ? `<div class="plan-group-note">Stopped: ${this.escapeHtml(stoppedReason)}</div>` : ''}
+        ${cards.map(story => this.renderStoryCard(story)).join('')}
+      </details>`
+  }
+
+  /**
+   * Badges and actions that describe a task's place in its plan and its run state.
+   */
+  renderTaskBadges(story) {
+    const badges = []
+    if (story.planStep) {
+      const plan = (this.plans || []).find(p => p.id === story.planId)
+      const total = (this.stories || []).filter(s => s.planId === story.planId).length || plan?.total
+      badges.push(`<span class="task-badge task-badge-step" title="Step ${story.planStep} of the plan">${story.planStep}${total ? `/${total}` : ''}</span>`)
+    }
+    const blockers = (story.dependsOn || []).map(id => (this.stories || []).find(s => s.id === id)).filter(Boolean)
+    if (blockers.length) {
+      const unmet = blockers.filter(b => b.status !== 'completed')
+      badges.push(`<span class="task-badge task-badge-dep ${unmet.length ? 'blocked' : ''}" title="${this.escapeHtml(unmet.length ? `Waiting on: ${unmet.map(b => b.title).join(', ')}` : 'Dependencies done')}">after ${blockers.map(b => b.planStep || '?').join(', ')}</span>`)
+    }
+    if (story.skill) badges.push(`<span class="task-badge task-badge-skill" title="${this.escapeHtml(story.skill)}">skill</span>`)
+    const run = story.runState || 'idle'
+    const runLabels = { running: '● running', reviewing: '● reviewing', fixing: '● fixing', 'needs-fix': '⚠ needs fix', 'needs-human': '⚠ needs a human', failed: '✕ failed', cancelled: '✕ cancelled', reviewed: '✓ reviewed' }
+    if (runLabels[run]) {
+      const detail = story.runMeta?.lastError || story.runMeta?.reviewExcerpt || ''
+      badges.push(`<span class="task-badge task-badge-run run-${run}" title="${this.escapeHtml(detail.slice(0, 300))}">${runLabels[run]}</span>`)
+    }
+    return badges.length ? `<div class="task-badges">${badges.join('')}</div>` : ''
+  }
+
+  /**
+   * Plan → Board → Implement actions for a card, by state.
+   */
+  renderTaskActions(story) {
+    const run = story.runState || 'idle'
+    const busy = !!this.taskRun
+    const isThis = this.taskRun?.storyId === story.id
+    const unmet = (story.dependsOn || []).map(id => (this.stories || []).find(s => s.id === id)).filter(b => b && b.status !== 'completed')
+    const btn = (action, label, help, disabled = false, title = '') =>
+      `<button class="task-action-btn" data-task-action="${action}" ${disabled ? 'disabled' : ''} title="${this.escapeHtml(title || help)}" data-help="${this.escapeHtml(help)}">${label}</button>`
+    const out = []
+    if (story.status === 'pending' && ['idle', 'failed', 'cancelled'].includes(run)) {
+      const why = busy ? 'A task is already running' : unmet.length ? `Waiting on: ${unmet.map(b => b.title).join(', ')}` : ''
+      out.push(btn('implement', '▶ Implement', 'Start a new conversation that implements this task; the card moves to Doing and is reviewed when the session ends.', !!why, why))
+    }
+    if (story.status === 'in-progress') {
+      if (isThis) out.push(btn('open-thread', '💬 Open conversation', 'Show the conversation implementing this task.'))
+      else if (run === 'needs-fix') {
+        out.push(btn('fix', '🔧 Fix', 'Ask Claude to fix the issues the review found, in the same conversation.', busy))
+        out.push(btn('done-anyway', '✓ Done anyway', 'Accept the task despite the review issues.'))
+        out.push(btn('open-thread', '💬', 'Show the conversation implementing this task.'))
+      } else if (run === 'needs-human') {
+        out.push(btn('done-anyway', '✓ Done anyway', 'Accept the task; two fix rounds did not satisfy the review.'))
+        out.push(btn('open-thread', '💬', 'Show the conversation implementing this task.'))
+      } else if (run === 'failed' || run === 'cancelled') {
+        out.push(btn('retry', '↻ Retry', 'Run the task again with the previous error included in the prompt.', busy))
+        if (story.threadId) out.push(btn('open-thread', '💬', 'Show the conversation implementing this task.'))
+      } else if (story.threadId) {
+        out.push(btn('open-thread', '💬', 'Show the conversation implementing this task.'))
+      }
+    }
+    if (story.status === 'completed' && story.threadId) {
+      out.push(btn('open-thread', '💬', 'Show the conversation that implemented this task.'))
+    }
+    return out.length ? `<div class="task-actions">${out.join('')}</div>` : ''
+  }
+
   renderStoryCard(story) {
     const statusClass = story.status.replace('-', '')
     const canImplement = story.status === 'pending'
@@ -556,7 +675,8 @@ export class UserStoriesComponent {
     const canArchive = story.status !== 'archived' // Any non-archived story can be archived
     const isArchived = story.status === 'archived'
     const isKanban = this.currentView === VIEW_MODES.KANBAN
-    const isDraggable = isKanban && !isArchived && this.isDragDropSupported()
+    const isRunningNow = this.taskRun?.storyId === story.id
+    const isDraggable = isKanban && !isArchived && !isRunningNow && this.isDragDropSupported()
     const showFallbackDropdown = isKanban && !isArchived && !this.isDragDropSupported()
 
     return `
@@ -582,7 +702,9 @@ export class UserStoriesComponent {
           </div>
         </div>
         <h4 class="story-title">${this.escapeHtml(story.title)}</h4>
+        ${this.renderTaskBadges(story)}
         ${story.description ? `<p class="story-description">${this.escapeHtml(story.description)}</p>` : ''}
+        ${this.renderTaskActions(story)}
         <div class="story-footer">
           <span class="story-date">${this.formatDate(story.createdAt)}</span>
           ${story.branchId ? `<span class="story-branch">${this.formatBranchName(story.branchId)}</span>` : ''}
@@ -611,6 +733,41 @@ export class UserStoriesComponent {
    * Bind events for story cards
    */
   bindCardEvents() {
+    // Plan → Board → Implement: card actions
+    this.listContainer.querySelectorAll('.task-action-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const card = e.target.closest('.story-card')
+        if (!card || btn.disabled) return
+        this.intents.requestTaskRun(card.dataset.storyId, { action: btn.dataset.taskAction })
+      })
+    })
+
+    // Plan group actions
+    this.listContainer.querySelectorAll('.plan-group-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const group = e.target.closest('.plan-group')
+        const planId = group?.dataset.planId
+        if (!planId) return
+        const action = btn.dataset.planAction
+        if (action === 'implement-next') {
+          const next = (this.stories || [])
+            .filter(s => s.planId === planId && s.status === 'pending')
+            .sort((a, b) => (a.planStep || 0) - (b.planStep || 0))
+            .find(s => !(s.dependsOn || []).some(id => (this.stories || []).find(d => d.id === id)?.status !== 'completed'))
+          if (next) this.intents.requestTaskRun(next.id, { action: 'implement' })
+          else window.puffinApp?.showToast?.({ type: 'info', title: 'Plan', message: 'No unblocked task to implement.' })
+        } else if (action === 'open-plan') {
+          const plan = (this.plans || []).find(p => p.id === planId)
+          if (plan?.filePath) window.puffinApp?.openPathInEditor?.(plan.filePath)
+        } else {
+          this.intents.requestTaskRun(planId, { action })
+        }
+      })
+    })
+
     // Status change on click
     this.listContainer.querySelectorAll('.story-status').forEach(statusEl => {
       statusEl.addEventListener('click', (e) => {

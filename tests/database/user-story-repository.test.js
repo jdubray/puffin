@@ -697,3 +697,37 @@ describe('BaseRepository', () => {
     })
   })
 })
+
+describe('UserStoryRepository plan/run fields (4.2)', () => {
+  const { UserStoryRepository } = require('../../src/main/database/repositories/user-story-repository')
+  const repo = new UserStoryRepository({ getDatabase: () => null, db: null })
+
+  it('maps plan and run columns in both directions with safe defaults', () => {
+    const story = repo._rowToStory({
+      id: 's1', title: 'T', status: 'pending', acceptance_criteria: '[]', inspection_assertions: '[]', implemented_on: '[]',
+      plan_id: 'p1', plan_step: 2, depends_on: '["s0"]', skill: '/archlens', thread_id: 'prompt-9', run_state: 'needs-fix', run_meta: '{"fixRounds":1}'
+    })
+    assert.strictEqual(story.planId, 'p1')
+    assert.strictEqual(story.planStep, 2)
+    assert.deepStrictEqual(story.dependsOn, ['s0'])
+    assert.strictEqual(story.skill, '/archlens')
+    assert.strictEqual(story.threadId, 'prompt-9')
+    assert.strictEqual(story.runState, 'needs-fix')
+    assert.deepStrictEqual(story.runMeta, { fixRounds: 1 })
+
+    const legacy = repo._rowToStory({ id: 's2', title: 'Old', status: 'pending', acceptance_criteria: '[]', inspection_assertions: '[]', implemented_on: '[]' })
+    assert.strictEqual(legacy.planId, null)
+    assert.strictEqual(legacy.planStep, null)
+    assert.deepStrictEqual(legacy.dependsOn, [])
+    assert.strictEqual(legacy.runState, 'idle')
+    assert.deepStrictEqual(legacy.runMeta, {})
+
+    const row = repo._storyToRow({ id: 's3', title: 'X', planId: 'p1', planStep: 1, dependsOn: ['a'], runMeta: { headBefore: 'abc' } })
+    assert.strictEqual(row.plan_id, 'p1')
+    assert.strictEqual(row.plan_step, 1)
+    assert.strictEqual(row.depends_on, '["a"]')
+    assert.strictEqual(row.run_state, 'idle')
+    assert.strictEqual(row.run_meta, '{"headBefore":"abc"}')
+    assert.strictEqual(repo._storyToRow({ id: 's4', title: 'Y', planStep: '2' }).plan_step, null)
+  })
+})

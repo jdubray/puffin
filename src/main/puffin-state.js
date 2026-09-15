@@ -472,6 +472,13 @@ class PuffinState {
       status: story.status || 'pending',
       implementedOn: story.implementedOn || [],
       sourcePromptId: story.sourcePromptId || null,
+      planId: story.planId || null,
+      planStep: Number.isInteger(story.planStep) ? story.planStep : null,
+      dependsOn: Array.isArray(story.dependsOn) ? story.dependsOn : [],
+      skill: story.skill || null,
+      threadId: story.threadId || null,
+      runState: story.runState || 'idle',
+      runMeta: story.runMeta && typeof story.runMeta === 'object' ? story.runMeta : {},
       createdAt: story.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }

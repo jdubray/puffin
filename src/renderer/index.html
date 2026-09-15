@@ -578,6 +578,12 @@
                   </div>
                   <div id="btw-answer" class="btw-answer" style="display:none"></div>
                 </div>
+                <div id="task-chip" class="task-chip hidden" data-help="The task from the Backlog that the current session is implementing, reviewing or fixing.">
+                  <span class="task-chip-icon">▶</span>
+                  <span class="task-chip-label"></span>
+                  <button id="task-chip-open" class="task-chip-btn" title="Show the task on the Backlog">Board</button>
+                  <button id="task-chip-stop" class="task-chip-btn" title="Stop the plan run after this task">Stop plan</button>
+                </div>
                 <div class="prompt-input-wrapper">
                   <textarea id="prompt-input" placeholder="Enter your prompt..."></textarea>
                   <button id="clear-prompt-btn" class="clear-prompt-btn" title="Clear prompt" data-help="Clear all text from the prompt input field." style="display:none;">
@@ -600,6 +606,16 @@
                     <select id="thread-model" class="prompt-model-select" title="Select model for this Task">
                       <option value="">Loading models…</option>
                     </select>
+                  </div>
+                  <div class="prompt-option-group" id="prompt-mode-group">
+                    <label class="prompt-select-label" for="prompt-mode-build">Mode:</label>
+                    <div class="prompt-mode-switch" id="prompt-mode" role="radiogroup" aria-label="Prompt mode">
+                      <input type="radio" name="prompt-mode" id="prompt-mode-build" value="build" checked>
+                      <label for="prompt-mode-build" data-help="Build: Claude can read and edit files, run commands, and implement.">Build</label>
+                      <input type="radio" name="prompt-mode" id="prompt-mode-plan" value="plan">
+                      <label for="prompt-mode-plan" data-help="Plan: Claude explores read-only and writes a plan for your approval. Nothing is changed. The plan opens for review when the session ends and can be sent to the Backlog as tasks.">Plan</label>
+                    </div>
+                    <button id="plan-import-btn" class="btn outline small prompt-inline-btn" title="Import a plan file" data-help="Import a plan Claude wrote in the terminal (~/.claude/plans) or one saved under docs/plans, review it, and send its steps to the Backlog.">Import plan…</button>
                   </div>
                   <div class="prompt-option-group" id="thinking-budget-group">
                     <label for="thinking-budget" class="prompt-select-label">Thinking Budget:</label>

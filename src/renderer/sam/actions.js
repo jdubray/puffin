@@ -101,6 +101,9 @@ export const submitPrompt = (data) => ({
     branchId: data.branchId,
     parentId: data.parentId || null,
     content: data.content,
+    title: data.title || null,
+    // 'plan' when the session runs read-only in Claude's plan mode; the plan is captured on completion
+    mode: data.mode === 'plan' ? 'plan' : 'build',
     timestamp: Date.now()
   }
 })
@@ -273,6 +276,38 @@ export const deleteUserStory = (storyId) => ({
   payload: {
     id: storyId
   }
+})
+
+// ═══════════════════════════════════════════════════════════════
+// PLANS AND TASK RUNS (Plan → Board → Implement)
+// ═══════════════════════════════════════════════════════════════
+
+// Plans loaded from the database (with task counts)
+export const loadPlans = (plans) => ({
+  type: 'LOAD_PLANS',
+  payload: { plans: Array.isArray(plans) ? plans : [] }
+})
+
+// A card asked to be implemented; app.js picks it up like a rerun request
+export const requestTaskRun = (storyId, options = {}) => ({
+  type: 'REQUEST_TASK_RUN',
+  payload: { storyId, options }
+})
+
+export const clearTaskRunRequest = () => ({ type: 'CLEAR_TASK_RUN_REQUEST', payload: {} })
+
+// The task currently being implemented / reviewed / fixed (one at a time)
+export const setTaskRun = (run) => ({
+  type: 'SET_TASK_RUN',
+  payload: { run: run ? { ...run } : null }
+})
+
+export const clearTaskRun = () => ({ type: 'CLEAR_TASK_RUN', payload: {} })
+
+// Run every remaining task of a plan in order
+export const setPlanRun = (planRun) => ({
+  type: 'SET_PLAN_RUN',
+  payload: { planRun: planRun ? { ...planRun } : null }
 })
 
 // Load user stories from storage

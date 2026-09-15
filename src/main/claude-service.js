@@ -802,7 +802,11 @@ class ClaudeService {
 
     // Permission mode: bypass all prompts when puppeteer loop is active (user opted in),
     // otherwise only auto-accept file edits.
-    const permissionMode = data.mcpConfigPath ? 'bypassPermissions' : 'acceptEdits'
+    // Plan mode (read-only exploration; the plan is written to ~/.claude/plans) is
+    // requested by the renderer; otherwise bypass only when the puppeteer loop opted in.
+    const permissionMode = data.permissionMode === 'plan'
+      ? 'plan'
+      : (data.mcpConfigPath ? 'bypassPermissions' : 'acceptEdits')
     args.push('--permission-mode', permissionMode)
 
     // Add model if specified

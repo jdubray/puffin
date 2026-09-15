@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-09-15
+
+### Added
+
+- **Plan → Board → Implement.** Claude Code's plan mode now feeds the task board, and the
+  board launches the work:
+  - **Plan mode** in the Prompt window (*Build | Plan* switch). The session runs read-only
+    (`--permission-mode plan`); the plan Claude writes to `~/.claude/plans/` is captured when
+    the session ends and opens in a **Plan Review** panel: the plan as written on the left,
+    the steps it becomes on the right — include/exclude, reorder, edit acceptance criteria,
+    dependencies, skill steps. *Approve & send to board* saves the plan under
+    `docs/plans/<date>-<slug>.md` (front matter links it to the planning prompt) and creates
+    one task per step. *Revise* sends feedback back into the same planning thread.
+  - **Import plan…** from `~/.claude/plans` (plans written in the terminal) or `docs/plans`;
+    **As plan** on any reply treats that reply as a plan.
+  - **Implement** on a card: a new thread named after the task, with the step, its *done when*
+    criteria and the plan context; when the session ends a **review pass** runs
+    (`REVIEW: PASS` → Done, `REVIEW: ISSUES` → *Fix*, two rounds max, then *Needs a human*);
+    *Retry*, *Done anyway*, *Open conversation*. A task chip above the prompt editor shows
+    what the current session is doing for the board.
+  - **Plan groups** on the board with step, dependency, skill and run-state badges;
+    **Run plan** executes the remaining tasks in order, one session at a time, stopping at the
+    first task that does not reach Done (*Continue* resumes); **Re-plan** prefills a Plan-mode
+    prompt with the plan and the board state.
+  - A step whose first line is `/skill …` is launched as that skill.
+- Spec: `docs/PLAN_TO_BOARD_SPEC.md`. Migration 014 (`board_plans` table; plan/run columns on
+  tasks).
+
+### Notes
+
+- Headless plan mode has no `ExitPlanMode` approval: the plan is the file the session writes.
+  Subagents are disallowed in plan sessions because a headless session ends with its turn.
+- Plan/run state lives on the task (`plan_id, plan_step, depends_on, skill, thread_id,
+  run_state, run_meta`); there is one implementation path (the card's) and *Run plan* is a
+  queue over it — no separate orchestrator.
+
 ## [4.1.0] - 2026-09-14
 
 ### Added

@@ -4,11 +4,13 @@
 
 # Puffin
 
-**Version 4.1 — Documentation Manager with a living Architecture tab**
+**Version 4.2 — Documentation Manager with a living Architecture tab and plan-driven tasks**
 
 A workbench for teams building with [Claude Code](https://docs.anthropic.com/en/docs/claude-code): keep the documentation, the architecture, and the task board of a project in one place, next to the conversations that produced them.
 
-> **🚀 New in v4.1:** the **Architecture tab**, built on [arch-lens](https://github.com/cognitive-fab/arch-lens) — question-driven architecture diagrams that stay in sync with the code, and an *Ask* box that answers architecture questions from the analysis first, then in prose, then with a new diagram.
+> **🚀 New in v4.2:** **Plan → Board → Implement** — ask Claude for a plan in the Prompt window (read-only plan mode), review it, send its steps to the task board, and implement one card or the whole plan from there, each task reviewed before it reaches Done.
+>
+> **v4.1:** the **Architecture tab**, built on [arch-lens](https://github.com/cognitive-fab/arch-lens) — question-driven architecture diagrams that stay in sync with the code, and an *Ask* box that answers architecture questions from the analysis first, then in prose, then with a new diagram.
 
 ## Why Puffin?
 
@@ -27,6 +29,7 @@ Puffin 3.x tried to be a structured code generator (sprints, implementation plan
 | "Branches" and "threads" (confused with git) | **Workspaces** and **Tasks** |
 | Every prompt through the interactive CLI | Cost-controlled **document editing** through a configurable provider (Anthropic API or the CLI) |
 | — | **Architecture tab** (4.1): analysis-first diagrams, questions, drift detection |
+| Sprints planned by a built-in engine | **Plans** (4.2): Claude's own plan mode → reviewed → tasks on the board → *Implement* / *Run plan* with a review gate |
 
 ## Overview
 
@@ -43,6 +46,13 @@ Puffin is an Electron application that opens a project directory (like VS Code) 
 - **Ask** — an instant slice of the analysis (no model call) with a coverage bar and the words the analysis never mentions; then an optional prose answer written only from that slice; then *Answer with a diagram*, which runs `/archlens` in Claude Code to extend the analysis
 - **Knows when it is stale** — `archlens check`/`enforce` on open: in sync, commits ahead, cited files changed, planned components now built, or citations gone; *Refresh analysis* and *Map this architecture* hand a fixed prompt to Claude Code
 - **Model browser and glossary** — components, relations, boundaries, facts and terms, each with back-references to the questions that use them
+
+### 📋 Plan → Board → Implement (new in 4.2)
+- **Plan mode** in the Prompt window: Claude explores read-only and writes a plan; Puffin opens it in a **Plan Review** panel where you include/exclude, reorder and edit the steps, their *done when* criteria and dependencies
+- **Send to board**: the approved plan is saved under `docs/plans/` and becomes one task per step, grouped on the board; plans written in the terminal can be imported, and any reply can be treated as a plan
+- **Implement** from a card: a new conversation with the task and plan context, then an automatic review pass before the card reaches Done (*Fix* loop when the review finds issues)
+- **Run plan**: every remaining task in order, one session at a time, stop on the first failure; **Re-plan** with the board state
+- Steps may invoke skills (`/archlens …`, `/code-review`, project skills)
 
 ### 📚 Documents
 - **Docs** tab — browse and preview the project's `docs/` tree
@@ -302,7 +312,13 @@ npm start /path/to/your/project
 1. **Project Setup** - Description, coding preferences, and the document-editing provider (Anthropic API key + model, or the Claude CLI)
 2. **Workspace Focus** - Focus instructions for each workspace (Specifications, UI, Backend, …)
 
-### Step 4: Map the Architecture (optional, recommended)
+### Step 4: Plan and implement from the board
+
+1. In the Prompt window switch to **Plan**, describe what you want, press **Plan** — Claude explores read-only and writes a plan
+2. Review the plan (steps, criteria, dependencies) and **Approve & send to board**
+3. On the **Backlog**, press **Implement** on a card, or **Run plan** on the plan group; each task gets its own conversation and a review pass before it is Done
+
+### Step 5: Map the Architecture (optional, recommended)
 
 1. Install arch-lens in Claude Code: `/plugin marketplace add cognitive-fab/arch-lens` then `/plugin install archlens@arch-lens`, and the renderer with `npx skills add tt-a1i/archify -g`
 2. Open the **Architecture** tab and click **Map this architecture** — Claude Code reads the project and writes `docs/architecture/<name>.analysis.json` plus one diagram per question

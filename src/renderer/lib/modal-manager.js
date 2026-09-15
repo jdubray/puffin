@@ -5,10 +5,19 @@
  * Extracted from app.js for better separation of concerns.
  */
 
+import { PlanReviewModal } from './plan-review-modal.js'
+
 export class ModalManager {
-  constructor(intents, showToast) {
+  constructor(intents, showToast, options = {}) {
     this.intents = intents
     this.showToast = showToast
+    // Plan review / import panels (Plan → Board); actions are supplied by the app
+    this.planReview = new PlanReviewModal({
+      intents,
+      showToast,
+      renderMarkdown: (text) => this.renderMarkdown(text),
+      actions: options.planActions || {}
+    })
     this._currentModalRender = null
     this._cqCountdownInterval = null // Auto-answer countdown for claude-question modal
     // Next-action modal cache — last generated recommendation (cleared on Refresh click)
@@ -102,6 +111,12 @@ export class ModalManager {
         break
       case 'next-action':
         this.renderNextAction(modalTitle, modalContent, modalActions, modal.data, state)
+        break
+      case 'plan-review':
+        this.planReview.render(modalTitle, modalContent, modalActions, modal.data, state)
+        break
+      case 'plan-import':
+        this.planReview.renderImport(modalTitle, modalContent, modalActions, modal.data)
         break
       default:
         console.warn('Unknown modal type:', modal.type)

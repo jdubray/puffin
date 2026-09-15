@@ -10,7 +10,7 @@
 const { connection, DatabaseConnection } = require('./connection')
 const { MigrationRunner } = require('./migrations/runner')
 const { JsonMigrator } = require('./json-migrator')
-const { BaseRepository, UserStoryRepository, StoryStatus } = require('./repositories')
+const { BaseRepository, UserStoryRepository, StoryStatus, PlanRepository, PlanStatus } = require('./repositories')
 
 /**
  * Database manager - coordinates connection, migrations, and initialization
@@ -24,6 +24,7 @@ class Database {
 
     // Repositories (initialized after connection)
     this.userStories = null
+    this.plans = null
   }
 
   /**
@@ -70,6 +71,7 @@ class Database {
 
       // Initialize repositories
       this.userStories = new UserStoryRepository(this.connection)
+      this.plans = new PlanRepository(this.connection)
 
       this.initialized = true
       console.log('[DATABASE] Initialization complete')
@@ -91,6 +93,7 @@ class Database {
     this.migrationRunner = null
     this.jsonMigrator = null
     this.userStories = null
+    this.plans = null
   }
 
   /**

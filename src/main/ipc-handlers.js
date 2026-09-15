@@ -17,6 +17,7 @@ const { DeveloperProfileManager } = require('./developer-profile')
 const { GitService } = require('./git-service')
 const { scaffoldCommands } = require('./command-scaffolder')
 const documentEditService = require('./document-edit-service')
+const { PlanService } = require('./plan-service')
 const { getTempImageService } = require('./services')
 const { initializeMetricsService, getMetricsService } = require('./metrics-service')
 const websiteServer = require('./website-server')
@@ -28,6 +29,7 @@ let claudeService = null
 let vibeService = null
 let developerProfile = null
 let gitService = null
+let planService = null
 let tempImageService = null
 let projectPath = null
 // Lazy reference to pluginManager — set by setupPluginManagerHandlers once loaded
@@ -2848,66 +2850,47 @@ async function updateSnipHook(dir, enabled) {
  * @param {IpcMain} ipcMain
  */
 function setupPlanHandlers(ipcMain) {
-  /**
-   * Find the most recently modified .md file in ~/.claude/plan/ that was
-   * touched within the last 10 minutes.  Returns null when nothing is found.
-   */
-  ipcMain.handle('plan:readLatest', async () => {
-    try {
-      const planDir = path.join(os.homedir(), '.claude', 'plan')
-      if (!fs.existsSync(planDir)) return null
-
-      const entries = fs.readdirSync(planDir)
-        .filter(f => f.endsWith('.md'))
-        .map(f => {
-          const full = path.join(planDir, f)
-          const stat = fs.statSync(full)
-          return { filename: f, filePath: full, mtimeMs: stat.mtimeMs }
-        })
-        .filter(e => Date.now() - e.mtimeMs < 10 * 60 * 1000) // within 10 min
-        .sort((a, b) => b.mtimeMs - a.mtimeMs)
-
-      if (entries.length === 0) return null
-
-      const best = entries[0]
-      const content = fs.readFileSync(best.filePath, 'utf8')
-      console.log(`[PLAN] Found plan file: ${best.filename} (${content.length} chars)`)
-      return { filename: best.filename, filePath: best.filePath, content }
-    } catch (err) {
-      console.error('[PLAN] readLatest error:', err.message)
-      return null
+  const service = () => {
+    if (!planService) {
+      planService = new PlanService({
+        projectPath,
+        getDatabase: () => puffinState?.database || null
+      })
     }
-  })
+    planService.setProjectPath(projectPath)
+    return planService
+  }
 
-  /**
-   * Write plan content to docs/plans/<filename> inside the current project.
-   * Creates the directory if it doesn't exist.
-   */
-  ipcMain.handle('plan:saveToDocs', async (event, { filename, content }) => {
+  const wrap = (fn) => async (event, args = {}) => {
     try {
-      if (!projectPath) return { success: false, error: 'No project path set' }
-      if (!filename || typeof filename !== 'string') {
-        return { success: false, error: 'Invalid filename' }
-      }
-      // Reject any path separators or traversal sequences; only allow a bare filename.
-      if (/[\\/]/.test(filename) || filename.includes('..') || path.isAbsolute(filename)) {
-        return { success: false, error: 'Filename must not contain path separators' }
-      }
-      const docsDir = path.join(projectPath, 'docs', 'plans')
-      if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true })
-      const dest = path.resolve(docsDir, filename)
-      const resolvedDocsDir = path.resolve(docsDir)
-      if (dest !== resolvedDocsDir && !dest.startsWith(resolvedDocsDir + path.sep)) {
-        return { success: false, error: 'Resolved path escapes plans directory' }
-      }
-      fs.writeFileSync(dest, content, 'utf8')
-      console.log(`[PLAN] Saved plan to ${dest}`)
-      return { success: true, filePath: dest }
+      const data = await fn(args || {})
+      return { success: true, data }
     } catch (err) {
-      console.error('[PLAN] saveToDocs error:', err.message)
+      console.error('[PLAN] handler error:', err.message)
       return { success: false, error: err.message }
     }
-  })
+  }
+
+  /** Plan files Puffin can import: ~/.claude/plans (and legacy ~/.claude/plan), docs/plans */
+  ipcMain.handle('plan:listFiles', wrap(() => service().listPlanFiles()))
+
+  /** Read one plan file (only from the allowed directories) */
+  ipcMain.handle('plan:readFile', wrap(({ path: filePath }) => service().readPlanFile(filePath)))
+
+  /** Save an approved plan under docs/plans and create its tasks */
+  ipcMain.handle('plan:create', wrap((args) => service().createPlan(args)))
+
+  /** Plans with task counts */
+  ipcMain.handle('plan:list', wrap(({ branchId } = {}) => service().listPlans({ branchId })))
+
+  /** Delete a plan (pending tasks removed, others unlinked, markdown kept) */
+  ipcMain.handle('plan:delete', wrap(({ planId }) => service().deletePlan(planId)))
+
+  /** Skills a plan step may invoke */
+  ipcMain.handle('plan:listSkills', wrap(() => service().listSkills()))
+
+  /** Current git HEAD (null outside a repository) */
+  ipcMain.handle('plan:gitHead', wrap(() => service().gitHead()))
 }
 
 /**

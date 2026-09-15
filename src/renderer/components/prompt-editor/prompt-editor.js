@@ -4,6 +4,8 @@
  * Handles prompt input and submission to Claude.
  */
 
+import { planningSuffix } from '../../lib/task-prompts.js'
+
 // Maximum number of image attachments allowed per prompt
 const MAX_ATTACHMENTS = 5
 
@@ -54,6 +56,11 @@ export class PromptEditorComponent {
     this.reviewThreadBtn = null
     this._reviewState = 'idle'
     this._pendingReviewAction = null // 'review' | 'fix'
+    // Prompt mode: 'build' (default) or 'plan' (Claude's read-only plan mode; the plan is
+    // captured when the session ends). Skills are listed in the planning suffix.
+    this.promptMode = 'build'
+    this._skills = []
+    this._externalTitle = null
   }
 
   /**
@@ -83,6 +90,10 @@ export class PromptEditorComponent {
 
     // Quick Code Review button
     this.reviewThreadBtn = document.getElementById('review-thread-btn')
+
+    // Build | Plan mode switch and plan import
+    this.modeGroup = document.getElementById('prompt-mode')
+    this.planImportBtn = document.getElementById('plan-import-btn')
 
     // Clear prompt button (X)
     this.clearPromptBtn = document.getElementById('clear-prompt-btn')
@@ -282,6 +293,16 @@ export class PromptEditorComponent {
       this.btwOpenBtn.addEventListener('click', () => {
         window.puffinApp?._openBtwPanel?.()
       })
+    }
+
+    // Build | Plan mode switch
+    if (this.modeGroup) {
+      this.modeGroup.addEventListener('change', (e) => {
+        if (e.target?.name === 'prompt-mode') this.setPromptMode(e.target.value)
+      })
+    }
+    if (this.planImportBtn) {
+      this.planImportBtn.addEventListener('click', () => window.puffinApp?.openPlanImport?.())
     }
 
     // Quick Code Review button
@@ -824,6 +845,7 @@ export class PromptEditorComponent {
     // Show loading state
     const btnText = this.submitBtn.querySelector('.btn-text')
     const btnLoading = this.submitBtn.querySelector('.btn-loading')
+    btnText.textContent = this.promptMode === 'plan' ? 'Plan' : 'Send'
     if (isProcessing) {
       btnText.classList.add('hidden')
       btnLoading.classList.remove('hidden')
@@ -1131,11 +1153,13 @@ export class PromptEditorComponent {
    * @param {boolean} [options.newThread=false] - Start a new thread instead of continuing
    * @returns {Promise<boolean>} true when a submission was attempted
    */
-  async submitExternal(text, { newThread = false } = {}) {
+  async submitExternal(text, { newThread = false, title = null, mode = null } = {}) {
     const content = String(text || '').trim()
     if (!content || !this.textarea) return false
     const isRunning = await window.puffin?.claude?.isRunning?.()
     if (isRunning) return false
+    if (mode) this.setPromptMode(mode)
+    this._externalTitle = title || null
     this.textarea.value = content
     this.textarea.dispatchEvent(new Event('input'))
     if (newThread) {
@@ -1143,7 +1167,36 @@ export class PromptEditorComponent {
     } else {
       await this.submit()
     }
+    this._externalTitle = null
     return true
+  }
+
+  /**
+   * Switch between Build and Plan mode (updates the radio control and the submit label).
+   * @param {'build'|'plan'} mode
+   */
+  setPromptMode(mode) {
+    this.promptMode = mode === 'plan' ? 'plan' : 'build'
+    const radio = document.getElementById(this.promptMode === 'plan' ? 'prompt-mode-plan' : 'prompt-mode-build')
+    if (radio && !radio.checked) radio.checked = true
+    const btnText = this.submitBtn?.querySelector('.btn-text')
+    if (btnText) btnText.textContent = this.promptMode === 'plan' ? 'Plan' : 'Send'
+    if (this.textarea) {
+      this.textarea.placeholder = this.promptMode === 'plan'
+        ? 'Describe what you want planned. Claude explores read-only and proposes a plan for your approval…'
+        : (this._defaultPlaceholder || this.textarea.placeholder)
+      if (!this._defaultPlaceholder) this._defaultPlaceholder = this.textarea.placeholder
+    }
+    if (this.promptMode === 'plan' && this._skills.length === 0) {
+      window.puffin?.plan?.listSkills?.().then(list => { this._skills = Array.isArray(list) ? list : [] }).catch(() => {})
+    }
+  }
+
+  /** @returns {string|null} A one-shot thread title handed in by submitExternal */
+  _takeExternalTitle() {
+    const t = this._externalTitle
+    this._externalTitle = null
+    return t
   }
 
   async submit() {
@@ -1230,7 +1283,9 @@ export class PromptEditorComponent {
     const data = {
       branchId: state.history.activeBranch,
       parentId: parentId,
-      content: content
+      content: content,
+      mode: this.promptMode,
+      title: this._takeExternalTitle()
     }
 
     // Submit to SAM
@@ -1279,6 +1334,7 @@ export class PromptEditorComponent {
 
       // Append design documents to prompt if selected
       let finalPrompt = docsContent ? content + docsContent : content
+      if (this.promptMode === 'plan') finalPrompt += planningSuffix(this._skills)
 
       // Prepend image attachments to prompt if any
       const imageAttachments = this.formatImagesForPrompt()
@@ -1333,6 +1389,11 @@ export class PromptEditorComponent {
           handoffContext: handoffContext,
           model: selectedModel,
           maxTurns: 100, // Max turns per request
+          // Plan mode: read-only exploration; the plan lands in ~/.claude/plans.
+          // Subagents are disallowed: a headless session ends when the turn ends, so a
+          // background Explore agent would never report back.
+          permissionMode: this.promptMode === 'plan' ? 'plan' : undefined,
+          disallowedTools: this.promptMode === 'plan' ? ['Agent', 'Task'] : undefined,
           // Puppeteer Visual Feedback Loop (Website Edition)
           puppeteerLoop: !!state.puppeteerLoop,
           puppeteerPort: state.config?.websitePort || 5000
@@ -1452,7 +1513,9 @@ export class PromptEditorComponent {
     const data = {
       branchId: state.history.activeBranch,
       parentId: null, // Always null for new thread
-      content: content
+      content: content,
+      mode: this.promptMode,
+      title: this._takeExternalTitle()
     }
 
     // Submit to SAM
@@ -1475,6 +1538,7 @@ export class PromptEditorComponent {
       const thinkingBudget = this.thinkingBudgetSelect?.value || 'none'
       let selectedModel = this.modelSelect?.value || this.defaultModel || 'sonnet'
       let finalPrompt = content
+      if (this.promptMode === 'plan') finalPrompt += planningSuffix(this._skills)
 
       // Prepend image attachments to prompt if any
       const imageAttachmentsNT = this.formatImagesForPrompt()
@@ -1516,7 +1580,9 @@ export class PromptEditorComponent {
           guiDescription: guiDescription,
           threadFilesModified: threadFilesModified,
           model: selectedModel,
-          maxTurns: 100 // Max turns per request
+          maxTurns: 100, // Max turns per request
+          permissionMode: this.promptMode === 'plan' ? 'plan' : undefined,
+          disallowedTools: this.promptMode === 'plan' ? ['Agent', 'Task'] : undefined
         })
       }
 
@@ -2559,7 +2625,7 @@ After fixing all issues, briefly confirm what was changed.`
    * Replicates the session-resume + parentId logic from submit().
    * @param {string} promptText - The pre-formed prompt to send
    */
-  async _submitBuiltInPrompt(promptText) {
+  async _submitBuiltInPrompt(promptText, { maxTurns = 20 } = {}) {
     const state = window.puffinApp?.state
     if (!state) return
 
@@ -2616,7 +2682,7 @@ After fixing all issues, briefly confirm what was changed.`
         userStories,
         threadFilesModified,
         model: selectedModel,
-        maxTurns: 20
+        maxTurns
       })
     }
   }

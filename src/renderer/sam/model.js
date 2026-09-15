@@ -87,6 +87,12 @@ export const initialModel = {
   // User stories state (from .puffin/user-stories.json)
   userStories: [],
 
+  // Plans (docs/plans + plans table) and the implementation run in flight
+  plans: [],
+  taskRunRequest: null, // { storyId, options } — a card asked to be implemented
+  taskRun: null,        // { storyId, phase: 'implement'|'review'|'fix', fixRounds, headBefore, startedAt }
+  planRun: null,        // { planId, queue: [storyId], current, stopped, reason }
+
   // Stuck detection state - tracks iteration outputs to detect loops
   stuckDetection: {
     isStuck: false,
@@ -364,6 +370,7 @@ export const submitPromptAcceptor = model => proposal => {
       parentId: proposal.payload.parentId,
       content: proposal.payload.content,
       title: proposal.payload.title || null,
+      mode: proposal.payload.mode === 'plan' ? 'plan' : undefined,
       timestamp: proposal.payload.timestamp,
       response: null,
       children: []
@@ -949,6 +956,44 @@ export const deleteUserStoryAcceptor = model => proposal => {
     console.log('[DELETE-DEBUG] deleteUserStoryAcceptor called with storyId:', proposal.payload.id, 'current story count:', model.userStories.length)
     model.userStories = model.userStories.filter(s => s.id !== proposal.payload.id)
     console.log('[DELETE-DEBUG] After filter, story count:', model.userStories.length)
+  }
+}
+
+export const loadPlansAcceptor = model => proposal => {
+  if (proposal?.type === 'LOAD_PLANS') {
+    model.plans = proposal.payload.plans || []
+  }
+}
+
+export const requestTaskRunAcceptor = model => proposal => {
+  if (proposal?.type === 'REQUEST_TASK_RUN') {
+    const { storyId, options } = proposal.payload
+    if (!storyId) return
+    model.taskRunRequest = { storyId, options: options || {}, requestedAt: Date.now() }
+  }
+}
+
+export const clearTaskRunRequestAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_TASK_RUN_REQUEST') {
+    model.taskRunRequest = null
+  }
+}
+
+export const setTaskRunAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_TASK_RUN') {
+    model.taskRun = proposal.payload.run || null
+  }
+}
+
+export const clearTaskRunAcceptor = model => proposal => {
+  if (proposal?.type === 'CLEAR_TASK_RUN') {
+    model.taskRun = null
+  }
+}
+
+export const setPlanRunAcceptor = model => proposal => {
+  if (proposal?.type === 'SET_PLAN_RUN') {
+    model.planRun = proposal.payload.planRun || null
   }
 }
 
@@ -1851,6 +1896,14 @@ export const acceptors = [
   updateUserStoryAcceptor,
   deleteUserStoryAcceptor,
   loadUserStoriesAcceptor,
+
+  // Plans and task runs
+  loadPlansAcceptor,
+  requestTaskRunAcceptor,
+  clearTaskRunRequestAcceptor,
+  setTaskRunAcceptor,
+  clearTaskRunAcceptor,
+  setPlanRunAcceptor,
 
   // Story Generation Tracking
   loadStoryGenerationsAcceptor,

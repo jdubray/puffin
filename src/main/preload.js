@@ -8,6 +8,17 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 /**
+ * Unwrap a { success, data } / { success: false, error } plan:* reply into data or a thrown Error.
+ * @param {Promise<Object>} promise
+ * @returns {Promise<*>}
+ */
+async function unwrapPlan(promise) {
+  const result = await promise
+  if (result && result.success === false) throw new Error(result.error || 'Plan operation failed')
+  return result?.data ?? result
+}
+
+/**
  * Puffin API exposed to renderer
  */
 contextBridge.exposeInMainWorld('puffin', {
@@ -786,8 +797,20 @@ contextBridge.exposeInMainWorld('puffin', {
    * Reads plans written by Claude Code to ~/.claude/plan/ and saves copies to docs/plans/
    */
   plan: {
-    readLatest: () => ipcRenderer.invoke('plan:readLatest'),
-    saveToDocs: (args) => ipcRenderer.invoke('plan:saveToDocs', args)
+    /** Plan files that can be imported: { home: [...], project: [...] } */
+    listFiles: () => unwrapPlan(ipcRenderer.invoke('plan:listFiles')),
+    /** Read a plan file from ~/.claude/plans or docs/plans */
+    readFile: (filePath) => unwrapPlan(ipcRenderer.invoke('plan:readFile', { path: filePath })),
+    /** Save an approved plan under docs/plans and create its tasks */
+    create: (args) => unwrapPlan(ipcRenderer.invoke('plan:create', args)),
+    /** Plans with task counts */
+    list: (args) => unwrapPlan(ipcRenderer.invoke('plan:list', args || {})),
+    /** Delete a plan (pending tasks removed, others unlinked) */
+    delete: (planId) => unwrapPlan(ipcRenderer.invoke('plan:delete', { planId })),
+    /** Skills a plan step may invoke */
+    listSkills: () => unwrapPlan(ipcRenderer.invoke('plan:listSkills')),
+    /** Current git HEAD or null */
+    gitHead: () => unwrapPlan(ipcRenderer.invoke('plan:gitHead'))
   },
 
   /**

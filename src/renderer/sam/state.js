@@ -35,6 +35,12 @@ export function computeState(model) {
     // User Stories state
     userStories: model.userStories || [],
 
+    // Plans and the implementation run in flight
+    plans: model.plans || [],
+    taskRunRequest: model.taskRunRequest || null,
+    taskRun: model.taskRun || null,
+    planRun: model.planRun || null,
+
     // Story Generation Tracking state
     storyGenerations: model.storyGenerations || {
       generations: [],

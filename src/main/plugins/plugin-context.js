@@ -270,6 +270,27 @@ class PluginContext {
   }
 
   /**
+   * Push an event to the renderer process.
+   *
+   * Delivered on the shared `plugin:event` channel as
+   * `{ plugin, event, data }`; the renderer subscribes with
+   * `window.puffin.plugins.onEvent(pluginName, callback)`.
+   * Requires the `getMainWindow` service; silently no-ops otherwise.
+   *
+   * @param {string} eventName - Plugin-scoped event name
+   * @param {any} [data] - Serializable payload
+   * @returns {boolean} true when the event was sent
+   */
+  sendToRenderer(eventName, data) {
+    const win = typeof this.services.getMainWindow === 'function' ? this.services.getMainWindow() : null
+    if (!win || win.isDestroyed?.() || !win.webContents || win.webContents.isDestroyed?.()) {
+      return false
+    }
+    win.webContents.send('plugin:event', { plugin: this.pluginName, event: eventName, data })
+    return true
+  }
+
+  /**
    * Emit an event (for plugin-to-plugin communication)
    * @param {string} eventName - Event name
    * @param {any} data - Event data

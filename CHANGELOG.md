@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-09-14
+
+### Added
+
+- **Architecture tab** (`plugins/architecture-plugin`) — a workbench around the
+  [arch-lens](https://github.com/cognitive-fab/arch-lens) Claude Code plugin. Puffin
+  finds the project's `<name>.analysis.json`, lists one question per diagram, shows
+  each archify page in a sandboxed iframe (source links open in the Editor tab), and
+  renders the prose behind every question: answer, context, long read, components,
+  facts, omissions and the glossary terms it uses. A model browser covers components,
+  relations, boundaries, facts and the glossary with back-references.
+- **Ask** — a question is answered in up to three stages: an instant slice from
+  `archlens ask` (no model call) with a coverage bar and the words the analysis never
+  mentions; an optional prose answer through the configured prompt provider, written
+  only from the slice and cited; and *Answer with a diagram*, which sends
+  `/archlens <question>` through the Prompt tab so the analysis is extended and rendered.
+  Prose answers can be saved to `docs/architecture/questions.md`.
+- **Freshness** — `archlens check` + `enforce` run when the tab opens; a badge says
+  *in sync*, what changed since the pinned revision, which planned components are now
+  built, or which citations are gone. *Refresh analysis* and *Map this architecture*
+  hand a fixed prompt to Claude Code; *Render all* / *Validate* run the CLI directly
+  (renders default to `--no-check`).
+- Plugin API: `PluginContext.sendToRenderer(event, data)` and
+  `window.puffin.plugins.onEvent(pluginName, cb)` give bundled plugins a main→renderer
+  push channel; `getMainWindow` and `getConfig` services; `PromptEditor.submitExternal(text)`
+  lets a plugin submit a prompt through the normal history-recording path.
+- Spec: `docs/ARCHITECTURE_TAB_SPEC.md`.
+
+### Notes
+
+- archlens 0.5+ is required for ask/check/enforce; older published builds are detected
+  and the tab says so. The runner prefers the newest install it can find (Claude plugin
+  cache, `~/.claude/skills`, or a sibling `../archlens` checkout) and runs it under
+  Electron's bundled Node.
+
 ## [4.0.0] - 2026-06-06
 
 Puffin pivots from an AI code generator to a **documentation manager**. Anthropic's

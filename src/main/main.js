@@ -473,7 +473,11 @@ async function initializeProject(projectPath) {
         history: historyService,
         stories: storyService,
         claudeService: getClaudeService(),
-        vibeService: getVibeService()
+        vibeService: getVibeService(),
+        // Lets a plugin push events to the renderer (see PluginContext.sendToRenderer)
+        getMainWindow: () => mainWindow,
+        // Current project config (promptProvider, anthropic.*, ...) for plugins that route prompts
+        getConfig: () => getPuffinState()?.getState?.()?.config || {}
       },
       projectPath
     })

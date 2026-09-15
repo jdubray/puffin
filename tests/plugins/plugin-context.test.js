@@ -51,6 +51,24 @@ describe('PluginContext', () => {
     })
   })
 
+  describe('sendToRenderer', () => {
+    it('sends a plugin-scoped event on the shared plugin:event channel', () => {
+      const send = jest.fn()
+      const win = { isDestroyed: () => false, webContents: { isDestroyed: () => false, send } }
+      const ctx = new PluginContext('evt-plugin', '/p', { registry, ipcMain: mockIpcMain, services: { getMainWindow: () => win } })
+      expect(ctx.sendToRenderer('changed', { kind: 'analysis' })).toBe(true)
+      expect(send).toHaveBeenCalledWith('plugin:event', { plugin: 'evt-plugin', event: 'changed', data: { kind: 'analysis' } })
+    })
+
+    it('is a no-op without a window service or when the window is gone', () => {
+      expect(context.sendToRenderer('x', {})).toBe(false)
+      const gone = { isDestroyed: () => true, webContents: { send: jest.fn() } }
+      const ctx = new PluginContext('evt-plugin', '/p', { registry, ipcMain: mockIpcMain, services: { getMainWindow: () => gone } })
+      expect(ctx.sendToRenderer('x', {})).toBe(false)
+      expect(gone.webContents.send).not.toHaveBeenCalled()
+    })
+  })
+
   describe('registerAction', () => {
     it('should register an action with qualified name', () => {
       const handler = jest.fn()

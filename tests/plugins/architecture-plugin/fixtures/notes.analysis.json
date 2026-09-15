@@ -1,0 +1,33 @@
+{
+  "schema_version": "1",
+  "system": {
+    "name": "Notes",
+    "purpose": "A tiny notes service used as a test fixture.",
+    "repository": { "url": "https://github.com/example/notes", "revision": "abc1234abc1234abc1234abc1234abc1234abc12" }
+  },
+  "boundaries": [
+    { "id": "host", "kind": "deployment", "label": "Notes host", "claim": "Everything inside runs in one process.", "contains": ["api", "store"] }
+  ],
+  "components": [
+    { "id": "client", "name": "Browser client", "kind": "external-service", "detail": "web app", "responsibility": "Lets a person write and read notes.", "status": "built", "evidence": [{ "path": "web/app.js" }] },
+    { "id": "api", "name": "Notes API", "kind": "service", "detail": "HTTP", "responsibility": "Validates note requests and reads or writes the store.", "status": "built", "evidence": [{ "path": "src/api.js", "line": 10 }] },
+    { "id": "store", "name": "Note store", "kind": "datastore", "detail": "SQLite", "responsibility": "Keeps every note durably on disk.", "status": "planned", "evidence": [{ "path": "src/store.js" }] }
+  ],
+  "relations": [
+    { "id": "r1", "from": "client", "to": "api", "mechanism": "http", "summary": "JSON over HTTP", "what_crosses": "Note text and ids.", "crosses": "host" },
+    { "id": "r2", "from": "api", "to": "store", "mechanism": "call", "summary": "SQL", "what_crosses": "Rows for notes." }
+  ],
+  "facts": [
+    { "id": "f1", "kind": "constraint", "claim": "The client never reaches the store directly.", "because": "All writes are validated by the API.", "rule": { "kind": "no-relation", "from": "client", "to": "store" } },
+    { "id": "f2", "kind": "doctrine", "claim": "Notes are plain text.", "because": "Simplicity." }
+  ],
+  "glossary": [
+    { "term": "note", "definition": "One piece of plain text a person saved." },
+    { "term": "store", "also": ["note store"], "definition": "The SQLite database holding notes." },
+    { "term": "unused term", "definition": "Appears in no question." }
+  ],
+  "questions": [
+    { "id": "q_save", "title": "How a note is saved", "ask": "What happens when a person saves a note?", "answer": "The client posts to the API, which validates and writes the store.", "context": "Saving is the only write path.", "narrative": "Start at the client. It sends JSON to the Notes API; the API writes a row into the store.", "involves": ["client", "api", "store"], "highlight": ["api"], "facts": ["f1"], "omits": "Authentication." },
+    { "id": "q_read", "title": "How a note is read", "ask": "How does a note come back?", "answer": "The API reads it from the store.", "involves": ["api", "store"], "shape": "sequence", "steps": [{ "from": "api", "to": "store", "says": "select" }] }
+  ]
+}

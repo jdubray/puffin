@@ -715,6 +715,21 @@ contextBridge.exposeInMainWorld('puffin', {
       return () => ipcRenderer.removeListener('plugin:deactivated', handler)
     },
 
+    /**
+     * Subscribe to events a plugin pushes from the main process
+     * (PluginContext.sendToRenderer). Events from other plugins are filtered out.
+     * @param {string} pluginName - Plugin whose events to receive
+     * @param {Function} callback - (eventName, data) => void
+     * @returns {Function} Unsubscribe
+     */
+    onEvent: (pluginName, callback) => {
+      const handler = (event, payload) => {
+        if (payload && payload.plugin === pluginName) callback(payload.event, payload.data)
+      }
+      ipcRenderer.on('plugin:event', handler)
+      return () => ipcRenderer.removeListener('plugin:event', handler)
+    },
+
     // === Named Plugin APIs ===
     // Convenience wrappers for common plugins
 

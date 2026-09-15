@@ -555,6 +555,44 @@ Cross-cutting technical facts about the project:
 
 Example:
 ```markdown
+## Architecture Tab (v4.1)
+
+The **Architecture** tab shows a project's living architecture, compiled from an
+[arch-lens](https://github.com/cognitive-fab/arch-lens) analysis
+(`docs/architecture/<name>.analysis.json`). One diagram exists per *question*; the
+tab is organised by question, not by file.
+
+**Prerequisites.** Install archlens in Claude Code
+(`/plugin marketplace add cognitive-fab/arch-lens`, `/plugin install archlens@arch-lens`)
+and the archify renderer (`npx skills add tt-a1i/archify -g`). archlens 0.5 or newer is
+needed for asking and checking; the tab tells you if it found an older build, and the
+path can be set in the tab's settings (⚙).
+
+**Reading.** Pick a question on the left to see its diagram (archify's own guided views,
+lenses and source links all work; a source link opens the file in the Editor tab). The
+right pane carries the prose: answer, context, the long read, the components involved,
+facts, what was deliberately left out, and the glossary terms used. The strip above the
+diagram lists what the renderer had to leave out. The **Model** sections browse every
+component, relation, boundary, fact and term with back-references to questions.
+
+**Asking.** Type a question in the header (or press `/`). The first answer is instant and
+calls no model: the slice of the analysis the question touches, a coverage bar, and the
+words the analysis never mentions. From there you can ask for a **prose answer** (one
+model call through your configured prompt provider, written only from the slice and
+cited) or **answer with a diagram**, which runs `/archlens <question>` in Claude Code and
+adds the new question and diagram to the project. Prose answers can be saved to
+`docs/architecture/questions.md`.
+
+**Keeping it true.** The badge next to the system name comes from `archlens check`:
+*in sync*, commits ahead of the pinned revision, cited files that changed, planned
+components now built, or citations gone. **Refresh analysis** asks Claude Code to bring
+the analysis up to date and re-render; **Render all** and **Validate** run the CLI
+directly. A project with no analysis yet gets **Map this architecture** (Claude Code
+reads the code and writes the first analysis) or **Seed** from `package.json` /
+`docker-compose.yml`.
+
+Keyboard: `↑`/`↓` move between questions, `/` focuses the ask box, `Esc` closes the answer view.
+
 ## Facts
 - Electron app using vanilla JS (ES6+ modules), no framework
 - State management via SAM pattern (sam-pattern + sam-fsm npm packages)

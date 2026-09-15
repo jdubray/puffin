@@ -1122,6 +1122,30 @@ export class PromptEditorComponent {
   /**
    * Submit the prompt
    */
+  /**
+   * Submit a prompt on behalf of another component (e.g. a plugin view).
+   * Goes through the normal submit path so the prompt is recorded in history,
+   * the session is resumed, and the running-process guard applies.
+   * @param {string} text - Prompt text
+   * @param {Object} [options]
+   * @param {boolean} [options.newThread=false] - Start a new thread instead of continuing
+   * @returns {Promise<boolean>} true when a submission was attempted
+   */
+  async submitExternal(text, { newThread = false } = {}) {
+    const content = String(text || '').trim()
+    if (!content || !this.textarea) return false
+    const isRunning = await window.puffin?.claude?.isRunning?.()
+    if (isRunning) return false
+    this.textarea.value = content
+    this.textarea.dispatchEvent(new Event('input'))
+    if (newThread) {
+      await this.submitAsNewThread()
+    } else {
+      await this.submit()
+    }
+    return true
+  }
+
   async submit() {
     const content = this.textarea.value.trim()
 

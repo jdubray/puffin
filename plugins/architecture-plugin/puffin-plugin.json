@@ -1,0 +1,77 @@
+{
+  "name": "architecture-plugin",
+  "version": "1.0.0",
+  "displayName": "Architecture",
+  "description": "Question-driven architecture diagrams and answers, compiled from an arch-lens analysis",
+  "main": "index.js",
+  "author": "Puffin",
+  "license": "MIT",
+  "keywords": ["architecture", "diagrams", "archlens", "archify", "documentation"],
+  "extensionPoints": {
+    "actions": ["status", "ask"],
+    "ipcHandlers": [
+      "architecture:status",
+      "architecture:doctor",
+      "architecture:load",
+      "architecture:getQuestion",
+      "architecture:getRecord",
+      "architecture:getDiagram",
+      "architecture:ask",
+      "architecture:answer",
+      "architecture:render",
+      "architecture:check",
+      "architecture:validate",
+      "architecture:seed",
+      "architecture:openEvidence",
+      "architecture:openExternal",
+      "architecture:getAskHistory",
+      "architecture:saveNote",
+      "architecture:cancel",
+      "architecture:getSettings",
+      "architecture:setSettings"
+    ],
+    "components": ["architecture-view"]
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "architecture-view",
+        "name": "Architecture",
+        "location": "nav",
+        "icon": "🏛",
+        "order": 56,
+        "component": "ArchitectureView"
+      }
+    ],
+    "commands": [
+      { "id": "architecture.ask", "title": "Ask an architecture question", "category": "Architecture" },
+      { "id": "architecture.render", "title": "Render architecture diagrams", "category": "Architecture" },
+      { "id": "architecture.check", "title": "Check architecture drift", "category": "Architecture" }
+    ],
+    "configuration": {
+      "title": "Architecture",
+      "properties": {
+        "architecture.archlensPath": { "type": "string", "default": "", "description": "Path to archlens.mjs (auto-detected when empty)" },
+        "architecture.analysisFile": { "type": "string", "default": "", "description": "Project-relative path to the *.analysis.json (auto-detected when empty)" },
+        "architecture.diagramsDir": { "type": "string", "default": "docs/architecture", "description": "Where rendered diagrams live" },
+        "architecture.coverageFloor": { "type": "number", "default": 0.4, "description": "Below this ask coverage, a prose answer is not offered" },
+        "architecture.checkOnOpen": { "type": "boolean", "default": true, "description": "Run archlens check when the tab opens" },
+        "architecture.renderBrowserCheck": { "type": "boolean", "default": false, "description": "Run archify's headless-browser check on render (slow)" },
+        "architecture.followTheme": { "type": "boolean", "default": true, "description": "Diagram theme follows Puffin's theme" }
+      }
+    }
+  },
+  "activationEvents": ["onStartup"],
+  "renderer": {
+    "entry": "renderer/components/index.js",
+    "components": [
+      {
+        "name": "ArchitectureView",
+        "export": "ArchitectureView",
+        "type": "class",
+        "description": "Architecture tab: question navigator, diagram viewer, model browser, ask panel"
+      }
+    ],
+    "styles": ["renderer/styles/architecture.css"]
+  }
+}
